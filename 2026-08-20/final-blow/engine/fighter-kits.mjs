@@ -1771,6 +1771,40 @@ export function motionPose(cell, fallbackBank, fallbackFrame) {
   return { bank: "motion", frame: cell, fallback: { bank: fallbackBank, frame: fallbackFrame } };
 }
 
+// ---------------------------------------------------------------------------
+// v2.9 FLOW — the second authored bank (assets/motion2, MOTION-ATLAS.md
+// "Motion2 bank"): sixteen transition/anticipation keys targeting every beat
+// that still snapped after 2.7. Same architecture as bank 1 — descriptors are
+// pure sim-state, the manifest gates per-cell acceptance through the same
+// buildMotionAcceptMasks shape, and every motion2 descriptor carries the
+// exact pre-2.9 beat as its fallback. A motion2 cell is a bonus, never a
+// dependency.
+// ---------------------------------------------------------------------------
+
+export const MOTION2_CELLS = Object.freeze({
+  windupPunch: 0, windupKick: 1, walkA: 2, walkB: 3, crouchTrans: 4,
+  turnaround: 5, dashBrake: 6, jumpRise: 7, blockHit: 8, lightHit: 9,
+  dizzy: 10, thrown: 11, throwGrab: 12, airAttack: 13, getupA: 14, getupB: 15,
+});
+
+export function motion2Pose(cell, fallbackBank, fallbackFrame) {
+  return { bank: "motion2", frame: cell, fallback: { bank: fallbackBank, frame: fallbackFrame } };
+}
+
+/**
+ * v2.9 FLOW: the sequenced wake-up rise — knee-up push-off (getup-a) through
+ * the half-risen crouch (getup-b) — mapped onto the existing knockdown
+ * recovery countdown, ending the old teleport-to-feet. Pure function of the
+ * snapshotted counter; fallbacks are byte-for-byte the pre-2.9 cells
+ * (down/hit 15, then the crouched gather 12).
+ */
+export function wakeupMotionPose(wakeupFrames) {
+  if (!(wakeupFrames > 0)) return null;
+  return wakeupFrames > 9
+    ? motion2Pose(MOTION2_CELLS.getupA, "base", 15)
+    : motion2Pose(MOTION2_CELLS.getupB, "base", 12);
+}
+
 /**
  * Per-fighter accept masks (+ build scale, kept for reference) from
  * assets/motion/MANIFEST.json. A cell missing from the manifest is treated as
@@ -1791,15 +1825,20 @@ export function buildMotionAcceptMasks(manifest) {
 }
 
 /**
- * Resolve a pose descriptor against sheet availability: bank "motion" holds
- * only while `drawable(cell)` reports the sheet loaded AND the manifest
- * accepting the cell; otherwise the descriptor's own fallback wins. Non-motion
- * poses pass through untouched.
+ * Resolve a pose descriptor against sheet availability: an authored bank
+ * ("motion" or, v2.9, "motion2") holds only while `drawable(cell, bank)`
+ * reports that bank's sheet loaded AND its manifest accepting the cell;
+ * otherwise the descriptor's fallback wins. The walk is chained so a motion2
+ * beat whose pre-2.9 read was itself a bank-1 cell still degrades all the way
+ * to base cleanly. Non-motion poses pass through untouched.
  */
 export function resolveMotionPose(pose, drawable) {
-  if (!pose || pose.bank !== "motion") return pose;
-  if (drawable(pose.frame)) return pose;
-  return pose.fallback || { bank: "base", frame: 0 };
+  let current = pose;
+  while (current && (current.bank === "motion" || current.bank === "motion2")) {
+    if (drawable(current.frame, current.bank)) return current;
+    current = current.fallback || { bank: "base", frame: 0 };
+  }
+  return current;
 }
 
 /**
@@ -1835,6 +1874,28 @@ export function attackMotionBeat(attack, attackFrame) {
         || attack.kitAction === "launcher" || attack.kitAction === "enhancedLauncher";
       return { beat: "smear", cell: rising ? MOTION_CELLS.smearV : MOTION_CELLS.smearH };
     }
+    // v2.9 FLOW: 2-4 tick authored ANTICIPATION key on kit-less standing
+    // heavies — cocked-back fist (punch limb) / chambered knee (kick limb)
+    // riding the startup ticks immediately before the smear→extension
+    // sequence, so the bank-1 extension stops appearing from a neutral
+    // guard: windup → smear flash → extension → follow reads as ONE swing.
+    // Re-skins EXISTING startup ticks only (startup length untouched);
+    // moves with authored windup art (kit animation), overheads (arms rise
+    // overhead, not back) and the drive shoulder run keep their own reads.
+    const windupEligible = !attack.animation && attack.kind === "heavy"
+      && !crouching && !airborne
+      && attack.level !== ATTACK_LEVELS.OVERHEAD && attack.kitAction !== "driveHeavy";
+    if (windupEligible) {
+      const smearTicks = smearEligible ? 2 : 0;
+      const windupTicks = Math.min(4, Math.max(0, start - smearTicks - 2));
+      if (windupTicks >= 2 && attackFrame >= start - smearTicks - windupTicks
+        && attackFrame < start - smearTicks) {
+        return {
+          beat: "windup", bank: "motion2",
+          cell: attack.limb === "kick" ? MOTION2_CELLS.windupKick : MOTION2_CELLS.windupPunch,
+        };
+      }
+    }
     // Super/EX startups hold the gathered charge stance until the smear.
     // 2.7 critic round: the stance occupies WHATEVER startup room exists
     // above a 2-tick minimum — the old `start >= 8` gate left every short
@@ -1852,6 +1913,12 @@ export function attackMotionBeat(attack, attackFrame) {
   }
   if (attackFrame >= end) return null;
   const progress = (attackFrame - start) / Math.max(1, end - start);
+  // v2.9 FLOW: kit-less air normals wear the authored jumping-strike key
+  // through the whole active window — they previously borrowed the ground
+  // punch cells (and the grounded follow-through late in the window).
+  if (airborne && !attack.animation && (attack.kind === "light" || attack.kind === "heavy")) {
+    return { beat: "airAttack", bank: "motion2", cell: MOTION2_CELLS.airAttack };
+  }
   // Full-extension contact for the matching limb — kit-less normals only
   // (authored specials cells stay the contact art; driveHeavy is a shoulder/
   // body run, not a limb extension). 2.7 critic round J1: heavies hold the
@@ -1891,7 +1958,14 @@ export function attackAnimationPose(attack, attackFrame) {
   // v2.7 FRAMES: authored charge/smear/follow keys ride over the kit
   // sequence, each carrying the exact cell it replaces as its fallback.
   const beat = attackMotionBeat(attack, attackFrame);
-  if (beat && beat.beat !== "extension") return motionPose(beat.cell, animation.bank, frame);
+  if (beat && beat.beat !== "extension") {
+    // v2.9 FLOW: beats may name either authored bank (windup/air-attack are
+    // motion2). In practice both are gated on kit-less moves, but the routing
+    // stays bank-correct if a future beat lands here.
+    return beat.bank === "motion2"
+      ? motion2Pose(beat.cell, animation.bank, frame)
+      : motionPose(beat.cell, animation.bank, frame);
+  }
   return { bank: animation.bank, frame };
 }
 

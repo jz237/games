@@ -69,6 +69,10 @@ test("a bounded demo exhibition shows the entire kit and every staged beat", () 
     "throw", "taunt", "guardedContact",
     "dashForward", "dashBack", "jumpForward", "jumpNeutral", "jumpBack",
     "weaponPickup",
+    // v2.9 FLOW: the motion2 animation beats join the bounded coverage —
+    // crouch transitions and air attacks fall out of the staged normals,
+    // the turnaround is staged as a close-range cross-up.
+    "crouchTrans", "turnaround", "airAttack",
   ]) {
     assert.ok(beatTotals[beat] >= 1, `staged beat ${beat} must appear at least once (got ${beatTotals[beat]})`);
   }

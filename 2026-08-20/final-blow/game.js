@@ -56,12 +56,15 @@ import {
 import {
   KIT_ACTIONS,
   MOTION_CELLS,
+  MOTION2_CELLS,
   attackAnimationPose,
   attackMotionBeat,
   buildMotionAcceptMasks,
   createFighterMove,
   motionPose,
+  motion2Pose,
   resolveMotionPose,
+  wakeupMotionPose,
   fighterActionCost,
   fighterActionGroup,
   getFighterKit,
@@ -1006,6 +1009,47 @@ function motionCellDrawable(fighterId, cell) {
     && motionBankState.masks?.[fighterId]?.accept[cell]);
 }
 
+// v2.9 FLOW: the second authored bank (assets/motion2) rides the exact same
+// machinery — lazy sheets on the on-demand media policy, manifest accept
+// masks (all 160 accepted this wave, but the gate stays: a missing/loading
+// sheet or a future rejected cell falls back to the pre-2.9 beat carried on
+// every motion2 descriptor).
+const fighterMotion2Atlases = {};
+const motion2BankState = { masks: null, requested: false };
+
+function ensureMotion2Manifest() {
+  if (motion2BankState.requested) return;
+  motion2BankState.requested = true;
+  fetch("assets/motion2/MANIFEST.json")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((manifest) => { motion2BankState.masks = manifest ? buildMotionAcceptMasks(manifest) : {}; })
+    .catch(() => { motion2BankState.masks = {}; });
+}
+
+function ensureMotion2Atlas(fighterId) {
+  ensureMotion2Manifest();
+  let atlas = fighterMotion2Atlases[fighterId];
+  if (!atlas) {
+    atlas = new Image();
+    atlas.src = `assets/motion2/${fighterId}.webp`;
+    fighterMotion2Atlases[fighterId] = atlas;
+  }
+  return atlas;
+}
+
+function motion2CellDrawable(fighterId, cell) {
+  const atlas = ensureMotion2Atlas(fighterId);
+  return Boolean(atlas.complete && atlas.naturalWidth
+    && motion2BankState.masks?.[fighterId]?.accept[cell]);
+}
+
+/** Bank-routed drawable gate for resolveMotionPose (both authored banks). */
+function motionBankCellDrawable(fighterId, cell, bank) {
+  return bank === "motion2"
+    ? motion2CellDrawable(fighterId, cell)
+    : motionCellDrawable(fighterId, cell);
+}
+
 // The Commissioner has no separate specials sheet, so DOM art paths (victory
 // pose, ending panels) address his combat atlas — the same fallback the
 // canvas renderer uses via fighterMoveAtlases.
@@ -1035,8 +1079,9 @@ let matchPalettes = [0, 0];
 let pendingPalettes = [0, 0];
 
 function altAtlasSource(fighterId, bank) {
-  // v2.7 FRAMES: the motion bank remaps like any other sheet.
+  // v2.7 FRAMES: the motion bank remaps like any other sheet (2.9: motion2 too).
   if (bank === "motion") return { image: fighterMotionAtlases[fighterId], key: `${fighterId}:motion` };
+  if (bank === "motion2") return { image: fighterMotion2Atlases[fighterId], key: `${fighterId}:motion2` };
   const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
   // The boss shares one sheet across banks — collapse to one cache entry.
   if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
@@ -1074,7 +1119,9 @@ function paletteAtlas(fighterId, side, bank = "base") {
     ? fighterMoveAtlases[fighterId] || fighterAtlases[fighterId]
     : bank === "motion"
       ? fighterMotionAtlases[fighterId] || fighterAtlases[fighterId]
-      : fighterAtlases[fighterId];
+      : bank === "motion2"
+        ? fighterMotion2Atlases[fighterId] || fighterAtlases[fighterId]
+        : fighterAtlases[fighterId];
   if (matchPalettes[side] !== 1) return base;
   return ensureAltAtlas(fighterId, bank) || base;
 }
@@ -5805,6 +5852,10 @@ const presentationDebug = {
   focusLines: 0, lightSpills: 0,
   // v2.6 MOTION steady per-frame passes (2D draw path).
   squashStretchFrames: 0, poseCrossfades: 0, attackSmears: 0,
+  // v2.9 FLOW: motion2 cells actually drawn this frame (per side), so probes
+  // can prove a transition key rendered at its beat rather than trusting the
+  // descriptor alone.
+  motion2Cells: 0,
   // MOTION FIX 7: flip-path arc ribbon frames (2D world pass).
   arcRibbons: 0,
   // Wave 7 steady screen-space passes, counted per rendered frame.
@@ -5922,6 +5973,10 @@ function createMotionObserver() {
     ribbonFade: 1,
     // Pose cross-fade bookkeeping (2D draw path only).
     poseBank: null, poseFrame: -1, fadeBank: null, fadeFrame: -1, fadeLeft: 0,
+    // v2.9 FLOW transition latches (tick-paced, render-only): remaining ticks
+    // on the authored turnaround pivot key and the crouch enter/leave
+    // in-between. prevFacing 0 / prevCrouch null mean "not yet observed".
+    prevFacing: 0, turnFrames: 0, prevCrouch: null, crouchTransFrames: 0,
   };
 }
 const motionObs = [createMotionObserver(), createMotionObserver()];
@@ -6291,6 +6346,20 @@ function updateMotionObservers() {
       : fighter.dashFrames > 0 ? (fighter.dashDirection || fighter.facing) * 0.07
         : Math.abs(fighter.vx) > 22 ? Math.sign(fighter.vx) * 0.035 : 0;
     obs.leanLevel += clamp(leanTarget - obs.leanLevel, -0.018, 0.018);
+    // --- v2.9 FLOW: facing-flip + crouch-transition latches -----------------
+    // Edge-detected here (render loop, tick-deduped — never during rollback
+    // resimulation) and consumed by fighterPoseDescriptor as 2-3 tick holds
+    // of the authored turnaround / crouch-trans keys.
+    if (obs.prevFacing !== 0 && fighter.facing !== obs.prevFacing
+      && fighter.grounded && !fighter.down && state.phase === "fight") {
+      obs.turnFrames = 3;
+    } else if (obs.turnFrames > 0) obs.turnFrames -= 1;
+    if (obs.prevCrouch !== null && fighter.crouch !== obs.prevCrouch
+      && fighter.grounded && state.phase === "fight") {
+      obs.crouchTransFrames = 3;
+    } else if (obs.crouchTransFrames > 0) obs.crouchTransFrames -= 1;
+    obs.prevFacing = fighter.facing;
+    obs.prevCrouch = fighter.crouch;
     // --- Pose cross-fade observation (spec 3) -------------------------------
     // Tick-paced here so render rate never changes the fade length; the 2D
     // draw path consumes fadeBank/fadeFrame/fadeLeft. A fade only ARMS on a
@@ -11999,6 +12068,8 @@ function demoChoreoFighterView(fighter) {
     dizzyFrames: fighter.dizzyFrames,
     tauntFrames: fighter.tauntFrames,
     attacking: Boolean(fighter.attacking),
+    // v2.9 FLOW: crouch edges feed the choreographer's crouchTrans beat.
+    crouch: Boolean(fighter.crouch),
     grabbed: Boolean(fighter.grabbed),
     grabbing: Boolean(fighter.grabbing),
     meter: fighter.meter,
@@ -13437,7 +13508,8 @@ function updateFighter(fighter, opponent, input, dt) {
       // the trail.
       const ghostPose = fighterAnimationPose(fighter);
       const ghostFrame = ghostPose.bank === "base" ? ghostPose.frame
-        : ghostPose.bank === "motion" && ghostPose.fallback?.bank === "base"
+        : (ghostPose.bank === "motion" || ghostPose.bank === "motion2")
+          && ghostPose.fallback?.bank === "base"
           ? ghostPose.fallback.frame : -1;
       if (ghostFrame >= 0) {
         state.effects.push({
@@ -16429,7 +16501,7 @@ function drawVetAtmosphere(time) {
 function fighterAnimationPose(fighter) {
   return resolveMotionPose(
     fighterPoseDescriptor(fighter),
-    (cell) => motionCellDrawable(fighter.def.id, cell),
+    (cell, bank) => motionBankCellDrawable(fighter.def.id, cell, bank),
   );
 }
 
@@ -16448,8 +16520,25 @@ function showcasePoseDescriptor(fighter) {
 function fighterPoseDescriptor(fighter) {
   const base = (frame) => ({ bank: "base", frame });
   if (fighter.cinematicFrame !== null) return base(fighter.cinematicFrame);
-  if (fighter.grabbed) return base(15);
-  if (fighter.dizzyFrames > 0 || fighter.guardCrushFrames > 0) return base(12 + Math.floor(fighter.animTime * 6) % 2);
+  // v2.9 FLOW: the throw victim wears the authored loose-limbed held pose
+  // through the grab clinch (the old read was the flat hit cell).
+  if (fighter.grabbed) return motion2Pose(MOTION2_CELLS.thrown, "base", 15);
+  // v2.9 FLOW: the throw attacker wears the authored two-handed seize through
+  // the grab hold; the fallback is exactly what the kit's throw art showed.
+  if (fighter.grabbing) {
+    const kitPose = fighter.attacking
+      ? attackAnimationPose(fighter.attacking, fighter.attackFrame) : null;
+    const fallback = kitPose && kitPose.bank !== "motion" && kitPose.bank !== "motion2"
+      ? { bank: kitPose.bank, frame: kitPose.frame }
+      : { bank: "base", frame: 8 };
+    return { bank: "motion2", frame: MOTION2_CELLS.throwGrab, fallback };
+  }
+  if (fighter.dizzyFrames > 0 || fighter.guardCrushFrames > 0) {
+    // v2.9 FLOW: the authored rubber-legs sway alternates with the base
+    // stagger cell at the old cadence — dizzy owns the beat that showed 12.
+    const sway = Math.floor(fighter.animTime * 6) % 2;
+    return sway ? base(13) : motion2Pose(MOTION2_CELLS.dizzy, "base", 12);
+  }
   // Release 1.7: air-recovery back-flip tuck. v2.7 FRAMES: the spin window
   // wears the authored tuck ball, the tail arches into the airrec footing key.
   if (fighter.airTechFlipFrames > 0) {
@@ -16523,6 +16612,12 @@ function fighterPoseDescriptor(fighter) {
       if (fighter.pendingKnockdown && fighter.vy > 0 && FLOOR - fighter.y < 55) {
         return motionPose(MOTION_CELLS.crumple, "base", 15);
       }
+      // v2.9 FLOW: a hurled throw victim keeps the loose-limbed thrown key
+      // through the rising arc of the hurl, before the launched-victim reads
+      // (bighit/airrec/crumple) take over on the way down.
+      if (fighter.lastHitResult === ATTACK_LEVELS.THROW && fighter.vy < 0) {
+        return motion2Pose(MOTION2_CELLS.thrown, "base", 15);
+      }
       return motionPose(fighter.vy < -120 ? MOTION_CELLS.bighit : MOTION_CELLS.airrec, "base", 15);
     }
   }
@@ -16552,9 +16647,13 @@ function fighterPoseDescriptor(fighter) {
       // authored big-hit key (body bent backward) instead of the flat hit
       // cell; lights keep the tighter head snap.
       if (sinceHit < 5) {
+        // v2.9 FLOW: light/medium reactions open on the authored small
+        // head-jolt key — the beat between "no reaction" and the bank-1
+        // big-hit bend, which heavies and specials keep. The jolt then
+        // sequences into the existing progressive stagger track below.
         return striker.attacking && striker.attacking.kind !== "light"
           ? motionPose(MOTION_CELLS.bighit, "base", 15)
-          : base(15);                                       // head snap
+          : motion2Pose(MOTION2_CELLS.lightHit, "base", 15); // head snap
       }
       if (sinceHit < 11) return base(hitKey ? 13 : 12);     // torso fold (alternates per hit)
       if (sinceHit < 18) return base(hitKey ? 15 : 13);     // stagger step
@@ -16562,9 +16661,29 @@ function fighterPoseDescriptor(fighter) {
     }
     return base(15);
   }
+  // v2.9 FLOW: standing guarded contact wears the authored guard-flinch key
+  // for the WHOLE blockstun window — checked before the hit-flash read below
+  // so the flash ticks of a blocked contact flinch instead of borrowing the
+  // clean-hit cell (crouch blockstun keeps the crouch guard cell — the
+  // flinch is a standing pose). The fallback tracks the exact pre-2.9 read:
+  // the hit cell while the contact flash decays, then the guard cell.
+  if (fighter.blockstunFrames > 0 && !fighter.crouch) {
+    return motion2Pose(MOTION2_CELLS.blockHit, "base", fighter.hitFlash > 0 ? 15 : 12);
+  }
   if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return base(15);
-  if (fighter.wakeupFrames > 0) return base(fighter.wakeupFrames > 9 ? 15 : 12);
+  // v2.9 FLOW: sequenced wake-up — getup-a (knee up, hand pushing off) into
+  // getup-b (half-risen crouch) across the recovery countdown, ending the
+  // teleport-to-feet. Pure helper in fighter-kits.mjs; fallbacks exact.
+  if (fighter.wakeupFrames > 0) return wakeupMotionPose(fighter.wakeupFrames);
   if (fighter.throwTechFlashFrames > 0) return base(12);
+  // v2.9 FLOW: 2-3 ticks of the authored half-lowered in-between entering
+  // crouch (the leave side lives past the movement branches below). The
+  // latch is render-only observer state — never advanced during rollback
+  // resimulation (updateMotionObservers runs only in draw()).
+  if (fighter.crouch && !fighter.block
+    && motionObs[fighter.side]?.crouchTransFrames > 0) {
+    return motion2Pose(MOTION2_CELLS.crouchTrans, "base", 12);
+  }
   if (fighter.block || fighter.blockstunFrames > 0 || fighter.crouch) return base(12);
   if (fighter.attacking) {
     const attack = fighter.attacking;
@@ -16597,6 +16716,12 @@ function fighterPoseDescriptor(fighter) {
     // the kit-less normals timeline, each falling back to the exact base cell
     // this path showed before.
     const beat = attackMotionBeat(attack, fighter.attackFrame);
+    // v2.9 FLOW: the authored anticipation key re-skins the late startup
+    // ticks (windup → smear → extension → follow reads as one swing), and
+    // air normals wear the authored jumping-strike key through their active
+    // window instead of the borrowed ground punch cells.
+    if (beat?.beat === "windup") return motion2Pose(beat.cell, "base", frames[1]);
+    if (beat?.beat === "airAttack") return motion2Pose(beat.cell, "base", frames[2]);
     if (beat?.beat === "smear") return motionPose(beat.cell, "base", frames[1]);
     if (beat?.beat === "extension") return motionPose(beat.cell, "base", frames[2]);
     if (time < startup * 0.48) return base(frames[0]);
@@ -16636,7 +16761,12 @@ function fighterPoseDescriptor(fighter) {
       const bandStart = fighter.def.id === "donald" ? 0.06 : 0.22;
       if (progress > bandStart && progress < 0.82) return motionPose(MOTION_CELLS.tuck, "base", 13);
     }
-    if (fighter.vy < 0) return base(13);
+    // v2.9 FLOW: the ascent band between takeoff and the bank-1 tuck wears
+    // the authored rising key (knees starting to draw up) — the base ascent
+    // cell was a full air pose arriving instantly at takeoff (and donald's
+    // is the golf swing). Covers the reduced-motion path too: it is a pose
+    // key, not a transform.
+    if (fighter.vy < 0) return motion2Pose(MOTION2_CELLS.jumpRise, "base", 13);
     // BODY-FIRST (spec 4): the descent cell advances BEFORE touchdown — the
     // legs gather on the crouch cell through the last ~110px of the fall
     // (about five ticks), so the frozen late-fall pair is deduped and the
@@ -16647,17 +16777,46 @@ function fighterPoseDescriptor(fighter) {
   // v2.7 FRAMES: the landing-recovery window holds the authored full-squat
   // compress under the existing squash-stretch transform.
   if (fighter.landingRecoveryFrames > 0) return motionPose(MOTION_CELLS.land, "base", 12);
+  // v2.9 FLOW: grounded facing flip wears the authored mid-pivot key for the
+  // 2-3 latch ticks; leaving crouch shows the half-lowered in-between on the
+  // way back up. Both latches are render-only observer state (never advanced
+  // during rollback resimulation) and both fall back to the exact cell the
+  // pre-2.9 read showed at that moment.
+  const transObs = motionObs[fighter.side];
+  if (transObs?.turnFrames > 0) {
+    return motion2Pose(MOTION2_CELLS.turnaround, "base",
+      Math.abs(fighter.vx) > 22
+        ? 4 + Math.floor(fighter.walkTime * 10) % 4
+        : Math.floor(fighter.animTime * 5) % 4);
+  }
+  if (transObs?.crouchTransFrames > 0 && !fighter.crouch && fighter.grounded) {
+    return motion2Pose(MOTION2_CELLS.crouchTrans, "base", Math.floor(fighter.animTime * 5) % 4);
+  }
   if (fighter.dashFrames > 0) {
-    // BODY-FIRST (spec 6) + 2.7 critic round: the dash used to pop 90° from
-    // the horizontal stretch cell straight to an upright stance in 2 ticks.
-    // The final two dash ticks now hold the base GATHER cell (12 — the
-    // crouched compress) as a rising in-between, so the silhouette bridges
-    // stretch → gather → upright instead of snapping.
-    if (fighter.dashFrames <= 2) return base(12);
+    // BODY-FIRST (spec 6) + 2.7 critic round + v2.9 FLOW: the dash exits
+    // through the AUTHORED brake key (rising from the lunge, one foot
+    // braking, arms trailing) for its final two ticks — replacing the base
+    // gather cell the 2.7 bridge borrowed, which stays as the fallback:
+    // stretch → brake → upright.
+    if (fighter.dashFrames <= 2) return motion2Pose(MOTION2_CELLS.dashBrake, "base", 12);
     // v2.7 FRAMES: the dash stretch cell over the old walk-cell cycle.
     return motionPose(MOTION_CELLS.dash, "base", 5 + Math.floor(fighter.walkTime * 18) % 3);
   }
-  if (Math.abs(fighter.vx) > 22) return base(4 + Math.floor(fighter.walkTime * 10) % 4);
+  if (Math.abs(fighter.vx) > 22) {
+    // v2.9 FLOW: the authored passing/contact keys interleave the base walk
+    // cells (walk-a → base → walk-b → base at the old cadence). Donald's
+    // motion2 walk pair is club-less while his base walk carries the golf
+    // club (MANIFEST note), so his two cells cycle as a self-contained pair
+    // instead of popping the club in and out mid-stride. Fallbacks are the
+    // exact base cell each beat replaced.
+    const step = Math.floor(fighter.walkTime * 10) % 4;
+    if (fighter.def.id === "donald") {
+      return motion2Pose(step % 2 ? MOTION2_CELLS.walkB : MOTION2_CELLS.walkA, "base", 4 + step);
+    }
+    if (step === 0) return motion2Pose(MOTION2_CELLS.walkA, "base", 4);
+    if (step === 2) return motion2Pose(MOTION2_CELLS.walkB, "base", 6);
+    return base(4 + step);
+  }
   return base(Math.floor(fighter.animTime * 5) % 4);
 }
 
@@ -18196,7 +18355,10 @@ const MOTION_SHEET_ADJUST = Object.freeze({ commissioner: 1.046 });
 
 function bankSheetAdjust(fighterId, bank) {
   if (bank === "specials") return MOVE_SHEET_ADJUST[fighterId] || 1;
-  if (bank === "motion") return MOTION_SHEET_ADJUST[fighterId] || 1;
+  // v2.9 FLOW: the motion2 sheets share the motion bank's build
+  // normalisation, so the Commissioner's +4.6% correction applies to both
+  // authored banks from the same table (both renderers read it).
+  if (bank === "motion" || bank === "motion2") return MOTION_SHEET_ADJUST[fighterId] || 1;
   return 1;
 }
 
@@ -18398,6 +18560,8 @@ function drawFighter(fighter, time) {
     presentationDebug.lastFighterMirror[fighter.side] = {
       fighterId: fighter.def.id, bank: pose.bank, frame, facing: fighter.facing, mirror: renderMirror,
     };
+    // v2.9 FLOW: count motion2 cells the moment they actually draw.
+    if (pose.bank === "motion2") presentationDebug.motion2Cells += 1;
   }
   ctx.scale(renderMirror, 1);
   ctx.translate(lunge - startupPower * 8, crouchDrop - attackSwing * (attackKind === "special" ? 13 : 5));
@@ -22856,6 +23020,22 @@ function draw(time) {
       drawProjectiles(time);
       drawAfterimages();
       const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
+      // v2.9 FLOW (2.7 critic J2): during the attacker's 1-2-tick smear /
+      // final charge-flash frames the attacker draws LAST — from the P1 seat
+      // those flash cells were drawing behind the opponent and getting
+      // occluded at the exact moment they exist to be seen. Scoped strictly
+      // to the flash beats (attackMotionBeat is the same pure classifier the
+      // pose functions use); no general pair-layering change.
+      if (ordered.length === 2) {
+        const flashIndex = ordered.findIndex((fighter) => {
+          if (!fighter.attacking) return false;
+          const beat = attackMotionBeat(fighter.attacking, fighter.attackFrame);
+          return Boolean(beat && (beat.beat === "smear"
+            || (beat.beat === "charge"
+              && fighter.attackFrame >= fighter.attacking.activeStartFrame - 4)));
+        });
+        if (flashIndex === 0) ordered.push(ordered.shift());
+      }
       ordered.forEach((fighter) => drawFighter(fighter, time));
       state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
       state.fighters.forEach((fighter) => drawGuardCrushMarker(fighter, time));
@@ -26367,6 +26547,8 @@ window.__finalBlowEngine = {
         squashStretchFrames: presentationDebug.squashStretchFrames,
         poseCrossfades: presentationDebug.poseCrossfades,
         attackSmears: presentationDebug.attackSmears,
+        // v2.9 FLOW: motion2 cells drawn in the last rendered frame.
+        motion2Cells: presentationDebug.motion2Cells,
         skidSmokes: motionFxDebug.skidSmokes,
         landingDust: motionFxDebug.landingDust,
         // v2.6 ELEMENTS counters: monotonic one-shots (elementFxDebug) for the

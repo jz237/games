@@ -99,8 +99,12 @@ function testStrikeBeatContracts() {
   assert.equal(attackMotionBeat(heavyPunch, heavyPunch.activeEndFrame - 1)?.beat, "follow");
   const sweep = createFighterMove("deathblow", "heavy", { limb: "kick", crouching: true });
   assert.notEqual(attackMotionBeat(sweep, sweep.activeStartFrame)?.beat, "extension");
+  // v2.9 FLOW: air normals no longer borrow the grounded cells — their active
+  // window classifies as the motion2 air-attack beat (never the bank-1
+  // extension); tests/motion2-cells.test.mjs holds the full contract.
   const airHeavy = createFighterMove("deathblow", "heavy", { airborne: true });
-  assert.equal(attackMotionBeat(airHeavy, airHeavy.activeStartFrame), null);
+  assert.equal(attackMotionBeat(airHeavy, airHeavy.activeStartFrame)?.beat, "airAttack");
+  assert.notEqual(attackMotionBeat(airHeavy, airHeavy.activeStartFrame)?.beat, "extension");
   // Horizontal heavies smear flat; rising launchers streak upward.
   assert.equal(attackMotionBeat(heavyPunch, heavyPunch.activeStartFrame - 1)?.cell, MOTION_CELLS.smearH);
   const riser = createFighterMove("deathblow", "launcher");

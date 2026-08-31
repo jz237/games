@@ -46,6 +46,7 @@ function mockView(world) {
       wakeupFrames: fighter.wakeupFrames, hitstunFrames: fighter.hitstunFrames,
       blockstunFrames: fighter.blockstunFrames, dizzyFrames: fighter.dizzyFrames,
       tauntFrames: fighter.tauntFrames, attacking: fighter.busyFrames > 0,
+      crouch: fighter.crouch,
       grabbed: fighter.grabbed, grabbing: fighter.grabbing,
       meter: fighter.meter, stunMeter: fighter.stunMeter,
       throwableUses: fighter.throwableUses, carriedWeapon: fighter.carriedWeapon,

@@ -44,6 +44,11 @@ export const DEMO_BEATS = Object.freeze([
   "throw", "taunt", "guardedContact",
   "dashForward", "dashBack", "jumpForward", "jumpNeutral", "jumpBack",
   "weaponPickup", "roundEnd", "finisher",
+  // v2.9 FLOW: the motion2 animation beats the demo must also put on stage.
+  // crouchTrans falls out of the staged crouch normals (the hold.down press
+  // covers both edges), airAttack falls out of the staged air normals, and
+  // turnaround is actively staged as a close-range cross-up jump.
+  "crouchTrans", "turnaround", "airAttack",
 ]);
 
 // The beats the choreographer actively stages (the others fall out of normal
@@ -51,7 +56,7 @@ export const DEMO_BEATS = Object.freeze([
 const STAGED_BEATS = Object.freeze([
   "taunt", "throw", "counterhit", "dizzy", "juggle", "wallsplat",
   "dashForward", "dashBack", "jumpForward", "jumpNeutral", "jumpBack",
-  "weaponPickup", "guardedContact",
+  "weaponPickup", "guardedContact", "turnaround",
 ]);
 
 // The full kit-move grid, in the same action/context vocabulary beginAttack
@@ -256,6 +261,14 @@ export function createDemoChoreographer({ pair, stageId = "", hasStageWeapon = f
         }
         if (fighter.blockstunFrames > 0 && before.blockstunFrames <= 0) noteBeat(side, "guardedContact");
         if (before.wakeupFrames > 0 && fighter.wakeupFrames <= 0) noteBeat(side, "wakeup");
+        // v2.9 FLOW animation beats: grounded facing flips (the turnaround
+        // key), crouch enter/leave edges (the crouch-trans key) and an air
+        // normal starting while airborne (the air-attack key).
+        if (fighter.grounded && before.facing !== undefined
+          && fighter.facing !== before.facing) noteBeat(side, "turnaround");
+        if (fighter.grounded && before.crouch !== undefined
+          && Boolean(fighter.crouch) !== Boolean(before.crouch)) noteBeat(side, "crouchTrans");
+        if (!fighter.grounded && fighter.attacking && !before.attacking) noteBeat(side, "airAttack");
       }
       previous[side] = {
         grounded: fighter.grounded,
@@ -263,6 +276,9 @@ export function createDemoChoreographer({ pair, stageId = "", hasStageWeapon = f
         blockstunFrames: fighter.blockstunFrames,
         wakeupFrames: fighter.wakeupFrames,
         vy: fighter.vy,
+        facing: fighter.facing,
+        crouch: Boolean(fighter.crouch),
+        attacking: Boolean(fighter.attacking),
       };
     }
   }
@@ -323,6 +339,17 @@ export function createDemoChoreographer({ pair, stageId = "", hasStageWeapon = f
       candidates.push(beat.startsWith("dash")
         ? { beat, count: beats[beat], make: () => ({ kind: "dash", forward: dir > 0 }) }
         : { beat, count: beats[beat], make: () => ({ kind: "air", press: null, jumpDir: dir, approach: Infinity }) });
+    }
+    // v2.9 FLOW: the turnaround key is staged as a close-range cross-up —
+    // walk in tight, jump forward OVER the opponent; the GROUNDED defender's
+    // facing flips as the jumper crosses, which is the edge observe()
+    // records. Pair ledger (beatTotal): the beat lands on the defender while
+    // the jumper stages it.
+    if (beatTotal("turnaround") === 0 && !opponent.down) {
+      candidates.push({
+        beat: "turnaround", count: 0,
+        make: () => ({ kind: "air", press: null, jumpDir: 1, approach: 100, crossup: true }),
+      });
     }
     if (!candidates.length) return null;
     const pick = candidates[Math.floor(rng.nextFloat() * candidates.length) % candidates.length];
@@ -501,7 +528,10 @@ export function createDemoChoreographer({ pair, stageId = "", hasStageWeapon = f
   function runAir(view, self, opponent, distance) {
     const { press, jumpDir } = directive.spec;
     if (directive.phase === "act") {
-      if (press && jumpDir > 0 && distance > directive.spec.approach) return towardInput(self, opponent);
+      // Cross-ups approach even with no press: the jump must start close
+      // enough to carry the fighter over the opponent.
+      if ((press || directive.spec.crossup) && jumpDir > 0
+        && distance > directive.spec.approach) return towardInput(self, opponent);
       if (!actionable(self)) {
         if (directive.frames > 60) finishDirective(view, false);
         return emptyInput();

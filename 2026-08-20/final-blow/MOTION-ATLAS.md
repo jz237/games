@@ -232,3 +232,59 @@ no-tint rule cannot be violated by an effect that does not exist.
 World size: same normalisation as the base banks; the Commissioner's motion2
 sheet needs the SAME +4.6% `MOTION_SHEET_ADJUST` entry as his bank-1 sheet
 (one more row in the existing table, both renderers already read it).
+
+### Integration (wired, 2.9)
+
+The cells are live on bank 1's exact architecture: descriptors stay pure
+sim-state (`MOTION2_CELLS`/`motion2Pose`/`wakeupMotionPose` +
+`attackMotionBeat`'s new `windup`/`airAttack` beats in fighter-kits.mjs, the
+state-driven beats in `fighterPoseDescriptor`), `resolveMotionPose` now walks
+CHAINED fallbacks with a bank-routed drawable gate (motion2 → bank-1/base →
+base), and both renderers lazy-load `assets/motion2/` behind the same
+accept-mask machinery — SD only, never renderer/hd/. Battle damage, alt
+palettes, tinted silhouettes and the crossfade ghost all key on the atlas, so
+motion2 cells inherited every compositor for free.
+
+Beat map as wired (2.9):
+
+- **windup-punch/kick** re-skins the last 2-4 startup ticks of kit-less
+  STANDING heavies immediately before the smear window (kick heavies, having
+  no arm smear, hand off windup → extension directly; the Commissioner's
+  bare-fist normals windup → extension too, preserving the no-cane rule).
+  Never on lights, crouch/air normals, overheads, driveHeavy, or authored-
+  windup kit moves; startup length untouched.
+- **walk-a/b** interleave the base cycle at the old cadence (a → 5 → b → 7);
+  donald cycles his club-less pair self-contained so the golf club never pops
+  between banks.
+- **crouch-trans / turnaround** hold 3 ticks off render-only edge latches in
+  the motion observers (crouch flip both ways; grounded facing flip — the
+  cross-up defender wears the pivot). Never advanced during rollback resim.
+- **dash-brake** replaces the 2.7 base-gather dash-exit bridge (final 2 dash
+  ticks): stretch → brake → upright. **jump-rise** owns the ascent between
+  takeoff and the bank-1 tuck band (covers reduced motion — it is a pose).
+- **block-hit** owns the whole standing blockstun window (checked ABOVE the
+  hit-flash read so blocked contacts flinch instead of borrowing the clean-
+  hit cell; crouch blockstun keeps the crouch guard cell).
+- **light-hit** opens the reaction track for light hits, then sequences into
+  the 2.6 progressive stagger; heavies/specials keep bank-1 bighit.
+- **dizzy** alternates with the base stagger cell at the old sway cadence
+  (also covers guard crush — the shared branch).
+- **thrown** rides the victim through the grab clinch AND the rising half of
+  the hurl (`lastHitResult === "throw" && vy < 0`) before bighit/airrec/
+  crumple take the fall. **throw-grab** holds the attacker through the grab
+  clinch, falling back to the kit's own throw art.
+- **air-attack** owns the whole active window of kit-less air normals
+  (replacing the borrowed ground punch cells and the grounded follow read).
+- **getup-a → getup-b** sequence the wake-up countdown (>9 / ≤9 of the
+  16-frame recovery), ending the teleport-to-feet.
+- **P1-seat flash layering** (2.7 critic J2): during smear / final-2-tick
+  charge flashes the attacker draws LAST in the pair, so the flash cells stop
+  vanishing behind the opponent from the P1 seat. Scoped to those beats only.
+- **Micro-crossfades** came free: the 2.6 torso-clipped pose crossfade arms
+  on every bank switch, and paletteAtlas/bankSheetAdjust resolve "motion2"
+  for the ghost pass, so motion2 ↔ bank-1 ↔ base transitions all fade.
+
+Demo coverage: `crouchTrans`, `turnaround` and `airAttack` joined DEMO_BEATS
+(turnaround actively staged as a close-range cross-up; the other two fall out
+of the staged crouch/air normals) so the choreographer provably parades the
+new keys. Contracts live in tests/motion2-cells.test.mjs.
