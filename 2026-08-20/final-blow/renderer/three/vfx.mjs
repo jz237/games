@@ -66,6 +66,9 @@ export class ImpactVfxLayer {
     this.customEffects = new Map(); // tier -> fn(payload, layer)
     this.pending = [];
     this.seenTicks = [];
+    // MOTION FIX 12: takeoff/landing/dash dust latches from the game-side
+    // motion observers — 3D parity for the 2D ground-work particles.
+    this.pendingDust = [];
 
     // Spark pool (CPU-simulated, single draw call) + streak line segments
     // sharing the same simulation (head = particle, tail = pos - vel*k).
@@ -411,6 +414,41 @@ export class ImpactVfxLayer {
     if (this.pending.length > 8) this.pending.shift();
   }
 
+  // MOTION FIX 12: dust latch — same guard discipline as onHit. Fired from
+  // the render-loop motion observers (never during resim), payload carries
+  // sim-space position + a 0-1.6 force.
+  onDust(payload) {
+    if (this.host.isRollbackResimulating()) return;
+    this.pendingDust.push(payload);
+    if (this.pendingDust.length > 6) this.pendingDust.shift();
+  }
+
+  // Muted grey-brown motes through the ember pool: values kept below bloom
+  // threshold so they read as street dust, not sparks — gentle outward kick,
+  // ordinary ember gravity brings them back down.
+  spawnDust(x, y, force, direction) {
+    const count = Math.round(5 + force * 4);
+    for (let i = 0; i < count; i += 1) {
+      const index = this.emberCursor;
+      this.emberCursor = (this.emberCursor + 1) % MAX_EMBERS;
+      const base = index * 3;
+      this.emberPositions[base] = x + (this.rand() - 0.5) * 0.3;
+      this.emberPositions[base + 1] = Math.max(0.02, y + this.rand() * 0.06);
+      this.emberPositions[base + 2] = 0.16;
+      const side = i % 2 ? 1 : -1;
+      const kick = (0.35 + this.rand() * 0.7) * Math.max(0.5, force);
+      this.emberVelocities[base] = side * kick + direction * kick * 0.3;
+      this.emberVelocities[base + 1] = 0.35 + this.rand() * 0.75 * Math.max(0.5, force);
+      this.emberVelocities[base + 2] = (this.rand() - 0.5) * 0.3;
+      const dim = 0.34 + this.rand() * 0.16;
+      this.emberColors[base] = dim;
+      this.emberColors[base + 1] = dim * 0.92;
+      this.emberColors[base + 2] = dim * 0.8;
+      this.emberMaxLife[index] = 0.4 + this.rand() * 0.36;
+      this.emberLife[index] = this.emberMaxLife[index];
+    }
+  }
+
   spawnSparks(x, y, style, direction, counter) {
     const count = Math.round(style.sparks * (counter ? 1.4 : 1));
     const color = new THREE.Color(style.color);
@@ -675,6 +713,12 @@ export class ImpactVfxLayer {
       }
     }
     this.pending.length = 0;
+    // MOTION FIX 12: drain the dust latches (takeoff / landing / dash).
+    for (const payload of this.pendingDust) {
+      this.spawnDust(worldX(payload.x), worldY(payload.y),
+        payload.force ?? 1, payload.direction ?? 0);
+    }
+    this.pendingDust.length = 0;
     this.kickTtl = Math.max(0, this.kickTtl - dtSec);
     this.pulseTtl = Math.max(0, this.pulseTtl - dtSec);
     this.popState.ttl = Math.max(0, this.popState.ttl - dtSec);

@@ -314,6 +314,12 @@ export function createRenderer(host) {
     layers.get("vfx")?.onHit(payload);
   };
 
+  // MOTION FIX 12: ground-work dust latch (takeoff / landing / dash pushes),
+  // 3D parity for the 2D motion-observer particles.
+  renderer3d.onDust = (payload) => {
+    layers.get("vfx")?.onDust(payload);
+  };
+
   renderer3d.setQuality = (tier) => {
     if (tier !== "high" && tier !== "balanced" && tier !== null) return false;
     manualQuality = tier;
