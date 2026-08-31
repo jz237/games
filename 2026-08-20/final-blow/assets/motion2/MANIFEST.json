@@ -1,9 +1,9 @@
 {
  "format": {
   "sheet": "1280x1280 RGBA WebP, 4x4 grid, 320px cells, right-facing, one global scale per sheet (tallest of frames 0-11 normalised to 95.6% cell height; taller frames clamp-shrink to fit)",
-  "grammar": "see MOTION-ATLAS.md 'Motion2 bank (2.9)' \u2014 frame ids fixed across all fighters, no per-fighter signature slots in this bank",
-  "generator": "openai-gpt-image-2 via fal MCP (prompt-only; no reference-image input \u2014 identity carried by per-fighter character bibles)",
-  "processed": "blob-clustering slicer (art 2.8 method) on tools/build_atlas.py key/despill conventions \u2014 whole figures recovered even when adjacent rows interleave, fragment drop, 320px cells",
+  "grammar": "see MOTION-ATLAS.md 'Motion2 bank (2.9)' — frame ids fixed across all fighters, no per-fighter signature slots in this bank",
+  "generator": "openai-gpt-image-2 via fal MCP (prompt-only; no reference-image input — identity carried by per-fighter character bibles)",
+  "processed": "blob-clustering slicer (art 2.8 method) on tools/build_atlas.py key/despill conventions — whole figures recovered even when adjacent rows interleave, fragment drop, 320px cells",
   "built": "2026-08-31",
   "poseIds": [
    "windup-punch",
@@ -23,7 +23,8 @@
    "getup-a",
    "getup-b"
   ],
-  "acceptNote": "2.9 critic round: all 20 walk-a/walk-b cells are accept:false. Measured foot-cluster positions prove walk-a and walk-b are the SAME stride phase for every fighter (walk-b is the same pose with a wider stance), so the pair is not a cycle; and the bank's build/palette/prop grading parts from the base walk bank, which cannot be blended by interleaving. The locomotion beat is base-only again, exactly as 2.8 shipped it. The art is retained, not deleted."
+  "acceptNote": "2.9 critic round: all 20 walk-a/walk-b cells are accept:false. Measured foot-cluster positions prove walk-a and walk-b are the SAME stride phase for every fighter (walk-b is the same pose with a wider stance), so the pair is not a cycle; and the bank's build/palette/prop grading parts from the base walk bank, which cannot be blended by interleaving. The locomotion beat is base-only again, exactly as 2.8 shipped it. The art is retained, not deleted. 2.9 critic round 2: the devil's crouch-trans (4) and dash-brake (6) join them at accept:false — both are all-fours prowls, so his crouch press and his dash each played quadruped frames inside an otherwise upright bipedal beat. 138 cells accepted.",
+  "regenAttempt": "2.9 follow-up, FAILED — the cells stay accept:false and game.js was not touched. Seven prompt-only openai-gpt-image-2 generations across three pilot fighters (deathblow 3, jez 2, benny 2) produced correctly-phased passing poses but could NOT reproduce the base bank's identity: chest band landed -53% to +24% against the base walk mean (10% gate), per-region palette 4.3-10.9 dE, arm-carriage centroid -40% to +19% (15% gate). Round-1 prompts came back too slim; round 2, pushed toward the base bank's heroic mass, overshot into caricature and changed the face. Zero of three passed, so per the pilot rule the remaining seven fighters were not generated. Prompt-only cannot hit a specific existing sprite's build and this fal path has no reference-image input (422, re-confirmed). ALSO MEASURED: the BASE walk bank is single-phase too — in 37 of 40 base walk cells the leading foot is forward of body centre and the trailing foot behind it, and in ZERO cells is that inverted, so no two-cell motion2 patch can make a cycle out of it. See MOTION-ATLAS.md 'Walk regeneration attempt'."
  },
  "fighters": {
   "deathblow": {
@@ -45,13 +46,13 @@
      "frame": 2,
      "id": "walk-a",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1): different generation from the base walk cycle \u2014 chest band 29% wider at the matched draw height, arms hanging where the base bank carries a fists-up guard, lighter cap, redrawn shark decal, different sneakers. Interleaved with base 4-7 the fighter morphed 4x/second. Also not a cycle: walk-a and walk-b are the SAME stride phase (foot centres -67/+63 vs -78/+74 \u2014 same leading leg, just a wider stance)."
+     "note": "walk-a/b DISABLED (2.9 critic round B1): different generation from the base walk cycle — chest band 29% wider at the matched draw height, arms hanging where the base bank carries a fists-up guard, lighter cap, redrawn shark decal, different sneakers. Interleaved with base 4-7 the fighter morphed 4x/second. Also not a cycle: walk-a and walk-b are the SAME stride phase (foot centres -67/+63 vs -78/+74 — same leading leg, just a wider stance)."
     },
     {
      "frame": 3,
      "id": "walk-b",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1): different generation from the base walk cycle \u2014 chest band 29% wider at the matched draw height, arms hanging where the base bank carries a fists-up guard, lighter cap, redrawn shark decal, different sneakers. Interleaved with base 4-7 the fighter morphed 4x/second. Also not a cycle: walk-a and walk-b are the SAME stride phase (foot centres -67/+63 vs -78/+74 \u2014 same leading leg, just a wider stance)."
+     "note": "walk-a/b DISABLED (2.9 critic round B1): different generation from the base walk cycle — chest band 29% wider at the matched draw height, arms hanging where the base bank carries a fists-up guard, lighter cap, redrawn shark decal, different sneakers. Interleaved with base 4-7 the fighter morphed 4x/second. Also not a cycle: walk-a and walk-b are the SAME stride phase (foot centres -67/+63 vs -78/+74 — same leading leg, just a wider stance)."
     },
     {
      "frame": 4,
@@ -62,7 +63,7 @@
      "frame": 5,
      "id": "turnaround",
      "accept": true,
-     "note": "reads as a from-behind weight-shift step more than a snap pivot \u2014 right for a 2-3 tick turnaround key"
+     "note": "reads as a from-behind weight-shift step more than a snap pivot — right for a 2-3 tick turnaround key"
     },
     {
      "frame": 6,
@@ -136,13 +137,13 @@
      "frame": 2,
      "id": "walk-a",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1): bank palettes are graded apart \u2014 base gi reads desaturated slate with orange-laced boots, motion2 royal blue with tan boots (leg-band delta dE 43, foot dE 20) \u2014 and the base walk carries a fists-up guard against motion2's hanging arms. Also the same stride phase in both cells (foot centres -65/+64 vs -80/+76)."
+     "note": "walk-a/b DISABLED (2.9 critic round B1): bank palettes are graded apart — base gi reads desaturated slate with orange-laced boots, motion2 royal blue with tan boots (leg-band delta dE 43, foot dE 20) — and the base walk carries a fists-up guard against motion2's hanging arms. Also the same stride phase in both cells (foot centres -65/+64 vs -80/+76)."
     },
     {
      "frame": 3,
      "id": "walk-b",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1): bank palettes are graded apart \u2014 base gi reads desaturated slate with orange-laced boots, motion2 royal blue with tan boots (leg-band delta dE 43, foot dE 20) \u2014 and the base walk carries a fists-up guard against motion2's hanging arms. Also the same stride phase in both cells (foot centres -65/+64 vs -80/+76)."
+     "note": "walk-a/b DISABLED (2.9 critic round B1): bank palettes are graded apart — base gi reads desaturated slate with orange-laced boots, motion2 royal blue with tan boots (leg-band delta dE 43, foot dE 20) — and the base walk carries a fists-up guard against motion2's hanging arms. Also the same stride phase in both cells (foot centres -65/+64 vs -80/+76)."
     },
     {
      "frame": 4,
@@ -354,7 +355,7 @@
      "frame": 9,
      "id": "light-hit",
      "accept": true,
-     "note": "small painted impact spark by the head \u2014 on the effect layer, not the costume"
+     "note": "small painted impact spark by the head — on the effect layer, not the costume"
     },
     {
      "frame": 10,
@@ -459,7 +460,7 @@
      "frame": 12,
      "id": "throw-grab",
      "accept": true,
-     "note": "exposed fingertips carry a warm skin highlight past the fingerless gloves \u2014 verified at 3x, not magenta spill"
+     "note": "exposed fingertips carry a warm skin highlight past the fingerless gloves — verified at 3x, not magenta spill"
     },
     {
      "frame": 13,
@@ -481,7 +482,7 @@
   "donald": {
    "sheet": "donald.webp",
    "scale": 1.372,
-   "note": "one full-sheet generation, no retries; club-less sheet \u2014 base walk cells carry the golf club, so integration should cycle walk-a/walk-b as a pair (or accept the club popping between banks)",
+   "note": "one full-sheet generation, no retries; club-less sheet — base walk cells carry the golf club, so integration should cycle walk-a/walk-b as a pair (or accept the club popping between banks)",
    "cells": [
     {
      "frame": 0,
@@ -497,13 +498,13 @@
      "frame": 2,
      "id": "walk-a",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B2): NOT A WALK CYCLE \u2014 walk-a and walk-b are the same stride phase (same leg forward, same arm out, same raised heel; foot centres -78/+72 vs -84/+72), so the self-contained pair skated with a 32px foot slide per hold. Both cells are also club-less while his base idle and base walk carry the golf club, so the club teleported in and out at every walk start/stop. Reverted to the base 4-cell cycle, which is a proper cycle."
+     "note": "walk-a/b DISABLED (2.9 critic round B2): NOT A WALK CYCLE — walk-a and walk-b are the same stride phase (same leg forward, same arm out, same raised heel; foot centres -78/+72 vs -84/+72), so the self-contained pair skated with a 32px foot slide per hold. Both cells are also club-less while his base idle and base walk carry the golf club, so the club teleported in and out at every walk start/stop. Reverted to the base 4-cell cycle, which is a proper cycle."
     },
     {
      "frame": 3,
      "id": "walk-b",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B2): NOT A WALK CYCLE \u2014 walk-a and walk-b are the same stride phase (same leg forward, same arm out, same raised heel; foot centres -78/+72 vs -84/+72), so the self-contained pair skated with a 32px foot slide per hold. Both cells are also club-less while his base idle and base walk carry the golf club, so the club teleported in and out at every walk start/stop. Reverted to the base 4-cell cycle, which is a proper cycle."
+     "note": "walk-a/b DISABLED (2.9 critic round B2): NOT A WALK CYCLE — walk-a and walk-b are the same stride phase (same leg forward, same arm out, same raised heel; foot centres -78/+72 vs -84/+72), so the self-contained pair skated with a 32px foot slide per hold. Both cells are also club-less while his base idle and base walk carry the golf club, so the club teleported in and out at every walk start/stop. Reverted to the base 4-cell cycle, which is a proper cycle."
     },
     {
      "frame": 4,
@@ -560,7 +561,7 @@
      "frame": 14,
      "id": "getup-a",
      "accept": true,
-     "note": "reads closer to all-fours than knee-up \u2014 still a clean ground-rise phase 1"
+     "note": "reads closer to all-fours than knee-up — still a clean ground-rise phase 1"
     },
     {
      "frame": 15,
@@ -572,7 +573,7 @@
   "cyraxx": {
    "sheet": "cyraxx.webp",
    "scale": 1.384,
-   "note": "one full-sheet generation, no retries; generated with zero energy effects on purpose \u2014 shirt and trousers stay untinted in every cell (CYRAXX.md overlay rule)",
+   "note": "one full-sheet generation, no retries; generated with zero energy effects on purpose — shirt and trousers stay untinted in every cell (CYRAXX.md overlay rule)",
    "cells": [
     {
      "frame": 0,
@@ -588,13 +589,13 @@
      "frame": 2,
      "id": "walk-a",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1): same stride phase in both cells (foot centres -76/+70 vs -94/+83), arms hang straight against the base walk's bent carriage, and this sheet was deliberately generated with NO energy effects while his base walk carries keyed purple/green flecks at the feet \u2014 so the flecks strobed on and off at the interleave cadence."
+     "note": "walk-a/b DISABLED (2.9 critic round B1): same stride phase in both cells (foot centres -76/+70 vs -94/+83), arms hang straight against the base walk's bent carriage, and this sheet was deliberately generated with NO energy effects while his base walk carries keyed purple/green flecks at the feet — so the flecks strobed on and off at the interleave cadence."
     },
     {
      "frame": 3,
      "id": "walk-b",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1): same stride phase in both cells (foot centres -76/+70 vs -94/+83), arms hang straight against the base walk's bent carriage, and this sheet was deliberately generated with NO energy effects while his base walk carries keyed purple/green flecks at the feet \u2014 so the flecks strobed on and off at the interleave cadence."
+     "note": "walk-a/b DISABLED (2.9 critic round B1): same stride phase in both cells (foot centres -76/+70 vs -94/+83), arms hang straight against the base walk's bent carriage, and this sheet was deliberately generated with NO energy effects while his base walk carries keyed purple/green flecks at the feet — so the flecks strobed on and off at the interleave cadence."
     },
     {
      "frame": 4,
@@ -715,7 +716,7 @@
      "frame": 9,
      "id": "light-hit",
      "accept": true,
-     "note": "painted spark by the head, glasses knocked askew \u2014 in character"
+     "note": "painted spark by the head, glasses knocked askew — in character"
     },
     {
      "frame": 10,
@@ -768,13 +769,13 @@
      "frame": 2,
      "id": "walk-a",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1/M5): same stride phase in both cells, and these cells bottom out at 316 while his older base walk cells bottom at 294/286 \u2014 the interleave was the visible half of his levitation bug. His base bank now carries an explicit per-cell floor registration table instead."
+     "note": "walk-a/b DISABLED (2.9 critic round B1/M5): same stride phase in both cells, and these cells bottom out at 316 while his older base walk cells bottom at 294/286 — the interleave was the visible half of his levitation bug. His base bank now carries an explicit per-cell floor registration table instead."
     },
     {
      "frame": 3,
      "id": "walk-b",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B1/M5): same stride phase in both cells, and these cells bottom out at 316 while his older base walk cells bottom at 294/286 \u2014 the interleave was the visible half of his levitation bug. His base bank now carries an explicit per-cell floor registration table instead."
+     "note": "walk-a/b DISABLED (2.9 critic round B1/M5): same stride phase in both cells, and these cells bottom out at 316 while his older base walk cells bottom at 294/286 — the interleave was the visible half of his levitation bug. His base bank now carries an explicit per-cell floor registration table instead."
     },
     {
      "frame": 4,
@@ -811,7 +812,7 @@
      "frame": 10,
      "id": "dizzy",
      "accept": true,
-     "note": "dizzy leans on the planted cane with both hands \u2014 strongest cell on the sheet"
+     "note": "dizzy leans on the planted cane with both hands — strongest cell on the sheet"
     },
     {
      "frame": 11,
@@ -844,7 +845,7 @@
   "devil": {
    "sheet": "devil.webp",
    "scale": 1.45,
-   "note": "one full-sheet generation, no retries; quadruped grammar adaptations \u2014 walk-a/b are a prowling all-fours gait, turnaround is a mid-wing-pivot seen from behind, throw-grab is a rearing two-claw seize, block-hit shields with wings wrapped forward. Hide a shade warmer than the base sheet, same variance bank-1 showed",
+   "note": "one full-sheet generation, no retries; quadruped grammar adaptations — walk-a/b are a prowling all-fours gait, turnaround is a mid-wing-pivot seen from behind, throw-grab is a rearing two-claw seize, block-hit shields with wings wrapped forward. Hide a shade warmer than the base sheet, same variance bank-1 showed | 2.9 critic round 2 (B6): crouch-trans (4) and dash-brake (6) disabled — all-fours prowl poses against an upright bipedal base bank.",
    "cells": [
     {
      "frame": 0,
@@ -861,18 +862,19 @@
      "frame": 2,
      "id": "walk-a",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B3): BODY-PLAN MISMATCH \u2014 this pair is an all-fours PROWL (6 ground-contact clusters, content height 200px) while the base walk cycle is UPRIGHT BIPEDAL (272px). Interleaving dropped him to four legs and stood him back up every ~6 ticks, moving his head ~140px in one tick. Good art, incompatible with the base bipedal cycle."
+     "note": "walk-a/b DISABLED (2.9 critic round B3): BODY-PLAN MISMATCH — this pair is an all-fours PROWL (6 ground-contact clusters, content height 200px) while the base walk cycle is UPRIGHT BIPEDAL (272px). Interleaving dropped him to four legs and stood him back up every ~6 ticks, moving his head ~140px in one tick. Good art, incompatible with the base bipedal cycle."
     },
     {
      "frame": 3,
      "id": "walk-b",
      "accept": false,
-     "note": "walk-a/b DISABLED (2.9 critic round B3): BODY-PLAN MISMATCH \u2014 this pair is an all-fours PROWL (6 ground-contact clusters, content height 200px) while the base walk cycle is UPRIGHT BIPEDAL (272px). Interleaving dropped him to four legs and stood him back up every ~6 ticks, moving his head ~140px in one tick. Good art, incompatible with the base bipedal cycle."
+     "note": "walk-a/b DISABLED (2.9 critic round B3): BODY-PLAN MISMATCH — this pair is an all-fours PROWL (6 ground-contact clusters, content height 200px) while the base walk cycle is UPRIGHT BIPEDAL (272px). Interleaving dropped him to four legs and stood him back up every ~6 ticks, moving his head ~140px in one tick. Good art, incompatible with the base bipedal cycle."
     },
     {
      "frame": 4,
      "id": "crouch-trans",
-     "accept": true
+     "accept": false,
+     "note": "DISABLED for the devil (2.9 critic round 2, B6): this cell is an ALL-FOURS PROWL on a fighter whose base bank is upright and bipedal. Verified at 1:1 — horizontal spine, head dropped below the shoulder line, both forelimbs bearing weight, tail streaming. Intercut with the bipedal beats it belongs to, ONE crouch press played four different body plans in about 20 ticks (upright idle -> quadruped -> upright wing-wrapped cocoon -> quadruped). The art is retained, not deleted; the existing fallback path already covers the beat."
     },
     {
      "frame": 5,
@@ -882,7 +884,8 @@
     {
      "frame": 6,
      "id": "dash-brake",
-     "accept": true
+     "accept": false,
+     "note": "DISABLED for the devil (2.9 critic round 2, B6): this cell is an ALL-FOURS PROWL on a fighter whose base bank is upright and bipedal. Verified at 1:1 — horizontal spine, head dropped below the shoulder line, both forelimbs bearing weight, tail streaming. Intercut with the bipedal beats it belongs to, ONE crouch press played four different body plans in about 20 ticks (upright idle -> quadruped -> upright wing-wrapped cocoon -> quadruped). The art is retained, not deleted; the existing fallback path already covers the beat."
     },
     {
      "frame": 7,
@@ -928,7 +931,7 @@
      "frame": 15,
      "id": "getup-b",
      "accept": true,
-     "note": "half-risen on haunches with wings unfurling \u2014 feeds wake-up straight into the crouch stance read"
+     "note": "half-risen on haunches with wings unfurling — feeds wake-up straight into the crouch stance read"
     }
    ]
   }

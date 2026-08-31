@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   BASE_CELL_ROLES,
   MOTION2_CELLS,
+  MOTION_CELLS,
   MOTION_CELL_COUNT,
   attackAnimationPose,
   attackMotionBeat,
@@ -49,11 +50,28 @@ function testManifestAcceptMasks() {
   // the bank's build/palette/prop grading parts from the base walk bank badly
   // enough that interleaving strobed (deathblow, jez), teleported a golf club
   // (donald) or flipped body plan (the devil's all-fours prowl against an
-  // upright bipedal cycle). The other 140 cells stay live.
-  assert.equal(accepted, 140);
+  // upright bipedal cycle).
+  //
+  // 2.9 critic round 2 (B6): the devil's crouch-trans (4) and dash-brake (6)
+  // join them. Both are all-fours PROWL poses — horizontal spine, head below
+  // the shoulder line, both forelimbs bearing weight — on a fighter whose base
+  // bank is upright and bipedal, so one crouch press played four body plans in
+  // about 20 ticks. The other 138 cells stay live.
+  assert.equal(accepted, 138);
   for (const id of ROSTER) {
     assert.equal(masks[id].accept[MOTION2_CELLS.walkA], false, `${id} walk-a must stay disabled`);
     assert.equal(masks[id].accept[MOTION2_CELLS.walkB], false, `${id} walk-b must stay disabled`);
+    if (id === "devil") {
+      assert.equal(masks[id].accept[MOTION2_CELLS.crouchTrans], false,
+        "the devil's quadruped crouch-trans must stay disabled");
+      assert.equal(masks[id].accept[MOTION2_CELLS.dashBrake], false,
+        "the devil's quadruped dash-brake must stay disabled");
+    } else {
+      assert.equal(masks[id].accept[MOTION2_CELLS.crouchTrans], true,
+        `${id} crouch-trans is a bipedal coil and must stay live`);
+      assert.equal(masks[id].accept[MOTION2_CELLS.dashBrake], true,
+        `${id} dash-brake is a bipedal lunge and must stay live`);
+    }
     // Every rejected cell must carry the reviewer's reason, so a later wave
     // cannot silently re-enable art that measured incompatible.
     for (const cell of manifest.fighters[id].cells) {
@@ -188,20 +206,49 @@ function testAirAttackBeat() {
 }
 
 function testGetupSequenceOrdering() {
-  // getup-a (knee up) must precede getup-b (half-risen) as the wake-up
-  // counter runs down, each carrying the exact pre-2.9 cell as fallback.
+  // getup-a (knee up) must precede getup-b (half-risen) as the wake-up counter
+  // runs down, each carrying the exact pre-2.9 cell as fallback.
+  //
+  // v2.9 critic round 2 (M3): the track now OPENS on the bank-1 crumple key.
+  // The rise END was fixed in round 1 and the START then hard-cut — base:15
+  // (flat on his back, a horizontal body) straight to motion2:14 (kneeling,
+  // hand on the floor) in ONE tick, ~90 degrees of torso rotation and ~150px
+  // of head rise with nothing in between. crumple is the collapse pose, which
+  // played in reverse is precisely that missing in-between, and it falls back
+  // to the same prone cell so a missing bank changes nothing.
+  // Asserted on what DRAWS: resolved with the (not yet authored) motion3 bank
+  // reporting absent, which is the shipping configuration.
+  const noMotion3 = (cell, bank) => bank !== "motion3";
   const seen = [];
+  const prone = { bank: "base", frame: 15 };
+  const gather = { bank: "base", frame: 12 };
   for (let frames = 16; frames >= 1; frames -= 1) {
-    const pose = wakeupMotionPose(frames);
-    assert.equal(pose.bank, "motion2");
-    if (!seen.length || seen.at(-1) !== pose.frame) seen.push(pose.frame);
-    assert.deepEqual(
-      pose.fallback,
-      pose.frame === MOTION2_CELLS.getupA ? { bank: "base", frame: 15 } : { bank: "base", frame: 12 },
-    );
+    const pose = resolveMotionPose(wakeupMotionPose(frames), noMotion3);
+    assert.ok(pose.bank === "motion2" || pose.bank === "motion",
+      `wake-up must stay authored, got ${pose.bank}`);
+    const key = `${pose.bank}:${pose.frame}`;
+    if (!seen.length || seen.at(-1) !== key) seen.push(key);
+    // Every band still degrades to the exact cell the pre-fix read showed: the
+    // prone cell while he is down, the crouched gather as he reaches his feet.
+    assert.deepEqual(pose.fallback,
+      pose.bank === "motion2" && pose.frame === MOTION2_CELLS.getupB ? gather : prone);
   }
-  assert.deepEqual(seen, [MOTION2_CELLS.getupA, MOTION2_CELLS.getupB],
-    "wake-up must rise getup-a then getup-b with no interleave");
+  assert.deepEqual(seen, [
+    `motion:${MOTION_CELLS.crumple}`,
+    `motion2:${MOTION2_CELLS.getupA}`,
+    `motion2:${MOTION2_CELLS.getupB}`,
+  ], "wake-up must run crumple then getup-a then getup-b with no interleave");
+  // With no sheets at all the track still only ever shows the two cells the
+  // pre-2.9 read used — prone while he is down, the crouched gather as he
+  // reaches his feet — and never interleaves them.
+  const bareSeen = [];
+  for (let frames = 16; frames >= 1; frames -= 1) {
+    const bare = resolveMotionPose(wakeupMotionPose(frames), () => false);
+    assert.deepEqual(bare, frames > 6 ? prone : gather);
+    const key = `${bare.bank}:${bare.frame}`;
+    if (!bareSeen.length || bareSeen.at(-1) !== key) bareSeen.push(key);
+  }
+  assert.deepEqual(bareSeen, ["base:15", "base:12"]);
   assert.equal(wakeupMotionPose(0), null);
 }
 

@@ -1952,6 +1952,46 @@ export function baseCellDrawAdjust(fighterId, bank, frame) {
 }
 
 // ---------------------------------------------------------------------------
+// v2.9 critic round 2 (M4) — GUARD / BLOCK-HIT STANCE RECONCILIATION.
+//
+// The standing guard cell and the authored block-flinch are different
+// generations at different scales, and a blocked hit cuts between them with no
+// in-between. Measured content heights at 1:1 (opaque pixels, alpha >= 24):
+//
+//   ali        guard base:9  305px   block-hit motion2:8  259px   -15.1%
+//   jez        guard base:11 305px   block-hit motion2:8  255px   -16.4%
+//   donald     guard base:0  306px   block-hit motion2:8  265px   -13.4%
+//   post       guard base:11 306px   block-hit motion2:8  263px   -14.1%
+//
+// The flinch SHOULD compress a little — he is absorbing a blow — but a 15%
+// height step in one tick reads as the character changing size, which is what
+// the critics saw. The correction takes the flinch back to the guard's height
+// and is capped: the same mechanism, and the same cap philosophy, as the
+// oversized-crouch correction above.
+// ---------------------------------------------------------------------------
+
+const GUARD_FLINCH_ADJUST = Object.freeze({
+  deathblow: 1.10, jez: 1.20, alan: 1.09, post: 1.16, donald: 1.16,
+  devil: 1.08, ali: 1.18, benny: 1.11, commissioner: 1.03, cyraxx: 1.05,
+});
+
+/** Scale correction that lands the authored guard flinch on the guard's height. */
+export function guardFlinchAdjust(fighterId, bank, frame) {
+  if (bank !== "motion2" || frame !== MOTION2_CELLS.blockHit) return 1;
+  const adjust = GUARD_FLINCH_ADJUST[fighterId];
+  return Number.isFinite(adjust) ? Math.min(1.22, Math.max(1, adjust)) : 1;
+}
+
+/**
+ * The ONE draw-scale correction a renderer needs for a resolved cell. Both
+ * renderers call exactly this so the 2D canvas and the CINEMA 3D rig can never
+ * disagree about how big a cell draws.
+ */
+export function cellDrawAdjust(fighterId, bank, frame) {
+  return baseCellDrawAdjust(fighterId, bank, frame) * guardFlinchAdjust(fighterId, bank, frame);
+}
+
+// ---------------------------------------------------------------------------
 // v2.9 critic round (M5) — PER-CELL FLOOR REGISTRATION.
 //
 // Sprites are bottom-anchored: drawAtlasFrame lands the CELL's bottom edge on
@@ -2002,6 +2042,484 @@ export function auditCellFloorOffsets() {
 }
 
 // ---------------------------------------------------------------------------
+// v2.9 critic round 2 (B2) — AIRBORNE BODY-CENTRE ANCHORING.
+//
+// Every cell is FLOOR anchored: drawAtlasFrame lands the cell's bottom edge on
+// the fighter's y, which is right for a figure standing on the street and
+// WRONG for a figure in the air. Measured content centres (PIL, opaque pixels,
+// alpha >= 24, one row per cell of 320, floor-registration folded in):
+//
+//   deathblow jump-rise (motion2:7) content centre row 174, height 281
+//   deathblow tuck      (motion:5)  content centre row 238, height 156
+//
+// Both floor-anchored, so on the tick the ascent hands off to the tuck the
+// body centre drops 64 cell px (~78 world px) and the HEAD drops 125 cell px
+// (~152 world px, half a body height) — on the tick vy is most negative. The
+// character visually plummets while he is rising fastest.
+//
+// The fix anchors airborne cells by BODY CENTRE instead of by feet: the cell
+// is shifted so its content centroid sits where the standing reference's
+// centroid sits. A tuck then brings the FEET UP to the chest, which is what a
+// tuck is, and — because every airborne cell targets the SAME reference row —
+// no airborne bank switch can move the body at all.
+//
+// Ground continuity is preserved by ramping the correction with height: the
+// shift is zero on the floor and full by AIRBORNE_ANCHOR_RAMP_PX, so takeoff
+// and touchdown stay feet-planted and the last ticks of a fall read as the
+// legs reaching down for the street. Cells are addressed by measurement, so a
+// future bank (motion3) inherits the behaviour by adding a row here.
+// ---------------------------------------------------------------------------
+
+/** Height above the floor, in world px, at which the anchor is fully applied. */
+export const AIRBORNE_ANCHOR_RAMP_PX = 110;
+
+/**
+ * Measured content-centroid row (of 320) per cell per bank, with each sheet's
+ * floor registration already folded in. `ref` is the fighter's standing
+ * reference centroid (the mean of the four base idle cells).
+ */
+export const CELL_BODY_CENTRE = Object.freeze({
+  deathblow: Object.freeze({
+    base: Object.freeze([162, 162, 162, 162, 162, 162, 162, 162, 162, 163, 172, 162, 162, 162, 187, 162]),
+    motion: Object.freeze([195, 187, 191, 163, 187, 238, 230, 238, 191, 231, 199, 224, 174, 160, 160, 164]),
+    motion2: Object.freeze([171, 163, 164, 168, 187, 171, 186, 174, 177, 174, 176, 197, 201, 174, 212, 180]),
+    motion3: Object.freeze([161, 158, 158, 158, 164, 188, 158, 166, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 162,
+  }),
+  jez: Object.freeze({
+    base: Object.freeze([162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 170, 162, 162, 162, 162, 162]),
+    motion: Object.freeze([187, 182, 189, 163, 179, 228, 220, 227, 197, 229, 198, 195, 175, 160, 160, 190]),
+    motion2: Object.freeze([173, 163, 165, 169, 196, 174, 204, 186, 187, 181, 186, 211, 209, 172, 221, 206]),
+    motion3: Object.freeze([182, 160, 158, 158, 182, 222, 168, 186, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 162,
+  }),
+  alan: Object.freeze({
+    base: Object.freeze([162, 162, 162, 162, 168, 161, 161, 161, 162, 199, 209, 162, 165, 162, 175, 163]),
+    motion: Object.freeze([186, 188, 185, 163, 183, 231, 214, 242, 191, 233, 188, 200, 166, 160, 160, 191]),
+    motion2: Object.freeze([171, 163, 163, 166, 186, 166, 189, 168, 175, 171, 178, 210, 200, 185, 212, 193]),
+    motion3: Object.freeze([160, 158, 158, 161, 168, 214, 158, 172, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 162,
+  }),
+  post: Object.freeze({
+    base: Object.freeze([162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 184, 174]),
+    motion: Object.freeze([177, 171, 186, 163, 175, 221, 223, 229, 196, 226, 182, 211, 158, 160, 164, 219]),
+    motion2: Object.freeze([174, 163, 163, 163, 190, 166, 197, 170, 184, 181, 187, 196, 199, 190, 211, 183]),
+    motion3: Object.freeze([172, 158, 158, 158, 176, 204, 158, 178, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 162,
+  }),
+  donald: Object.freeze({
+    base: Object.freeze([162, 162, 162, 162, 161, 162, 190, 162, 162, 162, 208, 169, 162, 161, 205, 162]),
+    motion: Object.freeze([184, 185, 185, 163, 185, 227, 225, 207, 187, 235, 209, 185, 179, 171, 158, 163]),
+    motion2: Object.freeze([175, 163, 162, 169, 197, 172, 196, 181, 183, 175, 188, 202, 197, 191, 209, 200]),
+    motion3: Object.freeze([176, 158, 158, 158, 178, 203, 164, 184, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 162,
+  }),
+  devil: Object.freeze({
+    base: Object.freeze([165, 163, 167, 166, 179, 179, 179, 182, 181, 209, 216, 180, 199, 197, 214, 209]),
+    motion: Object.freeze([175, 171, 178, 163, 176, 205, 224, 252, 194, 219, 191, 201, 188, 160, 184, 169]),
+    motion2: Object.freeze([164, 163, 217, 215, 212, 166, 206, 175, 190, 183, 180, 190, 190, 187, 222, 172]),
+    motion3: Object.freeze([158, 158, 158, 158, 157, 198, 158, 160, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 165,
+  }),
+  ali: Object.freeze({
+    base: Object.freeze([162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 185, 185, 162, 162, 192, 193]),
+    motion: Object.freeze([172, 176, 180, 163, 177, 237, 214, 220, 197, 214, 202, 216, 203, 160, 160, 160]),
+    motion2: Object.freeze([173, 163, 164, 169, 197, 174, 201, 186, 186, 184, 188, 189, 192, 182, 215, 204]),
+    motion3: Object.freeze([172, 158, 158, 158, 158, 201, 158, 172, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 162,
+  }),
+  benny: Object.freeze({
+    base: Object.freeze([162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162, 162]),
+    motion: Object.freeze([189, 184, 208, 160, 185, 240, 234, 206, 197, 238, 190, 192, 182, 160, 161, 180]),
+    motion2: Object.freeze([171, 163, 163, 165, 199, 173, 185, 164, 178, 174, 182, 193, 194, 168, 213, 194]),
+    motion3: Object.freeze([160, 158, 158, 158, 158, 204, 158, 179, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 162,
+  }),
+  commissioner: Object.freeze({
+    base: Object.freeze([158, 158, 158, 160, 166, 172, 176, 192, 182, 181, 156, 185, 172, 186, 159, 167]),
+    motion: Object.freeze([181, 180, 184, 163, 187, 229, 225, 205, 199, 233, 193, 194, 193, 163, 160, 171]),
+    motion2: Object.freeze([168, 163, 163, 163, 198, 170, 204, 183, 176, 176, 190, 197, 167, 174, 199, 197]),
+    motion3: Object.freeze([160, 158, 158, 158, 166, 204, 158, 187, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 158,
+  }),
+  cyraxx: Object.freeze({
+    base: Object.freeze([165, 165, 165, 165, 164, 165, 163, 163, 168, 168, 185, 168, 195, 159, 167, 179]),
+    motion: Object.freeze([178, 180, 186, 160, 189, 229, 222, 227, 181, 221, 189, 202, 183, 160, 160, 160]),
+    motion2: Object.freeze([175, 163, 163, 165, 195, 164, 201, 188, 175, 175, 182, 206, 204, 160, 208, 174]),
+    motion3: Object.freeze([162, 158, 158, 158, 158, 214, 158, 170, -1, -1, -1, -1, -1, -1, -1, -1]),
+    ref: 165,
+  }),
+});
+
+/**
+ * The airborne anchor correction for one cell, in CELL pixels of 320 (the same
+ * unit CELL_FLOOR_OFFSET uses). Negative lifts the drawing. Callers scale it by
+ * airborneAnchorRamp(heightAboveFloor) so the correction is absent on the
+ * ground and total in the air.
+ */
+export function airborneAnchorOffset(fighterId, bank, frame) {
+  const table = CELL_BODY_CENTRE[fighterId];
+  if (!table) return 0;
+  const centres = table[bank];
+  const centre = centres?.[frame];
+  if (!Number.isFinite(centre) || centre < 0) return 0;
+  return table.ref - centre - cellFloorOffset(fighterId, bank, frame);
+}
+
+/** 0 on the street, 1 once the fighter is a body-height off it. */
+export function airborneAnchorRamp(heightAboveFloor) {
+  if (!(heightAboveFloor > 0)) return 0;
+  return Math.min(1, heightAboveFloor / AIRBORNE_ANCHOR_RAMP_PX);
+}
+
+/**
+ * The ONE vertical registration a renderer needs for a resolved cell, in cell
+ * pixels: the per-sheet floor registration plus the ramped airborne anchor.
+ * Both renderers call exactly this, so the 2D canvas and the CINEMA 3D rig can
+ * never disagree about where a cell's body sits.
+ */
+export function cellVerticalOffset(fighterId, bank, frame, heightAboveFloor = 0) {
+  const floor = cellFloorOffset(fighterId, bank, frame);
+  const ramp = airborneAnchorRamp(heightAboveFloor);
+  if (ramp <= 0) return floor;
+  return floor + airborneAnchorOffset(fighterId, bank, frame) * ramp;
+}
+
+/** Audit hook: every roster sheet is measured and the reference is sane. */
+export function auditBodyCentres() {
+  const errors = [];
+  for (const [fighterId, table] of Object.entries(CELL_BODY_CENTRE)) {
+    if (!(table.ref > 100 && table.ref < 220)) errors.push(`${fighterId}: ref ${table.ref}`);
+    for (const bank of ["base", "motion", "motion2", "motion3"]) {
+      const centres = table[bank];
+      if (!centres || centres.length !== MOTION_CELL_COUNT) {
+        errors.push(`${fighterId}/${bank}: ${centres?.length ?? 0} entries`);
+        continue;
+      }
+      centres.forEach((value, index) => {
+        // -1 marks a cell the bank does not use (motion3 ships 8 of 16), which
+        // airborneAnchorOffset reads as "no measurement, no correction".
+        if (!Number.isFinite(value) || value > 320 || (value < 0 && value !== -1)) {
+          errors.push(`${fighterId}/${bank}[${index}]: ${value}`);
+        }
+      });
+    }
+  }
+  return Object.freeze({ errors: Object.freeze(errors) });
+}
+
+// ---------------------------------------------------------------------------
+// v2.9 critic round 2 (B4) — PROP-CELL PROHIBITION.
+//
+// BASE_CELL_ROLES.attack answers "may this cell draw during an attack beat".
+// That is not the same question as "is this the right drawing for THIS move".
+// donald's bare-fisted heavy punch resolved its recovery to base:11 — a full
+// club-in-hand golf follow-through — and held it for 23 ticks, and base:11 is
+// in his `attack` set, so the 2.9 contract test passed it.
+//
+// Four fighters carry a signature prop whose art is baked into specific cells:
+// donald's driver, post's spray can, ali's microphone, the Commissioner's
+// cane. Those cells are correct for the KIT moves that swing the prop and
+// wrong for every bare-handed normal. `propAction` lists the cells that depict
+// the prop being SWUNG / SPRAYED / STRUCK WITH (including baked prop VFX);
+// `bareHand` routes each one to the fighter's nearest prop-free equivalent at
+// the same choke point the `unusable` swap uses, so no bare-handed beat
+// anywhere — present or future — can reach one.
+// ---------------------------------------------------------------------------
+
+export const PROP_CELLS = Object.freeze({
+  donald: Object.freeze({
+    prop: "golf club",
+    // Verified cell by cell at 1:1 this round. 9 is a straight club thrust,
+    // 10 a downward swing with a baked golden starburst, 11 the swing's
+    // follow-through (the 23-tick freeze the critics caught), 13 the full
+    // overhead swing with three baked crescents, 14 a fist blast cone.
+    // base:8 (gloves crossed high, no club, no VFX) is his ONLY club-free
+    // clean cell and is therefore the whole bare-hand map. His motion2 bank
+    // carries no club at all, so it needs no entries.
+    propAction: Object.freeze({
+      base: Object.freeze([9, 10, 11, 13, 14]),
+      motion: Object.freeze([2, 3, 14]),
+      motion2: Object.freeze([]),
+    }),
+    bareHand: Object.freeze({
+      base: Object.freeze({ 9: 8, 10: 8, 11: 8, 13: 8, 14: 8 }),
+    }),
+  }),
+  post: Object.freeze({
+    prop: "spray can",
+    // 10 is a punch with a baked pink splat on the fist, 13 raises the can
+    // through its own mist, 14 is the full spray cone. base:9 is a clean
+    // two-fist straight punch with no can in the cell at all. In motion, only
+    // smear-v swings the can — smear-h is a bare punch streak.
+    propAction: Object.freeze({
+      base: Object.freeze([10, 13, 14]),
+      motion: Object.freeze([3]),
+      motion2: Object.freeze([]),
+    }),
+    bareHand: Object.freeze({
+      base: Object.freeze({ 10: 9, 13: 9, 14: 9 }),
+    }),
+  }),
+  ali: Object.freeze({
+    prop: "microphone",
+    // The worst case on the roster: ali's base bank has NO clean bare-handed
+    // strike cell. 8 swings the mic overhead on its cable (and 8 is the
+    // kit-less startup cell), 10 and 11 are swings with baked impact art, 13
+    // is an overhead swing, 14 the sonic blast. Everything routes to 9 — a
+    // braced wide stance carrying the mic passively, no swing arc, no VFX —
+    // which is also the role map's guard read. The authored banks own his
+    // real strike beats, so base is a one-tick fallback here.
+    propAction: Object.freeze({
+      base: Object.freeze([8, 10, 11, 13, 14]),
+      motion: Object.freeze([2, 14]),
+      motion2: Object.freeze([]),
+    }),
+    bareHand: Object.freeze({
+      base: Object.freeze({ 8: 9, 10: 9, 11: 9, 13: 9, 14: 9 }),
+    }),
+  }),
+  commissioner: Object.freeze({
+    prop: "cane",
+    // 8 and 9 are cane thrusts, 11 a low sweep with a baked gold crescent, 14
+    // an overhead raise inside a flame aura. 13 (arms-out recoil) and 15
+    // (folded arms) are his two cane-free cells; 13 is the strike/recovery
+    // stand-in. His motion2 bank only ever CARRIES the cane — cell 8 raises it
+    // as a block, which is defensive, not a strike.
+    propAction: Object.freeze({
+      base: Object.freeze([8, 9, 11, 14]),
+      motion: Object.freeze([2, 3]),
+      motion2: Object.freeze([]),
+    }),
+    bareHand: Object.freeze({
+      base: Object.freeze({ 8: 13, 9: 13, 11: 13, 14: 13 }),
+    }),
+  }),
+});
+
+/** True when this cell depicts the fighter's signature prop IN ACTION. */
+export function isPropActionCell(fighterId, bank, frame) {
+  return Boolean(PROP_CELLS[fighterId]?.propAction?.[bank]?.includes(frame));
+}
+
+/**
+ * The prop-free stand-in for a cell, used whenever a BARE-HANDED move resolves
+ * to a prop-action cell. Returns the frame unchanged when there is nothing to
+ * swap (which is every cell of the six prop-free fighters).
+ */
+export function bareHandedFrame(fighterId, bank, frame) {
+  if (!isPropActionCell(fighterId, bank, frame)) return frame;
+  const mapped = PROP_CELLS[fighterId]?.bareHand?.[bank]?.[frame];
+  return Number.isInteger(mapped) ? mapped : frame;
+}
+
+/**
+ * A move is BARE-HANDED when it has no authored kit art of its own: kit-less
+ * normals draw from the shared base/authored banks, and those banks are the
+ * only place a prop cell can leak in. Every move that DOES carry kit animation
+ * frames is drawing its own art, prop included, on purpose.
+ */
+export function bareHandedAttack(attack) {
+  return Boolean(attack) && !attack.animation;
+}
+
+// ---------------------------------------------------------------------------
+// v2.9 critic round 2 (B1) — THE HOLD BUDGET, and the data-driven beat tracks
+// that enforce it.
+//
+// The round-1 integration was a slideshow: authored cells were held for
+// 183-500ms and slid across the screen by a transform. Measured on the 2.9
+// build: heavy-kick windup 17 ticks on ONE drawing, jump tuck 28 ticks
+// covering the apex AND the descent, air normal 30 ticks with zero pose
+// change, throw recovery 31 ticks, dash body 10 ticks.
+//
+// THE RULE: no single drawing may own a beat for longer than
+// MOTION_HOLD_BUDGET ticks. A beat that runs longer must advance to another
+// compatible authored cell. Every long beat below is therefore expressed as a
+// KEY LIST — an ordered array of `{ at, pose }` bands over the beat's own
+// normalised progress — rather than as one cell plus a transform.
+//
+// MOTION3 SLOT-IN: keys whose bank is "motion3" are addressed BY POSE NAME,
+// not by frame index, because that bank does not exist yet and its frame order
+// is not fixed. Each carries the exact key it replaces as its fallback, so
+// with no motion3 sheet on disk every track below degrades to a real,
+// shipping-today sequence and NOTHING regresses; when the bank lands, its
+// manifest's poseIds list is enough to light every slot up with no code change
+// (see MOTION-ATLAS.md "Motion3 slots").
+// ---------------------------------------------------------------------------
+
+/** Longest run of ticks one drawing may own inside a beat. */
+export const MOTION_HOLD_BUDGET = 8;
+
+/** Ticks the throw-recovery track is paced over (see attackMotionBeat). */
+const THROW_RECOVERY_TICKS = 34;
+
+/**
+ * The name-addressed bonus bank. Deliberately NOT in AUTHORED_BANKS: those
+ * banks resolve by frame INDEX against a fixed 16-cell grammar, motion3
+ * resolves by pose NAME against whatever its manifest happens to ship, so the
+ * two gates are different contracts and share nothing but the fallback chain.
+ */
+export const MOTION3_BANK = "motion3";
+
+/**
+ * The pose names a motion3 sheet may supply. Order is irrelevant — these are
+ * NAMES, matched against the manifest's own format.poseIds list, which is why
+ * the bank lit up on the tracks below the moment its eight cells landed
+ * without a line of code changing.
+ *
+ * The first eight are the ids the shipped bank actually carries. The rest are
+ * reserved slots the tracks already reference: they resolve to nothing today
+ * and will light up the same way if a later bank supplies them.
+ */
+export const MOTION3_KEYS = Object.freeze({
+  // Shipped in assets/motion3 (2.9 hold-breaking bank).
+  windupPunchB: "windup-punch-b",
+  windupKickB: "windup-kick-b",
+  jumpApex: "jump-apex",
+  jumpDescent: "jump-descent",
+  airAttackB: "air-attack-b",
+  dashBodyB: "dash-body-b",
+  throwRecover: "throw-recover",
+  reactMid: "react-mid",
+  // Reserved: the holds a future bank could still shorten.
+  airStartup: "air-startup",
+  dashLaunch: "dash-launch",
+  throwClinch: "throw-clinch",
+  attackSettle: "attack-settle",
+  blockSettle: "block-settle",
+  getupRoll: "getup-roll",
+});
+
+/**
+ * A motion3 descriptor. `key` is a pose NAME; the host resolves it against
+ * whatever assets/motion3/MANIFEST.json ships and returns the frame index, or
+ * false when the bank (or that pose) is absent — in which case the fallback,
+ * which is always a shipping-today key, wins.
+ */
+export function motion3Pose(key, fallback) {
+  return { bank: MOTION3_BANK, key, frame: -1, fallback };
+}
+
+/**
+ * Build the pose-name -> frame-index map from a motion3 manifest. Tolerant by
+ * construction: an absent manifest, an absent poseIds list or an unknown name
+ * all yield "no such key", which routes the descriptor to its fallback.
+ */
+export function buildMotion3KeyMap(manifest) {
+  const ids = manifest?.format?.poseIds;
+  const map = {};
+  if (Array.isArray(ids)) {
+    ids.forEach((id, index) => {
+      if (typeof id === "string" && id && !(id in map)) map[id] = index;
+    });
+  }
+  return map;
+}
+
+/**
+ * Key-chain constructors. A key is `{ at, chain }` where `chain` runs from the
+ * most-preferred drawing to the least; the CALLER appends its own fallback, so
+ * one track shape serves the kit-less path (base-cell fallback) and the kit
+ * path (kit-frame fallback) without being written twice.
+ */
+export const m3key = (key) => Object.freeze({ bank: MOTION3_BANK, key });
+export const m2key = (cell) => Object.freeze({ bank: "motion2", cell });
+export const m1key = (cell) => Object.freeze({ bank: "motion", cell });
+
+/**
+ * Fold a key's chain onto a fallback into one pose descriptor. A key may pin
+ * its OWN terminal fallback (`key.fallback`) when the beat it replaces showed
+ * a different base cell there than the rest of the track — that is how each
+ * track stays byte-identical to the pre-fix read when no sheet is on disk.
+ */
+export function beatKeyPose(key, fallback) {
+  let pose = key?.fallback || fallback;
+  const chain = key?.chain || [];
+  for (let index = chain.length - 1; index >= 0; index -= 1) {
+    const link = chain[index];
+    pose = link.bank === MOTION3_BANK
+      ? motion3Pose(link.key, pose)
+      : { bank: link.bank, frame: link.cell, fallback: pose };
+  }
+  return pose;
+}
+
+/**
+ * Pick the key whose band contains `progress` (0..1). Bands are `at` values in
+ * ascending order; the first key's `at` must be 0.
+ */
+export function pickBeatKey(keys, progress) {
+  if (!Array.isArray(keys) || keys.length === 0) return null;
+  const point = progress <= 0 ? 0 : progress >= 1 ? 0.999999 : progress;
+  let chosen = keys[0];
+  for (const key of keys) {
+    if (point >= key.at) chosen = key;
+    else break;
+  }
+  return chosen;
+}
+
+/** pickBeatKey + beatKeyPose in one call: the shape every consumer wants. */
+export function beatPoseAt(keys, progress, fallback) {
+  const key = pickBeatKey(keys, progress);
+  // `fallback` may be a FUNCTION of the key. Tracks whose bands land on
+  // different base cells (the reaction tracks' stagger/guard/idle reads, the
+  // throw tail's kit-cell/idle split) need that: two bands that degrade to the
+  // SAME cell are one hold, which is the trap round 1 fell into.
+  const resolveFallback = (chosen) => (typeof fallback === "function" ? fallback(chosen) : fallback);
+  return key ? beatKeyPose(key, resolveFallback(key)) : resolveFallback(null);
+}
+
+/**
+ * What a key ACTUALLY DRAWS with no motion3 bank on disk — the first link of
+ * its chain that is not a motion3 slot, or the caller's fallback. This is the
+ * resolution the hold-budget audit uses, because "two neighbouring motion3
+ * slots that both degrade to the same authored cell" is one hold, not two.
+ */
+export function defaultBeatKeyResolve(key, { motion3 = false, fallback = null } = {}) {
+  for (const link of key?.chain || []) {
+    if (link.bank === MOTION3_BANK) {
+      if (motion3) return `motion3:${link.key}`;
+      continue;
+    }
+    return `${link.bank}:${link.cell}`;
+  }
+  // An empty chain defers to the CALLER's per-band fallback. The audit must
+  // not assume two such bands draw the same cell (they deliberately do not),
+  // so they are distinguished by band unless the caller says otherwise.
+  return typeof fallback === "function" ? fallback(key) : fallback || `fallback@${key?.at ?? 0}`;
+}
+
+/**
+ * Audit hook for the hold budget: the tick length of every band of a key list
+ * when the beat runs for `spanTicks`. Adjacent bands that resolve to the SAME
+ * drawing are merged first — two neighbouring keys that fall back to one cell
+ * are one hold, not two, which is exactly the trap the round-1 reaction track
+ * fell into.
+ */
+export function beatKeyRuns(keys, spanTicks, resolve = defaultBeatKeyResolve) {
+  const span = Math.max(1, Math.round(spanTicks));
+  const cells = [];
+  for (let tick = 0; tick < span; tick += 1) {
+    const key = pickBeatKey(keys, tick / span);
+    cells.push(key ? resolve(key) : "none");
+  }
+  const runs = [];
+  let current = null;
+  for (const cell of cells) {
+    if (current && current.cell === cell) current.ticks += 1;
+    else { current = { cell, ticks: 1 }; runs.push(current); }
+  }
+  return runs;
+}
+
+/** The worst hold in a key list at a given span — what the budget test asserts. */
+export function longestBeatHold(keys, spanTicks, resolve) {
+  return beatKeyRuns(keys, spanTicks, resolve).reduce((worst, run) => Math.max(worst, run.ticks), 0);
+}
+
+// ---------------------------------------------------------------------------
 // v2.9 FLOW — the second authored bank (assets/motion2, MOTION-ATLAS.md
 // "Motion2 bank"): sixteen transition/anticipation keys targeting every beat
 // that still snapped after 2.7. Same architecture as bank 1 — descriptors are
@@ -2028,11 +2546,242 @@ export function motion2Pose(cell, fallbackBank, fallbackFrame) {
  * snapshotted counter; fallbacks are byte-for-byte the pre-2.9 cells
  * (down/hit 15, then the crouched gather 12).
  */
-export function wakeupMotionPose(wakeupFrames, roles = DEFAULT_BASE_ROLES) {
+export function wakeupMotionPose(wakeupFrames, roles = DEFAULT_BASE_ROLES, totalFrames = 16) {
   if (!(wakeupFrames > 0)) return null;
-  return wakeupFrames > 9
-    ? motion2Pose(MOTION2_CELLS.getupA, "base", roles.hit)
-    : motion2Pose(MOTION2_CELLS.getupB, "base", roles.crouch);
+  const total = Math.max(1, totalFrames);
+  return beatPoseAt(wakeupKeys(total, roles), 1 - wakeupFrames / total, null);
+}
+
+/**
+ * v2.9 critic round 2 (M3) — the wake-up ENTRY bridge. The rise END was fixed
+ * in round 1; the START then hard-cut, base:15 (flat on his back, a horizontal
+ * body) straight to motion2:14 (kneeling, one hand on the floor) in ONE tick —
+ * about 90 degrees of torso rotation and ~150px of head rise with nothing
+ * between. The first ticks now wear the authored crumple key (a folded body
+ * still low to the street: the collapse pose played backwards is exactly the
+ * missing in-between), and wakeupRiseTransform opens with a matching pitch, so
+ * the sequence reads prone -> folding up -> knee up -> half-risen -> standing.
+ * The crumple key falls back to base `hit`, which is the flat-on-back cell the
+ * pre-fix read showed at that moment, so a missing bank changes nothing.
+ */
+export function wakeupKeys(totalFrames = 16, roles = DEFAULT_BASE_ROLES) {
+  const prone = { bank: "base", frame: Number.isInteger(roles.hit) ? roles.hit : 15 };
+  const gather = { bank: "base", frame: Number.isInteger(roles.crouch) ? roles.crouch : 12 };
+  return [
+    { at: 0, chain: [m1key(MOTION_CELLS.crumple)], fallback: prone },
+    { at: totalFrames > 12 ? 0.18 : 0.12, chain: [m2key(MOTION2_CELLS.getupA)], fallback: prone },
+    { at: 0.46, chain: [m3key(MOTION3_KEYS.getupRoll), m2key(MOTION2_CELLS.getupA)], fallback: prone },
+    { at: 0.62, chain: [m2key(MOTION2_CELLS.getupB)], fallback: gather },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// v2.9 critic round 2 (B1) — the long-beat KEY TRACKS.
+//
+// Each returns an `{ at, chain, fallback? }` list over the beat's own
+// normalised progress. Measured round-1 holds, and what each track does:
+//
+//   JUMP ARC       28 ticks on the tuck cell covering the apex AND the whole
+//                  descent. Now rise -> tuck -> [apex] -> [descend] -> airrec
+//                  -> land: four real body plans today, six with motion3.
+//   AIR NORMAL     30 ticks on ONE cell for startup + active + recovery. Now
+//                  chamber (tuck) -> strike (air-attack) -> trail (airrec) ->
+//                  gather (land).
+//   HEAVY WINDUP   17 ticks (kick) / 11 (punch) on the chamber cell. Now the
+//                  weight GATHERS on the charge stance before the limb cocks.
+//   DASH           10 ticks on the stretch cell with a 90-degree entry pop and
+//                  a 2-tick exit. Now launch -> stretch -> brake, and the
+//                  brake owns the velocity decay instead of the idle.
+//   THROW RECOVERY 31 ticks on one kit cell. Now release -> follow-through ->
+//                  stance -> idle cycle.
+//   REACTION       the heavy opened on big-hit for 4 ticks and then dropped
+//                  into the SAME cell the light track uses. The two tracks now
+//                  differ through their middles, and both end on the idle
+//                  cycle instead of pinning the guard cell for a dozen ticks.
+//
+// Every chain ends at a shipping-today authored or base cell, so no track
+// depends on motion3 existing.
+// ---------------------------------------------------------------------------
+
+/**
+ * The ballistic arc, 0 = takeoff, 0.5 = apex, 1 = touchdown. `bandStart` is
+ * the fighter-specific progress at which the tuck may open (donald's base
+ * ascent cell is his golf swing, so his opens almost immediately — kept
+ * exactly as 2.7 shipped it).
+ */
+export function jumpArcKeys(bandStart = 0.22) {
+  // donald's band used to open at 0.06 because his BASE ascent cell is the
+  // golf swing and a plain jump wore it for ~10 ticks. That workaround is
+  // superseded: since 2.9 the ascent wears the authored jump-rise key, so his
+  // opening is clamped back into the roster's range — leaving it at 0.06 gave
+  // him a 3-tick rise and a 20-tick tuck, which is the very hold this track
+  // exists to break.
+  const open = Math.min(0.26, Math.max(0.18, bandStart));
+  // The airborne middle is divided RELATIVE to the opening, so an earlier or
+  // later tuck cannot stretch one band past the budget.
+  const span = 0.73 - open;
+  return [
+    { at: 0, chain: [m2key(MOTION2_CELLS.jumpRise)] },
+    { at: open, chain: [m1key(MOTION_CELLS.tuck)] },
+    { at: open + span * 0.25, chain: [m3key(MOTION3_KEYS.jumpApex), m1key(MOTION_CELLS.tuck)] },
+    { at: open + span * 0.5, chain: [m3key(MOTION3_KEYS.jumpDescent), m1key(MOTION_CELLS.airrec)] },
+    { at: open + span * 0.75, chain: [m1key(MOTION_CELLS.airrec)] },
+    // The airborne gather. The TOUCHDOWN that follows it is the landing-
+    // recovery branch's half-crouch, so the landing reads gather -> plant ->
+    // stand across two drawings under one squash.
+    { at: 0.73, chain: [m1key(MOTION_CELLS.land)] },
+  ];
+}
+
+/**
+ * A kit-less AIR NORMAL across its whole window, in progress over the move's
+ * total duration. The active band is the authored diving strike; the startup
+ * chambers on the tuck (knees drawn up before the limb goes out) and the
+ * recovery trails on the loose-limbed air-recovery key into the landing
+ * gather, so the extended limb is not frozen for half a second.
+ */
+export function airNormalKeys(startupPhase, recoverPhase) {
+  const strike = Math.min(0.6, Math.max(0.08, startupPhase));
+  const trail = Math.min(0.92, Math.max(strike + 0.1, recoverPhase));
+  return [
+    { at: 0, chain: [m3key(MOTION3_KEYS.airStartup), m1key(MOTION_CELLS.tuck)] },
+    { at: strike, chain: [m2key(MOTION2_CELLS.airAttack)] },
+    { at: strike + (trail - strike) * 0.5, chain: [m3key(MOTION3_KEYS.airAttackB), m2key(MOTION2_CELLS.airAttack)] },
+    { at: trail, chain: [m1key(MOTION_CELLS.airrec)] },
+    { at: trail + (1 - trail) * 0.55, chain: [m1key(MOTION_CELLS.land)] },
+  ];
+}
+
+/**
+ * The anticipation on a kit-less standing heavy, in progress over the windup
+ * window. One drawing owned all 17 ticks of deathblow's heavy kick; the weight
+ * now GATHERS first and the limb cocks second, which is the order a real windup
+ * happens in.
+ *
+ * The gather is motion2's crouch-trans cell, checked at 1:1 across the roster
+ * this round: on all nine human fighters it is a deep coiled crouch with the
+ * fists already up — prop-free (donald's carries no club) and VFX-free, which
+ * `charge` is NOT (charge glows on deathblow, jez, benny, donald and cyraxx,
+ * so using it would put a power-up aura on every ordinary heavy). The devil's
+ * crouch-trans is an all-fours prowl and is accept:false for him, so his chain
+ * degrades to the cocked cell exactly as before.
+ */
+export function heavyWindupKeys(limb) {
+  const kick = limb === "kick";
+  const cocked = kick ? MOTION2_CELLS.windupKick : MOTION2_CELLS.windupPunch;
+  // The motion3 mid-key is LIMB-SPECIFIC, exactly like the chamber it sits
+  // between, so a kick windup never borrows the punch's coil.
+  const mid = kick ? MOTION3_KEYS.windupKickB : MOTION3_KEYS.windupPunchB;
+  return [
+    { at: 0, chain: [m2key(MOTION2_CELLS.crouchTrans), m2key(cocked)] },
+    { at: 0.44, chain: [m3key(mid), m2key(cocked)] },
+    { at: 0.72, chain: [m2key(cocked)] },
+  ];
+}
+
+/**
+ * The dash, in progress over the dash window. M1: the 2.7 wave fixed the exit
+ * pop and left the ENTRY identical — one tick of upright idle at vx 0 followed
+ * by a fully horizontal lunge at vx 622. The brake key (a mid-lunge body, one
+ * foot planted, arms trailing) now bookends the stretch, so the fighter passes
+ * through a transitional body plan on the way INTO the lunge as well as out.
+ */
+export function dashKeys() {
+  return [
+    { at: 0, chain: [m3key(MOTION3_KEYS.dashLaunch), m2key(MOTION2_CELLS.dashBrake)] },
+    { at: 0.16, chain: [m1key(MOTION_CELLS.dash)] },
+    { at: 0.42, chain: [m3key(MOTION3_KEYS.dashBodyB), m1key(MOTION_CELLS.dash)] },
+    { at: 0.68, chain: [m2key(MOTION2_CELLS.dashBrake)] },
+  ];
+}
+
+/**
+ * The throw ATTACKER's recovery, in progress over the recovery window. The
+ * clinch released and then held ONE kit cell for 31 ticks. The weight now
+ * carries past the release on the follow-through key before the stance
+ * recovers, and the tail hands back to the caller's idle read so the last
+ * third breathes instead of freezing. An empty chain means "whatever the
+ * caller's fallback is at this instant" — the kit cell, then the idle cycle.
+ */
+export function throwClinchKeys() {
+  return [
+    { at: 0, chain: [] },
+    { at: 0.18, chain: [m2key(MOTION2_CELLS.throwGrab)] },
+    { at: 0.5, chain: [m3key(MOTION3_KEYS.throwClinch)] },
+    { at: 0.72, chain: [] },
+  ];
+}
+
+export function throwRecoveryKeys() {
+  return [
+    { at: 0, chain: [] },
+    { at: 0.18, chain: [m1key(MOTION_CELLS.follow)] },
+    { at: 0.40, chain: [] },
+    { at: 0.56, chain: [m3key(MOTION3_KEYS.throwRecover), m1key(MOTION_CELLS.follow)] },
+    { at: 0.74, chain: [] },
+  ];
+}
+
+/**
+ * A kit-less normal's RECOVERY, in progress over the recovery window. Round 1
+ * left this beat completely unsequenced: `return base(frames[3])` for the
+ * whole window, measured at 20-23 ticks frozen on one cell across the roster
+ * (and on donald that cell was a club-in-hand golf follow-through). The weight
+ * now carries past the target on the follow-through key before the stance
+ * recovers, and the tail hands back to the caller's idle read so the last
+ * third breathes instead of freezing.
+ */
+export function attackRecoveryKeys() {
+  return [
+    { at: 0, chain: [m1key(MOTION_CELLS.follow)] },
+    { at: 0.24, chain: [] },
+    { at: 0.46, chain: [m3key(MOTION3_KEYS.attackSettle)] },
+    { at: 0.66, chain: [] },
+  ];
+}
+
+/**
+ * BLOCKSTUN, in progress over the blockstun window. The authored guard flinch
+ * owned all 17 ticks of it — a static absorb, and the one drawing whose height
+ * mismatch with the guard cell M4 is about. The flinch now owns the IMPACT and
+ * the stance recovers behind it, which is what blockstun looks like.
+ */
+export function blockstunKeys() {
+  return [
+    { at: 0, chain: [m2key(MOTION2_CELLS.blockHit)] },
+    { at: 0.42, chain: [m3key(MOTION3_KEYS.blockSettle)] },
+    { at: 0.62, chain: [] },
+  ];
+}
+
+/**
+ * The victim REACTION tracks, in progress over the reaction window. Round 1
+ * opened the heavy on the big-hit key for four ticks and then dropped it into
+ * motion2:9 — the SAME cell the light track uses — with a 60-70 degree torso
+ * jump and no in-between, and then both tracks pinned ONE base cell for 6-7
+ * ticks. The middles are now different drawings (heavy sags through the
+ * authored rubber-legs key, light folds through the authored guard flinch) and
+ * motion3's react-mid pair slots straight into both. Empty chains defer to the
+ * caller's per-band base fallback (the map's stagger/hit/guard reads).
+ */
+export function reactionTrackKeys(heavy) {
+  return heavy
+    ? [
+      { at: 0, chain: [m1key(MOTION_CELLS.bighit)] },
+      { at: 0.12, chain: [m3key(MOTION3_KEYS.reactMid), m2key(MOTION2_CELLS.dizzy)] },
+      { at: 0.30, chain: [m2key(MOTION2_CELLS.lightHit)] },
+      { at: 0.44, chain: [] },
+      { at: 0.60, chain: [] },
+      { at: 0.78, chain: [] },
+    ]
+    : [
+      { at: 0, chain: [m2key(MOTION2_CELLS.lightHit)] },
+      { at: 0.14, chain: [m2key(MOTION2_CELLS.blockHit)] },
+      { at: 0.30, chain: [] },
+      { at: 0.44, chain: [] },
+      { at: 0.60, chain: [] },
+      { at: 0.78, chain: [] },
+    ];
 }
 
 /**
@@ -2060,17 +2809,74 @@ export function wakeupRiseTransform(wakeupFrames, totalFrames = 16) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// v2.10 WALK — the third authored bank (assets/walk, MOTION-ATLAS.md "Walk
+// bank"): FOUR keys of one stride, generated in a single pass so build,
+// costume and grading match BY CONSTRUCTION, and played as its own
+// self-contained cycle that is NEVER interleaved with the base walk cells.
+//
+// Both prior attempts failed for reasons this shape removes at once. The base
+// bank is not a cycle -- its four walk cells are near-duplicate redraws of ONE
+// stride phase (adjacent-key silhouette IoU ~0.88-0.93, and pointed at those
+// cells the 2.10 gate fails phase alternation on every fighter) -- so no
+// two-cell patch bolted onto it can produce a walk; and a patch generated
+// separately from the base bank cannot match its grading, which is the
+// identity strobe the 2.9 critic round rejected.
+//
+// A fighter without an ACCEPTED sheet keeps the pre-2.10 base-only walk
+// byte-identically: the descriptor's fallback is exactly the base cell that
+// stride phase used to show, and resolveMotionPose drops to it whenever the
+// sheet is missing, still decoding, or manifest-rejected. Eight of ten
+// fighters ship that way today.
+// ---------------------------------------------------------------------------
+
+/** Cells per walk sheet. Only row 0 of the 4x4 grid carries art. */
+export const WALK_CELL_COUNT = 4;
+
+export const WALK_CELLS = Object.freeze({
+  contactLeft: 0, passingLeft: 1, contactRight: 2, passingRight: 3,
+});
+
+export function walkPose(cell, fallbackBank, fallbackFrame) {
+  return { bank: "walk", frame: cell, fallback: { bank: fallbackBank, frame: fallbackFrame } };
+}
+
+/**
+ * Which of the four walk keys this stride phase is on: 0 -> 1 -> 2 -> 3 -> 0.
+ *
+ * Deliberately the SAME `walkTime * 10` phase the base cycle has always used,
+ * so locomotion speed still drives cadence exactly as it did and the fallback
+ * lands on the very base cell the old read would have shown at that instant.
+ * Pure function of snapshotted sim state -- no Math.random, no observer
+ * latch -- so rollback resimulation and both online peers agree.
+ */
+export function walkCycleFrame(walkTime) {
+  const phase = Math.floor((Number.isFinite(walkTime) ? walkTime : 0) * 10);
+  return ((phase % WALK_CELL_COUNT) + WALK_CELL_COUNT) % WALK_CELL_COUNT;
+}
+
+/**
+ * The locomotion descriptor: the authored key, falling back to the base walk
+ * cell that same phase already used. `roles.walk` is [4,5,6,7] for all ten
+ * fighters, so the fallback is byte-for-byte the pre-2.10 read.
+ */
+export function walkCyclePose(walkTime, roles = DEFAULT_BASE_ROLES) {
+  const key = walkCycleFrame(walkTime);
+  const walk = roles.walk || DEFAULT_BASE_ROLES.walk;
+  return walkPose(key, "base", walk[key % walk.length]);
+}
+
 /**
  * Per-fighter accept masks (+ build scale, kept for reference) from
  * assets/motion/MANIFEST.json. A cell missing from the manifest is treated as
  * rejected, so a stale manifest can never ship an unreviewed frame.
  */
-export function buildMotionAcceptMasks(manifest) {
+export function buildMotionAcceptMasks(manifest, cellCount = MOTION_CELL_COUNT) {
   const masks = {};
   for (const [fighterId, entry] of Object.entries(manifest?.fighters || {})) {
-    const accept = new Array(MOTION_CELL_COUNT).fill(false);
+    const accept = new Array(cellCount).fill(false);
     for (const cell of entry.cells || []) {
-      if (Number.isInteger(cell.frame) && cell.frame >= 0 && cell.frame < MOTION_CELL_COUNT) {
+      if (Number.isInteger(cell.frame) && cell.frame >= 0 && cell.frame < cellCount) {
         accept[cell.frame] = cell.accept === true;
       }
     }
@@ -2079,25 +2885,50 @@ export function buildMotionAcceptMasks(manifest) {
   return masks;
 }
 
+/** The authored sheet banks, in the order they were added. */
+export const AUTHORED_BANKS = Object.freeze(["motion", "motion2", "walk"]);
+
+/** True for a bank that must clear the sheet + accept-mask gate before it draws. */
+export function isAuthoredBank(bank) {
+  return AUTHORED_BANKS.includes(bank);
+}
+
 /**
  * Resolve a pose descriptor against sheet availability: an authored bank
- * ("motion" or, v2.9, "motion2") holds only while `drawable(cell, bank)`
- * reports that bank's sheet loaded AND its manifest accepting the cell;
- * otherwise the descriptor's fallback wins. The walk is chained so a motion2
- * beat whose pre-2.9 read was itself a bank-1 cell still degrades all the way
- * to base cleanly. Non-motion poses pass through untouched.
+ * ("motion", v2.9 "motion2", or v2.10 "walk") holds only while
+ * `drawable(cell, bank)` reports that bank's sheet loaded AND its manifest
+ * accepting the cell; otherwise the descriptor's fallback wins. The chain is
+ * walked, so a motion2 beat whose pre-2.9 read was itself a bank-1 cell still
+ * degrades all the way to base cleanly. Non-authored poses pass through
+ * untouched.
  */
-export function resolveMotionPose(pose, drawable, fighterId = null) {
+export function resolveMotionPose(pose, drawable, fighterId = null, options = {}) {
+  // v2.9 critic round 2 (B4): a BARE-HANDED move may not resolve to a cell
+  // that depicts the fighter's signature prop being swung.
+  const bareHanded = options.bareHanded === true;
   let current = pose;
-  while (current && (current.bank === "motion" || current.bank === "motion2")) {
-    if (drawable(current.frame, current.bank)) return current;
+  let guard = 0;
+  while (current && (isAuthoredBank(current.bank) || current.bank === MOTION3_BANK) && guard < 12) {
+    guard += 1;
+    // v2.9 critic round 2 (B1): motion3 keys are addressed BY POSE NAME, so
+    // the host answers with the RESOLVED FRAME INDEX (or false). The
+    // index-addressed banks keep the boolean contract they shipped with.
+    const answer = current.bank === MOTION3_BANK
+      ? drawable(current.key, MOTION3_BANK)
+      : drawable(current.frame, current.bank);
+    const frame = answer === true ? current.frame
+      : Number.isInteger(answer) && answer >= 0 ? answer : -1;
+    if (frame >= 0 && !(bareHanded && isPropActionCell(fighterId, current.bank, frame))) {
+      return frame === current.frame ? current : { ...current, frame };
+    }
     current = current.fallback || { bank: "base", frame: 0 };
   }
   // v2.9 critic round: the `unusable` swap runs on whatever base cell won, so
   // an art-defect cell can never reach a renderer no matter which beat, kit
   // or fallback chain produced it.
   if (fighterId && current && current.bank === "base") {
-    const safe = safeBaseFrame(fighterId, current.frame);
+    const swapped = bareHanded ? bareHandedFrame(fighterId, "base", current.frame) : current.frame;
+    const safe = safeBaseFrame(fighterId, swapped);
     if (safe !== current.frame) return { ...current, frame: safe };
   }
   return current;
@@ -2110,9 +2941,26 @@ export function resolveMotionPose(pose, drawable, fighterId = null) {
  * attack instance + attackFrame.
  */
 export function attackMotionBeat(attack, attackFrame) {
-  if (!attack || attack.kind === "throw") return null;
+  if (!attack) return null;
   const start = attack.activeStartFrame;
   const end = attack.activeEndFrame;
+  // v2.9 critic round 2 (B1): the THROW attacker's recovery. Measured at 31
+  // ticks frozen on one kit cell after the clinch released. `cell` stays null
+  // so no legacy consumer changes behaviour; the sequence rides `keys`.
+  if (attack.kind === "throw") {
+    if (attackFrame < end) return null;
+    // A throw's totalFrames includes the whole clinch, so measuring the
+    // recovery against it stretched the first band over 25 ticks. The track is
+    // paced against the recovery window itself, capped at a real recovery
+    // length rather than the move's whole timeline.
+    const tail = Math.min(THROW_RECOVERY_TICKS, Math.max(1, (attack.totalFrames ?? end + 1) - end));
+    return {
+      beat: "throwRecover",
+      cell: null,
+      keys: throwRecoveryKeys(),
+      phase: Math.min(0.999, (attackFrame - end) / tail),
+    };
+  }
   const crouching = Boolean(attack.cancelProfileId?.startsWith("crouch"));
   const airborne = attack.level === ATTACK_LEVELS.AIR;
   // v2.9 critic round (B5): a kit-less AIR NORMAL is one authored pose for its
@@ -2123,7 +2971,20 @@ export function attackMotionBeat(attack, attackFrame) {
   // limb teleported leg -> fist mid-move. Checked before every other beat so
   // no smear/charge/windup branch can re-open the grounded reads.
   if (airborne && !attack.animation && (attack.kind === "light" || attack.kind === "heavy")) {
-    return { beat: "airAttack", bank: "motion2", cell: MOTION2_CELLS.airAttack };
+    // v2.9 critic round 2 (B1): round 1 fixed WHICH cell an air normal wears
+    // and left it wearing that ONE cell for all 30 ticks of the move — the
+    // longest single-drawing hold measured anywhere in the build. `cell` and
+    // `bank` are unchanged (the beat's signature drawing, and what the 2.9
+    // contract asserts); `keys` sequences chamber -> strike -> trail -> gather
+    // across the same window.
+    const total = Math.max(1, attack.totalFrames ?? end + 1);
+    return {
+      beat: "airAttack",
+      bank: "motion2",
+      cell: MOTION2_CELLS.airAttack,
+      keys: airNormalKeys(start / total, end / total),
+      phase: Math.min(0.999, Math.max(0, attackFrame / total)),
+    };
   }
   if (attackFrame < start) {
     // 1-2 FLASH frames between windup and contact on standing heavies,
@@ -2168,9 +3029,17 @@ export function attackMotionBeat(attack, attackFrame) {
       // in the middle of a kick. Only the smear flash is reserved.
       const windupEnd = start - smearTicks;
       if (windupEnd >= 2 && attackFrame < windupEnd) {
+        // v2.9 critic round 2 (B1): filling the window with ONE drawing was
+        // the other half of the problem — deathblow's heavy kick owned 17
+        // consecutive ticks (283ms) of the chambered-knee cell. `cell` stays
+        // the beat's signature drawing (the limb chamber, which is what the
+        // 2.9 contract asserts and what the transform pairs with); `keys`
+        // splits the window into gather -> [mid] -> cocked.
         return {
           beat: "windup", bank: "motion2",
           cell: attack.limb === "kick" ? MOTION2_CELLS.windupKick : MOTION2_CELLS.windupPunch,
+          keys: heavyWindupKeys(attack.limb),
+          phase: Math.min(0.999, Math.max(0, attackFrame / windupEnd)),
         };
       }
     }
@@ -2189,7 +3058,22 @@ export function attackMotionBeat(attack, attackFrame) {
     }
     return null;
   }
-  if (attackFrame >= end) return null;
+  if (attackFrame >= end) {
+    // v2.9 critic round 2 (B1): the RECOVERY of a kit-less normal. Measured
+    // 20-23 ticks frozen on one base cell on every fighter tested. Gated to
+    // kit-less normals exactly like the windup/smear/extension beats, so an
+    // authored special's own recovery art is untouched.
+    if (!attack.animation && (attack.kind === "light" || attack.kind === "heavy")) {
+      const tail = Math.max(1, (attack.totalFrames ?? end + 1) - end);
+      return {
+        beat: "recover",
+        cell: MOTION_CELLS.follow,
+        keys: attackRecoveryKeys(),
+        phase: Math.min(0.999, (attackFrame - end) / tail),
+      };
+    }
+    return null;
+  }
   const progress = (attackFrame - start) / Math.max(1, end - start);
   // Full-extension contact for the matching limb — kit-less normals only
   // (authored specials cells stay the contact art; driveHeavy is a shoulder/
@@ -2231,6 +3115,11 @@ export function attackAnimationPose(attack, attackFrame) {
   // sequence, each carrying the exact cell it replaces as its fallback.
   const beat = attackMotionBeat(attack, attackFrame);
   if (beat && beat.beat !== "extension") {
+    // v2.9 critic round 2 (B1): a beat that carries a KEY TRACK sequences
+    // through it, with the kit's own cell as the terminal fallback — that is
+    // how the throw attacker's 31-tick recovery freeze becomes release ->
+    // follow-through -> stance without losing the kit art.
+    if (beat.keys) return beatPoseAt(beat.keys, beat.phase ?? 0, { bank: animation.bank, frame });
     // v2.9 FLOW: beats may name either authored bank (windup/air-attack are
     // motion2). In practice both are gated on kit-less moves, but the routing
     // stays bank-correct if a future beat lands here.

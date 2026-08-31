@@ -25,6 +25,9 @@ import * as THREE from "three";
 import { PX, worldX, worldY, SIM_FLOOR } from "./shared.mjs";
 import { normalMapForAtlas, softDotTexture, hardShadowTexture, smearedAtlasTexture, bleedAtlasCanvas, hdComposedCanvas, atlasFootMetrics } from "./textures.mjs";
 import { FIGHTER_MASK_LAYER } from "./post.mjs";
+// v2.10 WALK: the authored-bank list is shared with the sim so 3D can never
+// drift from the 2D path on which banks exist (motion, motion2, walk).
+import { AUTHORED_BANKS } from "../../engine/fighter-kits.mjs";
 
 // HD (2x) atlas variants for 3D mode only (renderer/hd/MANIFEST.json).
 // Loaded lazily per fighter; on any failure the bank silently keeps the
@@ -692,6 +695,8 @@ export class FighterLayer {
   // HD motion sheets, so 3D must never request renderer/hd/ for this bank.
   // v2.9 FLOW: the motion2 bank rides the same lazy path (SD only, same
   // no-renderer/hd rule).
+  // v2.10 WALK: and so does the walk bank — resolved from the SD sheet in
+  // assets/walk/, never from renderer/hd/ (no HD walk sheets exist).
   ensureMotionBank(rig, fighter, bankName = "motion") {
     if (rig.banks[bankName]) return true;
     const host = this.host;
@@ -707,12 +712,12 @@ export class FighterLayer {
     // The host only emits an authored bank once the sheet is loaded and the
     // manifest accepts the cell, but the rig's texture may still be a frame
     // behind — the descriptor's own fallback covers the gap.
-    if ((pose.bank === "motion" || pose.bank === "motion2")
+    if (AUTHORED_BANKS.includes(pose.bank)
       && !this.ensureMotionBank(rig, fighter, pose.bank)) {
       pose = pose.fallback || { bank: "base", frame: pose.frame };
     }
     const bankName = pose.bank === "specials" && rig.banks.specials ? "specials"
-      : (pose.bank === "motion" || pose.bank === "motion2") && rig.banks[pose.bank]
+      : AUTHORED_BANKS.includes(pose.bank) && rig.banks[pose.bank]
         ? pose.bank : "base";
     const bank = rig.banks[bankName];
     if (rig.currentBank !== bankName) {
@@ -742,16 +747,31 @@ export class FighterLayer {
     // the 3D rig holds the same constant mass across the crouch handoff the
     // 2D path does.
     const sizeAdjust = (bankName === "specials" ? (host.moveSheetAdjust[fighter.def.id] || 1)
-      : bankName === "motion" || bankName === "motion2"
-        ? (host.motionSheetAdjust?.[fighter.def.id] || 1) : 1)
-      * (host.baseCellDrawAdjust ? host.baseCellDrawAdjust(fighter.def.id, bankName, pose.frame) : 1);
+      : bankName === "motion" || bankName === "motion2" || bankName === "motion3"
+        ? (host.motionSheetAdjust?.[fighter.def.id] || 1)
+        // v2.10 WALK: its own table — the walk sheets normalise to each
+        // fighter's measured BASE WALK height, not to the motion banks'
+        // convention, so they must not inherit that correction.
+        : bankName === "walk" ? (host.walkSheetAdjust?.[fighter.def.id] || 1) : 1)
+      // v2.9 critic round 2 (M4): cellDrawAdjust rolls the oversized-crouch
+      // correction together with the guard-flinch height reconciliation, so
+      // the rig and the canvas apply one identical scale rule per cell.
+      * (host.cellDrawAdjust ? host.cellDrawAdjust(fighter.def.id, bankName, pose.frame)
+        : host.baseCellDrawAdjust ? host.baseCellDrawAdjust(fighter.def.id, bankName, pose.frame) : 1);
     const renderSize = host.fighterRenderSize(fighter.def.id) * sizeAdjust * PX;
     // v2.9 critic round (M5): per-cell floor registration in sim pixels — the
     // Commissioner's older base sheet bottoms out anywhere from 277 to 320.
-    const floorFix = host.cellFloorOffset
-      ? host.cellFloorOffset(fighter.def.id, bankName, pose.frame) / 320
+    // v2.9 critic round 2 (B2): plus the ramped airborne body-centre anchor,
+    // so the rig cannot disagree with the canvas about where an airborne cell
+    // sits. Same pure helper, same ramp.
+    const airHeight = fighter.grounded ? 0 : Math.max(0, SIM_FLOOR - fighter.y);
+    const floorFix = host.cellVerticalOffset
+      ? host.cellVerticalOffset(fighter.def.id, bankName, pose.frame, airHeight) / 320
         * host.fighterRenderSize(fighter.def.id) * sizeAdjust
-      : 0;
+      : host.cellFloorOffset
+        ? host.cellFloorOffset(fighter.def.id, bankName, pose.frame) / 320
+          * host.fighterRenderSize(fighter.def.id) * sizeAdjust
+        : 0;
     const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
     const crouchScale = fighter.crouch ? 0.88 : 1;
     const crouchDrop = fighter.crouch ? 21 : 0;
