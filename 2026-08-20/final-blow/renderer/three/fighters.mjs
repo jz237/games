@@ -682,10 +682,29 @@ export class FighterLayer {
     }
   }
 
+  // v2.7 FRAMES: the SD motion sheet becomes a bank the first time a motion
+  // pose arrives with its image decoded. Built with NO hdPath — there are no
+  // HD motion sheets, so 3D must never request renderer/hd/ for this bank.
+  ensureMotionBank(rig, fighter) {
+    if (rig.banks.motion) return true;
+    const host = this.host;
+    const image = host.fighterAtlasFor ? host.fighterAtlasFor(fighter, "motion") : null;
+    if (!image?.complete || !image.naturalWidth) return false;
+    rig.banks.motion = this.buildBank(image);
+    return true;
+  }
+
   poseRig(rig, fighter, state, timeSec, dtSec = 0) {
     const host = this.host;
-    const pose = host.fighterAnimationPose(fighter);
-    const bankName = pose.bank === "specials" && rig.banks.specials ? "specials" : "base";
+    let pose = host.fighterAnimationPose(fighter);
+    // The host only emits bank "motion" once the sheet is loaded and the
+    // manifest accepts the cell, but the rig's texture may still be a frame
+    // behind — the descriptor's own fallback covers the gap.
+    if (pose.bank === "motion" && !this.ensureMotionBank(rig, fighter)) {
+      pose = pose.fallback || { bank: "base", frame: pose.frame };
+    }
+    const bankName = pose.bank === "specials" && rig.banks.specials ? "specials"
+      : pose.bank === "motion" && rig.banks.motion ? "motion" : "base";
     const bank = rig.banks[bankName];
     if (rig.currentBank !== bankName) {
       rig.mesh.material = bank.material;
@@ -709,7 +728,8 @@ export class FighterLayer {
     const moving = Math.abs(fighter.vx) > 22 && fighter.grounded && !attack;
     const bob = fighter.cinematicFrame === null && fighter.grounded && !fighter.stun && !fighter.block
       ? Math.sin((moving ? fighter.walkTime * 20 : fighter.animTime * 10) + fighter.side * 2) * (moving ? 1.8 : 2.7) : 0;
-    const sizeAdjust = bankName === "specials" ? (host.moveSheetAdjust[fighter.def.id] || 1) : 1;
+    const sizeAdjust = bankName === "specials" ? (host.moveSheetAdjust[fighter.def.id] || 1)
+      : bankName === "motion" ? (host.motionSheetAdjust?.[fighter.def.id] || 1) : 1;
     const renderSize = host.fighterRenderSize(fighter.def.id) * sizeAdjust * PX;
     const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
     const crouchScale = fighter.crouch ? 0.88 : 1;

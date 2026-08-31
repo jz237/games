@@ -3,6 +3,7 @@ import {
   AUTHORED_MOVEMENT_BASELINE,
   FIGHTER_KITS,
   KIT_ACTIONS,
+  MOTION_CELLS,
   attackAnimationPose,
   createFighterMove,
   fighterActionCost,
@@ -155,7 +156,10 @@ function testMoveInstancesAndArt() {
   // (recovery cell) arrives a third early so no active window freezes.
   const midActive = faultline.activeStartFrame + Math.floor(faultline.activeFrames * 0.5);
   assert.deepEqual(attackAnimationPose(faultline, midActive), { bank: "specials", frame: 2 });
-  assert.deepEqual(attackAnimationPose(faultline, faultline.activeEndFrame - 1), { bank: "specials", frame: 3 });
+  // v2.7 FRAMES: the late-active beat is the authored follow-through motion
+  // cell, carrying the exact recovery cell it replaced as its fallback.
+  assert.deepEqual(attackAnimationPose(faultline, faultline.activeEndFrame - 1),
+    { bank: "motion", frame: MOTION_CELLS.follow, fallback: { bank: "specials", frame: 3 } });
   assert.deepEqual(attackAnimationPose(faultline, faultline.activeEndFrame), { bank: "specials", frame: 3 });
 
   const vinyl = createFighterMove("jez", "backSpecial");

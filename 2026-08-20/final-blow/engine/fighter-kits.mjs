@@ -1750,6 +1750,103 @@ export function recognizeFighterCommand(fighterId, history, currentFrame, { limb
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// v2.7 FRAMES — the per-fighter MOTION bank (assets/motion, MOTION-ATLAS.md).
+// Pure sim-state cell selection: pose descriptors may name bank "motion" and
+// then ALWAYS carry the base/specials cell the machinery used before as
+// `fallback`, so a missing sheet or a manifest-rejected cell degrades to
+// exactly the 2.6 read in both renderers. A motion cell is a bonus, never a
+// dependency.
+// ---------------------------------------------------------------------------
+
+export const MOTION_CELL_COUNT = 16;
+
+export const MOTION_CELLS = Object.freeze({
+  punchExt: 0, kickExt: 1, smearH: 2, smearV: 3, follow: 4, tuck: 5,
+  land: 6, dash: 7, bighit: 8, crumple: 9, wallsplat: 10, airrec: 11,
+  charge: 12, victory2: 13, sig1: 14, sig2: 15,
+});
+
+export function motionPose(cell, fallbackBank, fallbackFrame) {
+  return { bank: "motion", frame: cell, fallback: { bank: fallbackBank, frame: fallbackFrame } };
+}
+
+/**
+ * Per-fighter accept masks (+ build scale, kept for reference) from
+ * assets/motion/MANIFEST.json. A cell missing from the manifest is treated as
+ * rejected, so a stale manifest can never ship an unreviewed frame.
+ */
+export function buildMotionAcceptMasks(manifest) {
+  const masks = {};
+  for (const [fighterId, entry] of Object.entries(manifest?.fighters || {})) {
+    const accept = new Array(MOTION_CELL_COUNT).fill(false);
+    for (const cell of entry.cells || []) {
+      if (Number.isInteger(cell.frame) && cell.frame >= 0 && cell.frame < MOTION_CELL_COUNT) {
+        accept[cell.frame] = cell.accept === true;
+      }
+    }
+    masks[fighterId] = { accept: Object.freeze(accept), scale: Number(entry.scale) || 1 };
+  }
+  return masks;
+}
+
+/**
+ * Resolve a pose descriptor against sheet availability: bank "motion" holds
+ * only while `drawable(cell)` reports the sheet loaded AND the manifest
+ * accepting the cell; otherwise the descriptor's own fallback wins. Non-motion
+ * poses pass through untouched.
+ */
+export function resolveMotionPose(pose, drawable) {
+  if (!pose || pose.bank !== "motion") return pose;
+  if (drawable(pose.frame)) return pose;
+  return pose.fallback || { bank: "base", frame: 0 };
+}
+
+/**
+ * Strike-beat classification shared by the pose functions AND the procedural
+ * extension envelope (fighterMotionTransform in game.js), so the chosen cell
+ * and the transform riding it always agree. Pure function of the snapshotted
+ * attack instance + attackFrame.
+ */
+export function attackMotionBeat(attack, attackFrame) {
+  if (!attack || attack.kind === "throw") return null;
+  const start = attack.activeStartFrame;
+  const end = attack.activeEndFrame;
+  const crouching = Boolean(attack.cancelProfileId?.startsWith("crouch"));
+  const airborne = attack.level === ATTACK_LEVELS.AIR;
+  if (attackFrame < start) {
+    // 1-2 FLASH frames between windup and contact on standing heavies,
+    // specials and supers. Rising arcs streak upward (smear-v); overheads
+    // keep their authored windup — the grammar has no downward smear.
+    if (attackFrame >= start - 2 && start >= 6 && !crouching && !airborne
+      && attack.kind !== "light" && attack.level !== ATTACK_LEVELS.OVERHEAD) {
+      const rising = attack.juggleStarter
+        || (Number.isFinite(attack.launchVelocityY) && attack.launchVelocityY < 0)
+        || attack.kitAction === "launcher" || attack.kitAction === "enhancedLauncher";
+      return { beat: "smear", cell: rising ? MOTION_CELLS.smearV : MOTION_CELLS.smearH };
+    }
+    // Super/EX startups hold the gathered charge stance until the smear.
+    if ((attack.superMove || (attack.gritCost || 0) > 0) && start >= 8 && attackFrame < start - 2) {
+      return { beat: "charge", cell: MOTION_CELLS.charge };
+    }
+    return null;
+  }
+  if (attackFrame >= end) return null;
+  const progress = (attackFrame - start) / Math.max(1, end - start);
+  // Full-extension contact for the matching limb — kit-less normals only
+  // (authored specials cells stay the contact art; driveHeavy is a shoulder/
+  // body run, not a limb extension).
+  if (!attack.animation && !crouching && !airborne && attack.kitAction !== "driveHeavy"
+    && (attack.kind === "light" || attack.kind === "heavy")
+    && progress < (attack.kind === "light" ? 0.52 : 0.34)) {
+    return { beat: "extension", cell: attack.limb === "kick" ? MOTION_CELLS.kickExt : MOTION_CELLS.punchExt };
+  }
+  // Follow-through key: the authored weight-carry replaces the recovery cell
+  // arriving early.
+  if (attack.kind !== "light" && progress >= 0.67) return { beat: "follow", cell: MOTION_CELLS.follow };
+  return null;
+}
+
 export function attackAnimationPose(attack, attackFrame) {
   const animation = attack?.animation;
   if (!animation) return null;
@@ -1766,7 +1863,12 @@ export function attackAnimationPose(attack, attackFrame) {
     if (attack.kind === "light") index = activeProgress < 0.52 ? 1 : 2;
     else index = activeProgress < 0.34 ? 1 : activeProgress < 0.67 ? 2 : 3;
   }
-  return { bank: animation.bank, frame: animation.frames[index] };
+  const frame = animation.frames[index];
+  // v2.7 FRAMES: authored charge/smear/follow keys ride over the kit
+  // sequence, each carrying the exact cell it replaces as its fallback.
+  const beat = attackMotionBeat(attack, attackFrame);
+  if (beat && beat.beat !== "extension") return motionPose(beat.cell, animation.bank, frame);
+  return { bank: animation.bank, frame };
 }
 
 export function selectKitAiIntent(fighterId, {

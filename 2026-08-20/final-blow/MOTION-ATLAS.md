@@ -87,4 +87,44 @@ base-bank cell for that beat; a motion cell is a bonus, never a dependency.
 Integration consumes `accept` for fallback; notes carry the reviewer's reason
 on any rejected slot.
 
-No game code changed this wave: art + manifest + this document only.
+## Integration (wired, 2.7)
+
+The cells are live. Selection is pure sim-state logic in the pose functions —
+`fighterPoseDescriptor`/`fighterAnimationPose` (game.js) and
+`attackAnimationPose`/`attackMotionBeat` (engine/fighter-kits.mjs) — emitting
+descriptors `{ bank: "motion", frame, fallback: { bank, frame } }` where the
+fallback is byte-for-byte the pre-2.7 beat. `resolveMotionPose` holds the
+motion bank only while the fighter's sheet is decoded AND the manifest accepts
+the cell, so a missing/loading sheet or a rejected slot (cyraxx smear-v)
+degrades to exactly the old read in BOTH renderers; CINEMA 3D lazily builds a
+motion texture bank from the same SD sheet (there are no HD motion sheets and
+the 3D path never requests renderer/hd/ for this bank).
+
+Decisions a future wave should know about:
+
+- **Battle damage:** ALL motion cells run through the same per-side damage
+  compositor as base cells (`drawDamagedAtlasFrame` keys on atlas+frame, so
+  the extension came free). The 1-2-frame smears therefore also carry marks —
+  they are painted limb streaks on the fighter's own body, and one extra
+  scratch rebuild per flash frame is the same cost any pose change pays.
+- **World size:** every motion sheet shares the base banks' build
+  normalisation (tallest standing frame → 95.6% cell height; the manifest's
+  `scale` records each sheet's raw build scale), so motion cells match
+  base-cell world size at 1.0. The measured exception is the Commissioner,
+  whose older base atlas normalises to the full 320px cell —
+  `MOTION_SHEET_ADJUST` (game.js) scales his motion cells up 4.6% to meet it;
+  both renderers read the same table.
+- **Beat map as wired:** punch/kick-ext replace the kit-less normals' active
+  peak (the procedural extension envelope thins to a reduced translate while
+  the authored cell draws — never double-stretched); smears flash ≤2 frames
+  before contact on standing heavies/specials/supers (risers get smear-v,
+  overheads keep authored windup — no downward smear exists); follow rides
+  the late-active third; tuck owns the ballistic tumbling band and the
+  air-tech spin; land covers the pre-touchdown gather + landing recovery;
+  dash replaces the dash walk-cycle; bighit/crumple/wallsplat/airrec sequence
+  the launched-victim reads; charge holds super/EX startups (and feeds the 3D
+  super portrait); victory2/sig2 rotate with the kit victory cell on taunt
+  and round-win by match-seed parity; sig1/sig2 hold the intro stance.
+- **Skipped:** super-flash portrait moments beyond the charge-stance capture
+  (the cut-in already composes from the live pose), and smears on overheads/
+  crouch/air normals (no matching cell in the grammar).
