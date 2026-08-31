@@ -29,8 +29,8 @@ function testManifestAcceptMasks() {
     assert.equal(masks[id].accept.length, MOTION_CELL_COUNT, `${id} mask must cover the 16-cell grammar`);
     assert.ok(masks[id].scale > 1 && masks[id].scale < 2, `${id} build scale should be recorded`);
   }
-  // The one reviewed rejection this wave: cyraxx smear-v ships accept:false.
-  assert.equal(masks.cyraxx.accept[MOTION_CELLS.smearV], false);
+  // The 2.7 cyraxx smear-v rejection was regenerated and accepted in 2.8.
+  assert.equal(masks.cyraxx.accept[MOTION_CELLS.smearV], true);
   assert.equal(masks.cyraxx.accept[MOTION_CELLS.smearH], true);
   assert.ok(masks.deathblow.accept.every(Boolean));
   // A cell absent from a manifest is rejected, never assumed shipped.
@@ -59,7 +59,10 @@ function testCyraxxSmearVFallsBack() {
   assert.equal(pose.bank, "motion");
   assert.equal(pose.frame, MOTION_CELLS.smearV, "a rising launcher must ask for the vertical smear");
   const resolved = resolveMotionPose(pose, (cell) => masks.cyraxx.accept[cell]);
-  assert.deepEqual(resolved, pose.fallback, "rejected cyraxx smear-v must fall back to the base-bank beat");
+  assert.equal(resolved.bank, "motion", "the regenerated cyraxx smear-v is accepted and must hold");
+  // Mask-driven rejection still falls back to the exact base-bank beat.
+  const rejected = resolveMotionPose(pose, (cell) => cell !== MOTION_CELLS.smearV);
+  assert.deepEqual(rejected, pose.fallback, "a rejected smear-v must fall back to the base-bank beat");
   // The same beat on an accepted sheet keeps the motion cell.
   const jezRiser = createFighterMove("jez", "launcher");
   const jezPose = attackAnimationPose(jezRiser, jezRiser.activeStartFrame - 1);

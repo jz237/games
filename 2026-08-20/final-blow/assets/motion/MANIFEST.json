@@ -27,7 +27,8 @@
  "fighters": {
   "deathblow": {
    "sheet": "deathblow.webp",
-   "scale": 1.645,
+   "scale": 1.269,
+   "note": "2.8 full-sheet regen 2026-08-31: regenerated at square_hd (was 4:3 with a 1.645 upscale, softest of the ten) \u2014 sharpness now matches the other nine sheets; poses match the 2.7 sheet per cell; rows recovered by blob clustering so no severed fists at row splits",
    "signature": {
     "sig1": "seismic overhead gauntlet slam",
     "sig2": "gauntlet clash, red energy sparking"
@@ -36,89 +37,98 @@
     {
      "frame": 0,
      "id": "punch-ext",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31: full-extension gauntlet straight"
     },
     {
      "frame": 1,
      "id": "kick-ext",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31"
     },
     {
      "frame": 2,
      "id": "smear-h",
      "accept": true,
-     "note": "red-orange gauntlet arc"
+     "note": "2.8 regen 2026-08-31: red-orange gauntlet arc"
     },
     {
      "frame": 3,
      "id": "smear-v",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31: vertical red streak, body arched \u2014 sets the sheet's global scale"
     },
     {
      "frame": 4,
      "id": "follow",
      "accept": true,
-     "note": "reads closer to a second extension than a cross-body carry"
+     "note": "2.8 regen 2026-08-31: now a true cross-body carry (old second-extension read fixed)"
     },
     {
      "frame": 5,
      "id": "tuck",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31"
     },
     {
      "frame": 6,
      "id": "land",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31"
     },
     {
      "frame": 7,
      "id": "dash",
      "accept": true,
-     "note": "width-clamped smaller by pose geometry"
+     "note": "2.8 regen 2026-08-31: width-clamped by pose geometry"
     },
     {
      "frame": 8,
      "id": "bighit",
      "accept": true,
-     "note": "reads as horizontal launch rather than backward bend \u2014 still a valid heavy-hit key"
+     "note": "2.8 regen 2026-08-31: single-cell regen spliced in \u2014 backward C-arch, head snapped back, feet leaving the ground; pose contract honored (old horizontal-launch read fixed)"
     },
     {
      "frame": 9,
      "id": "crumple",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31"
     },
     {
      "frame": 10,
      "id": "wallsplat",
      "accept": true,
-     "note": "carries painted wall-crack debris"
+     "note": "2.8 regen 2026-08-31: carries a light painted wall-crack halo"
     },
     {
      "frame": 11,
      "id": "airrec",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31"
     },
     {
      "frame": 12,
      "id": "charge",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31: gauntlets crackling red"
     },
     {
      "frame": 13,
      "id": "victory2",
      "accept": true,
-     "note": "taller than global scale, clamp-shrunk"
+     "note": "2.8 regen 2026-08-31: taller than global scale, clamp-shrunk"
     },
     {
      "frame": 14,
      "id": "sig1",
      "accept": true,
-     "note": "taller than global scale, clamp-shrunk"
+     "note": "2.8 regen 2026-08-31: taller than global scale, clamp-shrunk"
     },
     {
      "frame": 15,
      "id": "sig2",
-     "accept": true
+     "accept": true,
+     "note": "2.8 regen 2026-08-31"
     }
    ]
   },
@@ -437,7 +447,7 @@
      "frame": 3,
      "id": "smear-v",
      "accept": true,
-     "note": "reads as rising electric column more than fist streak"
+     "note": "2.8 regen 2026-08-31: now reads as his blurred punching arm — streaked ribbon with the gloved fist at the apex, arcs riding the streak (old electric-column read fixed)"
     },
     {
      "frame": 4,
@@ -501,7 +511,7 @@
      "frame": 15,
      "id": "sig2",
      "accept": true,
-     "note": "reads as elbow wind-up rather than forward drive \u2014 usable as pre-hit key"
+     "note": "2.8 regen 2026-08-31: forward-driving blitz elbow caught at impact, arcs on the elbow, speed lines trailing (old wind-up read fixed)"
     }
    ]
   },
@@ -629,8 +639,8 @@
     {
      "frame": 3,
      "id": "smear-v",
-     "accept": false,
-     "note": "REJECTED: rising strike came out as a full-body purple smoke column tinting shirt and torso \u2014 violates the CYRAXX.md overlay rule (powers never tint clothes). Integration must fall back to the base-bank cell for this beat."
+     "accept": true,
+     "note": "2.8 regen 2026-08-31: rising arm smear with the fist at the apex; translucent purple feedback discharge trails behind/above the arm only, clearly off the body \u2014 shirt stays clean blue, CYRAXX.md overlay rule respected (old smoke-column tint fixed)"
     },
     {
      "frame": 4,
