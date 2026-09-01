@@ -757,6 +757,12 @@ const HEALTH_GAP_TOLERANCE = 26;
 const YIELD_FRAMES = 54;
 const YIELD_RELEASE_FRAMES = 40;
 
+// v3.2 SHOWCASE — the locomotion lease. Only ever reached when a caller asks
+// for a locomotion bias, which the attract loop never does.
+const STROLL_MIN_FRAMES = 54;
+const STROLL_SPAN_FRAMES = 66;
+const STROLL_REST_FRAMES = 26;
+
 /**
  * @param {object} options
  * @param {string[]} options.pair    fighter ids, [side0, side1]
@@ -767,10 +773,14 @@ const YIELD_RELEASE_FRAMES = 40;
  * @param {object}   [options.priorShown] cumulative attract ledger,
  *   fighterId -> { moveId: count }, so a fighter that has already featured
  *   earlier in this attract session leads with what it has NOT shown yet.
+ * @param {number}   [options.locomotion] v3.2 SHOWCASE — 0..1 share of the
+ *   free decision points spent WALKING instead of showcasing a move. 0 (the
+ *   attract default) makes every branch it guards unreachable, rng included,
+ *   so the shipped exhibition is byte-identical. See `strollWindow`.
  */
 export function createDemoChoreographer({
   pair, stageId = "", hasStageWeapon = false, seed = 237,
-  blend = DEMO_COVERAGE_BLEND, priorShown = null,
+  blend = DEMO_COVERAGE_BLEND, priorShown = null, locomotion = 0,
 } = {}) {
   if (!Array.isArray(pair) || pair.length !== 2) throw new Error("Demo choreography needs a fighter pair.");
   const rng = new DeterministicRng(hashSeed("FINAL-BLOW-DEMO-CHOREO", seed, pair[0], pair[1], stageId));
@@ -817,6 +827,9 @@ export function createDemoChoreographer({
     airRowPicks: 0, slamPresses: 0, yieldTicks: 0, trailerBoosts: 0,
     topUpCloserPicks: 0,
     turnaroundSeen: 0, turnaroundBlind: {},
+    // v3.2 SHOWCASE — locomotion lease accounting. Both stay 0 on the attract
+    // default, which is the assertion that the bias never armed.
+    strollLeases: 0, strollTicks: 0,
   };
   const previous = [null, null];
 
@@ -835,6 +848,25 @@ export function createDemoChoreographer({
   const idleScript = [
     { mode: "stand", until: 0 },
     { mode: "stand", until: 0 },
+  ];
+  // v3.2 SHOWCASE — LOCOMOTION BIAS.
+  //
+  // The rig pilot covers WALK and IDLE and nothing else, so a rig-vs-sprite
+  // comparison wants the pair spending most of its time on the one beat where
+  // the two render paths actually differ. The coverage pipeline is the
+  // opposite instinct by design: it optimises for showing a checklist. Rather
+  // than reweighting the picker (which would change what an exhibition
+  // covers, and is what the whole 2.9 contract is written against), the bias
+  // is a separate LEASE that simply takes some of the free decision points
+  // for pure walking and hands the rest back untouched.
+  //
+  // `locomotionShare` is 0 for every attract exhibition, and `strollWindow`
+  // returns before it touches the rng in that case, so the shipped stream is
+  // bit-identical — the same reason every 2.9 gate is written this way.
+  const locomotionShare = Math.max(0, Math.min(1, Number(locomotion) || 0));
+  const stroll = [
+    { until: -1, next: 0, start: 0, out: false, near: 200, far: 440, dash: false },
+    { until: -1, next: 0, start: 0, out: true, near: 200, far: 440, dash: false },
   ];
   const beatAttempts = Object.fromEntries(DEMO_BEATS.map((beat) => [beat, 0]));
   const beatBlockedUntil = Object.fromEntries(DEMO_BEATS.map((beat) => [beat, 0]));
@@ -2347,6 +2379,62 @@ export function createDemoChoreographer({
     }
   }
 
+  // --- v3.2 SHOWCASE: the locomotion lease -------------------------------
+  //
+  // Does this side owe the showcase a walk right now? Rolled once per lease
+  // off the private rng, so it replays with the seed like everything else.
+  // The `locomotionShare <= 0` bail is BEFORE the roll on purpose: an attract
+  // exhibition must not consume a single rng draw it did not consume at 3.1.
+  function strollWindow(side, view) {
+    if (locomotionShare <= 0) return false;
+    const lease = stroll[side];
+    if (view.tick < lease.until) return true;
+    if (view.tick < lease.next) return false;
+    if (rng.nextFloat() >= locomotionShare) {
+      lease.next = view.tick + STROLL_REST_FRAMES;
+      return false;
+    }
+    lease.start = view.tick;
+    lease.until = view.tick + STROLL_MIN_FRAMES + Math.floor(rng.nextFloat() * STROLL_SPAN_FRAMES);
+    lease.next = lease.until + STROLL_REST_FRAMES;
+    // Fresh band per lease, so the pair does not settle into one range: the
+    // approach and the retreat are both long enough to read as travel.
+    lease.near = 150 + Math.floor(rng.nextFloat() * 95);
+    lease.far = 380 + Math.floor(rng.nextFloat() * 170);
+    lease.dash = rng.nextFloat() < 0.3;
+    lease.out = rng.nextFloat() < 0.5;
+    stats.strollLeases += 1;
+    return true;
+  }
+
+  // Pure locomotion: never a crouch, never a guard, never a swing. A
+  // hysteresis band turns it into a genuine there-and-back — close to `near`,
+  // turn around; open past `far`, come back — which is what puts BOTH walk
+  // directions and both facings on screen instead of parking at one range.
+  // The band edges are the only state it carries, and they are a function of
+  // the sim view it is handed, so it replays exactly.
+  function strollInput(side, view) {
+    const self = view.fighters[side];
+    const opponent = view.fighters[1 - side];
+    if (!actionable(self)) return emptyInput();
+    const lease = stroll[side];
+    const distance = Math.abs(opponent.x - self.x);
+    const cornered = Math.min(self.x - view.stageMinX, view.stageMaxX - self.x) < 130;
+    if (lease.out) {
+      if (distance >= lease.far || cornered) lease.out = false;
+    } else if (distance <= lease.near) lease.out = true;
+    stats.strollTicks += 1;
+    const drift = lease.out ? awayInput(self, opponent) : towardInput(self, opponent);
+    // One authored dash at the head of a lease that rolled for it — the
+    // dash-brake cell only draws on a dash's last two ticks, so a dash the
+    // viewer can see has to be deliberately spent.
+    if (lease.dash) {
+      const step = view.tick - lease.start;
+      if (step <= 9) return (step === 2 || (step >= 5 && step <= 8)) ? drift : emptyInput();
+    }
+    return drift;
+  }
+
   // A fighter that has to hold a position (a feed waiting for the showcase, a
   // script waiting for a cue) still has to look alive. Rocking on the spot —
   // in and out of the window it must hold — keeps vx non-zero every tick
@@ -2523,6 +2611,11 @@ export function createDemoChoreographer({
     // because their window is NOW and it is measured in tens of ticks.
     const momentFirst = maybeStart(side, view, true);
     if (momentFirst) return liveliness(side, view, momentFirst);
+    // v3.2 SHOWCASE — the locomotion lease. Deliberately BELOW the moment
+    // beats (a perishable window is still worth taking) and ABOVE the yield
+    // and the decision gap, because those are the two things that would
+    // otherwise spend the free ticks the walk wants. Inert at locomotion 0.
+    if (strollWindow(side, view)) return liveliness(side, view, strollInput(side, view));
     // v2.9 round 4 — YIELD THE STAGE. Measured, seed 1234 match 5 finished
     // with jez on 6 of 30 against ali on 19: he spent the exhibition in
     // hitstun, so `stageable` was false whenever the pipeline looked at him
@@ -2615,5 +2708,8 @@ export function createDemoChoreographer({
     ])),
     hasStageWeapon: () => hasStageWeapon,
     pair: () => [...pair],
+    // v3.2 SHOWCASE: the locomotion share this exhibition was built with. 0
+    // for every attract exhibition.
+    locomotion: () => locomotionShare,
   });
 }

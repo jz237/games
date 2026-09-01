@@ -135,8 +135,13 @@ export function createMockWorld({
   // window, which is what a whiffing exhibition looks like. The choreographer
   // must then issue ZERO chain links (see the gate in chainItem).
   confirmHits = true,
+  // v3.2 SHOWCASE: the locomotion bias, passed straight through. 0 is the
+  // attract default and every pre-3.2 caller leaves it there.
+  locomotion = 0,
 } = {}) {
-  const choreo = createDemoChoreographer({ pair, stageId, hasStageWeapon, seed, priorShown });
+  const choreo = createDemoChoreographer({
+    pair, stageId, hasStageWeapon, seed, priorShown, locomotion,
+  });
   const world = {
     tick: 0,
     fighters: [makeMockFighter(420, 1, pair[0]), makeMockFighter(860, -1, pair[1])],

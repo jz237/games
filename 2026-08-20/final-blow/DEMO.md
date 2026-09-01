@@ -226,6 +226,101 @@ harness (one `qa.step` plus one awaited `requestAnimationFrame` per tick). A
 purely synchronous step loop never lets the authored banks decode or the
 renderer run, so it can only ever support sim-state claims.
 
+## Rig-vs-sprite showcase (3.2)
+
+A CPU-vs-CPU **DeathBlow mirror match** with the 3.1 skeletal rig drawing one
+side and the shipped sprite bank drawing the other, so the render path is the
+only difference on screen.
+
+| URL | What it does |
+| --- | --- |
+| `?rigdemo=1` | rig on **P1** (left), sprite on P2 |
+| `?rigdemo=2` | rig on **P2** (right), sprite on P1 |
+| `?rigdemo=1&speed=0.25` | ...at quarter speed from the first frame |
+
+Both land straight in the fight from a cold load — no menu, no user gesture
+(fullscreen and the audio unlock are skipped exactly as they are for attract).
+
+- **A mirror on purpose.** The rig is a render-path change, so the only honest
+  comparison is one where nothing else differs. Different fighters would put
+  different bodies, walk speeds and kits either side of the screen.
+- **Both fighters are labelled.** A persistent `RIG` / `SPRITE` pill rides
+  above each head — above, never below, because the legs are what is being
+  judged — and the seat tags read `CPU 1 · RIG` / `CPU 2 · SPRITE`. The pill
+  says SPRITE until the rig asset has genuinely loaded on that side, so it can
+  never claim a render path the fighter is not using.
+- **`R` swaps the sides live.** Pure render state: the sim, the choreographer
+  and both rng streams carry straight on, so the same fight continues with the
+  labels and the render paths exchanged. It exists to rule out a left/right or
+  facing bias in what the viewer thinks they are seeing.
+- **Same palette both sides.** `resolveMatchPalettes` normally forces the alt
+  colours onto side 1 of any mirror. The showcase pins both seats to palette 0:
+  the rig atlas is cut from the base sheet, so an alt-palette rigged side would
+  be comparing a palette bug, and a differently-coloured opponent is a second
+  variable. Demo-scoped — every other mirror keeps the auto-alt.
+- **Biased toward locomotion.** The rig covers WALK and IDLE only, so the
+  choreographer is built with `locomotion: 0.75`: a per-side lease takes the
+  free decision points for pure walking — a hysteresis band that walks in to
+  ~150-245px, turns around, opens back out to ~380-550px and comes back, with
+  an occasional dash. Measured on the sim-lite harness, that moves the tick
+  budget from 52% lead directives / 0% walking to 26% / 39% while still
+  reaching 30/30 kit coverage. The remaining time is the ordinary coverage
+  pipeline, so the sprite fallback for attacks, jumps and reactions is on
+  screen too. `locomotion: 0` is the attract default and every branch it guards
+  returns before it draws an rng number, so the shipped attract stream is
+  bit-identical to 3.1.
+- **No forced opening super.** The attract loop guarantees one opening super,
+  which hijacks both CPUs for the first seconds of a round. That is the wrong
+  opening here twice over — it is a beat the rig has no pose for, and
+  deathblow's authored super art puts him in a visibly different outfit from
+  his walk cells, which reads as "the rig changed the character". The showcase
+  pre-marks it shown and hands the opening to the locomotion bias instead.
+- `qa.rigShowcase(0|1)` starts it, `qa.rigShowcase()` reads the ledger
+  (`rigSideDraws` / `spriteSideDraws` are counted at the two draw sites, so
+  they answer "which fighter's body came out of which renderer" rather than
+  inferring it), `qa.rigShowcaseSwap()` swaps sides.
+
+### Adjustable demo speed (3.2)
+
+`engine/demo-speed.mjs`. Rates **1x / 0.5x / 0.25x / 0.1x**, plus pause and
+single-frame step.
+
+| Control | |
+| --- | --- |
+| `[` / `]` | one notch slower / faster |
+| `1` `2` `3` `4` | jump straight to 1x / 0.5x / 0.25x / 0.1x |
+| `\` or `Space` | pause / resume |
+| `.` | advance exactly one sim tick (pauses first if running) |
+| `R` | swap the rig and sprite sides (showcase only) |
+| `?speed=0.25` | set the rate from the URL |
+| `qa.demoSpeed(rate)` · `qa.demoPause()` · `qa.frameStep(n)` | the same three controls |
+
+The rate chip is always on screen; the key legend shows itself for nine
+seconds after arming or after any transport key, below the floor line so it can
+never cover a fighter.
+
+**It scales the TICK CADENCE, never dt.** Every frame count in this sim is an
+integer number of 1/60s ticks and every physics integration is written against
+`SIMULATION_STEP_SECONDS`; a smaller dt would move all of it at once and two
+peers integrating identical inputs at different dt is the definition of a
+desync. So the rate multiplies the WALL-CLOCK SECONDS handed to
+`FixedStepClock.advance`: the accumulator crosses `stepSeconds` proportionally
+less often, and every tick it does take still runs at exactly 1/60s. Rendering
+keeps running at the display rate (the presentation already interpolates off
+`state.simulationAlpha`, which the smaller accumulator advance drives for
+free). The tick STREAM is identical at every rate — same ticks, same order,
+same dt — which is why three seeded showcase runs at 1x, 0.25x and 0.1x
+produce bit-identical state after 240 ticks. Frame-step runs the same fixed
+step through the same driver, one tick per rendered frame, capped at four a
+frame so a held key cannot dump a burst.
+
+Scoped to `state.mode === "demo"` and `"training"` and refused outright for
+online (twice: by mode and by an active session role), for replay playback
+(its own transport) and while `qaManualMode` owns the clock. The transport also
+defers to any key the player has bound, to a rebind capture in progress and to
+a focused text field, so it can never steal an input that belongs to something
+else.
+
 ## Verification
 
 - `node --test tests/demo.test.mjs` checks determinism, full matchup coverage, stage/track rotation, boundary behavior, invalid configuration, and 10,000 bounded cycles.
@@ -264,3 +359,16 @@ renderer run, so it can only ever support sim-state claims.
   confirmed-hit cancels — without which the stun string the fix depends on
   would have looked impossible in the harness.
 - `node tests/browser-smoke.mjs` checks two live AI brains, automatic Final Blow activation, result scheduling, 64 rapid cycles with one bounded intro timer, input-to-exit, mobile HUD bounds, hidden touch controls, and offline precaching.
+- `node --test tests/demo-speed.test.mjs` pins the 3.2 contract: that the
+  speed control is a tick-cadence multiplier and never a dt change (every tick
+  is asserted to run at `SIMULATION_STEP_SECONDS` at every rate, and the tick
+  stream is asserted identical across all four), that 0.5x/0.1x hit their
+  cadences, that pause holds and frame-step advances exactly one tick per
+  request with a burst cap, that the transport is scoped to demo/training and
+  refuses online, replay and an out-of-scope context, the `?speed=` parser and
+  the rate ladder, plus the choreographer's locomotion bias: that a mirror pair
+  is a legal matchup, that `locomotion: 0` is byte-identical to the shipped
+  attract choreography (rng included), that the bias spends a real share of
+  ticks walking without abandoning the move checklist, and that it replays from
+  its seed. The game.js call sites are asserted from source, because the
+  scoping is the part that must never regress.
