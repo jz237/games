@@ -239,8 +239,14 @@ function testGetupSequenceOrdering() {
     if (!seen.length || seen.at(-1) !== key) seen.push(key);
     // Every band still degrades to the exact cell the pre-fix read showed: the
     // prone cell while he is down, the crouched gather as he reaches his feet.
-    assert.deepEqual(pose.fallback,
-      pose.bank === "motion2" && pose.frame === MOTION2_CELLS.getupB ? gather : prone);
+    // v3.0: the unified bank sits between the authored key and that base cell
+    // (the prone read is its knockdown, the gather is its crouch), so the
+    // assertion is on where the chain LANDS with no sheets at all — which is
+    // the byte-identical property that actually matters.
+    const expected = pose.bank === "motion2" && pose.frame === MOTION2_CELLS.getupB ? gather : prone;
+    assert.equal(pose.fallback.bank, "unified");
+    assert.deepEqual(pose.fallback.fallback, expected);
+    assert.deepEqual(resolveMotionPose(pose.fallback, () => false), expected);
   }
   assert.deepEqual(seen, [
     `motion:${MOTION_CELLS.crumple}`,

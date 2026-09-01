@@ -27,7 +27,9 @@ import { normalMapForAtlas, softDotTexture, hardShadowTexture, smearedAtlasTextu
 import { FIGHTER_MASK_LAYER } from "./post.mjs";
 // v2.10 WALK: the authored-bank list is shared with the sim so 3D can never
 // drift from the 2D path on which banks exist (motion, motion2, walk).
-import { AUTHORED_BANKS } from "../../engine/fighter-kits.mjs";
+// v3.0: ...and on the unified bank's name, so the sheet-adjust branch below
+// cannot drift from the sim's idea of what that bank is called.
+import { AUTHORED_BANKS, UNIFIED_BANK } from "../../engine/fighter-kits.mjs";
 
 // HD (2x) atlas variants for 3D mode only (renderer/hd/MANIFEST.json).
 // Loaded lazily per fighter; on any failure the bank silently keeps the
@@ -697,6 +699,9 @@ export class FighterLayer {
   // no-renderer/hd rule).
   // v2.10 WALK: and so does the walk bank — resolved from the SD sheet in
   // assets/walk/, never from renderer/hd/ (no HD walk sheets exist).
+  // v3.0 UNIFIED: and so does the unified bank — SD sheet in assets/unified/,
+  // never renderer/hd/. buildBank is called with NO hdPath on this path, so
+  // the 2x swap can never be requested for it.
   ensureMotionBank(rig, fighter, bankName = "motion") {
     if (rig.banks[bankName]) return true;
     const host = this.host;
@@ -719,6 +724,10 @@ export class FighterLayer {
     const bankName = pose.bank === "specials" && rig.banks.specials ? "specials"
       : AUTHORED_BANKS.includes(pose.bank) && rig.banks[pose.bank]
         ? pose.bank : "base";
+    // v3.0: the host owns the ALL-SIXTEEN-OR-NOTHING gate; the rig only needs
+    // to know the answer so its height reconciliations match the canvas.
+    const unifiedActive = host.isUnifiedFighter
+      ? host.isUnifiedFighter(fighter.def.id) : false;
     const bank = rig.banks[bankName];
     if (rig.currentBank !== bankName) {
       rig.mesh.material = bank.material;
@@ -752,11 +761,18 @@ export class FighterLayer {
         // v2.10 WALK: its own table — the walk sheets normalise to each
         // fighter's measured BASE WALK height, not to the motion banks'
         // convention, so they must not inherit that correction.
-        : bankName === "walk" ? (host.walkSheetAdjust?.[fighter.def.id] || 1) : 1)
+        : bankName === "walk" ? (host.walkSheetAdjust?.[fighter.def.id] || 1)
+          // v3.0 UNIFIED: also its own table. The unified sheets DO share the
+          // motion banks' 306px standing convention, but a future sheet built
+          // to another one must not inherit a correction fitted to this one.
+          : bankName === UNIFIED_BANK ? (host.unifiedSheetAdjust?.[fighter.def.id] || 1) : 1)
       // v2.9 critic round 2 (M4): cellDrawAdjust rolls the oversized-crouch
       // correction together with the guard-flinch height reconciliation, so
       // the rig and the canvas apply one identical scale rule per cell.
-      * (host.cellDrawAdjust ? host.cellDrawAdjust(fighter.def.id, bankName, pose.frame)
+      // v3.0: ...and the same unified flag the 2D path passes, so both
+      // renderers reconcile the block-flinch against the same guard drawing.
+      * (host.cellDrawAdjust
+        ? host.cellDrawAdjust(fighter.def.id, bankName, pose.frame, { unified: unifiedActive })
         : host.baseCellDrawAdjust ? host.baseCellDrawAdjust(fighter.def.id, bankName, pose.frame) : 1);
     const renderSize = host.fighterRenderSize(fighter.def.id) * sizeAdjust * PX;
     // v2.9 critic round (M5): per-cell floor registration in sim pixels — the

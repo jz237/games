@@ -58,7 +58,12 @@ import {
   MOTION_CELLS,
   MOTION2_CELLS,
   MOTION3_KEYS,
+  UNIFIED_BANK,
+  UNIFIED_CELLS,
   WALK_CELL_COUNT,
+  buildUnifiedAcceptMasks,
+  unifiedPose,
+  unifiedReactionCells,
   isAuthoredBank,
   walkCyclePose,
   attackAnimationPose,
@@ -1174,9 +1179,74 @@ function motion3KeyDrawable(fighterId, key) {
   return atlas.complete && atlas.naturalWidth ? frame : false;
 }
 
-/** Bank-routed drawable gate for resolveMotionPose (all four authored banks). */
+// ---------------------------------------------------------------------------
+// v3.0 — THE UNIFIED BANK (assets/unified).
+//
+// Same lazy-sheet, manifest-gated machinery as every other bank, with ONE
+// difference that is the entire point of it: the gate is ALL SIXTEEN OR
+// NOTHING, per fighter. buildUnifiedAcceptMasks collapses any sheet that is
+// not 16/16 accepted to an all-false mask, so `unifiedCellDrawable` is either
+// true for every one of the sixteen cells or false for all of them. There is
+// no state in which a fighter draws his idle from this bank and his walk from
+// another — which is exactly the cross-generation costume strobe (11-14 dE)
+// that put 40 cells behind `accept: false` in 2.9.
+//
+// Manifest BEFORE sheet, like the walk and motion3 banks: two fighters are not
+// on the bank (`cyraxx` 0/16, the `deathblow` pilot 12/16) and requesting
+// their sheets would be 600KB of download that can never draw a pixel.
+// ---------------------------------------------------------------------------
+const fighterUnifiedAtlases = {};
+const unifiedBankState = { masks: null, requested: false, ready: null };
+
+function ensureUnifiedManifest() {
+  if (unifiedBankState.requested) return unifiedBankState.ready;
+  unifiedBankState.requested = true;
+  unifiedBankState.ready = fetch("assets/unified/MANIFEST.json")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((manifest) => { unifiedBankState.masks = manifest ? buildUnifiedAcceptMasks(manifest) : {}; })
+    .catch(() => { unifiedBankState.masks = {}; });
+  return unifiedBankState.ready;
+}
+
+/** True once the manifest has confirmed this fighter's sheet is 16/16. */
+function unifiedFighterWhole(fighterId) {
+  return Boolean(unifiedBankState.masks?.[fighterId]?.whole);
+}
+
+function ensureUnifiedAtlas(fighterId) {
+  let atlas = fighterUnifiedAtlases[fighterId];
+  if (!atlas) {
+    atlas = new Image();
+    atlas.src = `assets/unified/${fighterId}.webp`;
+    fighterUnifiedAtlases[fighterId] = atlas;
+  }
+  return atlas;
+}
+
+function unifiedCellDrawable(fighterId, cell) {
+  ensureUnifiedManifest();
+  const mask = unifiedBankState.masks?.[fighterId];
+  if (!mask?.whole) return false;
+  const atlas = ensureUnifiedAtlas(fighterId);
+  return Boolean(atlas.complete && atlas.naturalWidth && mask.accept[cell]);
+}
+
+/**
+ * Is this fighter DRAWING from the unified bank right now? The two height
+ * reconciliations that compare a cell against the fighter's standing/guard
+ * drawing (the guard-flinch adjust, the wake-up settle) need to know which
+ * bank supplies that drawing, and both renderers must answer identically.
+ * Deliberately the same gate the pose resolver uses, sheet included, so the
+ * corrections switch on exactly the tick the cells do.
+ */
+function unifiedFighterReady(fighterId) {
+  return unifiedCellDrawable(fighterId, UNIFIED_CELLS.idle);
+}
+
+/** Bank-routed drawable gate for resolveMotionPose (all five authored banks). */
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
+  if (bank === UNIFIED_BANK) return unifiedCellDrawable(fighterId, cell);
   if (bank === "walk") return walkCellDrawable(fighterId, cell);
   return bank === "motion2"
     ? motion2CellDrawable(fighterId, cell)
@@ -1219,6 +1289,25 @@ function preloadAuthoredBanks(fighterIds) {
       }
     }
   }
+  // v3.0: the unified sheet is warmed through the SAME choke point, but only
+  // once the manifest has confirmed the fighter is 16/16 — an incomplete sheet
+  // can never draw a cell, so requesting it would be pure waste (and `cyraxx`
+  // 0/16 plus the `deathblow` pilot 12/16 is 600KB of it).
+  //
+  // Warming this one matters MORE than the others, not less. The other banks
+  // fall back per beat, so a late sheet costs one beat; this bank's gate is
+  // all-or-nothing, so a late sheet flips the fighter's ENTIRE core vocabulary
+  // in a single tick. Decoding it before FIGHT! is what keeps that flip off
+  // the screen.
+  ensureUnifiedManifest()?.then(() => {
+    for (const id of ids) {
+      if (!unifiedFighterWhole(id)) continue;
+      const atlas = ensureUnifiedAtlas(id);
+      if (atlas && !atlas.complete && typeof atlas.decode === "function") {
+        atlas.decode().catch(() => {});
+      }
+    }
+  });
 }
 
 // The Commissioner has no separate specials sheet, so DOM art paths (victory
@@ -1255,6 +1344,11 @@ function altAtlasSource(fighterId, bank) {
   if (bank === "motion2") return { image: fighterMotion2Atlases[fighterId], key: `${fighterId}:motion2` };
   if (bank === "motion3") return { image: fighterMotion3Atlases[fighterId], key: `${fighterId}:motion3` };
   if (bank === "walk") return { image: fighterWalkAtlases[fighterId], key: `${fighterId}:walk` };
+  // v3.0: the unified sheet is physically identical to every other bank
+  // (1280x1280, 4x4, 320px cells), so the palette remap, the silhouette cache,
+  // the crossfade ghost, the damage compositor and the 3D bank builder all
+  // read it with no change at all.
+  if (bank === UNIFIED_BANK) return { image: fighterUnifiedAtlases[fighterId], key: `${fighterId}:unified` };
   const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
   // The boss shares one sheet across banks — collapse to one cache entry.
   if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
@@ -1298,7 +1392,9 @@ function paletteAtlas(fighterId, side, bank = "base") {
           ? fighterMotion3Atlases[fighterId] || fighterAtlases[fighterId]
           : bank === "walk"
             ? fighterWalkAtlases[fighterId] || fighterAtlases[fighterId]
-            : fighterAtlases[fighterId];
+            : bank === UNIFIED_BANK
+              ? fighterUnifiedAtlases[fighterId] || fighterAtlases[fighterId]
+              : fighterAtlases[fighterId];
   if (matchPalettes[side] !== 1) return base;
   return ensureAltAtlas(fighterId, bank) || base;
 }
@@ -6712,7 +6808,8 @@ function updateMotionObservers() {
       && state.phase === "fight" && obs.wakeLastRung) {
       obs.wakeSettleFrames = WAKEUP_SETTLE_FRAMES;
       obs.wakeSettleStart = wakeupSettleStart(fighter.def.id,
-        obs.wakeLastRung.bank, obs.wakeLastRung.frame);
+        obs.wakeLastRung.bank, obs.wakeLastRung.frame, DEFENSE_RULES.wakeupFrames,
+        { unified: unifiedFighterReady(fighter.def.id) });
       obs.wakeLastRung = null;
     } else if (obs.wakeSettleFrames > 0) obs.wakeSettleFrames -= 1;
     obs.prevWakeup = fighter.wakeupFrames;
@@ -7078,7 +7175,8 @@ function fighterMotionTransform(fighter) {
     // poseFrame are the resolved cell this frame, so a rejected sheet is
     // accounted for; before the first pose is latched it degrades to 1.
     const rung = obs.poseBank
-      ? wakeupRiseStretch(fighter.def.id, obs.poseBank, obs.poseFrame) : 1;
+      ? wakeupRiseStretch(fighter.def.id, obs.poseBank, obs.poseFrame,
+        { unified: unifiedFighterReady(fighter.def.id) }) : 1;
     const wake = wakeupRiseTransform(fighter.wakeupFrames, DEFENSE_RULES.wakeupFrames, rung);
     if (wake) {
       const calm = reducedMotion ? 0.5 : 1;
@@ -17039,6 +17137,21 @@ function showcasePoseDescriptor(fighter) {
 
 function fighterPoseDescriptor(fighter) {
   const base = (frame) => ({ bank: "base", frame });
+  // v3.0 UNIFIED: `uni(cell, pose)` puts the unified drawing ON TOP of the
+  // exact 2.9 descriptor for that beat. It is a pure descriptor edit — the
+  // per-fighter ALL-SIXTEEN-OR-NOTHING gate lives in unifiedCellDrawable, so
+  // for the two fighters not on the bank every one of these calls resolves
+  // straight through to `pose` and the read is byte-identical to 2.9.
+  //
+  // The sixteen beats it owns and where they are routed below: idle (the
+  // breathing cycle and every tail that hands back to it), the four walk keys
+  // (walkCyclePose), crouch, crouch-transition (enter, leave and the landing
+  // gather), guard, jump-rise, jump-tuck, punch- and kick-extension, light-hit
+  // (the flat recoil, the clinch flinch and the reaction snap), big-hit (the
+  // heavy reaction opener and the launched victim), stagger (the reaction
+  // fold and the storm writhe) and knockdown.
+  const uni = (cell, pose) => unifiedPose(cell, pose);
+  const uniReact = unifiedReactionCells();
   // v2.9 critic round: every beat below that used to hand off to a hardcoded
   // base index now resolves through the per-fighter semantic map — base(12)
   // is a deep squat and base(13) an attack pose (or, on deathblow, a whole
@@ -17072,7 +17185,7 @@ function fighterPoseDescriptor(fighter) {
       && (lifted > THROW_HURL_LIFT_PX || Math.abs(fighter.cinematicRotation) > 0.55);
     return hurling
       ? motion2Pose(MOTION2_CELLS.thrown, "base", roles.hit)
-      : motion2Pose(MOTION2_CELLS.lightHit, "base", roles.hit);
+      : uni(UNIFIED_CELLS.lightHit, motion2Pose(MOTION2_CELLS.lightHit, "base", roles.hit));
   }
   // v2.9 FLOW: the throw attacker wears the authored two-handed seize through
   // the grab hold; the fallback is exactly what the kit's throw art showed.
@@ -17097,7 +17210,7 @@ function fighterPoseDescriptor(fighter) {
     // fighter squared up and set — and it is certified non-attack per fighter.
     const fallback = kitPose && !isAuthoredBank(kitPose.bank)
       ? { bank: kitPose.bank, frame: kitPose.frame }
-      : { bank: "base", frame: roles.guard };
+      : uni(UNIFIED_CELLS.guard, { bank: "base", frame: roles.guard });
     const hold = fighter.grabbing;
     const clinch = clamp((hold.frame || 0) / Math.max(1, hold.total || 1), 0, 0.999);
     return beatPoseAt(throwClinchKeys(), clinch, fallback);
@@ -17118,7 +17231,9 @@ function fighterPoseDescriptor(fighter) {
   // wears the authored tuck ball, the tail arches into the airrec footing key.
   if (fighter.airTechFlipFrames > 0) {
     const flip = 1 - fighter.airTechFlipFrames / AIR_RECOVERY_RULES.flipFrames;
-    return motionPose(flip < 0.6 ? MOTION_CELLS.tuck : MOTION_CELLS.airrec, "base", 13);
+    return flip < 0.6
+      ? uni(UNIFIED_CELLS.jumpTuck, motionPose(MOTION_CELLS.tuck, "base", 13))
+      : motionPose(MOTION_CELLS.airrec, "base", 13);
   }
   // Release 1.7 wave 11: the taunt holds the fighter's victory pose frame
   // (v2.7: rotated with the motion alternates).
@@ -17170,16 +17285,23 @@ function fighterPoseDescriptor(fighter) {
       // authored bank; the beat shapes are unchanged.
       const writhe = Number.isInteger(roles.stagger) ? roles.stagger : roles.hit;
       if (stormCaster.def.vfx === "authority") {
-        if (phase < 0.25) return base(roles.hit);                                 // flinch at onset
+        // v3.0: the two alternating bands are the SAME unified drawing (the
+        // authored light-hit and the map's flat recoil collapse onto cell 12),
+        // so the per-hit alternation would freeze. The off-beat takes the
+        // unified STAGGER instead — which is what "staggered recoil" says —
+        // and both bands keep their exact 2.9 cell underneath.
+        if (phase < 0.25) return uni(UNIFIED_CELLS.lightHit, base(roles.hit));    // flinch at onset
         if (phase < 0.72) {                                                       // per-hit staggered recoil
-          return hitBeat ? motion2Pose(MOTION2_CELLS.lightHit, "base", writhe) : base(roles.hit);
+          return hitBeat
+            ? uni(UNIFIED_CELLS.stagger, motion2Pose(MOTION2_CELLS.lightHit, "base", writhe))
+            : uni(UNIFIED_CELLS.lightHit, base(roles.hit));
         }
         return motion2Pose(MOTION2_CELLS.dizzy, "base", roles.crouch);            // bound / slumped at the bind
       }
-      if (phase < 0.4) return base(roles.hit);                                    // curse impact recoil
+      if (phase < 0.4) return uni(UNIFIED_CELLS.lightHit, base(roles.hit));       // curse impact recoil
       return hitBeat                                                              // per-hit sagging writhe
         ? motion2Pose(MOTION2_CELLS.dizzy, "base", roles.crouch)
-        : motion2Pose(MOTION2_CELLS.lightHit, "base", writhe);
+        : uni(UNIFIED_CELLS.stagger, motion2Pose(MOTION2_CELLS.lightHit, "base", writhe));
     }
   }
   // v2.7 FRAMES: slammed victims — wall pin, launch arc, knockdown collapse.
@@ -17204,7 +17326,9 @@ function fighterPoseDescriptor(fighter) {
       if (fighter.lastHitResult === ATTACK_LEVELS.THROW && fighter.vy < 0) {
         return motion2Pose(MOTION2_CELLS.thrown, "base", roles.down);
       }
-      return motionPose(fighter.vy < -120 ? MOTION_CELLS.bighit : MOTION_CELLS.airrec, "base", roles.down);
+      return fighter.vy < -120
+        ? uni(UNIFIED_CELLS.bigHit, motionPose(MOTION_CELLS.bighit, "base", roles.down))
+        : motionPose(MOTION_CELLS.airrec, "base", roles.down);
     }
   }
   if (fighter.down || fighter.knockdownFrames > 0) {
@@ -17212,7 +17336,7 @@ function fighterPoseDescriptor(fighter) {
     if (fighter.down && fighter.knockdownFrames > DEFENSE_RULES.knockdownFrames - 7) {
       return motionPose(MOTION_CELLS.crumple, "base", roles.down);
     }
-    return base(roles.down);
+    return uni(UNIFIED_CELLS.knockdown, base(roles.down));
   }
   // v2.6 BODY-FIRST (core 2): EVERY hit sequences the victim through a
   // progressive stagger — head-snap -> torso fold -> stagger step -> recover
@@ -17272,15 +17396,26 @@ function fighterPoseDescriptor(fighter) {
       // third band entirely rather than repeat one when the sheet cannot
       // supply three distinct non-attack drawings.
       const tail = reactionFallbackCells(roles);
+      // v3.0: the ladder gets a unified drawing per band ON TOP of the exact
+      // 2.9 base cell. The unified grammar carries a standing recoil, a
+      // stagger step AND a braced stance on every sheet, so a unified
+      // fighter's tail is three distinct drawings on all eight of them —
+      // where R4 had to DROP the third band on the eight base sheets whose
+      // `stagger` is null or equal to `hit`. The `tail.settle === null` case
+      // therefore keeps handing the BASE read to the breathing idle exactly
+      // as it does today while the unified read takes the brace.
       return beatPoseAt(reactionTrackKeys(heavyTrack), sinceHit / 44, (key) => {
         const at = key ? key.at : 0;
-        if (at < REACTION_BANDS[2]) return base(tail.snap);
-        if (at < REACTION_BANDS[4]) return base(tail.fold);
-        if (at < REACTION_BANDS[5] && tail.settle !== null) return base(tail.settle);
-        return base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]);
+        const idle = () => base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]);
+        if (at < REACTION_BANDS[2]) return uni(uniReact.snap, base(tail.snap));
+        if (at < REACTION_BANDS[4]) return uni(uniReact.fold, base(tail.fold));
+        if (at < REACTION_BANDS[5]) {
+          return uni(uniReact.settle, tail.settle !== null ? base(tail.settle) : idle());
+        }
+        return uni(uniReact.idle, idle());
       });
     }
-    return base(roles.hit);
+    return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
   }
   // v2.9 FLOW: standing guarded contact wears the authored guard-flinch key
   // for the WHOLE blockstun window — checked before the hit-flash read below
@@ -17307,9 +17442,9 @@ function fighterPoseDescriptor(fighter) {
     // the whole window — round 1's read borrowed the clean-hit cell while the
     // contact flash decayed, which put a 2-tick hit pose in the middle of a
     // block once the flinch stopped owning the whole thing.
-    return beatPoseAt(blockstunKeys(), blockPhase, base(roles.guard));
+    return beatPoseAt(blockstunKeys(), blockPhase, uni(UNIFIED_CELLS.guard, base(roles.guard)));
   }
-  if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return base(roles.hit);
+  if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
   // v2.9 FLOW: sequenced wake-up — getup-a (knee up, hand pushing off) into
   // getup-b (half-risen crouch) across the recovery countdown, ending the
   // teleport-to-feet. Pure helper in fighter-kits.mjs; fallbacks exact.
@@ -17324,7 +17459,7 @@ function fighterPoseDescriptor(fighter) {
     // keeps the bands honest instead of assuming 16.
     return wakeupMotionPose(fighter.wakeupFrames, roles, DEFENSE_RULES.wakeupFrames);
   }
-  if (fighter.throwTechFlashFrames > 0) return base(roles.guard);
+  if (fighter.throwTechFlashFrames > 0) return uni(UNIFIED_CELLS.guard, base(roles.guard));
   // v2.9 critic round 2 — TURNAROUND PRECEDENCE. Measured across ~2800 fight
   // ticks, the authored pivot key drew for 0-1 ticks TOTAL: it sat below the
   // guard/crouch and attack branches, and a grounded facing flip essentially
@@ -17353,12 +17488,14 @@ function fighterPoseDescriptor(fighter) {
   // resimulation (updateMotionObservers runs only in draw()).
   if (fighter.crouch && !fighter.block
     && motionObs[fighter.side]?.crouchTransFrames > 0) {
-    return motion2Pose(MOTION2_CELLS.crouchTrans, "base", roles.crouch);
+    return uni(UNIFIED_CELLS.crouchTrans, motion2Pose(MOTION2_CELLS.crouchTrans, "base", roles.crouch));
   }
   // v2.9 critic round (B5): crouching keeps the low stance; STANDING guard
   // gets the map's braced standing cell instead of borrowing the crouch.
   if (fighter.block || fighter.blockstunFrames > 0 || fighter.crouch) {
-    return base(fighter.crouch ? roles.crouch : roles.guard);
+    return fighter.crouch
+      ? uni(UNIFIED_CELLS.crouch, base(roles.crouch))
+      : uni(UNIFIED_CELLS.guard, base(roles.guard));
   }
   if (fighter.attacking) {
     const attack = fighter.attacking;
@@ -17380,8 +17517,9 @@ function fighterPoseDescriptor(fighter) {
         // the kit release, the stance, and the breathing idle in that order.
         (key) => (!key || key.at < 0.26
           ? { bank: kitPose.bank, frame: kitPose.frame }
-          : key.at < 0.78 ? base(roles.guard)
-            : base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length])));
+          : key.at < 0.78 ? uni(UNIFIED_CELLS.guard, base(roles.guard))
+            : uni(UNIFIED_CELLS.idle,
+              base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]))));
     }
     if (kitPose) {
       // BODY-FIRST (spec 10): the Commissioner's storm is ONE full cane-swing
@@ -17449,12 +17587,18 @@ function fighterPoseDescriptor(fighter) {
     if (beat?.beat === "recover") {
       return beatPoseAt(beat.keys, beat.phase, (key) => {
         if (!key || key.at < 0.46) return base(frames[3]);
-        if (key.at < 0.66) return base(roles.guard);
-        return base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]);
+        if (key.at < 0.66) return uni(UNIFIED_CELLS.guard, base(roles.guard));
+        return uni(UNIFIED_CELLS.idle,
+          base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]));
       });
     }
     if (beat?.beat === "smear") return motionPose(beat.cell, "base", frames[1]);
-    if (beat?.beat === "extension") return motionPose(beat.cell, "base", frames[2]);
+    if (beat?.beat === "extension") {
+      // The full-extension cells ARE the unified punch/kick extension beats.
+      const extension = beat.cell === MOTION_CELLS.kickExt
+        ? UNIFIED_CELLS.kickExt : UNIFIED_CELLS.punchExt;
+      return uni(extension, motionPose(beat.cell, "base", frames[2]));
+    }
     if (time < startup * 0.48) return base(frames[0]);
     if (time < startup) return base(frames[1]);
     if (time <= activeEnd) {
@@ -17507,13 +17651,13 @@ function fighterPoseDescriptor(fighter) {
     // cell was a full air pose arriving instantly at takeoff (and donald's
     // is the golf swing). Covers the reduced-motion path too: it is a pose
     // key, not a transform.
-    if (fighter.vy < 0) return motion2Pose(MOTION2_CELLS.jumpRise, "base", 13);
+    if (fighter.vy < 0) return uni(UNIFIED_CELLS.jumpRise, motion2Pose(MOTION2_CELLS.jumpRise, "base", 13));
     // BODY-FIRST (spec 4): the descent cell advances BEFORE touchdown — the
     // legs gather on the crouch cell through the last ~110px of the fall
     // (about five ticks), so the frozen late-fall pair is deduped and the
     // landing squash arrives on a fresh key. v2.7: the authored deep gather.
     if (FLOOR - fighter.y < 110) return motionPose(MOTION_CELLS.land, "base", 12);
-    return base(roles.down);
+    return uni(UNIFIED_CELLS.knockdown, base(roles.down));
   }
   // v2.7 FRAMES: the landing-recovery window holds the authored full-squat
   // compress under the existing squash-stretch transform.
@@ -17524,7 +17668,7 @@ function fighterPoseDescriptor(fighter) {
   // the street all the way through the compress. Fallback is the exact cell
   // this branch has always shown.
   if (fighter.landingRecoveryFrames > 0) {
-    return motion2Pose(MOTION2_CELLS.crouchTrans, "base", 12);
+    return uni(UNIFIED_CELLS.crouchTrans, motion2Pose(MOTION2_CELLS.crouchTrans, "base", 12));
   }
   // v2.9 FLOW: grounded facing flip wears the authored mid-pivot key for the
   // 2-3 latch ticks; leaving crouch shows the half-lowered in-between on the
@@ -17533,7 +17677,8 @@ function fighterPoseDescriptor(fighter) {
   // pre-2.9 read showed at that moment.
   const transObs = turnObs;
   if (transObs?.crouchTransFrames > 0 && !fighter.crouch && fighter.grounded) {
-    return motion2Pose(MOTION2_CELLS.crouchTrans, "base", Math.floor(fighter.animTime * 5) % 4);
+    return uni(UNIFIED_CELLS.crouchTrans,
+      motion2Pose(MOTION2_CELLS.crouchTrans, "base", Math.floor(fighter.animTime * 5) % 4));
   }
   if (fighter.dashFrames > 0) {
     // BODY-FIRST (spec 6) + 2.7 critic round + v2.9 FLOW + v2.9 critic round 2
@@ -17597,7 +17742,15 @@ function fighterPoseDescriptor(fighter) {
     // still render that base cell, byte-identically to 2.9.
     return walkCyclePose(fighter.walkTime, roles);
   }
-  return base(Math.floor(fighter.animTime * 5) % 4);
+  // v3.0: the neutral idle. A unified fighter has exactly ONE idle drawing
+  // where the base bank has a four-cell breathing cycle, and that is a real
+  // cost measured and accepted here: the base cycle's adjacent-cell silhouette
+  // IoU runs 0.26-0.98, so on most of the roster it is a slow sway and on
+  // benny it is genuinely four drawings. It cannot be kept. Every base idle
+  // cell is 9.5-22.5 dE of costume away from the unified walk keys, so
+  // cycling base cells under a unified walk IS the strobe. The procedural
+  // breathing scaleY and the idle bob in drawFighter still run underneath.
+  return uni(UNIFIED_CELLS.idle, base(Math.floor(fighter.animTime * 5) % 4));
 }
 
 function drawAtlasFrame(atlas, frame, size) {
@@ -19229,6 +19382,21 @@ const MOTION_SHEET_ADJUST = Object.freeze({ commissioner: 1.033 });
 // registration outlier cannot silently inherit the wrong correction.
 const WALK_SHEET_ADJUST = Object.freeze({});
 
+// v3.0 UNIFIED: the unified sheets DO share the motion banks' build rule —
+// MANIFEST.json records `targetH: 306` on every one of them, taken from the
+// tallest STANDING figure, which is the motion2 convention exactly. So the one
+// fighter whose older base atlas normalises to the full cell instead needs the
+// same +3.3% here that he needs on banks 1-3. Verified by measurement this
+// wave: his base standing cells are 311-316px and his unified walk keys peak
+// at 306, so 316/306 = 1.033; every other fighter's base standing cells are
+// 305-306 and take 1.
+//
+// Kept as its own table rather than folded into MOTION_SHEET_ADJUST for the
+// same reason the walk bank has one: a future unified sheet built to a
+// different normalisation must not silently inherit a correction fitted to
+// this one.
+const UNIFIED_SHEET_ADJUST = Object.freeze({ commissioner: 1.033 });
+
 function bankSheetAdjust(fighterId, bank) {
   if (bank === "specials") return MOVE_SHEET_ADJUST[fighterId] || 1;
   // v2.9 FLOW: the motion2 sheets share the motion bank's build
@@ -19240,6 +19408,7 @@ function bankSheetAdjust(fighterId, bank) {
     return MOTION_SHEET_ADJUST[fighterId] || 1;
   }
   if (bank === "walk") return WALK_SHEET_ADJUST[fighterId] || 1;
+  if (bank === UNIFIED_BANK) return UNIFIED_SHEET_ADJUST[fighterId] || 1;
   return 1;
 }
 
@@ -19343,8 +19512,14 @@ function drawFighter(fighter, time) {
   // v2.9 critic round 2 (M4): cellDrawAdjust rolls the oversized-crouch
   // correction together with the new guard-flinch height reconciliation, so
   // both renderers apply exactly one scale rule per cell.
+  // v3.0: `unified` tells cellDrawAdjust which bank supplies this fighter's
+  // STANDING GUARD, because that is what the authored block-flinch is being
+  // height-matched to. Nothing else in the correction changes — the unified
+  // sheets are one global scale each and mutually registered, so no unified
+  // cell takes a per-cell adjust.
+  const unifiedActive = unifiedFighterReady(fighter.def.id);
   const moveSheetAdjust = bankSheetAdjust(fighter.def.id, pose.bank)
-    * cellDrawAdjust(fighter.def.id, pose.bank, frame);
+    * cellDrawAdjust(fighter.def.id, pose.bank, frame, { unified: unifiedActive });
   const renderSize = fighterRenderSize(fighter.def.id) * moveSheetAdjust;
   // v2.9 critic round (M5) + round 2 (B2): per-cell floor registration PLUS
   // the ramped airborne body-centre anchor, in world pixels. Floor-anchoring
@@ -19847,9 +20022,24 @@ function drawFighter(fighter, time) {
           // for the three fade ticks, which is precisely what the critics saw.
           // The exemption is now what it always claimed to be: base-bank idle
           // and walk rows only. Everything else softens.
-          const sameCycle = pose.bank === "base" && fadeObs.fadeBank === "base"
-            && Math.floor(fadeObs.fadeFrame / 4) === Math.floor(frame / 4)
-            && Math.floor(frame / 4) <= 1;
+          // v3.0: the unified bank's cells 0-4 ARE a cycle — one idle and the
+          // four keys of one stride, authored in one generation — so they earn
+          // the same crisp cross-dissolve the base bank's idle and walk rows
+          // do. Without this every walk key handoff on a unified fighter took
+          // the SOFTENED big-delta ghost, which is a quality step down from
+          // 2.9 on the most-seen transition in the game. Note the exemption
+          // spans idle -> walk here where the base bank's cannot: on the base
+          // sheet those are two different rows, and B5 is explicit that the
+          // test is "adjacent keys of one CYCLE" — which, on this bank, they
+          // are. Any other unified pair (guard, crouch, a reaction) still
+          // softens.
+          const unifiedCycle = pose.bank === UNIFIED_BANK && fadeObs.fadeBank === UNIFIED_BANK
+            && frame <= UNIFIED_CELLS.walkPassingB
+            && fadeObs.fadeFrame <= UNIFIED_CELLS.walkPassingB;
+          const sameCycle = unifiedCycle
+            || (pose.bank === "base" && fadeObs.fadeBank === "base"
+              && Math.floor(fadeObs.fadeFrame / 4) === Math.floor(frame / 4)
+              && Math.floor(frame / 4) <= 1);
           const ghost = poseGhostCell(fadeAtlas, fadeObs.fadeFrame, atlas, frame,
             renderSize / fadeSize, !sameCycle);
           if (ghost) {
@@ -29129,6 +29319,12 @@ function ensureCinema3d() {
       motionSheetAdjust: MOTION_SHEET_ADJUST,
       // v2.10 WALK: the walk bank's own (currently empty) correction table.
       walkSheetAdjust: WALK_SHEET_ADJUST,
+      // v3.0 UNIFIED: the unified bank's world-size correction, and the gate
+      // that says whether this fighter is drawing his standing guard from it —
+      // both renderers must answer that question identically or the 2D canvas
+      // and the CINEMA 3D rig will disagree about the guard-flinch height.
+      unifiedSheetAdjust: UNIFIED_SHEET_ADJUST,
+      isUnifiedFighter: unifiedFighterReady,
       // v2.9 critic round: the per-cell corrections travel the same bridge so
       // CINEMA 3D plants and scales identically to the 2D path (M3 oversized
       // crouch cells, M5 the Commissioner's base-bank floor registration).

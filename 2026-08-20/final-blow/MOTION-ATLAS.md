@@ -1519,3 +1519,188 @@ now roster-wide:
 2. **The walk is single-phase.** That is parity with what ships today and it is
    `accept:true` here, but it is not an improvement, and nothing in this wave
    should be read as claiming it is.
+
+---
+
+### THE INTEGRATION — the unified bank wired as the primary source (3.0)
+
+`game.js`, `engine/fighter-kits.mjs` and `renderer/three/fighters.mjs` now read
+`assets/unified`. The bank rides the same lazy-sheet, manifest-gated machinery
+as banks 1-3 and the walk bank, and it is registered in `AUTHORED_BANKS`, so
+`resolveMotionPose`, the palette remap, `tintedSilhouette`, the crossfade ghost,
+the damage compositor and the CINEMA 3D bank builder all consume it with no
+bank-specific code. One rule is new, and it is the whole integration.
+
+#### ALL SIXTEEN OR NOTHING, and who that leaves off the bank
+
+`buildUnifiedAcceptMasks` collapses any sheet that is not 16/16 `accept: true`
+to an **all-false** mask. There is no partial mode: `unifiedCellDrawable` is
+either true for every one of the sixteen cells or false for all of them, so no
+tick can exist in which a fighter draws his idle from this bank and his walk
+from another. That is the caveat above, enforced in one function.
+
+**Eight fighters are on the bank: `jez`, `alan`, `post`, `benny`, `donald`,
+`ali`, `commissioner`, `devil`.**
+
+**Two are not, and stay byte-identical to 2.9: `cyraxx` (0/16, failed U1 three
+times) and — read the manifest, not the summary — the `deathblow` PILOT sheet,
+which is 12/16.** His four walk keys are `accept: false` after all four
+generations failed the phase gate, and the rule is not "12 of 16 is most of
+it". A deathblow whose idle, guard and reactions came from the unified sheet
+and whose WALK came from his base atlas is precisely the 11.4-11.9 dE
+glasses-to-sunglasses strobe this programme exists to delete, aimed at the one
+transition the 2.9 round named. He keeps his existing banks whole. When a
+16/16 sheet lands for either of them, dropping it in is the entire integration:
+no code changes.
+
+Measured in the browser, ten fighters x nine scenes (idle, walk, light, heavy
+punch, heavy kick, special, jump, crouch, guard), 490 ticks each:
+
+| | unified ticks | base ticks | motion/2/3 + specials |
+| --- | --- | --- | --- |
+| the eight on the bank | **69-77%** | **4-8%** | 17-23% |
+| `cyraxx`, `deathblow` | **0%** | 71-73% | 27-29% |
+
+#### The sixteen beats, and where they are routed
+
+idle - the four walk keys - crouch - crouch-transition (enter, leave and the
+landing gather) - guard - jump-rise - jump-tuck - punch-extension -
+kick-extension - light-hit (the flat recoil, the throw-clinch flinch and the
+reaction snap) - big-hit (the heavy reaction opener and the launched victim) -
+stagger (the reaction fold and the super-storm writhe) - knockdown.
+
+Every routed site is a `uni(cell, <the exact 2.9 descriptor>)` wrap or a `ukey`
+prepended to a key track's chain. The data-driven tracks are otherwise
+untouched — `jumpArcKeys`, `airNormalKeys`, `heavyWindupKeys`,
+`throwClinchKeys`, `reactionTrackKeys` and `wakeupKeys` keep their band
+structure exactly; only the bank supplying those bands changed. Nothing was
+interleaved with the base walk cells: the four unified walk keys cycle among
+themselves on the identical `walkTime * 10` cadence.
+
+**The idle -> walk seam, filmstripped at 1 tick on four fighters.** `donald`,
+`benny`, `commissioner` and `jez`, idle -> walk -> idle: `unified:0` ->
+`unified:1..4` -> `unified:0`, with **zero** cross-bank transitions on any
+tick. Read at 1:1 across the seam, donald's club, the Commissioner's cane,
+benny's cap/glasses/belt pouch and jez's white forearm wrap are present and
+unchanged in every frame on both sides of it.
+
+#### One 2.9 workaround retired, three measured and KEPT
+
+* **RETIRED: M4's guard-flinch numbers, for the eight fighters on the bank.**
+  That correction matches the authored block-flinch (`motion2:8`) to the
+  fighter's STANDING GUARD, and for a unified fighter that drawing moved from
+  `base(roles.guard)` to `unified:7`. Left alone, jez's flinch would have drawn
+  255 x 1.20 = 306px against a 279px guard — M4's own defect with the sign
+  flipped, the fighter GROWING 10% on a blocked hit.
+  `UNIFIED_GUARD_FLINCH_ADJUST` re-derives it from the same measurement
+  (content height, alpha >= 24, at 1:1): jez 1.20 -> **1.094**, donald 1.16 ->
+  0.962 (**clamped to 1**), ali 1.18 -> **1.058**, post 1.16 -> **1.038**,
+  benny 1.11 -> **1.040**, alan 1.09 -> 0.979 (**clamped to 1**), devil 1.08 ->
+  **1.127**, commissioner 1.03 -> **1.000**. The floor of 1 and the cap of 1.22
+  are unchanged. `deathblow` and `cyraxx` are not in the table and reach their
+  2.9 values through the default path.
+* **KEPT: `BASE_WALK_ADJUST`.** Probed in the browser across eleven scenes: the
+  `devil` still reaches base cells **5, 6 and 7** — his `motion2:6` dash-brake
+  is `accept: false`, so his dash tail falls through to the base walk cells the
+  table corrects. It is not moot.
+* **KEPT: `BASE_CELL_ROLES.crouchAdjust`.** Same probe: the `devil` still
+  reaches **base:12**. A unified fighter's CROUCH BEAT no longer uses it (0
+  base ticks in the crouch scene on all eight), but base:12 remains the
+  fallback under the dash tail, the jump descent and the wake-up gather.
+* **KEPT: the 40 cells behind the 2.9 consistency gate.** The walk bank is
+  simply unused by a unified fighter — the unified keys outrank it — and it is
+  still the shipping read for the two fighters off the bank, so its
+  `accept: false` stays. Same for motion3 on deathblow and donald.
+
+#### Registration and scale
+
+* `UNIFIED_SHEET_ADJUST = { commissioner: 1.033 }`, its own table beside
+  `MOTION_SHEET_ADJUST` and `WALK_SHEET_ADJUST`. The sheets share motion2's
+  build rule (`targetH: 306` on all ten), so only the Commissioner's older
+  full-cell base atlas needs the correction, and it is the same 316/306 he
+  already takes on banks 1-3.
+* **No unified cell takes a per-cell draw adjust.** One global scale per sheet,
+  mutually registered by construction — the point of the bank.
+* **No unified cell needs a floor offset.** Measured foot bottoms sit at
+  315-319 of 320 against the base bank's 316.
+* `CELL_BODY_CENTRE` gains a measured 16-cell `unified` row for all ten
+  fighters, so B2's airborne body-centre anchoring covers `jump-rise`,
+  `jump-tuck`, the airborne `big-hit` and the `knockdown`. Verified: the tuck
+  registers lower in its cell than the rise on every sheet, so a jump cannot
+  drop the body at the handoff.
+* **The wake-up settle target moved with the idle.** R5 lands the standing cell
+  at the height the last rung was drawn at, and the unified idle is 8-15%
+  shorter than the base idle on every sheet (a settled wide fighting stance,
+  not a scale defect — verified at 1:1: same head size, knees bent, feet
+  apart). `WAKEUP_RISE_HEIGHT.standUnified` carries the new target; five of the
+  eight were hitting the 0.86 settle floor against the base target and none of
+  them does against the unified one.
+
+#### The hold census, and the one real cost
+
+Longest run of one identical drawing, measured in the browser at 1 tick per
+step with a RAF awaited per tick, unified fighter beside the `cyraxx` control:
+
+| beat | 3.0 (a fighter on the bank) | 2.9 control (`cyraxx`) |
+| --- | --- | --- |
+| walk cycle | `unified:1/2/3/4`, 6-7 ticks per key | `base:4/5/6/7`, 6 ticks per key |
+| crouch enter/hold/exit | `u:6` x3, `u:5` x18, `u:6` x3 | `m2:4` x3, `base:12` x13, `m2:4` x3 |
+| jump arc | `u:8` x9, `u:9` x8, `m3:2` x5, `m3:3` x6, `m:11` x10, `m:6` x8, `u:6` x7 | `m2:7` x9, `m:5` x7, `m3:2` x5, `m3:3` x6, `m:11` x10, `m:6` x8, `m2:4` x7 |
+| blocked heavy | `u:7` -> `m2:8` x12 -> `u:7` | `base:11` -> `m2:8` x12 -> `base:11` |
+| light reaction | `u:12` x7, `u:14` x7, `m2:10` x7, `u:14` x8 | `m2:9` x7, `base:15` x7, `m2:10` x7, `base:8` x8 |
+| heavy reaction | `u:13` x7, `m3:7` x7, `u:12` x7, `u:14` x8, `u:7` x4 | `m:8` x7, `m3:7` x7, `m2:9` x7, `base:8` x8, `base:11` x4 |
+| wake-up | `m:9` x2, `m2:14` x7, `m2:15` x6 | identical |
+| heavy punch | `m2:0` x2, `m3:0` x2, `u:6` x2, `m:2` x2, `u:10` x5, `m:4` x7, `base:11` x3 | same shape, `m2:4` and `m:0` in place of `u:6`/`u:10` |
+
+**Every beat's worst hold is tick-for-tick what 2.9 measured.** Routing through
+one bank merged no band. The unit audit asserts this as a property rather than
+a snapshot: `longestBeatHold` under the unified resolver must be `<=` the 2.9
+number for all thirteen tracks, and the band COUNT must be equal.
+
+**The one real cost, and it is unavoidable: the idle is now ONE drawing.** The
+base bank gives a fighter a four-cell breathing cycle at ~12 ticks a cell; the
+unified grammar has exactly one idle. Measured, the base idle cycle's
+adjacent-cell silhouette IoU runs 0.26-0.98 — on most of the roster a slow sway,
+on `benny` genuinely four drawings — and all of it is lost. It cannot be kept:
+every base idle cell is 9.9-22.5 dE of costume from the unified walk keys, so
+cycling base cells under a unified walk IS the strobe. The procedural breathing
+scaleY and the idle bob still run underneath it.
+
+One band had to be given a key rather than left empty. The light reaction's
+band 1 degrades to the ladder's `snap`, which on the base sheets is a DIFFERENT
+drawing from the authored light-hit above it and on this bank is the SAME one —
+so it takes the unified **stagger** instead, a drawing 2.9's ladder can only
+reach on two of ten sheets. The unified reaction tail is therefore three
+distinct drawings (`light-hit` -> `stagger` -> `guard`) on all eight fighters,
+where R4 had to DROP the third band on the eight base sheets whose `stagger` is
+null or equal to `hit`.
+
+#### Residual risk — where a unified fighter still touches another generation
+
+Named bluntly, because none of it is fixable without more art:
+
+1. **Kit-less normals. This is the big one.** The light/heavy startup and
+   recovery cells are raw base indices (`[8,9,10,11]`, `[8,13,13,11]`) and are
+   not part of the sixteen, so a unified fighter's punch runs
+   `unified:0 idle -> base:8/9 -> unified:10 extension -> motion:4 -> base:11 ->
+   unified:7 guard`. Measured at **24-42 ticks of base cells per 490**, entirely
+   inside light/heavy normals and never in idle, walk, crouch, guard, jump or
+   special. In 2.9 that whole sequence was one generation. **This wave moves the
+   seam off the game's most common transition and onto its normals.** That is
+   the trade, made deliberately: idle<->walk happens constantly and idle->jab is
+   bracketed by a smear, a flash and an impact.
+2. **The block flinch.** There is no block-flinch drawing in the unified
+   grammar, so a blocked hit still cuts `unified:7 -> motion2:8 -> unified:7`.
+   The HEIGHTS are reconciled (above); the generation is not.
+3. **The airborne tail.** `unified:9` tuck hands to `motion3` apex/descent and
+   then to `motion:11` air-recovery and `motion:6` landing gather — three
+   generations in one arc, exactly as 2.9 has it, with unified now supplying
+   the first two rungs instead of motion2/motion.
+4. **The load window.** The gate is all-or-nothing per fighter, so the tick the
+   sheet finishes decoding flips that fighter's ENTIRE core vocabulary at once.
+   `preloadAuthoredBanks` requests and `.decode()`s it as soon as a matchup is
+   known — and only for whole fighters, so nothing is downloaded for the two
+   off the bank — but a cold cache on a slow link can still put that flip on
+   screen once, before FIGHT!.
+5. **Inside the sixteen: nothing.** Asserted per fighter, per beat, on both the
+   ordinary and the bare-handed resolution path.

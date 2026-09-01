@@ -138,20 +138,32 @@ function testCycleOrdering() {
 }
 
 function testBaseOnlyWalkIsByteIdentical() {
-  // THE REGRESSION GUARD. For every fighter, the descriptor's fallback must be
+  // THE REGRESSION GUARD. For every fighter, the descriptor must degrade to
   // exactly the base cell the pre-2.10 read (`base(4 + floor(walkTime*10)%4)`)
-  // would have drawn at that instant. Eight of ten fighters render only this.
+  // would have drawn at that instant.
+  //
+  // v3.0: the unified bank now sits ON TOP of this chain (unified -> walk ->
+  // base), so the guard is asserted on the CHAIN rather than on the top link:
+  // the walk-bank descriptor and its base fallback must both still be there,
+  // in that order, and resolving with every authored bank reporting absent
+  // must land on the pre-2.10 base cell. That is the property the eight
+  // fighters with no accepted walk sheet actually ship.
   for (const id of ROSTER) {
     const roles = baseCellRoles(id);
     for (let step = 0; step < 12; step += 1) {
       const walkTime = step * 0.1;
       const legacy = 4 + Math.floor(walkTime * 10) % 4;
       const pose = walkCyclePose(walkTime, roles);
-      assert.equal(pose.bank, "walk");
-      assert.equal(pose.frame, walkCycleFrame(walkTime));
-      assert.equal(pose.fallback.bank, "base");
-      assert.equal(pose.fallback.frame, legacy,
+      assert.equal(pose.bank, "unified");
+      const walkLink = pose.fallback;
+      assert.equal(walkLink.bank, "walk");
+      assert.equal(walkLink.frame, walkCycleFrame(walkTime));
+      assert.equal(walkLink.fallback.bank, "base");
+      assert.equal(walkLink.fallback.frame, legacy,
         `${id} @${walkTime.toFixed(1)}: fallback must be the pre-2.10 base cell`);
+      assert.deepEqual(resolveMotionPose(pose, () => false, id),
+        { bank: "base", frame: legacy },
+        `${id} @${walkTime.toFixed(1)}: no authored sheet must draw the 2.10 base cell`);
     }
   }
 }
@@ -161,11 +173,15 @@ function testChainedFallbackToBase() {
   const pose = walkCyclePose(0.2, roles);       // key 2, fallback base 6
   // No sheet / rejected cell -> the base walk cell draws instead.
   assert.deepEqual(resolveMotionPose(pose, () => false, "alan"), { bank: "base", frame: 6 });
-  // Sheet present and cell accepted -> the authored key holds.
-  assert.equal(resolveMotionPose(pose, () => true, "alan").bank, "walk");
-  assert.equal(resolveMotionPose(pose, () => true, "alan").frame, 2);
+  // v3.0: with the unified sheet absent but the walk sheet present the 2.10
+  // key still holds — the two banks are independent links of one chain.
+  const noUnified = (cell, bank) => bank !== "unified";
+  assert.equal(resolveMotionPose(pose, noUnified, "alan").bank, "walk");
+  assert.equal(resolveMotionPose(pose, noUnified, "alan").frame, 2);
+  // Sheet present and cell accepted -> the unified key outranks it.
+  assert.equal(resolveMotionPose(pose, () => true, "alan").bank, "unified");
   // The gate is per BANK: a loaded motion bank must not license a walk cell.
-  const bankAware = (cell, bank) => bank !== "walk";
+  const bankAware = (cell, bank) => bank !== "walk" && bank !== "unified";
   assert.deepEqual(resolveMotionPose(pose, bankAware, "alan"), { bank: "base", frame: 6 });
   // Chaining still works when a walk descriptor falls back through bank 1.
   const chained = walkPose(0, "motion", 7);
@@ -186,13 +202,13 @@ function testDescriptorDeterminism() {
     assert.deepEqual(a, b);
   }
   // And it defaults sanely when no role map is supplied.
-  assert.equal(walkCyclePose(0.1).fallback.frame, 5);
+  assert.equal(walkCyclePose(0.1).fallback.fallback.frame, 5);
 }
 
 function testAuthoredBankRegistry() {
   // Both renderers and resolveMotionPose route off this one list, so the walk
   // bank cannot be gated in 2D and ungated in 3D.
-  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk"]);
+  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", "unified"]);
   for (const bank of AUTHORED_BANKS) assert.equal(isAuthoredBank(bank), true);
   for (const bank of ["base", "specials", undefined]) {
     assert.equal(isAuthoredBank(bank), false);
