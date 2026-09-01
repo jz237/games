@@ -230,20 +230,116 @@ test("the foot curve is continuous around the cycle seam", () => {
   assert.equal(after.planted, true, "the cycle starts on a plant");
 });
 
-test("depth order is pose-dependent for the arms and static for the legs", () => {
+test("depth order is pose-dependent for the arms AND follows the stride for the legs", () => {
   const zAt = (pose, name) => pose.bones.find((bone) => bone.name === name).z;
   const seen = { foreArmFar: new Set(), thighFar: new Set(), thighNear: new Set() };
   for (let i = 0; i < 60; i += 1) {
     const pose = rigPose(rig, walkSim(i / 60));
     for (const key of Object.keys(seen)) seen[key].add(zAt(pose, key));
-    // the near leg is nearer at every phase — in a 3/4 view pretending
-    // otherwise is how a rig starts strobing
-    assert.ok(zAt(pose, "thighNear") > zAt(pose, "thighFar"));
-    assert.ok(zAt(pose, "pelvis") > zAt(pose, "thighNear"), "shorts hide both hips");
+    // v3.3: the LEADING leg draws on top — its bones wear the leading art's z
+    // slots (7-9); the trailing leg tucks behind on 4-6. "The near leg is
+    // nearer at every phase" (the 3.1 rule) hid the leading leg behind the
+    // body for the whole far-led half of the cycle.
+    const front = pose.frontSide === "near" ? "thighNear" : "thighFar";
+    const back = pose.frontSide === "near" ? "thighFar" : "thighNear";
+    assert.ok(zAt(pose, front) > zAt(pose, back),
+      `leading thigh must draw over the trailing one at phase ${pose.phase.toFixed(3)}`);
+    assert.ok(zAt(pose, "pelvis") > zAt(pose, front), "shorts hide both hips");
   }
   assert.ok(seen.foreArmFar.size > 1, "the far forearm must change layer as it swings");
-  assert.equal(seen.thighFar.size, 1, "leg layers are static by design");
-  assert.equal(seen.thighNear.size, 1);
+  assert.equal(seen.thighFar.size, 2, "each leg takes both depth roles across a cycle");
+  assert.equal(seen.thighNear.size, 2);
+});
+
+// ---------------------------------------------------------------------------
+// v3.3 — THE WALK-STRIDE COLLAPSE FIX.
+//
+// The leg pieces were cut from ONE mid-stride drawing: near leg extended
+// forward, far leg extended back and foreshortened. The skeleton alternates a
+// true symmetric stride, so for half of every cycle the far leg led — pieces
+// rotated up to 93 degrees from their authored orientation and drawn BEHIND
+// the near leg and the shorts. The leading leg vanished into the body and the
+// walk read as a crouched shuffle every other half-step. The fix makes the
+// ARTWORK follow the ROLE: the forward leg always wears the leading pieces on
+// the leading depth slots. These tests pin that, phase by phase.
+// ---------------------------------------------------------------------------
+
+const FIGHT_PX_PER_CELL = 429 / 320; // deathblow's fight-mode draw scale
+
+const legDraw = (pose, bone) => pose.bones.find((entry) => entry.name === bone);
+
+test("held-direction fight-mode walk: the stride alternates and the leading leg is always dressed to lead", () => {
+  // Forward walk and back walk (the two facings of a held direction in fight
+  // mode differ only in mirror and speed — the rig sees |vx|).
+  for (const speed of [383, 299]) {
+    const leads = [];
+    let swaps = 0;
+    let previous = null;
+    for (let tick = 0; tick < 120; tick += 1) {
+      const pose = rigPose(rig, {
+        walkTime: tick / 60, animTime: tick / 60, moving: true,
+        speed, pxPerCell: FIGHT_PX_PER_CELL, fatigue: 0.2,
+      });
+      leads.push(pose.frontSide);
+      if (previous && pose.frontSide !== previous) swaps += 1;
+      previous = pose.frontSide;
+
+      const frontLeg = pose.frontSide === "near" ? rig.legs.near : rig.legs.far;
+      const backLeg = pose.frontSide === "near" ? rig.legs.far : rig.legs.near;
+      // the forward leg wears the leading art on every bone, the trailing leg
+      // the trailing art — at every single tick of a held walk
+      assert.equal(legDraw(pose, frontLeg.thigh).piece, "thighNear");
+      assert.equal(legDraw(pose, frontLeg.shin).piece, "shinNear");
+      assert.equal(legDraw(pose, frontLeg.foot).piece, "footNear");
+      assert.equal(legDraw(pose, backLeg.thigh).piece, "thighFar");
+      assert.equal(legDraw(pose, backLeg.shin).piece, "shinFar");
+      assert.equal(legDraw(pose, backLeg.foot).piece, "footFar");
+      // and the leading leg draws over the trailing one, under the shorts
+      assert.ok(legDraw(pose, frontLeg.shin).z > legDraw(pose, backLeg.shin).z);
+      assert.ok(legDraw(pose, frontLeg.foot).z > legDraw(pose, backLeg.foot).z);
+    }
+    // 120 ticks = 2s = 10/3 cycles at 5/3 cycles/sec; two role swaps per cycle
+    assert.ok(leads.includes("near") && leads.includes("far"),
+      "both legs must lead within a couple of cycles");
+    assert.ok(swaps >= 5 && swaps <= 8,
+      `role swaps should track the two foot crossings per cycle, got ${swaps}`);
+  }
+});
+
+test("no leg piece is ever drawn a quarter-turn from its authored orientation", () => {
+  // The observable symptom of the 3.2 bug: the far thigh at 93 degrees from
+  // rest, i.e. a painted vertical limb smeared horizontal. With art following
+  // role the worst leg-piece rotation in a full-speed cycle stays under ~87
+  // degrees, and it only peaks at the foot crossings where the legs overlap.
+  const QUARTER_TURN = Math.PI / 2;
+  for (let tick = 0; tick < 72; tick += 1) {
+    const pose = rigPose(rig, walkSim(tick / 120));
+    for (const entry of pose.bones) {
+      if (!/^(thigh|shin|foot)/.test(entry.name)) continue;
+      assert.ok(Math.abs(entry.angle) < QUARTER_TURN,
+        `${entry.name} wearing ${entry.piece} at ${(entry.angle * 180 / Math.PI).toFixed(1)}deg, phase ${pose.phase.toFixed(3)}`);
+    }
+  }
+});
+
+test("the near-led half and the idle are bit-identical to the shipped 3.2 draw", () => {
+  // The role map is empty whenever the near foot leads — including the whole
+  // idle — so the pilot-approved half of the walk cannot have moved a pixel.
+  for (const sim of [idleSim(0.7), idleSim(2.9)]) {
+    const pose = rigPose(rig, sim);
+    assert.equal(pose.frontSide, "near", "the idle stance leads with the near foot");
+    for (const entry of pose.bones) {
+      const bone = rig.byName.get(entry.name);
+      assert.equal(entry.piece, bone.piece, `${entry.name} must wear its own piece at idle`);
+      assert.equal(entry.ox, -bone.piecePivot[0]);
+    }
+  }
+  // and a near-led walk tick keeps every bone in its own art too
+  const nearLed = rigPose(rig, walkSim(0.06)); // phase 0.1 — near leads
+  assert.equal(nearLed.frontSide, "near");
+  for (const entry of nearLed.bones) {
+    assert.equal(entry.piece, rig.byName.get(entry.name).piece);
+  }
 });
 
 test("idle breathes without drifting", () => {
@@ -305,13 +401,21 @@ test("the rig is off by default and every draw-path change is gated on it", () =
   // the body blit branch
   assert.match(game, /else if \(rigDraw\) drawRigFighter\(fighter, rigDraw, renderSize\);/);
 
-  // every sprite-silhouette pass that could show a second, differently-posed
-  // body behind the rig is gated. If a future pass is added it must join them.
+  // v3.3: the rim light, projectile glow and cast shadow run on the RIG'S OWN
+  // silhouette — never a sprite silhouette behind a rigged body.
+  assert.match(game,
+    /if \(rigDraw\) drawRigSilhouetteFrame\(fighter, rigDraw, renderSize, stageRimColor\(\)\);/,
+    "the stage rim light must run on the rig's own pixels");
+  assert.match(game,
+    /if \(rigDraw\) drawRigSilhouetteFrame\(fighter, rigDraw, renderSize, "#04060a"\);/,
+    "the cast shadow must run on the rig's own pixels");
+  // every remaining sprite-silhouette pass (hit smear, dizzy ghosts, pose
+  // crossfade, battle damage) stays gated — those beats fall back to sprite
+  // cells in rigDrawSide anyway, so a rig copy would be a second body.
   const gates = game.match(/!rigDraw/g) || [];
-  assert.ok(gates.length >= 6,
-    `expected the silhouette passes to be gated, found ${gates.length}`);
+  assert.ok(gates.length >= 4,
+    `expected the remaining silhouette passes to be gated, found ${gates.length}`);
   assert.match(game, /reflectionPassActive \|\| rigDraw/, "attack trails must skip too");
-  assert.match(game, /if \(rigDrawSide\(fighter\)\) continue;/, "cast shadows must skip too");
 
   // rig assets are only ever reached through the gated dynamic import
   assert.match(game, /import\("\.\/engine\/rig\.mjs"\)/);

@@ -1368,16 +1368,98 @@ function rigDrawSide(fighter) {
   return rigState.rig;
 }
 
-function drawRigFighter(fighter, rig, renderSize) {
-  const pose = rigState.module.rigPose(rig, {
+// ---------------------------------------------------------------------------
+// v3.3 — RENDER-PASS PARITY FOR THE RIG.
+//
+// 3.1 shipped the rig by skipping every pass that blits a sprite silhouette
+// (rim light, cast shadow, projectile glow), because a silhouette cut from the
+// walk CELL behind a differently-posed rig is a second, wrongly-posed fighter
+// peeking out. Right call, wrong end state: in the 3.2 showcase the sprite
+// side wore the stage's rim light and threw a cast shadow while the rigged
+// side did neither, so a viewer read a LIGHTING difference as an animation
+// difference.
+//
+// The answer is to run those passes ON THE RIG'S OWN PIXELS. Every one of
+// them is a transform + composite around a single body blit, so the rig is
+// rasterised ONCE per pose into an offscreen the size of a source sprite cell
+// (RIG_CELL — twice RIG_CELL, so the rig keeps its 3.2 native-draw
+// crispness at fight render sizes), and each pass blits THAT. This also fixes a parity break in the passes the rig already
+// ran: drawRig lays down 14 overlapping pieces, so the floor reflection's
+// per-draw opacity filter and the body drop shadow applied fourteen times,
+// stacking toward full opacity where torso, pelvis and arm overlap — the
+// rig's reflection read hotter than the sprite's. One blit, one alpha, one
+// filter, one shadow: a sprite cell's compositing exactly.
+//
+// Per-side scratches, keyed on the pose inputs: the cast shadow, the rim
+// light, the mirror pass and the main pass share one rasterisation per tick.
+// Nothing here allocates or runs with the rig off.
+// ---------------------------------------------------------------------------
+// 2x the sprite cell: renderSize tops out near 430px, so the blit is a mild
+// DOWNscale and the rig stays as crisp as its 3.2 native-resolution draw.
+const RIG_CELL = 640;
+const rigCellScratches = [null, null];
+
+function rigCellScratch(side) {
+  let scratch = rigCellScratches[side];
+  if (!scratch) {
+    const cell = document.createElement("canvas");
+    cell.width = RIG_CELL;
+    cell.height = RIG_CELL;
+    const tint = document.createElement("canvas");
+    tint.width = RIG_CELL;
+    tint.height = RIG_CELL;
+    scratch = {
+      cell, cellContext: cell.getContext("2d"),
+      tint, tintContext: tint.getContext("2d"),
+      key: "", tintKey: "", pose: null,
+    };
+    rigCellScratches[side] = scratch;
+  }
+  return scratch;
+}
+
+/**
+ * Resolve this fighter's rig pose and rasterise it into its side's cell —
+ * memoised on the pose inputs, so every pass that asks for the same pose in
+ * the same frame shares one rasterisation. Pure render-side cache of a pure
+ * function: rollback and both peers still agree on every pose.
+ */
+function rigFrameCell(fighter, rig, renderSize) {
+  const scratch = rigCellScratch(fighter.side);
+  const sim = {
     walkTime: fighter.walkTime,
     animTime: fighter.animTime,
     moving: Math.abs(fighter.vx) > 22,
     speed: Math.abs(fighter.vx),
     pxPerCell: renderSize / rig.source.cellSize,
     fatigue: clamp(1 - fighter.health / 100, 0, 1),
-  });
-  rigState.module.drawRig(ctx, rig, rigState.image, pose, renderSize);
+  };
+  const key = `${sim.walkTime}|${sim.animTime}|${sim.moving}|${sim.speed}|${sim.pxPerCell}|${sim.fatigue}`;
+  if (key !== scratch.key) {
+    scratch.key = key;
+    scratch.tintKey = "";
+    scratch.pose = rigState.module.rigPose(rig, sim);
+    const cellContext = scratch.cellContext;
+    cellContext.setTransform(1, 0, 0, 1, 0, 0);
+    cellContext.globalCompositeOperation = "source-over";
+    cellContext.clearRect(0, 0, RIG_CELL, RIG_CELL);
+    cellContext.save();
+    // drawRig lands its figure on (-size/2, -size)..(size/2, 0) — the box
+    // drawAtlasFrame blits a cell into. Shifting the origin puts that box on
+    // (0,0)..(cell,cell): the same cell, as a source rect.
+    cellContext.translate(RIG_CELL * 0.5, RIG_CELL);
+    rigState.module.drawRig(cellContext, rig, rigState.image, scratch.pose, RIG_CELL);
+    cellContext.restore();
+  }
+  return scratch;
+}
+
+function drawRigFighter(fighter, rig, renderSize) {
+  const scratch = rigFrameCell(fighter, rig, renderSize);
+  const pose = scratch.pose;
+  // drawAtlasFrame's exact footprint — and now its exact compositing too: the
+  // caller's alpha, filter and drop shadow land on ONE image of the body.
+  ctx.drawImage(scratch.cell, -renderSize * 0.5, -renderSize, renderSize, renderSize);
   if (!reflectionPassActive) {
     rigState.draws += 1;
     rigState.sideDraws[fighter.side] += 1;
@@ -1390,8 +1472,32 @@ function drawRigFighter(fighter, rig, renderSize) {
       farFootX: Number(pose.feet.far.x.toFixed(2)),
       nearPlanted: pose.feet.near.planted,
       farPlanted: pose.feet.far.planted,
+      // v3.3: which leg wears the leading artwork this frame
+      frontSide: pose.frontSide,
     };
   }
+}
+
+/**
+ * drawSilhouetteFrame's rig twin — a flat tinted cut-out of the RIG's own
+ * pixels, cached per colour and invalidated with the pose. This is what lets
+ * the rim light, the cast shadow and the projectile glow run on a rigged
+ * fighter without blitting a differently-posed sprite behind him.
+ */
+function drawRigSilhouetteFrame(fighter, rig, renderSize, color) {
+  const scratch = rigFrameCell(fighter, rig, renderSize);
+  if (scratch.tintKey !== color) {
+    scratch.tintKey = color;
+    const tintContext = scratch.tintContext;
+    tintContext.setTransform(1, 0, 0, 1, 0, 0);
+    tintContext.globalCompositeOperation = "source-over";
+    tintContext.clearRect(0, 0, RIG_CELL, RIG_CELL);
+    tintContext.drawImage(scratch.cell, 0, 0);
+    tintContext.globalCompositeOperation = "source-in";
+    tintContext.fillStyle = color;
+    tintContext.fillRect(0, 0, RIG_CELL, RIG_CELL);
+  }
+  ctx.drawImage(scratch.tint, -renderSize * 0.5, -renderSize, renderSize, renderSize);
 }
 
 /** Bank-routed drawable gate for resolveMotionPose (all five authored banks). */
@@ -20263,11 +20369,14 @@ function drawFighter(fighter, time) {
       }
     }
 
-    // v3.1: every pass below that blits a SPRITE SILHOUETTE is skipped while
-    // the rig draws the body — a rim light cut from the walk cell behind a
-    // rigged pose is a second, differently-posed fighter peeking out.
+    // v3.1 skipped every silhouette pass while the rig drew the body — a rim
+    // light cut from the walk cell behind a rigged pose is a second,
+    // differently-posed fighter peeking out. v3.3: the rim light and the
+    // projectile glow run on a silhouette of the RIG'S OWN pixels instead
+    // (drawRigSilhouetteFrame), under the sprite path's exact alpha, offset
+    // and composite — so both showcase sides finally wear the same light.
     if (!reflectionPassActive && state.performance.shadows && !graphicFatality
-      && !rigDraw && !state.accessibility.highContrast) {
+      && !state.accessibility.highContrast) {
       // Stage-keyed rim light: a tinted silhouette peeking 2-3px past the edge
       // that faces the arena's key light. The sprite draw below covers all but
       // the lit edge; the colour warms while the super spotlight is up.
@@ -20276,13 +20385,14 @@ function drawFighter(fighter, time) {
       ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha = 0.35;
       ctx.translate(rim.direction * fighter.facing * 3, -2);
-      drawSilhouetteFrame(atlas, frame, renderSize, stageRimColor());
+      if (rigDraw) drawRigSilhouetteFrame(fighter, rigDraw, renderSize, stageRimColor());
+      else drawSilhouetteFrame(atlas, frame, renderSize, stageRimColor());
       ctx.restore();
       presentationDebug.rimLights += 1;
     }
 
     if (!reflectionPassActive && !graphicFatality && state.performance.trailScale > 0
-      && !rigDraw && !state.accessibility.highContrast && state.projectiles.length) {
+      && !state.accessibility.highContrast && state.projectiles.length) {
       // Projectile rim light (wave 4): the nearest incoming projectile or
       // thrown object tints the fighter's silhouette edge on the side facing
       // it, brightening as it closes in — same offset-silhouette technique as
@@ -20305,7 +20415,8 @@ function drawFighter(fighter, time) {
         ctx.globalCompositeOperation = "screen";
         ctx.globalAlpha = 0.55 * strength;
         ctx.translate(towardLocal * 5, -2);
-        drawSilhouetteFrame(atlas, frame, renderSize, tint);
+        if (rigDraw) drawRigSilhouetteFrame(fighter, rigDraw, renderSize, tint);
+        else drawSilhouetteFrame(atlas, frame, renderSize, tint);
         ctx.restore();
         presentationDebug.projectileGlows += 1;
       }
@@ -22319,16 +22430,18 @@ function drawFighterCastShadows() {
   ctx.rect(0, FLOOR + 1, W, REFLECTION_DEPTH);
   ctx.clip();
   for (const fighter of state.fighters) {
-    // v3.1: the cast shadow is a sprite silhouette too, and a rigged fighter's
-    // shadow would be walking a different cycle from his legs.
-    if (rigDrawSide(fighter)) continue;
+    // v3.1 skipped rigged fighters — a sprite-silhouette shadow would walk a
+    // different cycle from the rig's legs. v3.3: the shadow is cut from the
+    // RIG'S OWN pixels instead, under the same transform and alpha, so the
+    // rigged side of the showcase throws the same raked shadow as the sprite.
+    const rigDraw = rigDrawSide(fighter);
     const pose = fighterAnimationPose(fighter);
     const atlas = pose.bank === "specials"
       ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
       : pose.bank === "motion"
         ? fighterMotionAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
         : fighterAtlases[fighter.def.id];
-    if (!atlas?.complete || !atlas.naturalWidth) continue;
+    if (!rigDraw && (!atlas?.complete || !atlas.naturalWidth)) continue;
     const renderSize = fighterRenderSize(fighter.def.id) * bankSheetAdjust(fighter.def.id, pose.bank);
     const jump = Math.max(0, FLOOR - fighter.y);
     const airFade = clamp(1 - jump / 520, 0.25, 1);
@@ -22340,7 +22453,8 @@ function drawFighterCastShadows() {
     // shadow of a mixed-orientation sheet cannot point opposite its fighter.
     ctx.scale(fighter.facing * atlasFrameFacing(fighter.def.id, pose.bank, pose.frame), -stretch);  // flip into the floor, squashed long
     ctx.globalAlpha = (0.3 + deepen * 0.22) * airFade;
-    drawSilhouetteFrame(atlas, pose.frame, renderSize, "#04060a");
+    if (rigDraw) drawRigSilhouetteFrame(fighter, rigDraw, renderSize, "#04060a");
+    else drawSilhouetteFrame(atlas, pose.frame, renderSize, "#04060a");
     ctx.restore();
     presentationDebug.castShadows += 1;
   }

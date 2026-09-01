@@ -400,22 +400,65 @@ export function rigPose(rig, sim) {
     zOf.set(bone.name, z);
   }
 
+  // ---- leg ART follows the stride role (v3.3) --------------------------
+  //
+  // THE 3.2 WALK BUG. The leg pieces were cut from ONE mid-stride drawing:
+  // the near leg extended FORWARD (thigh rest 64°, screen-down-forward), the
+  // far leg extended BACK (thigh rest 139°, down-back, foreshortened). The
+  // skeleton alternates a true symmetric stride, so for half of every cycle
+  // the FAR leg has to lead — and leading demands its thigh piece rotate ~93°
+  // from rest. A painted, perspective-baked thigh a quarter-turn from its
+  // authored orientation is a horizontal smear, and with the far leg's static
+  // z slots (4-6) it draws BEHIND the near leg and the shorts, so the leading
+  // leg vanished into the body leaving a floating shoe. Result: one half-step
+  // read as a stride, the next as a crouched shuffle — "the legs are broken
+  // when walking". (The 3.1 pilot's verification strips covered phases
+  // 0.09-0.42 only — the near-led half — which is why it shipped unseen.)
+  //
+  // THE FIX: the ARTWORK follows the ROLE, not the bone. Whichever leg is
+  // forward wears the near-leg pieces (authored leading: small rotations,
+  // z 7-9, visible over the shorts hem); whichever trails wears the far-leg
+  // pieces (authored trailing, z 4-6, tucked behind). The skeleton, the IK,
+  // the planted-foot constraint and the stride are untouched — only which
+  // drawing rides which bone chain. At the readable extremes of the stride
+  // every piece now sits within ~20° of its authored orientation (the
+  // near-90° rotations that remain happen only at the crossings, where the
+  // legs overlap and hide each other), the leading leg draws in front, and
+  // the swing foot passes BEHIND the planted one exactly the way the approved
+  // near-led half already did. The handoff happens at the two foot crossings
+  // per cycle, where the leg pieces overlap almost completely, and it is a
+  // pure function of the same foot targets — deterministic, rollback-safe.
+  //
+  // When the near foot leads (the whole idle stance, and the already-approved
+  // half of the walk) the map is empty and the output is bit-identical to 3.2.
+  const legArt = new Map();
+  if (feet.near.x < feet.far.x) {
+    for (const part of ["thigh", "shin", "foot"]) {
+      legArt.set(rig.legs.near[part], rig.byName.get(rig.legs.far[part]));
+      legArt.set(rig.legs.far[part], rig.byName.get(rig.legs.near[part]));
+    }
+  }
+
   const draw = rig.bones
     .map((bone) => {
       const node = nodes.get(bone.name);
-      const piece = rig.pieces[bone.piece];
+      const art = legArt.get(bone.name) || bone;
+      const piece = rig.pieces[art.piece];
       const s = scale.get(bone.name);
       return {
         name: bone.name,
-        piece: bone.piece,
+        piece: art.piece,
         x: node.x,
         y: node.y,
-        angle: node.angle,
-        z: zOf.get(bone.name),
+        // the piece's pixels are pre-rotated for the ART bone's rest, so a
+        // swapped piece needs the rest delta to land at the same absolute
+        // limb direction: restArt + drawn = restBone + node.angle.
+        angle: node.angle + (art === bone ? 0 : bone.restAngle - art.restAngle),
+        z: art === bone ? zOf.get(bone.name) : art.z,
         scaleX: s ? s[0] : 1,
         scaleY: s ? s[1] : 1,
         sx: piece.x, sy: piece.y, sw: piece.w, sh: piece.h,
-        ox: -bone.piecePivot[0], oy: -bone.piecePivot[1],
+        ox: -art.piecePivot[0], oy: -art.piecePivot[1],
       };
     })
     .sort((a, b) => a.z - b.z || a.name.localeCompare(b.name));
@@ -426,6 +469,7 @@ export function rigPose(rig, sim) {
     strideCells,
     hipRow,
     feet,
+    frontSide: feet.near.x >= feet.far.x ? "near" : "far",
     bones: draw,
     nodes,
   };
