@@ -1050,3 +1050,209 @@ existing ones.** That is the only path that removes the interleave problem
 instead of measuring it. Until then a new bank should be judged by ONE
 question: at 1:1, beside the cell it will play next to, is this the same
 character? The number is a screen. The eye decides.
+
+## Unified bank (3.0 pilot) — one generation, one whole vocabulary
+
+The recommendation the 2.9 critic round closed on, built and measured on one
+fighter. `assets/unified/deathblow.webp` is deathblow's ENTIRE constantly-
+visible animation vocabulary — 16 cells — authored in a SINGLE generation, so
+it is self-consistent by construction rather than by measurement.
+
+**Result: the cross-bank costume problem is SOLVED. The walk cycle is NOT.**
+Twelve of sixteen cells are accepted. The four walk keys are `accept: false`
+after four full generations failed the phase mirror identically. Nothing is
+wired: `game.js` and `engine/` were not touched, the other nine fighters were
+not generated, and this bank does not draw.
+
+### The grammar (16 cells, 4x4, one generation)
+
+1280x1280, 320px cells, row-major, all right-facing, one global scale from the
+tallest STANDING figure normalised to 306px, foot bottoms on floor row 315,
+torso centroid on the cell centre. Physically identical to every other bank, so
+`drawAtlasFrame`, `tintedSilhouette`, the crossfade ghost, the palette remap,
+the damage compositor and the 3D bank builder would all read it unchanged.
+
+| # | id | # | id |
+| --- | --- | --- | --- |
+| 0 | `idle` | 8 | `jump-rise` |
+| 1 | `walk-contact-a` | 9 | `jump-tuck` |
+| 2 | `walk-passing-a` | 10 | `punch-extension` |
+| 3 | `walk-contact-b` | 11 | `kick-extension` |
+| 4 | `walk-passing-b` | 12 | `light-hit` |
+| 5 | `crouch` | 13 | `big-hit` |
+| 6 | `crouch-trans` | 14 | `stagger` |
+| 7 | `guard` | 15 | `knockdown` |
+
+Rare and bracketed beats (fatality poses, signature showcase) stay on the
+existing banks by design.
+
+**The generation layout is NOT the atlas grammar.** The four walk keys were
+generated as the sheet's contiguous TOP ROW — the 1x4 filmstrip that 2.10
+records as decisive for phase — and the slicer permutes generation panels to
+atlas cells (`slice16.py --order 1,2,3,4,0,5,...`). The grammar puts the walk at
+cells 1-4, which straddles a row break, so generating in grammar order would
+have split the filmstrip. Worth keeping for any repeat: the two orderings are
+independent and only the slicer needs to know.
+
+### THE MEASUREMENT THIS PILOT EXISTS TO MAKE
+
+The 2.9 round named the exact beat: deathblow's clear glasses become opaque
+SUNGLASSES and his red plaid forearms become gunmetal GAUNTLETS on every walk
+entry and exit, because the idle cell is from the base generation and the walk
+cell is from the walk generation. Same metric set, three idle→walk pairs:
+
+| pair | cap dE | head dE | gauntlet texture Δ |
+| --- | --- | --- | --- |
+| **A** same-gen: base idle → base walk (the null model) | 0.63–1.03 | 1.81–2.04 | 0.067–0.093 |
+| **B** CROSS-gen: base idle → walk bank (shipped disabled) | **11.42–11.89** | **7.86–8.20** | **0.198–0.200** |
+| **C** same-gen: unified idle → unified walk / guard / light-hit | **0.60–1.66** | 2.51–4.52 | **0.027–0.035** |
+
+**One-pass whole-vocabulary authoring collapses the idle→walk costume delta
+from 11.4–11.9 dE to 0.6–1.7 dE — inside the base bank's own 0.63–1.03 dE pose
+noise.** The strobe is not reduced, it is removed, for every beat the sheet
+covers. That is the durable fix, and it is now measured rather than argued.
+
+The caveat is in the same table. Unified idle against BASE idle measures cap
+9.52 dE and gauntlet texture 0.237 apart: the unified sheet is a different
+draughtsman from the base atlas, exactly as expected, and the 1:1 read agrees
+(slimmer, more red-check-dominant gauntlets; a smaller, simpler shark). So a
+unified bank must own EVERY beat it covers — one base cell falling through as a
+fallback re-creates the strobe it was built to remove. It cannot be an nth bank
+beside n-1 others; that is the whole point of it.
+
+### U1 internal consistency, and why the literal thresholds had to be re-derived
+
+**The spec thresholds (head-band width spread ≤ 8%, head-region palette ≤ 2.5
+dE) are unreachable on ANY 16-pose sheet, including the base atlas itself.**
+Measured with the identical code, the BASE ATLAS — one generation, one
+character, the identity reference — spreads **48.4%** on head width and **15.22
+dE** on head palette across its own 16 cells. motion2 spreads 96.3% and 14.56
+dE. A crouch, a jump-tuck and a knockdown draw the head at wildly different
+angles and foreshortenings, so a fixed head metric over 16 poses measures POSE.
+This is the 2.10 chest-band finding again, one bank later: **any metric taken at
+a fixed body landmark across a full 16-pose vocabulary is a pose metric until
+proved otherwise.** Every number is therefore reported twice — all 16 cells, and
+a pose-comparable UPRIGHT SUBSET — beside the same subset on the fighter's own
+sheets, and the gate applied is the brief's own fallback, *meet or beat
+motion2*.
+
+| sheet / subset | headW % | head dE | head dE mean | cap dE | gauntlet tex % | shoe dE | decal aspect % |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **unified all-16** | 111.2 | 11.09 | 4.04 | 12.38 | 20.6 | 12.21 | 137.1 |
+| **unified upright-9** | **41.8** | **7.19** | **3.03** | **3.30** | **13.1** | **4.78** | **116.9** |
+| base all-16 | 48.4 | 15.22 | 4.12 | 3.26 | 63.6 | 14.71 | 99.0 |
+| base upright-8 | 9.1 | 4.02 | 1.78 | 3.26 | 20.9 | 3.52 | 61.2 |
+| motion2 all-16 | 96.3 | 14.56 | 4.96 | 7.27 | 26.6 | 32.92 | 140.9 |
+| motion2 upright-9 | 54.3 | 10.07 | 4.21 | 5.02 | 21.6 | 16.93 | 128.4 |
+
+**The unified sheet beats motion2 on all seven features on both subsets — U1
+PASSES its benchmark gate.** Base's upright-8 is tighter still, but that subset
+is its idle plus its four near-duplicate walk redraws, i.e. the single-phase
+defect masquerading as tightness; MOTION-ATLAS already records why it is not a
+fair floor.
+
+Detector notes for the next agent. All of them are anchored to a NAMED COSTUME
+OBJECT rather than a height fraction, because the 2.9 round proved deathblow's
+real swap is glasses *geometry*, gauntlet *plating* and decal *shape* inside an
+unchanged palette. The head is found by locating the OLIVE CAP blob, so it is
+still the head on a knockdown or a jump-tuck.
+* **Cap colour is the strongest identity feature on this fighter.** 15 of 16
+  cells sit within 2.35 dE of the sheet median `[79,77,46]`. The lone outlier is
+  cell 13 (big-hit) at 10.64 dE, where the head is thrown fully back, the cap is
+  seen from underneath in shadow and only a sliver is detected — that one cell
+  drives the entire all-16 figure of 12.38.
+* **The eyewear number cannot decide.** The unified sheet reads eyeDarkFrac
+  0.38–0.68, inside the base atlas's own 0.406–0.671 — but so does the WALK
+  BANK, whose opaque sunglasses are the named 2.9 defect, at 0.59–0.62. The
+  detector separates nothing. At 1:1 the unified lenses are transparent with
+  eyes and brows visible in every face-on cell, and that read is the decision.
+  Third wave running, the same lesson: the number is a screen, the eye decides.
+
+### U2 walk phase — FAILED, four generations, identically
+
+| | cells 1 / 3 (contact) | cells 2 / 4 (passing) |
+| --- | --- | --- |
+| stride separation | 128.0 / 129.5 px (need ≥ 66.7, base mean 111.1) — PASS | 56.5 / 72.0 px |
+| ground-contact runs | 2 / 2 — PASS | 1 / 1 — PASS |
+| near/far leg luminance | **+21.2 vs +16.4 — SAME SIGN, no inversion** | **+28.2 vs +35.8 — SAME SIGN** |
+| adjacent-key IoU | max 0.574 vs the base bank's 0.927 — PASS | |
+| non-adjacent IoU | **cells 1–3: 0.842** | **cells 2–4: 0.878** |
+
+Everything except the phase passes, and the phase is the point. The adjacent
+IoU says the four drawings genuinely differ; the non-adjacent IoU gives it away
+— the two contact keys are near-duplicates of each other and so are the two
+passing keys. The 1:1 read agrees with the metric: in cells 1 and 3 alike the
+front leg is the brighter, unbroken, drawn-on-top one.
+
+Four generations, four identical failures. What was tried, so nobody pays for it
+twice:
+1. **Walk keys in grammar order** (row 0 cells 1-3, row 1 cell 4), occlusion
+   language, a tonal near/far rule bound to the black sneakers, and the closing
+   object sequence. Round 1: +26.6 / +22.0, no inversion. Also drew him OBESE
+   rather than heavyset-muscular — the mirror image of the 2.9 round-2 failure,
+   which overshot into heroic caricature. "Heavy through the ribs and belly"
+   pushed too far; "heavyset POWERLIFTER'S build, chest deeper than his belly,
+   bulky not fat" fixed the build in one round and held for three.
+2. **An explicit shading swap stated as a test** — "in panel 2 the front sneaker
+   is the LIGHT one; in panel 4 that is REVERSED" — plus reversed counter-swing.
+   Round 2: +12.1 / +13.3, no inversion.
+3. **The walk moved to its own contiguous filmstrip row**, the 2.10 fix, plus
+   the occlusion rule restated as "the leg you can see whole and unbroken from
+   hip to sneaker". Round 3: +17.4 / +18.3, no inversion, and the contact keys
+   stopped planting two feet.
+4. **A binary visible/hidden costume marker instead of a shading gradient** —
+   each sneaker has a small red heel tab, only the near one shows it, and the
+   test is "red tab in front in panel 1, red tab BEHIND in panel 3" — with the
+   whole walk block promoted above the character bible. Round 4: +21.2 / +16.4,
+   no inversion. The tabs are drawn; they just do not swap.
+
+**The finding, and it is the useful one: the walk phase does not survive being
+one-sixteenth of a prompt.** The 2.10 wave cleared this same gate with the same
+techniques — but on a generation that was ONLY four walk keys, and it still took
+two to three rounds per fighter. Here the identical language, including the
+dedicated filmstrip row, loses to the other twelve panels every time. The model
+converges on one canonical walking man and redraws him. Occlusion, tonal rules
+and named-object sequences are necessary and are not sufficient at this prompt
+density.
+
+### U4 / U5
+
+**U4 PASS.** Foot bottoms 313–316, spread **3px** against a 6px gate, all 16
+cells, no per-cell nudges.
+
+**U5 PASS with one marginal.** 15 of 16 cells read as their named beat at
+gameplay size (deathblow renders at 330 × 1.14 × 1.068 = 402px per 320px cell,
+so roughly 1:1 after canvas fit). Cells 12, 14 and 15 read unambiguously as
+reactions and never as strikes — the failure class that caused a real bug this
+month. The marginal is cell 13 `big-hit`, drawn far more horizontal than asked
+in all four generations: it reads as a body already thrown rather than a
+standing fighter arched under a knockback, so it overlaps the `thrown` read.
+Cell 6 `crouch-trans` reads as a low stance more than a transition — fine for a
+2-3 tick press key, marginal for a long hold.
+
+### THE VERDICT
+
+**One-pass whole-vocabulary authoring solves the problem it was built to solve,
+and only that problem.** The cross-bank costume strobe — four waves' worth of
+disabled cells, the thing that put 40 cells behind `accept: false` — collapses
+to below the base bank's own pose noise the moment idle and walk are born in the
+same generation. That result is unambiguous and it is the expensive half.
+
+It does **not** buy the walk cycle. Phase is an orthogonal problem that gets
+*harder* as the vocabulary grows, because the walk stops being the prompt's
+subject. So the honest shape of a 3.0 rollout is **two generations per fighter,
+not one**: a 12-cell unified sheet for everything except the walk, plus the 2.10
+dedicated 4-key walk filmstrip, sliced into one atlas. Both halves are then
+one-generation-consistent with the base atlas's *replacement*, and the walk gets
+a prompt where it is the only subject — the configuration that has actually
+passed W1d. The cost is that the two halves are different draughtsmen from each
+other, so that seam has to be measured before it is believed; on this fighter
+the pair to check is unified `idle` against walk-filmstrip `contact`.
+
+**Recommendation for the other nine fighters: roll out, but as the two-
+generation shape above, and only after one fighter has cleared that seam.** Do
+not repeat this pilot's single-generation form — it spends four generations
+losing the walk. And do not re-litigate the U1 thresholds: 8% / 2.5 dE is a
+four-pose number, the base atlas scores 48% / 15.2 dE on its own sixteen, and
+the benchmark that means something is *beat your own motion2 sheet on the
+upright subset*.

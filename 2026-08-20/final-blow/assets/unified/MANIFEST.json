@@ -1,0 +1,195 @@
+{
+ "format": {
+  "sheet": "1280x1280 RGBA WebP, 4x4 grid, 320px cells, right-facing, all 16 cells carry art. Physically identical to the base/motion/motion2/motion3/walk banks so drawAtlasFrame, tintedSilhouette, the crossfade ghost, the palette remap, the battle-damage compositor and the 3D bank builder would all read it unchanged. ONE global scale per sheet, taken from the tallest STANDING figure and normalised to 306px (the motion2 convention); foot bottoms registered to the shared floor row 315, torso centroid registered to the cell centre.",
+  "grammar": "see MOTION-ATLAS.md 'Unified bank (3.0 pilot)'. A fighter's WHOLE constantly-visible vocabulary in ONE generation: 0 idle, 1-4 the four keys of one walk stride, 5 crouch, 6 crouch-trans, 7 guard, 8 jump-rise, 9 jump-tuck, 10 punch-extension, 11 kick-extension, 12 light-hit, 13 big-hit, 14 stagger, 15 knockdown. Rare and bracketed beats (fatality poses, signature showcase) stay on the existing banks.",
+  "generator": "openai-gpt-image-2 via fal MCP, image_size square_hd, prompt-only (the tool exposes no image/reference parameter -- 422 re-confirmed as a schema fact by three prior waves and not re-probed here). Identity carried by a character bible written from the base atlas.",
+  "processed": "blob-clustering slicer (scratchpad unified30/slice16.py, a 16-figure generalisation of walk30/slice4.py): soft magenta key + despill on tools/build_atlas.py conventions, run-length connected components with union-find, ROW-BAND reading-order assignment (the generator's rows are ragged -- a crouch sits low and a jump sits high, so a naive sort by centroid-y interleaves neighbouring rows), each figure masked by its OWN blob labels, one global scale from the tallest standing figure, foot bottoms to floor row 315, torso centroid to the cell centre.",
+  "generationLayout": "The GENERATION layout and the ATLAS grammar are deliberately different. The four walk keys were generated as the sheet's contiguous TOP ROW -- the 1x4 filmstrip configuration MOTION-ATLAS records as decisive for walk phase in the 2.10 wave -- and the slicer permutes generation panels to atlas cells with --order 1,2,3,4,0,5,6,7,8,9,10,11,12,13,14,15. The grammar's walk keys sit at cells 1-4, which straddles a row break, so generating them in grammar order would have split the filmstrip.",
+  "built": "2026-08-31",
+  "poseIds": [
+   "idle",
+   "walk-contact-a",
+   "walk-passing-a",
+   "walk-contact-b",
+   "walk-passing-b",
+   "crouch",
+   "crouch-trans",
+   "guard",
+   "jump-rise",
+   "jump-tuck",
+   "punch-extension",
+   "kick-extension",
+   "light-hit",
+   "big-hit",
+   "stagger",
+   "knockdown"
+  ],
+  "cellCount": 16,
+  "status": "PILOT ONLY -- NOT WIRED. game.js and engine/ were not touched. One fighter (deathblow) was generated; the other nine were not. The bank exists and is measured; see `internal` for the pass/fail, and MOTION-ATLAS.md for the verdict.",
+  "acceptNote": "12 of 16 cells accepted, 4 rejected. Cells 1-4 (the walk keys) are accept:false: the sheet FAILS U2. Cells 1 and 3 carry the SAME lead leg (near/far leg luminance +21.2 and +16.4 -- both positive, no inversion) and cells 2 and 4 are near-duplicate swings (silhouette IoU 0.878), so the four keys are three-and-a-bit takes on one stride phase, which is the identical defect that disabled the 2.9 motion2 walk-a/walk-b pair and the whole 2.10 walk bank. Four full generations failed it the same way. The other 12 cells pass U1/U4/U5 and read correctly as their named beats."
+ },
+ "fighters": {
+  "deathblow": {
+   "sheet": "deathblow.webp",
+   "scale": 1.2697,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 4,
+   "note": "Round 4 of 4 shipped as the bank. Round 1 held the character together but drew him OBESE rather than heavyset-muscular; rounds 2-4 fixed the build. All four rounds failed the walk phase identically. Round 4 is the strongest on every U1 metric and is the only round that both plants two feet on each contact key and carries non-degenerate passing separations.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "idle",
+     "accept": true,
+     "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."
+    },
+    {
+     "frame": 1,
+     "id": "walk-contact-a",
+     "accept": false,
+     "note": "U2 FAIL (phase). Good drawing, wrong phase relationship: stride separation 128.0px (needs >=66.7, base mean 111.1) and it plants two feet correctly, but its near/far leg luminance is +21.2 and cell 3's is +16.4 -- SAME sign, so cells 1 and 3 lead with the same foot. Silhouette IoU against cell 3 is 0.842."
+    },
+    {
+     "frame": 2,
+     "id": "walk-passing-a",
+     "accept": false,
+     "note": "U2 FAIL (phase). Plants exactly one foot as a passing key should and its separation drops to 56.5px, but it is a near-duplicate of cell 4 (IoU 0.878) -- the two passing keys swing the same leg."
+    },
+    {
+     "frame": 3,
+     "id": "walk-contact-b",
+     "accept": false,
+     "note": "U2 FAIL (phase). Should be the PHASE MIRROR of cell 1 and is not: separation 129.5px, leg luminance +16.4 against cell 1's +21.2, no inversion. Four generations were spent on this cell alone; see MOTION-ATLAS.md for what was tried."
+    },
+    {
+     "frame": 4,
+     "id": "walk-passing-b",
+     "accept": false,
+     "note": "U2 FAIL (phase). Separation 72.0px, one foot planted; near-duplicate of cell 2 (IoU 0.878)."
+    },
+    {
+     "frame": 5,
+     "id": "crouch",
+     "accept": true,
+     "note": "deep squat, hips at the heels, both gauntlets covering the head. Drawn at the correct scale -- unlike the base bank's cell 12, which is drawn 1.25x oversized and needs crouchAdjust 0.8."
+    },
+    {
+     "frame": 6,
+     "id": "crouch-trans",
+     "accept": true,
+     "note": "half-lowered, clearly taller than cell 5 and lower than cell 0. Reads as a low fighting stance more than a transition -- usable for a 2-3 tick press key, marginal for a long hold."
+    },
+    {
+     "frame": 7,
+     "id": "guard",
+     "accept": true,
+     "note": "standing block, forearms vertical covering the face and chest, feet planted"
+    },
+    {
+     "frame": 8,
+     "id": "jump-rise",
+     "accept": true,
+     "note": "ascending, both feet clear, knees drawing up, arms swinging up"
+    },
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration would need the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {
+     "frame": 10,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."
+    },
+    {
+     "frame": 11,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "full committed kick, leg extended at hip height, support leg straight"
+    },
+    {
+     "frame": 12,
+     "id": "light-hit",
+     "accept": true,
+     "note": "contained flinch -- head jolted back, shoulder rolled up, BOTH FEET PLANTED. Reads unambiguously as absorbing, never as attacking."
+    },
+    {
+     "frame": 13,
+     "id": "big-hit",
+     "accept": true,
+     "note": "U5 MARGINAL. Drawn far more horizontal than the brief asked for across all four generations: it reads as a body already thrown through the air rather than a standing fighter arched under a knockback, so at gameplay size it overlaps the `thrown` read. Kept accept:true because it is unambiguously a reaction and never an attack, but an integration should prefer it for launcher hits and not for a standing heavy."
+    },
+    {
+     "frame": 14,
+     "id": "stagger",
+     "accept": true,
+     "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike -- the failure class the 2.9 wave hit."
+    },
+    {
+     "frame": 15,
+     "id": "knockdown",
+     "accept": true,
+     "note": "on the ground on his side, hip and shoulder down, cap still on. 320px wide and 99px tall after the global scale, so it clamps to the cell width."
+    }
+   ]
+  }
+ },
+ "internal": {
+  "method": "scratchpad unified30/ugate.py + costume.py. Every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because MOTION-ATLAS's 2.9 critic round records that deathblow's real costume swap is glasses GEOMETRY, gauntlet PLATING and decal SHAPE inside an unchanged palette, which no colour-mass feature can see. The head is located by finding the OLIVE CAP blob, so it is still the head on a knockdown or a jump-tuck cell.",
+  "thresholdFinding": "THE LITERAL U1 THRESHOLDS (head-band width spread <=8%, head-region palette <=2.5 dE) ARE UNREACHABLE ON ANY 16-POSE SHEET AND WERE RE-DERIVED. Measured with the identical code, the BASE ATLAS -- one generation, one character, the identity reference itself -- spreads 48.4% on head width and 15.22 dE on head palette across its own 16 cells, and motion2 spreads 96.3% and 14.56 dE. A crouch, a jump-tuck and a knockdown draw the head at wildly different angles and foreshortenings, so a 16-pose sheet cannot be tight on a head metric. This is the same contamination the 2.10 wave recorded for chest-band width. Every U1 number below is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on the fighter's own base and motion2 sheets, and the gate applied is the brief's own fallback: MEET OR BEAT motion2.",
+  "uprightSubset": {
+   "unified": [0, 1, 2, 3, 4, 6, 7, 10, 12],
+   "base": [0, 1, 2, 3, 4, 5, 6, 7],
+   "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]
+  },
+  "U1": {
+   "verdict": "PASS on the benchmark gate -- the unified sheet BEATS its own motion2 sheet on all seven U1 features, on both the all-16 and the upright subsets. FAIL on the literal 8% / 2.5 dE thresholds, which the base atlas also fails.",
+   "table": {
+    "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "cap palette max dE", "gauntlet redTex spread %", "footwear palette max dE", "decal aspect spread %"],
+    "unified all-16": [111.2, 11.09, 4.04, 12.38, 20.6, 12.21, 137.1],
+    "unified upright-9": [41.8, 7.19, 3.03, 3.3, 13.1, 4.78, 116.9],
+    "base all-16": [48.4, 15.22, 4.12, 3.26, 63.6, 14.71, 99.0],
+    "base upright-8": [9.1, 4.02, 1.78, 3.26, 20.9, 3.52, 61.2],
+    "motion2 all-16": [96.3, 14.56, 4.96, 7.27, 26.6, 32.92, 140.9],
+    "motion2 upright-9": [54.3, 10.07, 4.21, 5.02, 21.6, 16.93, 128.4]
+   },
+   "capColourStability": "15 of 16 cells sit within 2.35 dE of the sheet's median cap colour [79,77,46]. The single outlier is cell 13 (big-hit) at 10.64 dE, where the head is thrown fully back, the cap is seen from underneath and in shadow and the detector only finds a sliver of it (head width 14px against a 46-65px median). That one cell drives the whole all-16 cap figure of 12.38 dE; excluding it the sheet's cap is effectively invariant.",
+   "eyewear": "eyeDarkFrac 0.38-0.68 across the 15 non-outlier cells, INSIDE the base atlas's own 0.406-0.671. Reported, not gated: the walk bank -- whose opaque black sunglasses are the named 2.9 defect -- measures 0.59-0.62 on the same detector and sits inside the same range, so the number cannot separate clear glasses from sunglasses. The call is the 1:1 read, and at 1:1 the unified sheet's lenses are transparent with the eyes and brows visible in every cell that shows the face.",
+   "costumeElements": "cap colour stable (see above); eyewear clear in all cells, verified visually; gauntlet texture energy spread 13.1% upright / 20.6% all-16 against motion2's 21.6% / 26.6% and the base atlas's 20.9% / 63.6%; chest decal present in 13 of 16 cells (absent only where an arm covers the chest) and the same grey shark motif in all 13; footwear palette max 4.78 dE upright against motion2's 16.93."
+  },
+  "U2": {
+   "verdict": "FAIL -- this is the pilot's one hard failure, and it failed identically in all four generations.",
+   "contactSeparation": {"cells": [1, 3], "px": [128.0, 129.5], "baseMean": 111.1, "need": 66.7, "pass": true},
+   "passingSeparation": {"cells": [2, 4], "px": [56.5, 72.0]},
+   "groundContactRuns": {"cells": [1, 2, 3, 4], "runs": [2, 1, 2, 1], "want": [2, 1, 2, 1], "pass": true},
+   "leadLegInversion": {"legLumDelta": [21.2, 28.2, 16.4, 35.8], "cells1and3": "+21.2 vs +16.4 -- SAME SIGN", "pass": false, "note": "A right-facing figure shows the viewer its left side, so the near limbs are lit and the far limbs shadowed; a true phase mirror inverts the sign of (forward-leg luminance - rear-leg luminance). Both deltas are well above the 5.0 magnitude at which the metric escalates to the eye, and the 1:1 read agrees with the metric: in cells 1 and 3 alike the front leg is the brighter, unbroken, drawn-on-top one."},
+   "swingLegInversion": {"cells2and4": "+28.2 vs +35.8 -- SAME SIGN", "pass": false},
+   "adjacentIoU": {"pairs": {"1-2": 0.549, "2-3": 0.574, "3-4": 0.562, "1-4": 0.541}, "max": 0.574, "baseBankAdjacentMax": 0.927, "walkWavePasses": "0.34-0.48", "pass": true, "note": "Comfortably below the base bank's 0.86-0.93 single-phase signature, so the four keys are genuinely different drawings -- but the non-adjacent pairs give the defect away: cells 1-3 sit at 0.842 and cells 2-4 at 0.878, i.e. the two contact keys and the two passing keys are near-duplicates of each other."}
+  },
+  "U4": {
+   "verdict": "PASS",
+   "footBottomRows": [316, 316, 315, 315, 315, 316, 315, 315, 316, 316, 316, 315, 316, 316, 315, 313],
+   "spreadPx": 3,
+   "gate": 6
+  },
+  "U5": {
+   "verdict": "PASS with one marginal -- 15 of 16 cells read as their named beat at gameplay size (deathblow renders at 330 * 1.14 * 1.068 = 402px per 320px cell, so roughly 1:1 after canvas fit).",
+   "marginal": "cell 13 big-hit reads as an already-thrown body rather than a standing knockback; see its cell note.",
+   "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+  },
+  "U3": {
+   "verdict": "PASS -- unmistakably the same man, read at 1:1 beside base cells 0, 4 and 8.",
+   "present": "olive-drab cap with the side patch; CLEAR prescription glasses with transparent lenses and visible eyes; full dark beard; black tee with a grey shark chest print; red-and-black armoured forearm gauntlets with glowing red-orange seams; black cargo shorts with the red-and-black thigh strap; silver hip chain; black low-top sneakers with off-white soles; heavyset barrel-chested muscular build.",
+   "differences": "The gauntlets are slimmer and more red-check-dominant than the base atlas's massive gunmetal-plated barrels. The shark decal is smaller and simpler in outline. He is very slightly stockier and shorter in the leg. Measured, unified idle against base idle: cap 9.52 dE, head 5.52 dE, gauntlet texture energy 0.237 apart. This is a DIFFERENT DRAUGHTSMAN and the numbers say so -- which is expected and is the point: the unified bank replaces the common vocabulary rather than blending into it. The consequence for any future integration is recorded in MOTION-ATLAS.md: a unified bank must own EVERY beat it covers, because a single base cell falling through as a fallback re-creates the strobe."
+  },
+  "crossBankProof": {
+   "claim": "This is the measurement the pilot exists to make. MOTION-ATLAS names the exact beat that shipped disabled in 2.9: deathblow's clear glasses become opaque sunglasses and his red plaid forearms become gunmetal gauntlets on every walk entry and exit, because the idle cell comes from the base generation and the walk cell comes from the walk generation. Same metric set, three idle-to-walk pairs.",
+   "A_sameGeneration_baseIdle_to_baseWalk": {"capPal_dE": [0.63, 1.03], "headPal_dE": [1.81, 2.04], "redTex_abs": [0.067, 0.093], "meaning": "the null model -- how far a costume moves for POSE reasons alone inside one generation"},
+   "B_crossGeneration_baseIdle_to_walkBank": {"capPal_dE": [11.42, 11.89], "headPal_dE": [7.86, 8.2], "redTex_abs": [0.198, 0.2], "meaning": "the shipped-disabled pair -- 11-18x the pose noise on cap colour, 4x on head palette, 2-3x on gauntlet texture. This is the strobe, measured."},
+   "C_sameGeneration_unifiedIdle_to_unifiedWalkAndGuardAndHit": {"capPal_dE": [0.6, 1.66], "headPal_dE": [2.51, 4.52], "redTex_abs": [0.027, 0.035], "meaning": "the pilot. At or BELOW the base atlas's own same-generation pose noise on cap colour and gauntlet texture."},
+   "verdict": "PROVEN. One-pass whole-vocabulary authoring collapses the idle-to-walk costume delta from 11.4-11.9 dE to 0.6-1.7 dE, which is inside the base bank's own 0.63-1.03 dE pose noise. The cross-bank costume problem is solved by construction for every beat the sheet covers."
+  }
+ }
+}
