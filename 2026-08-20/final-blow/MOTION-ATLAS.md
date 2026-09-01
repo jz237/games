@@ -1256,3 +1256,266 @@ losing the walk. And do not re-litigate the U1 thresholds: 8% / 2.5 dE is a
 four-pose number, the base atlas scores 48% / 15.2 dE on its own sixteen, and
 the benchmark that means something is *beat your own motion2 sheet on the
 upright subset*.
+
+---
+
+### THE ROSTER ROLLOUT — the other nine fighters, one generation each
+
+The pilot's recommendation (two generations per fighter, splitting off a
+dedicated walk filmstrip) was **rejected before this wave started**, and the
+reason is the pilot's own data: the 0.6–1.7 dE result exists *because*
+everything is one generation, and splitting reintroduces a cross-generation
+seam at idle→walk — the most common transition in the game. The walk here is
+**single-phase**, which is **parity** with the shipping base bank (37 of its 40
+walk cells share one lead foot), not a regression. Regeneration budget went to
+identity and vocabulary; none of it went to chasing phase inversion.
+
+**Result: 8 of 9 fighters shipped whole. 128 of 144 roster cells are
+`accept:true`. One fighter — `cyraxx` — ships `accept:false` on all sixteen
+after three generations. Fifteen fal calls total. Nothing is wired.**
+
+| fighter | rounds | shipped | accept |
+| --- | --- | --- | --- |
+| `jez` | 1 | r1 | 16/16 |
+| `benny` | 1 | r1 | 16/16 |
+| `donald` | 1 | r1 | 16/16 |
+| `ali` | 1 | r1 | 16/16 |
+| `alan` | 2 | r2 | 16/16 |
+| `post` | 2 | r2 | 16/16 |
+| `commissioner` | 2 | r2 | 16/16 |
+| `devil` | 2 | r2 | 16/16 |
+| `cyraxx` | 3 | r1 | **0/16** |
+
+#### U2 — the decisive measurement, nine more times
+
+Same three pairs as the pilot, same code, per fighter. **A** is the null model
+(base idle → base walk, one generation, pose noise only). **B** is the
+cross-generation strobe (base idle → that fighter's walk bank, or motion2's
+walk keys where no walk bank exists: `alan`, `commissioner`, `devil`, `donald`).
+**C** is the unified sheet's own idle → walk / guard / light-hit.
+
+| fighter | **A** null: headwear dE / torso dE | **B** CROSS-gen | **C** unified same-gen |
+| --- | --- | --- | --- |
+| `jez` | 1.54–2.18 / 0.48–0.90 | 4.88–5.72 / **19.83–26.32** | **1.61–2.27 / 1.25–1.65** |
+| `alan` | 3.29–6.52 / 1.56–1.99 | 3.37–3.67 / 4.47–4.70 | **1.60–7.10 / 0.00–1.64** |
+| `post` | 1.38–1.67 / 0.00–0.00 | 1.13–1.72 / 2.97–5.19 | **1.20–3.72 / 0.75–1.97** |
+| `benny` | 1.39–1.98 / 1.53–1.80 | **11.00–11.12** / **16.86–20.52** | **0.00–2.55 / 1.15–2.74** |
+| `donald` | 2.10–5.01 / 1.29–1.92 | **14.73–14.82** / 8.05–9.69 | **2.03–7.77 / 2.22–5.43** |
+| `cyraxx` | 0.87–2.09 / 2.50–3.15 | 4.11–4.22 / **11.84–12.26** | **0.73–1.27 / 2.78–4.37** |
+| `ali` | 0.51–0.51 / 1.29–2.24 | **13.87–14.38** / **15.79–15.94** | **0.66–2.72 / 0.84–1.61** |
+| `commissioner` | 2.21–2.25 / 2.36–4.12 | 4.38–4.47 / 4.91–5.51 | **1.08–1.61\* / 0.41–2.31** |
+| `devil` | 7.46–10.16 / 2.03–2.45 | **25.85–27.13** / 7.48–8.17 | 8.06–24.55† / **0.65–0.86** |
+
+…and the limb-accessory texture feature, which is the one the 2.9 round proved
+a colour-mass metric cannot see:
+
+| fighter | A null | B CROSS-gen | C unified |
+| --- | --- | --- | --- |
+| `jez` (white forearm wrap) | 0.010–0.045 | 0.100–0.249 | **0.003–0.019** |
+| `alan` (white fist wraps) | 0.038–0.047 | 0.090–0.094 | **0.007–0.022** |
+| `post` (black gloves) | 0.138–0.249 | **0.599–0.708** | **0.014–0.053** |
+| `benny` (black gloves) | 0.024–0.118 | **0.673–0.743** | **0.012–0.054** |
+| `donald` (gold club head/trim) | 0.007–0.010 | 0.032–0.041 | **0.003–0.037** |
+| `cyraxx` (worn trousers) | 0.002–0.002 | 0.039–0.041 | **0.001–0.043** |
+| `ali` (gold chain + mic) | 0.000–0.005 | 0.061–0.075 | **0.001–0.019** |
+| `commissioner` (leather coat) | 0.005–0.052 | **0.358–0.361** | **0.002–0.082** |
+| `devil` (green limb wrappings) | 0.004–0.022 | 0.131–0.183 | **0.019–0.031** |
+
+**The pilot's result reproduces on the whole roster.** `benny` is the cleanest
+replication: an 11.0–11.1 dE cross-generation headwear delta — the same 11-ish
+figure MOTION-ATLAS records as deathblow's shipped-disabled strobe — collapsing
+to 0.0–2.55 dE inside one generation, with torso 16.9–20.5 → 1.2–2.7 and glove
+texture 0.67–0.74 → 0.01–0.05. `ali` (13.9–14.4 → 0.7–2.7), `donald`
+(14.7–14.8 → 2.0–7.8) and `devil` (25.9–27.1 → torso 7.5–8.2 → 0.65–0.86) are
+the same story. **In all nine, C lands at or below A and far below B on the
+features their detectors can actually see.** One-pass whole-vocabulary
+authoring is not a deathblow-shaped result; it is the general one.
+
+\* `commissioner`'s C-headwear reads **17.56 dE on the idle→guard pair only**,
+and that is a DETECTOR artefact, not a costume swap: his head anchor is
+"topmost bright-neutral blob", and in cells 7 and 8 he raises the cane so its
+**polished silver knob** sits above his silver hair and steals the anchor. The
+walk and light-hit pairs, where the cane is low, read 1.08 / 1.61 / 1.39.
+Same lesson as the pilot's eyewear column, in a new costume: *the number is a
+screen, the eye decides.*
+
+† `devil`'s headwear anchor is his **glowing amber eye** — a 7–28px specular
+highlight, not a garment. It is a fine *locator* (16/16 on the candidate after
+dilation) and a useless *colour* feature: it scores 26.7 dE on the unified
+sheet, 36.4 on the base atlas and 39.1 on motion2, i.e. it is noise on every
+sheet including the identity reference. His same-generation claim rests on the
+torso and limb-wrapping columns, where it is unambiguous.
+
+#### U1 — benchmark against each fighter's own motion2 sheet
+
+The pilot's re-derived gate, applied nine more times: report every feature twice
+(all 16 cells, and the pose-comparable upright subset), always beside the same
+subset measured on that fighter's own sheets, and **meet or beat motion2**. The
+number below is the **geometric mean of the seven candidate/motion2 ratios** —
+below 1.000 means the unified sheet is tighter than motion2 overall.
+
+| fighter | all-16 geomean | features ≥ | upright geomean | features ≥ |
+| --- | --- | --- | --- | --- |
+| `alan` | **0.747** | 6/7 | **0.537** | 5/7 |
+| `benny` | **0.869** | 4/7 | **0.523** | 7/7 |
+| `jez` | **0.903** | 5/7 | **0.729** | 5/7 |
+| `devil` | **0.911** | 4/7 | **0.944** | 6/7 |
+| `post` | **0.934** | 4/7 | **0.797** | 6/7 |
+| `ali` | **0.959** | 3/7 | **0.570** | 6/7 |
+| `donald` | 1.165 | 3/7 | **0.696** | 6/7 |
+| `commissioner` | 1.214 | 1/7 | **0.992** | 4/7 |
+| `cyraxx` | 1.080 | 3/7 | **1.173** | 2/7 |
+
+Eight of nine clear the gate on the upright subset; six of nine clear it on all
+sixteen as well. `donald` and `commissioner` are all-16 misses with clean
+upright passes, which is precisely the contamination the pilot's
+`thresholdFinding` describes — and in `donald`'s case the *base atlas* scores
+235.7% headW and 70.24 dE on the same detector, because his baked golden
+crescent VFX hijacks the blond anchor in two of its own cells. That row is a
+measurement of his base sheet's baked effects, not of its costume.
+
+`benny` beating motion2 on **7/7 upright features** is the roster's high-water
+mark and the closest reproduction of the pilot's sweep.
+
+#### `cyraxx` — the one honest failure
+
+Three generations, and the best of them is still **1.080 all-16 / 1.173 upright**
+against his own motion2 sheet. Rounds 2 and 3 were worse (1.176/1.264 and
+1.253/1.236), so the trend is not a bad roll. `accept:false` on all sixteen
+cells; he keeps his existing banks.
+
+It is worth recording *how* he fails, because it is not a costume failure:
+* He **passes U2** — torso 11.8–12.3 dE cross-generation collapsing to 2.8–4.4
+  same-generation, headwear 4.1–4.2 → 0.7–1.3.
+* He **passes U3**, and does something no other cyraxx sheet on the project
+  does: he obeys the standing rule. His base atlas *and* his walk bank both
+  carry keyed purple/green energy flecks on his forearms, hem and shoes; this
+  sheet measures a keyed-tint fraction of **0.0 on all sixteen cells**.
+* He **passes U4** (0px) and **U5**.
+* He loses on exactly two of the seven U1 features: **head-band width spread**
+  (60.1% vs motion2's 31.2%) and **accessory texture spread** (22.7% vs 9.3%).
+  Both are pose metrics on a man whose long hair and long beard change
+  silhouette every time he turns his head, and whose "accessory" object is a
+  pair of trousers. His costume *colour* features beat motion2 comfortably
+  (head palette 8.29 vs 15.51 dE, head mean 4.48 vs 7.48 dE).
+
+**For the next agent:** before regenerating him a fourth time, re-measure the
+existing sheet with a hair-independent head detector. The suspicion is that
+cyraxx fails a *detector* built for fighters who wear a hat.
+
+#### Prop continuity — the beat the 2.9 wave actually shipped broken
+
+Four fighters carry a constantly-visible prop, and the props are the reason two
+of the four needed a second generation:
+
+* **`post`'s spray can** vanished from cell 13 (big-hit) and cell 14 (stagger)
+  in round 1, because both poses open the hands.
+* **`commissioner`'s cane** vanished from cell 13 (big-hit) in round 1 — the
+  *exact* cell class MOTION-ATLAS records as the 2.9 bug, where the cane blinked
+  out of his hand on every standing reaction.
+
+The fix that worked, both times, in one round: promote the prop to **"the most
+important rule on this sheet"**, then **enumerate all sixteen panels by number**
+and call out the reaction panels by name — *"and this is where it is usually
+forgotten — panel 13, PANEL 14 (even with his arms flung out and back, his
+fingers stay CLOSED AROUND THE CANE), PANEL 15, panel 16"*. Verified at 1:1 on
+the shipped sheets: **club, cane, spray can, mic and boombox are present in
+16/16 cells on all four prop fighters**, knockdown included.
+
+`commissioner`'s round 2 scores materially worse on U1 than his round 1
+(1.214/0.992 against 0.943/0.537) and was shipped anyway. That is deliberate and
+it follows the pilot's own conclusion: *a unified bank must own EVERY beat it
+covers*, so a hole at big-hit would have handed that beat back to another
+generation and re-created the strobe the bank exists to remove. A worse number
+on a complete sheet beats a better number on a sheet with a hole in it.
+
+#### Build language, and the drift that came back
+
+`alan` round 1 drew him **obese** — a soft round belly in front of a smaller
+chest. That is the same drift the pilot hit on deathblow, and the pilot's
+sentence fixed it verbatim in one round:
+
+> a HEAVYSET POWERLIFTER'S build. His **CHEST IS DEEPER AND WIDER THAN HIS
+> BELLY**. Upper arms as thick as his own head … BULKY, NOT FAT.
+
+All-16 geomean went 0.975 → **0.747**. **Build language that pins proportions
+against each other ("X is deeper than Y") beats any number of adjectives.**
+Third wave running.
+
+`devil` needed his second round for the opposite reason: round 1 scored *better*
+on U1 (0.666/0.695 vs 0.911/0.944) but drew his wings **coral-red with pink
+spots**, and the wings are the largest single element of his silhouette. Round 2
+pins them — *"the same dull earth brown as his hide, never red, never coral,
+never pink, no coloured spots"* — and matches the base atlas. **U3 outranks U1
+when they disagree.** Worth recording separately: **the quadruped prowl that got
+his cells rejected twice in earlier waves did not appear once**, in either
+round, on any cell. `HE IS A BIPED` stated as an absolute rule, with the failure
+modes enumerated (*"never on all fours, prowling, crawling, pouncing … his wings
+are NEVER used as front legs"*), holds at this prompt density.
+
+#### U4 — and a registration bug worth not paying for twice
+
+**All nine sheets register at 0px spread.** That is not luck; the pilot's 3px
+was the honest number for its slicer, and the same slicer produced **9px on
+`post` and 17px on `donald`** here before it was fixed.
+
+The cause is a **measurement disagreement, not a drawing that floats**. The
+slicer finds the foot bottom on the pre-composite crop at `ALPHA_SOLID = 140`;
+the U4 gate re-finds it on the finished cell at `ALPHA_T = 40`. On an upright
+figure the two rules land on the same row. On a **PRONE knockdown** the body is
+300px wide, so "the lowest row at 12% of max row width" is a *much* higher row
+under one threshold than the other, and the cell lands 8–17px off its own floor.
+
+`slice16.py` now runs a **second pass**: re-measure every finished cell with the
+gate's own detector and nudge it onto floor row 315. Measured nudges across the
+nine sheets are 0 or −1 on 129 of 144 cells (sub-pixel resampling disagreement)
+and 2–16 on the prone and airborne cells. **If a future bank measures its
+registration with a different alpha threshold than it registered with, it will
+hit this again.**
+
+#### Detector notes for whoever measures the next bank
+
+Nine fighters needed nine head anchors, and the pilot's doctrine — anchor on a
+NAMED COSTUME OBJECT, never on a height fraction — held every time. What it
+cost:
+
+* **A relative area floor fails.** `alan`'s hair blob is ~140px; the deep shadow
+  gaps between his arm and his torso are ~470px and pass any "within 45% of the
+  biggest" filter. The rule that works is an **absolute** area floor plus
+  *topmost*.
+* **Bound your predicates on both sides.** `post`'s auburn hair and his
+  orange-red coverall are both warm; the hair separates only because the
+  predicate caps `r − g` at 56 (hair ≈ 25, coverall ≈ 70).
+* **Warm vs neutral separates dark from dark.** `alan`'s hair (r−g ≈ 26) and his
+  brown boots (r−g ≈ 11) are the same *value*; only the hue tells them apart.
+* **Tiny anchors need dilating before the component pass.** `devil`'s glowing
+  eye is 7–28px and arrives as three or four fragments, none of which clears an
+  area floor alone. Dilate by 2, label, then read the palette back from the
+  *undilated* pixels.
+* **Anything bright and neutral competes with silver hair.** `commissioner`'s
+  cane knob steals his anchor in the two cells where he raises it. Foreseeable;
+  not foreseen.
+* **The energy-tint predicate must exclude plain garment blue.** `cyraxx`'s
+  standing rule is "no energy tinting", not "no blue", and his own shirt is
+  blue. The predicate that means something is violet ∪ acid-green ∪ hot-pink.
+
+#### Verdict
+
+**The unified bank is ready to become the primary source for these sixteen beats
+on eight fighters, and it is the right shape for the ninth once its detector is
+re-examined.** The thing it was built to fix is fixed, roster-wide and by
+construction: idle and walk are born in the same generation, so the costume
+cannot strobe between them, and the numbers say so on every fighter whose
+detectors can see the costume at all. Registration is exact, every named beat
+reads, no reaction reads as a strike, and every prop stays in every hand.
+
+Two caveats for the integration agent, both inherited from the pilot and both
+now roster-wide:
+1. **It must own every beat it covers.** Every one of these sheets is a
+   different draughtsman from its base atlas — `donald` measures 22.5 dE from
+   his base idle, `jez` 11.1, `ali` 9.9. A single base cell falling through as a
+   fallback re-creates the exact strobe the bank removes. Cover all sixteen
+   beats from the unified sheet or cover none.
+2. **The walk is single-phase.** That is parity with what ships today and it is
+   `accept:true` here, but it is not an improvement, and nothing in this wave
+   should be read as claiming it is.

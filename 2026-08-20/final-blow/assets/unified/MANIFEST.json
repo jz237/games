@@ -25,7 +25,8 @@
    "knockdown"
   ],
   "cellCount": 16,
-  "status": "PILOT ONLY -- NOT WIRED. game.js and engine/ were not touched. One fighter (deathblow) was generated; the other nine were not. The bank exists and is measured; see `internal` for the pass/fail, and MOTION-ATLAS.md for the verdict.",
+  "status": "NOT WIRED -- game.js and engine/ were not touched by either wave. All ten fighters are now generated and measured: the 3.0 pilot (deathblow) and the nine-fighter roster rollout. Eight of the nine roster sheets are accepted whole; cyraxx ships accept:false on every cell after failing the U1 benchmark in three generations and keeps his existing banks. deathblow is unchanged from the pilot, including its four accept:false walk cells. The TOP-LEVEL `internal` block below is the PILOT'S and describes deathblow only; each roster fighter carries its own `internal` block of the same shape.",
+  "rosterAcceptNote": "Roster result: 8 of 9 fighters accepted whole = 128 of 144 roster cells accept:true, plus the pilot's 12. The walk keys are accept:TRUE on the roster sheets, unlike the pilot's, because the 3.0 decision is a SINGLE-PHASE walk at parity with the shipping base bank -- phase is reported and not gated. Rounds used: jez 1, benny 1, donald 1, ali 1, alan 2, post 2, commissioner 2, devil 2, cyraxx 3. Fifteen generations for nine fighters.",
   "acceptNote": "12 of 16 cells accepted, 4 rejected. Cells 1-4 (the walk keys) are accept:false: the sheet FAILS U2. Cells 1 and 3 carry the SAME lead leg (near/far leg luminance +21.2 and +16.4 -- both positive, no inversion) and cells 2 and 4 are near-duplicate swings (silhouette IoU 0.878), so the four keys are three-and-a-bit takes on one stride phase, which is the identical defect that disabled the 2.9 motion2 walk-a/walk-b pair and the whole 2.10 walk bank. Four full generations failed it the same way. The other 12 cells pass U1/U4/U5 and read correctly as their named beats."
  },
  "fighters": {
@@ -134,6 +135,827 @@
      "note": "on the ground on his side, hip and shoulder down, cap still on. 320px wide and 99px tall after the global scale, so it clamps to the cell width."
     }
    ]
+  },
+  "jez": {
+   "sheet": "jez.webp",
+   "scale": 1.2911,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 1,
+   "note": "Round 1 of 1 shipped as the bank. Cleared every gate on the first generation -- the only fighter on the roster that needed no retry.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": true, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {"frame": 12, "id": "light-hit", "accept": true, "note": "contained flinch, head jolted back, near shoulder rolled up, both feet planted -- reads as absorbing, never as a strike"},
+    {
+     "frame": 13,
+     "id": "big-hit",
+     "accept": true,
+     "note": "the roster's best big-hit: spine arched, head snapped back, feet just leaving the ground, still being struck rather than already thrown"
+    },
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the white-grey HAIR blob, topmost (his white left-forearm wrap is the same colour and the same size, so the anchor takes the highest candidate rather than the largest)",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 0.903 over all 16 cells (5/7 features at or better than motion2), 0.729 over the upright subset (5/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [101.1, 21.92, 8.4, 13.53, 23.8, 7.86, 167.4],
+      "unified upright-9": [37.6, 16.64, 6.63, 3.74, 18.8, 4.8, 64.6],
+      "base all-16": [27.5, 13.67, 4.34, 2.51, 12.0, 4.6, 59.7],
+      "base upright-8": [7.7, 5.69, 2.56, 2.22, 10.2, 4.41, 32.7],
+      "motion2 all-16": [112.0, 39.48, 11.57, 7.11, 38.6, 14.21, 80.7],
+      "motion2 upright-9": [29.3, 39.48, 14.54, 4.81, 17.6, 6.58, 88.5]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "eyeDarkFrac range [0.176, 0.76] over the cells that show the face. REPORTED, NOT GATED -- the pilot proved this detector cannot separate clear glasses from opaque sunglasses; the call is the 1:1 read.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 9e-05 over the 16 cells.",
+     "costumeElements": "PASS. Swept-back white-grey hair; CLEAR rectangular prescription glasses with the eyes visible through the lens in every face-on cell (never sunglasses); royal-blue sleeveless gi with ragged shoulder tears over a black undershirt; knotted black cloth belt with hanging ends; royal-blue gi trousers with frayed ankle cuffs; black fingerless gloves on both hands; white cloth wrap on the left forearm; dark brown thick-soled boots; lean sinewy sixty-year-old karateka build."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [1.54, 2.18], "torso": [0.48, 0.9], "accTex": [0.01, 0.04]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [4.88, 5.72], "torso": [19.83, 26.32], "accTex": [0.1, 0.25]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [1.61, 2.27], "torso": [1.25, 1.65], "accTex": [0.0, 0.02]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [11.08, 11.08], "torso": [19.64, 19.64], "accTex": [0.22, 0.22]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [128.5, 141.0],
+      "needPx": 88.3,
+      "baseMeanPx": 147.2,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [10.5, null, 12.1, 17.1],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.637,
+      "baseBankAdjacentMax": 0.842,
+      "allIoU": {"12": 0.544, "13": 0.678, "14": 0.637, "23": 0.473, "24": 0.717, "34": 0.591}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Swept-back white-grey hair; CLEAR rectangular prescription glasses with the eyes visible through the lens in every face-on cell (never sunglasses); royal-blue sleeveless gi with ragged shoulder tears over a black undershirt; knotted black cloth belt with hanging ends; royal-blue gi trousers with frayed ankle cuffs; black fingerless gloves on both hands; white cloth wrap on the left forearm; dark brown thick-soled boots; lean sinewy sixty-year-old karateka build.",
+     "differences": "A different draughtsman from the base atlas, as expected: the rendering is painterly rather than the base's hard cel edge, the boots are a lighter brown, and the base's small blue shoulder armband detail is not reproduced. Measured against base idle: headwear 11.08 dE, torso 19.64 dE."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "alan": {
+   "sheet": "alan.webp",
+   "scale": 1.319,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 2,
+   "note": "Round 2 of 2 shipped as the bank. Round 1 held the character together but drew him OBESE -- a soft round belly in front of a smaller chest, the exact drift the pilot recorded for deathblow. The pilot's fix worked again verbatim: 'a HEAVYSET POWERLIFTER'S build, his CHEST IS DEEPER AND WIDER THAN HIS BELLY, upper arms as thick as his own head, bulky NOT fat'. One round, corrected, and every U1 aggregate improved (all-16 geomean 0.975 -> 0.747 against motion2).",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": true, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {"frame": 12, "id": "light-hit", "accept": true, "note": "contained flinch -- head jolted back, shoulder rolled up, BOTH FEET PLANTED. Reads as absorbing, never as attacking."},
+    {"frame": 13, "id": "big-hit", "accept": true, "note": "head snapped back, spine arched, feet just leaving the ground, still being struck. Reads as a knockback, never as an attack."},
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the warm DARK-BROWN HAIR + moustache, topmost above a 30px floor. His boots are the same value but neutral (r-g about 11) where the hair is warm (r-g about 26); and a RELATIVE area floor fails here because the deep shadow gaps between his arm and torso are three times the area of the hair blob, so the rule is an ABSOLUTE floor + topmost.",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 0.747 over all 16 cells (6/7 features at or better than motion2), 0.537 over the upright subset (5/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [118.4, 25.99, 8.62, 9.87, 31.1, 11.51, 112.8],
+      "unified upright-9": [58.2, 5.84, 3.1, 9.24, 23.0, 10.86, 112.4],
+      "base all-16": [87.3, 28.8, 10.04, 13.3, 44.7, 8.38, 114.6],
+      "base upright-8": [84.2, 13.22, 5.59, 10.38, 29.7, 5.98, 52.3],
+      "motion2 all-16": [134.0, 39.76, 14.88, 12.27, 32.5, 27.83, 92.4],
+      "motion2 upright-9": [102.0, 39.76, 15.35, 12.27, 31.7, 9.83, 89.4]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "not applicable -- this fighter wears no eyewear.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 7e-05 over the 16 cells.",
+     "costumeElements": "PASS. Dark receding hair combed back; thick black moustache; heavy jaw; white short-sleeved t-shirt with the rust-orange thigh/chest stains, stretched over the chest; brown leather belt with a square buckle; faded mid-blue jeans; white cloth wraps on both fists and wrists with bare fingers; dark brown work boots; heavyweight doorman build with the gut sitting under a bigger chest."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [3.29, 6.52], "torso": [1.56, 1.99], "accTex": [0.04, 0.05]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [3.37, 3.67], "torso": [4.47, 4.7], "accTex": [0.09, 0.09]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [1.6, 7.1], "torso": [0.0, 1.64], "accTex": [0.01, 0.02]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [5.34, 5.34], "torso": [23.3, 23.3], "accTex": [0.07, 0.07]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [135.0, 165.5],
+      "needPx": 82.8,
+      "baseMeanPx": 138.0,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [24.3, null, 5.0, null],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.721,
+      "baseBankAdjacentMax": 0.885,
+      "allIoU": {"12": 0.721, "13": 0.693, "14": 0.689, "23": 0.562, "24": 0.884, "34": 0.607}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Dark receding hair combed back; thick black moustache; heavy jaw; white short-sleeved t-shirt with the rust-orange thigh/chest stains, stretched over the chest; brown leather belt with a square buckle; faded mid-blue jeans; white cloth wraps on both fists and wrists with bare fingers; dark brown work boots; heavyweight doorman build with the gut sitting under a bigger chest.",
+     "differences": "Slightly heavier through the middle than the base atlas and a shade less exaggerated in the shoulders. Measured against base idle: headwear 7.65 dE, torso 22.75 dE."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "post": {
+   "sheet": "post.webp",
+   "scale": 1.36,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 2,
+   "note": "Round 2 of 2 shipped as the bank. Round 1 was strong everywhere except the prop: the spray can vanished from cell 13 (big-hit) and cell 14 (stagger), because both poses open the hands. Round 2 named the can as 'the most important rule on this sheet', enumerated all sixteen panels by number and stated the reaction cells explicitly -- the can is now in the left fist in 16 of 16.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": true, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {"frame": 12, "id": "light-hit", "accept": true, "note": "contained flinch -- head jolted back, shoulder rolled up, BOTH FEET PLANTED. Reads as absorbing, never as attacking."},
+    {"frame": 13, "id": "big-hit", "accept": true, "note": "arched back, feet leaving the ground, spray can still in the left fist"},
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, arms hanging, spray can still in the left fist -- the round-1 defect this generation exists to fix"},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the long AUBURN-BROWN HAIR, topmost above a 120px floor. The predicate is bounded ABOVE on r-g so the orange coverall (r-g about 70) cannot win against the hair (r-g about 25).",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 0.934 over all 16 cells (4/7 features at or better than motion2), 0.797 over the upright subset (6/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [131.9, 16.42, 6.74, 4.93, 21.9, 8.81, 149.5],
+      "unified upright-9": [114.3, 14.59, 6.18, 4.25, 10.8, 6.41, 123.9],
+      "base all-16": [65.4, 20.19, 5.36, 5.72, 21.8, 4.22, 78.2],
+      "base upright-8": [25.6, 5.55, 2.95, 2.3, 17.8, 3.94, 72.8],
+      "motion2 all-16": [64.7, 18.6, 5.7, 6.35, 18.1, 25.83, 164.1],
+      "motion2 upright-9": [65.9, 18.6, 6.86, 6.08, 17.9, 15.18, 131.9]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "not applicable -- this fighter wears no eyewear.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 0.00041 over the 16 cells.",
+     "costumeElements": "PASS. Long wavy auburn hair past the shoulders; drooping brown moustache; orange-red coverall zipped up the front with the sleeves cut off at the shoulder, speckled with pink/green/blue/yellow paint flecks; rolled trouser cuffs; black fingerless gloves; the silver spray can with the pink nozzle cap clamped in the left fist in ALL SIXTEEN CELLS; black paint-speckled work boots."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [1.38, 1.67], "torso": [0.0, 0.0], "accTex": [0.14, 0.25]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [1.13, 1.72], "torso": [2.97, 5.19], "accTex": [0.6, 0.71]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [1.2, 3.72], "torso": [0.75, 1.97], "accTex": [0.01, 0.05]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [6.24, 6.24], "torso": [4.27, 4.27], "accTex": [0.54, 0.54]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [120.5, 130.5],
+      "needPx": 82.0,
+      "baseMeanPx": 136.8,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [11.6, 17.5, 9.5, 15.6],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.495,
+      "baseBankAdjacentMax": 0.796,
+      "allIoU": {"12": 0.492, "13": 0.894, "14": 0.466, "23": 0.495, "24": 0.881, "34": 0.464}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Long wavy auburn hair past the shoulders; drooping brown moustache; orange-red coverall zipped up the front with the sleeves cut off at the shoulder, speckled with pink/green/blue/yellow paint flecks; rolled trouser cuffs; black fingerless gloves; the silver spray can with the pink nozzle cap clamped in the left fist in ALL SIXTEEN CELLS; black paint-speckled work boots.",
+     "differences": "The round-2 sheet gives the rolled cuffs and collar a pale salmon lining that the base atlas does not have, and the paint flecks are larger and fewer. Measured against base idle: headwear 5.88 dE, accessory texture 0.414 apart."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "benny": {
+   "sheet": "benny.webp",
+   "scale": 1.354,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 1,
+   "note": "Round 1 of 1 shipped as the bank. The roster's strongest sheet: it beats its own motion2 sheet on ALL SEVEN U1 features on the upright subset, and it reproduces the pilot's headline result almost exactly -- his cross-generation idle-to-walk headwear delta is 11.0-11.1 dE, the same 11-ish figure MOTION-ATLAS records for deathblow, and it collapses to 0.0-2.55 dE inside one generation.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": true, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {"frame": 12, "id": "light-hit", "accept": true, "note": "contained flinch -- head jolted back, shoulder rolled up, BOTH FEET PLANTED. Reads as absorbing, never as attacking."},
+    {"frame": 13, "id": "big-hit", "accept": true, "note": "head snapped back, spine arched, feet just leaving the ground, still being struck. Reads as a knockback, never as an attack."},
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the GREY HEATHERED BALL CAP, topmost. The cleanest anchor on the roster after deathblow's olive cap -- nothing else on him is bright neutral.",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 0.869 over all 16 cells (4/7 features at or better than motion2), 0.523 over the upright subset (7/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [106.0, 18.92, 6.2, 4.03, 18.8, 11.85, 158.0],
+      "unified upright-9": [41.2, 4.59, 1.94, 3.39, 12.5, 8.12, 105.7],
+      "base all-16": [108.0, 22.05, 7.47, 4.04, 29.9, 7.57, 95.6],
+      "base upright-8": [58.9, 7.36, 3.7, 2.59, 27.0, 4.41, 45.2],
+      "motion2 all-16": [88.4, 21.65, 5.8, 5.69, 21.8, 25.37, 135.2],
+      "motion2 upright-9": [72.1, 12.8, 4.91, 5.58, 21.6, 15.6, 147.1]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "eyeDarkFrac range [0.127, 0.506] over the cells that show the face. REPORTED, NOT GATED -- the pilot proved this detector cannot separate clear glasses from opaque sunglasses; the call is the 1:1 read.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 0.0 over the 16 cells.",
+     "costumeElements": "PASS. Grey heathered baseball cap with a curved brim; thin wire-rimmed rectangular glasses with CLEAR lenses and the eyes visible through them; black long-sleeved v-neck tee with the sleeves pushed to the elbow; black belt with a square buckle AND the small flat black hip pouch; loose tan/khaki work trousers; black fingerless gloves with padded knuckles on both hands; black leather work boots."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [1.39, 1.98], "torso": [1.53, 1.8], "accTex": [0.02, 0.12]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [11.0, 11.12], "torso": [16.86, 20.52], "accTex": [0.67, 0.74]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [0.0, 2.55], "torso": [1.15, 2.74], "accTex": [0.01, 0.05]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [5.18, 5.18], "torso": [14.03, 14.03], "accTex": [0.58, 0.58]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [143.5, 141.0],
+      "needPx": 73.0,
+      "baseMeanPx": 121.8,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [20.3, null, 19.9, null],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.586,
+      "baseBankAdjacentMax": 0.712,
+      "allIoU": {"12": 0.567, "13": 0.914, "14": 0.538, "23": 0.586, "24": 0.75, "34": 0.564}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Grey heathered baseball cap with a curved brim; thin wire-rimmed rectangular glasses with CLEAR lenses and the eyes visible through them; black long-sleeved v-neck tee with the sleeves pushed to the elbow; black belt with a square buckle AND the small flat black hip pouch; loose tan/khaki work trousers; black fingerless gloves with padded knuckles on both hands; black leather work boots.",
+     "differences": "Very close to the base atlas. The base sheet's blue rim-light along his back edge is not reproduced (it was a lighting effect, not a garment). Measured against base idle: headwear 5.18 dE, torso 14.03 dE."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "donald": {
+   "sheet": "donald.webp",
+   "scale": 1.2389,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 1,
+   "note": "Round 1 of 1 shipped as the bank. The GOLF CLUB is physically held in all sixteen cells, including the jump-tuck (the shaft runs down through the tuck with the brass head clear of the boots) and the knockdown. The all-16 U1 aggregate is above motion2 (1.165) and the upright aggregate is well below it (0.696); the all-16 figure is driven by the pose-contaminated head band, exactly as the pilot's thresholdFinding predicts.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": true, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact tuck; the club shaft runs down through the ball with the brass head clear of the shoes -- verified at 1:1, the prop does not pop"
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {"frame": 12, "id": "light-hit", "accept": true, "note": "flinch with the club braced across the body; reads as a reaction, never as a swing"},
+    {"frame": 13, "id": "big-hit", "accept": true, "note": "head snapped back, spine arched, feet just leaving the ground, still being struck. Reads as a knockback, never as an attack."},
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the BLOND SWEPT-BACK HAIR, largest blob. On the CANDIDATE it lands on the head in 16 of 16. On his BASE atlas it is hijacked in cells 13 and 14 by the baked golden crescent VFX, which is why his base row in the table below reads 235.7% / 70.24 dE -- that row is a measurement of the base sheet's baked effects, not of its costume.",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 1.165 over all 16 cells (3/7 features at or better than motion2), 0.696 over the upright subset (6/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [79.0, 26.82, 10.11, 21.24, 28.4, 15.91, 164.9],
+      "unified upright-9": [49.9, 16.9, 8.44, 8.42, 12.5, 6.77, 134.4],
+      "base all-16": [235.7, 70.24, 16.53, 32.84, 84.8, 50.74, 165.1],
+      "base upright-8": [38.7, 11.69, 5.24, 9.3, 5.7, 4.45, 93.5],
+      "motion2 all-16": [53.7, 34.66, 11.95, 7.94, 23.3, 17.6, 160.4],
+      "motion2 upright-9": [51.6, 34.66, 14.38, 7.9, 14.9, 17.6, 160.9]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "not applicable -- this fighter wears no eyewear.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 4e-05 over the 16 cells.",
+     "costumeElements": "PASS. Blond side-parted sweep; orange-tanned jowly face; dark navy suit jacket with black armoured shoulder plates trimmed in gold; white dress shirt with visible cuffs; long bright red necktie past the belt; navy trousers with gold-filigree black knee guards; black leather gloves; black polished dress shoes; the steel-shafted, brass-headed golf club gripped in hand in ALL SIXTEEN CELLS."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [2.1, 5.01], "torso": [1.29, 1.92], "accTex": [0.01, 0.01]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [14.73, 14.82], "torso": [8.05, 9.69], "accTex": [0.03, 0.04]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [2.03, 7.77], "torso": [2.22, 5.43], "accTex": [0.0, 0.04]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [22.47, 22.47], "torso": [6.5, 6.5], "accTex": [0.02, 0.02]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [121.5, 111.0],
+      "needPx": 78.8,
+      "baseMeanPx": 131.2,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [8.1, null, 8.0, null],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.636,
+      "baseBankAdjacentMax": 0.681,
+      "allIoU": {"12": 0.594, "13": 0.808, "14": 0.559, "23": 0.636, "24": 0.792, "34": 0.621}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Blond side-parted sweep; orange-tanned jowly face; dark navy suit jacket with black armoured shoulder plates trimmed in gold; white dress shirt with visible cuffs; long bright red necktie past the belt; navy trousers with gold-filigree black knee guards; black leather gloves; black polished dress shoes; the steel-shafted, brass-headed golf club gripped in hand in ALL SIXTEEN CELLS.",
+     "differences": "Rounder and heavier through the middle than the base atlas, and the base's gold belt-buckle emblem is not reproduced. Measured against base idle: headwear 22.47 dE, torso 6.5 dE."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "cyraxx": {
+   "sheet": "cyraxx.webp",
+   "scale": 1.3661,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 3,
+   "note": "ROUND 1 OF 3 SHIPPED AS THE FILE, BUT EVERY CELL IS accept:false. The sheet passes U2, U3, U4 and U5 and is visually the best cyraxx on the project -- it is the only sheet of his that obeys the standing rule (his BASE atlas and his walk bank both carry keyed purple/green energy flecks on his clothing; this one measures energyFrac 0.0 on all 16 cells). It FAILS the U1 benchmark: after three generations the best round is still 8% above its own motion2 sheet on the all-16 aggregate and 17% above it on the upright subset. Rounds 2 and 3 were worse (1.176/1.264 and 1.253/1.236). Per the brief's rule -- a fighter failing U1 after three generations keeps its existing banks -- the accept mask is closed. The losses are concentrated in exactly two features, head-band WIDTH spread and trouser TEXTURE spread, both of which are pose metrics on a man whose long hair and beard change silhouette every time he turns his head; his costume COLOUR features (head palette 8.29 vs 15.51 dE, head mean 4.48 vs 7.48 dE, torso aspect 148.4 vs 124.6) beat or approach motion2. A future wave should re-measure him with a hair-independent head detector before writing this sheet off.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": false, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": false, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": false, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": false, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": false, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": false, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": false, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": false, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": false, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": false,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": false, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": false, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {"frame": 12, "id": "light-hit", "accept": false, "note": "contained flinch -- head jolted back, shoulder rolled up, BOTH FEET PLANTED. Reads as absorbing, never as attacking."},
+    {"frame": 13, "id": "big-hit", "accept": false, "note": "head snapped back, spine arched, feet just leaving the ground, still being struck. Reads as a knockback, never as an attack."},
+    {"frame": 14, "id": "stagger", "accept": false, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": false, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the BROWN HAIR + BEARD mass, largest blob. Reliable (16/16 on the base atlas including its prone cell) but it is the same detector that makes headW a pose metric for him.",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "FAIL on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 1.08 over all 16 cells (3/7 features at or better than motion2), 1.173 over the upright subset (2/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [72.2, 12.28, 5.45, 4.46, 26.1, 17.59, 132.9],
+      "unified upright-9": [60.1, 8.29, 4.48, 2.34, 22.7, 11.96, 148.4],
+      "base all-16": [63.7, 11.95, 3.68, 3.3, 15.4, 11.28, 83.1],
+      "base upright-8": [27.0, 3.4, 1.7, 2.38, 3.7, 2.89, 50.8],
+      "motion2 all-16": [63.2, 19.51, 7.53, 2.83, 12.9, 18.88, 120.0],
+      "motion2 upright-9": [31.2, 15.51, 7.48, 2.02, 9.3, 8.15, 124.6]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "not applicable -- this fighter wears no eyewear.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 5e-05 over the 16 cells.",
+     "costumeElements": "PASS (visually). Balding pate with long stringy brown hair to the shoulders; long straggly brown beard to the chest; gaunt bony frame with a sunken chest and a stooped forward lean; plain mid-blue short-sleeved t-shirt; worn charcoal-grey trousers; scuffed grey-brown canvas sneakers with pale soles. NO energy tinting anywhere on the sheet."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [0.87, 2.09], "torso": [2.5, 3.15], "accTex": [0.0, 0.0]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [4.11, 4.22], "torso": [11.84, 12.26], "accTex": [0.04, 0.04]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [0.73, 1.27], "torso": [2.78, 4.37], "accTex": [0.0, 0.04]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [3.73, 3.73], "torso": [7.57, 7.57], "accTex": [0.04, 0.04]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [152.0, 152.0],
+      "needPx": 73.0,
+      "baseMeanPx": 121.6,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [15.0, -17.5, 13.0, -31.7],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.45,
+      "baseBankAdjacentMax": 0.831,
+      "allIoU": {"12": 0.45, "13": 0.81, "14": 0.438, "23": 0.431, "24": 0.738, "34": 0.447}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS (visually). Balding pate with long stringy brown hair to the shoulders; long straggly brown beard to the chest; gaunt bony frame with a sunken chest and a stooped forward lean; plain mid-blue short-sleeved t-shirt; worn charcoal-grey trousers; scuffed grey-brown canvas sneakers with pale soles. NO energy tinting anywhere on the sheet.",
+     "differences": "Cleaner than the base atlas by design -- the base carries keyed purple/green energy flecks on his forearms, hem and shoes, and the standing rule for this character forbids them. Measured against base idle: headwear 1.80 dE, torso 6.09 dE."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "ali": {
+   "sheet": "ali.webp",
+   "scale": 1.2911,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 1,
+   "note": "Round 1 of 1 shipped as the bank. The BOOMBOX is on his back and the GOLD MICROPHONE is in his hand in all sixteen cells, both verified at 1:1 including the crouch, both jumps, all four reactions and the knockdown. His cross-generation idle-to-walk headwear delta is 13.9-14.4 dE -- the second-largest strobe measured on this roster -- and it collapses to 0.66-2.72 dE inside one generation.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": true, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {
+     "frame": 12,
+     "id": "light-hit",
+     "accept": true,
+     "note": "flinch with one hand covering the face -- the mic head is partly behind that hand but the mic body and the gold cable are both visible, verified at 1:1"
+    },
+    {"frame": 13, "id": "big-hit", "accept": true, "note": "head snapped back, spine arched, feet just leaving the ground, still being struck. Reads as a knockback, never as an attack."},
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the CRIMSON KNITTED BEANIE, topmost. Unique on him; nothing else is dark red.",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 0.959 over all 16 cells (3/7 features at or better than motion2), 0.57 over the upright subset (6/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [105.2, 37.53, 9.76, 25.29, 15.5, 21.29, 140.2],
+      "unified upright-9": [25.1, 18.01, 6.2, 2.84, 12.0, 17.06, 97.8],
+      "base all-16": [123.8, 32.14, 9.06, 36.18, 27.2, 6.91, 75.9],
+      "base upright-8": [31.5, 7.04, 3.45, 4.05, 3.0, 3.5, 84.5],
+      "motion2 all-16": [172.6, 23.25, 8.73, 19.38, 20.6, 31.78, 136.4],
+      "motion2 upright-9": [123.5, 18.18, 8.95, 9.2, 20.9, 15.82, 133.5]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "eyeDarkFrac range [0.19, 0.675] over the cells that show the face. REPORTED, NOT GATED -- the pilot proved this detector cannot separate clear glasses from opaque sunglasses; the call is the 1:1 read.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 0.0 over the 16 cells.",
+     "costumeElements": "PASS. Dark crimson knitted beanie; BLACK WRAPAROUND SUNGLASSES (dark eyewear is correct for this character); short dark beard; heavy gold rope chain with the round gold medallion; gold-yellow satin tracksuit with bold black diagonal blocks, worn over a black hooded top; black boombox with two silver speaker grilles strapped to his back; gold microphone with its coiled gold cable in hand; gold wristband; chunky black-and-yellow high-top sneakers."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [0.51, 0.51], "torso": [1.29, 2.24], "accTex": [0.0, 0.0]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [13.87, 14.38], "torso": [15.79, 15.94], "accTex": [0.06, 0.08]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [0.66, 2.72], "torso": [0.84, 1.61], "accTex": [0.0, 0.02]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [9.87, 9.87], "torso": [6.52, 6.52], "accTex": [0.1, 0.1]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [131.5, 133.5],
+      "needPx": 75.2,
+      "baseMeanPx": 125.4,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [19.9, null, 16.5, null],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.681,
+      "baseBankAdjacentMax": 0.764,
+      "allIoU": {"12": 0.587, "13": 0.921, "14": 0.681, "23": 0.589, "24": 0.628, "34": 0.672}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Dark crimson knitted beanie; BLACK WRAPAROUND SUNGLASSES (dark eyewear is correct for this character); short dark beard; heavy gold rope chain with the round gold medallion; gold-yellow satin tracksuit with bold black diagonal blocks, worn over a black hooded top; black boombox with two silver speaker grilles strapped to his back; gold microphone with its coiled gold cable in hand; gold wristband; chunky black-and-yellow high-top sneakers.",
+     "differences": "The tracksuit's black blocks are broader and simpler than the base atlas's chevrons. Measured against base idle: headwear 9.87 dE, torso 6.52 dE."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "commissioner": {
+   "sheet": "commissioner.webp",
+   "scale": 1.275,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 2,
+   "note": "Round 2 of 2 shipped as the bank, and the choice was made on the CANE rather than on the numbers. Round 1 scored much better on U1 (all-16 0.943 / upright 0.537 against motion2, versus round 2's 1.214 / 0.992) but it DROPPED THE CANE in cell 13 (big-hit) -- which is the precise 2.9 bug MOTION-ATLAS records for this character, where the cane blinked out of his hand on every standing reaction. A unified bank must own every beat it covers, so a hole at big-hit would have re-created the strobe it exists to remove. Round 2 carries the cane in 16 of 16 cells including the big-hit, the stagger and the knockdown.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "walk passing key B: one foot planted, the other swung through and lifted clear"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {
+     "frame": 7,
+     "id": "guard",
+     "accept": true,
+     "note": "standing block. The raised cane's silver knob sits above the head here and is what hijacks the headwear detector; the drawing itself is correct"
+    },
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {"frame": 12, "id": "light-hit", "accept": true, "note": "contained flinch -- head jolted back, shoulder rolled up, BOTH FEET PLANTED. Reads as absorbing, never as attacking."},
+    {"frame": 13, "id": "big-hit", "accept": true, "note": "arched back, feet lifting, and the cane swings out with the flung-back arm STILL IN HIS FINGERS -- the cell round 1 lost"},
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, cane still gripped in the outstretched hand"}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the SILVER-WHITE HAIR, bright-neutral, topmost. CAVEAT, and it is the reason his all-16 headwear figure reads 18.41 dE: in cells 7 and 8 he raises the cane ABOVE his head, and the cane's POLISHED SILVER KNOB is bright neutral and higher than his hair, so the anchor locks onto the knob. Those two cells alone drive the number -- the same-generation idle-to-guard headwear delta reads 17.56 dE for exactly that reason while the idle-to-walk pairs read 1.08 and 1.61 and the idle-to-light-hit pair reads 1.39. His hair is effectively invariant; the detector is not.",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the pose-comparable upright subset, FAIL on the all-16 aggregate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 1.214 over all 16 cells (1/7 features at or better than motion2), 0.992 over the upright subset (4/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [157.1, 26.51, 9.63, 18.41, 33.7, 8.74, 158.9],
+      "unified upright-9": [118.2, 24.85, 8.75, 17.56, 17.2, 5.02, 74.1],
+      "base all-16": [45.7, 23.54, 5.99, 4.28, 15.0, 83.22, 141.6],
+      "base upright-8": [11.9, 2.61, 1.38, 3.23, 10.6, 7.56, 59.8],
+      "motion2 all-16": [122.1, 21.56, 7.54, 9.16, 21.8, 17.24, 130.1],
+      "motion2 upright-9": [101.1, 21.56, 9.34, 7.67, 21.6, 7.36, 123.3]
+     },
+     "headAnchorFound": "16/16",
+     "eyewear": "not applicable -- this fighter wears no eyewear.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 0.00014 over the 16 cells.",
+     "costumeElements": "PASS. Swept-back silver-white hair; pale lined face; long black leather trench coat to mid-calf, open, with the deep crimson lining showing on the inside of the swinging skirts; black suit jacket over a dark burgundy shirt buttoned to the throat; small gold lapel pin; charcoal suit trousers; black polished dress shoes; the slim black cane with the polished silver knob gripped in hand in ALL SIXTEEN CELLS."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [2.21, 2.25], "torso": [2.36, 4.12], "accTex": [0.01, 0.05]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [4.38, 4.47], "torso": [4.91, 5.51], "accTex": [0.36, 0.36]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [1.08, 17.56], "torso": [0.41, 2.31], "accTex": [0.0, 0.08]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [4.27, 4.27], "torso": [6.14, 6.14], "accTex": [0.52, 0.52]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [0, 114.5],
+      "needPx": 71.1,
+      "baseMeanPx": 118.5,
+      "groundContactRuns": [2, 1, 2, 1],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [null, null, 10.1, null],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.619,
+      "baseBankAdjacentMax": 0.653,
+      "allIoU": {"12": 0.583, "13": 0.831, "14": 0.576, "23": 0.619, "24": 0.891, "34": 0.61}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Swept-back silver-white hair; pale lined face; long black leather trench coat to mid-calf, open, with the deep crimson lining showing on the inside of the swinging skirts; black suit jacket over a dark burgundy shirt buttoned to the throat; small gold lapel pin; charcoal suit trousers; black polished dress shoes; the slim black cane with the polished silver knob gripped in hand in ALL SIXTEEN CELLS.",
+     "differences": "The coat is cut a little narrower than the base atlas's and the lining reads brighter. Measured against base idle: headwear 2.81 dE, torso 3.63 dE -- the closest identity match on the roster."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
+  },
+  "devil": {
+   "sheet": "devil.webp",
+   "scale": 1.3722,
+   "targetH": 306,
+   "floorRow": 315,
+   "generations": 2,
+   "note": "Round 2 of 2 shipped as the bank, and this choice was also made on identity rather than on the aggregate. Round 1 scored better on U1 (all-16 0.666 / upright 0.695 against motion2, versus round 2's 0.911 / 0.944) but drew his wings CORAL-RED with pink spots, and the wings are the largest single element of his silhouette. Round 2 pins them to 'the same dull earth brown as his hide, never red, never coral, never pink, no coloured spots' and they match the base atlas. Both rounds are BIPEDAL in all sixteen cells -- the quadruped prowl that got cells rejected twice in earlier waves did not appear once here, in either round, on any cell.",
+   "cells": [
+    {"frame": 0, "id": "idle", "accept": true, "note": "fighting stance, guard up, weight settled. The U1 reference cell -- every other cell's costume delta is measured against this one."},
+    {"frame": 1, "id": "walk-contact-a", "accept": true, "note": "walk contact key A: both feet planted, full stride separation, near leg drawn on top"},
+    {"frame": 2, "id": "walk-passing-a", "accept": true, "note": "walk passing key A: one foot planted, the other swung through and lifted clear"},
+    {"frame": 3, "id": "walk-contact-b", "accept": true, "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."},
+    {"frame": 4, "id": "walk-passing-b", "accept": true, "note": "U2 note: this passing key plants two ground-contact runs where the grammar wants one; the swing foot is set down early"},
+    {"frame": 5, "id": "crouch", "accept": true, "note": "deep squat, hips at the heels, arms tucked in covering the head. Drawn at the correct scale -- no crouchAdjust needed."},
+    {"frame": 6, "id": "crouch-trans", "accept": true, "note": "half-lowered, clearly taller than cell 5 and clearly lower than cell 0"},
+    {"frame": 7, "id": "guard", "accept": true, "note": "standing block, forearms vertical covering the face and chest, feet planted"},
+    {"frame": 8, "id": "jump-rise", "accept": true, "note": "ascending, both feet clear, knees drawing up, arms swinging up"},
+    {
+     "frame": 9,
+     "id": "jump-tuck",
+     "accept": true,
+     "note": "compact ball, knees to chest, head tucked. Registered by foot bottom like every other cell, so an integration needs the motion3 airborne body-centre anchoring (MOTION-ATLAS B2) rather than the floor registration this sheet ships with."
+    },
+    {"frame": 10, "id": "punch-extension", "accept": true, "note": "full committed straight punch, weight through the front foot, back heel lifted. No baked VFX."},
+    {"frame": 11, "id": "kick-extension", "accept": true, "note": "full committed kick, leg extended at hip height, support leg straight"},
+    {
+     "frame": 12,
+     "id": "light-hit",
+     "accept": true,
+     "note": "U5 MARGINAL. The flinch is contained almost to the point of stillness -- at gameplay size it reads closer to a braced standing pose than to a recoil. It is unambiguously NOT an attack, which is the failure class that matters, but a reaction track should lead with cell 13 and let 12 show underneath."
+    },
+    {"frame": 13, "id": "big-hit", "accept": true, "note": "head snapped back, spine arched, feet just leaving the ground, still being struck. Reads as a knockback, never as an attack."},
+    {"frame": 14, "id": "stagger", "accept": true, "note": "folded forward, knees buckled, arms hanging loose. Reads clearly as a stumble and never as a strike."},
+    {"frame": 15, "id": "knockdown", "accept": true, "note": "on the ground on his side, hip and shoulder down. Reads as down and out, never as an attack."}
+   ],
+   "internal": {
+    "method": "scratchpad unified31/ugate2.py + cost2.py, a per-fighter generalisation of the pilot's unified30 rig. Same doctrine: every detector is anchored to a NAMED COSTUME OBJECT rather than to a height fraction of the bbox, because a height fraction points at the hip on a knockdown and at the knee on a jump-tuck. This fighter's head anchor is the the GLOWING AMBER EYE, dilated by 2 before the component pass and read back from the undilated pixels. The eye is 7-28 px and arrives as three or four fragments, none of which clears an area floor on its own; dilation merges them. It finds the head in 16/16 candidate cells, 15/16 base cells (the base's wing-wrapped cocoon hides the eye) and 14/16 motion2 cells. WEAK AS A COLOUR FEATURE: it is a specular highlight, not a garment, so his 'headwear palette' column is noise on all four sheets (candidate 26.7, base 36.4, motion2 39.1 dE) and his same-generation costume claim rests on the torso and limb-wrapping columns instead, where it is unambiguous.",
+    "thresholdFinding": "Unchanged from the pilot and re-confirmed on nine more sheets: the literal U1 thresholds (headW spread <= 8%, head palette <= 2.5 dE) are unreachable on any 16-pose sheet. Every number is therefore reported twice -- over all 16 cells and over a POSE-COMPARABLE UPRIGHT SUBSET -- always beside the same subset measured on this fighter's OWN base and motion2 sheets, and the gate applied is the brief's fallback: MEET OR BEAT motion2.",
+    "uprightSubset": {"unified": [0, 1, 2, 3, 4, 6, 7, 10, 12], "base": [0, 1, 2, 3, 4, 5, 6, 7], "motion2": [0, 1, 2, 3, 5, 8, 9, 10, 12]},
+    "U1": {
+     "verdict": "PASS on the benchmark gate -- geometric-mean ratio of the seven features against this fighter's own motion2 sheet: 0.911 over all 16 cells (4/7 features at or better than motion2), 0.944 over the upright subset (6/7 at or better). Below 1.000 means the unified sheet is tighter than motion2 overall.",
+     "table": {
+      "columns": ["headW spread %", "head palette max dE", "head palette mean dE", "headwear palette max dE", "accessory texture spread %", "footwear palette max dE", "torso aspect spread %"],
+      "unified all-16": [47.5, 37.61, 10.31, 26.67, 16.2, 8.98, 290.1],
+      "unified upright-9": [24.1, 12.76, 6.47, 26.63, 13.9, 3.54, 240.0],
+      "base all-16": [14.6, 10.46, 4.25, 36.39, 34.3, 12.36, 158.0],
+      "base upright-8": [14.4, 8.1, 3.55, 19.61, 21.0, 2.94, 96.5],
+      "motion2 all-16": [66.7, 22.11, 9.82, 39.09, 23.7, 17.56, 169.6],
+      "motion2 upright-9": [51.2, 18.78, 9.87, 36.51, 18.4, 7.76, 19.0]
+     },
+     "headAnchorFound": "14/16, missing [5, 8]",
+     "eyewear": "not applicable -- this fighter wears no eyewear.",
+     "energyTint": "keyed-VFX tint fraction (violet / acid green / hot pink; plain garment blue is deliberately excluded from the predicate because cyraxx's own shirt is blue) peaks at 0.0 over the 16 cells.",
+     "costumeElements": "PASS. Mottled brown-and-olive scaly hide with a pale cream chest and belly; elongated reptilian snout; ribbed dark horns swept back over the skull; GLOWING YELLOW-AMBER EYES; large tattered dull-brown membranous bat wings folded off the shoulders; the greenish-yellow teardrop CHARM on a cord at the throat; OLIVE-GREEN CLOTH WRAPPINGS on both forearms and both shins; three-clawed hands; dark clawed feet; whip tail with an arrowhead tip. UPRIGHT BIPED in all sixteen cells."
+    },
+    "U2": {
+     "verdict": "THE DECISIVE MEASUREMENT PASSES. The same-generation idle-to-walk costume delta sits at or below this fighter's own base-bank pose noise and far below the cross-generation figure.",
+     "units": "[min, max] over the pairs, for three features: headwear palette dE, torso palette dE, accessory texture energy (absolute).",
+     "A_sameGeneration_baseIdle_to_baseWalk": {"headwear": [7.46, 10.16], "torso": [2.03, 2.45], "accTex": [0.0, 0.02]},
+     "B_crossGeneration_baseIdle_to_otherBankWalk": {"headwear": [25.85, 27.13], "torso": [7.48, 8.17], "accTex": [0.13, 0.18]},
+     "C_sameGeneration_unifiedIdle_to_unifiedWalkGuardHit": {"headwear": [8.06, 24.55], "torso": [0.65, 0.86], "accTex": [0.02, 0.03]},
+     "D_crossGeneration_unifiedIdle_to_baseIdle_advisory": {"headwear": [18.23, 18.23], "torso": [4.37, 4.37], "accTex": [0.12, 0.12]},
+     "walkPhase": {
+      "note": "REPORTED, NOT GATED. The 3.0 rollout decision is ONE generation per fighter and therefore a SINGLE-PHASE walk, which is parity with the shipping base bank (37 of its 40 walk cells share one lead foot). The four keys are four genuinely different drawings; they are not a phase mirror, and no regeneration budget was spent chasing one.",
+      "contactSeparationPx": [164.5, 161.0],
+      "needPx": 93.6,
+      "baseMeanPx": 156.0,
+      "groundContactRuns": [2, 1, 2, 2],
+      "want": [2, 1, 2, 1],
+      "legLumDelta": [15.3, 13.4, 7.6, 13.9],
+      "leadLegInversion": false,
+      "adjacentIoUMax": 0.622,
+      "baseBankAdjacentMax": 0.833,
+      "allIoU": {"12": 0.515, "13": 0.665, "14": 0.622, "23": 0.542, "24": 0.605, "34": 0.611}
+     }
+    },
+    "U3": {
+     "verdict": "PASS -- unmistakably the same character, read at 1:1 beside the base atlas idle.",
+     "present": "PASS. Mottled brown-and-olive scaly hide with a pale cream chest and belly; elongated reptilian snout; ribbed dark horns swept back over the skull; GLOWING YELLOW-AMBER EYES; large tattered dull-brown membranous bat wings folded off the shoulders; the greenish-yellow teardrop CHARM on a cord at the throat; OLIVE-GREEN CLOTH WRAPPINGS on both forearms and both shins; three-clawed hands; dark clawed feet; whip tail with an arrowhead tip. UPRIGHT BIPED in all sixteen cells.",
+     "differences": "The horns read as a swept cluster of ridged spines rather than the base atlas's single dominant pair, and the neck is longer, so he sits a little further toward 'lizard' and away from 'goat-demon' than the base. Measured against base idle: torso 5.93 dE, limb-wrapping texture 0.096 apart."
+    },
+    "U4": {
+     "verdict": "PASS",
+     "footBottomRows": [315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315, 315],
+     "spreadPx": 0,
+     "gate": 6,
+     "note": "0px by construction. The slicer now runs a SECOND PASS that re-measures every finished cell with the U4 gate's OWN detector (alpha >= 40, lowest row at 12% of max row width) and nudges it onto floor row 315. Without it a PRONE knockdown lands 8-17px off, because the slicer measured at alpha >= 140 on a 300px-wide body while the gate measures at alpha >= 40 -- a measurement disagreement, not a drawing that floats."
+    },
+    "U5": {
+     "verdict": "PASS -- all 16 cells read as their named beat at gameplay size. One marginal; see the cell notes.",
+     "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
+    }
+   }
   }
  },
  "internal": {
