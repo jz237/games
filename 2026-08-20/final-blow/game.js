@@ -1250,6 +1250,102 @@ function unifiedFighterReady(fighterId) {
   return unifiedCellDrawable(fighterId, UNIFIED_CELLS.idle);
 }
 
+// ---------------------------------------------------------------------------
+// v3.1 SKELETAL RIG PILOT — deathblow only, OPT-IN, off by default.
+//
+// Everything below is inert unless somebody asks for it with `?rig=1` (or
+// `?rig=p1` / `?rig=p2` for a side-by-side against the shipped sprite) or calls
+// `window.__finalBlowQa.rig(...)`. With the rig off, `rigDrawSide` returns null
+// on every call, `drawFighter` takes exactly the branches it took at 3.0, and
+// no rig asset is even requested. See engine/rig.mjs for why the pilot exists.
+// ---------------------------------------------------------------------------
+const RIG_FIGHTER = "deathblow";
+const rigState = {
+  mode: (() => {
+    const requested = new URLSearchParams(location.search).get("rig");
+    if (requested === "1" || requested === "true" || requested === "both") return "both";
+    if (requested === "p1" || requested === "p2") return requested;
+    return "off";
+  })(),
+  module: null,
+  rig: null,
+  image: null,
+  loading: false,
+  failed: false,
+  draws: 0,
+};
+
+function rigLoad() {
+  if (rigState.loading || rigState.failed || rigState.rig) return;
+  rigState.loading = true;
+  // Dynamic import: the module and its atlas are never fetched in the shipped
+  // default, so the service-worker shell stays exactly the size it was.
+  Promise.all([
+    import("./engine/rig.mjs"),
+    fetch(`assets/rig/${RIG_FIGHTER}-rig.json`).then((response) => response.json()),
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = `assets/rig/${RIG_FIGHTER}-pieces.webp`;
+    }),
+  ]).then(([module, json, image]) => {
+    rigState.module = module;
+    rigState.rig = module.prepareRig(json);
+    rigState.image = image;
+  }).catch((error) => {
+    rigState.failed = true;
+    console.warn("rig pilot unavailable", error);
+  }).finally(() => {
+    rigState.loading = false;
+  });
+}
+
+/**
+ * Should THIS fighter draw from the rig on this frame? The only entry point;
+ * returns null for every fighter, every mode and every beat the pilot does not
+ * cover, which is what keeps the shipped path byte-identical.
+ */
+function rigDrawSide(fighter) {
+  if (rigState.mode === "off") return null;
+  if (fighter.def.id !== RIG_FIGHTER) return null;
+  if (rigState.mode === "p1" && fighter.side !== 0) return null;
+  if (rigState.mode === "p2" && fighter.side !== 1) return null;
+  // Walk and idle only. Anything else — attacks, reactions, crouch, jumps,
+  // fatalities, cinematics — stays on the shipped sprite bank, so the rig can
+  // never swallow a beat it has no pose for.
+  if (fighter.cinematicFrame !== null || !fighter.grounded || fighter.crouch
+    || fighter.attacking || fighter.stun || fighter.down || fighter.block
+    || fighter.dizzyFrames > 0 || fighter.hitstunFrames > 0) return null;
+  if (!rigState.rig) { rigLoad(); return null; }
+  return rigState.rig;
+}
+
+function drawRigFighter(fighter, rig, renderSize) {
+  const pose = rigState.module.rigPose(rig, {
+    walkTime: fighter.walkTime,
+    animTime: fighter.animTime,
+    moving: Math.abs(fighter.vx) > 22,
+    speed: Math.abs(fighter.vx),
+    pxPerCell: renderSize / rig.source.cellSize,
+    fatigue: clamp(1 - fighter.health / 100, 0, 1),
+  });
+  rigState.module.drawRig(ctx, rig, rigState.image, pose, renderSize);
+  if (!reflectionPassActive) {
+    rigState.draws += 1;
+    presentationDebug.lastRigPose[fighter.side] = {
+      walking: pose.walking,
+      phase: Number(pose.phase.toFixed(4)),
+      strideCells: Number(pose.strideCells.toFixed(2)),
+      hipRow: Number(pose.hipRow.toFixed(2)),
+      nearFootX: Number(pose.feet.near.x.toFixed(2)),
+      farFootX: Number(pose.feet.far.x.toFixed(2)),
+      nearPlanted: pose.feet.near.planted,
+      farPlanted: pose.feet.far.planted,
+    };
+  }
+}
+
 /** Bank-routed drawable gate for resolveMotionPose (all five authored banks). */
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
@@ -6182,6 +6278,9 @@ const presentationDebug = {
   // authored atlas facing — so QA can prove a mixed-orientation sheet (post)
   // renders toward the opponent instead of trusting numeric facing alone.
   lastFighterMirror: [null, null],
+  // v3.1 rig pilot: the last resolved rig pose per side, or null on a side the
+  // rig never drew. Instrumentation ONLY — read by qa.rig(), never by the sim.
+  lastRigPose: [null, null],
   practicalLights: 0, weatherParticles: 0, foregroundOccluders: 0, crowdFlashes: 0,
   counterFlashes: 0, projectileGlows: 0, swipeRibbons: 0, wallSplats: 0,
   focusLines: 0, lightSpills: 0,
@@ -19553,6 +19652,9 @@ function drawFighter(fighter, time) {
   // height-matched to. Nothing else in the correction changes — the unified
   // sheets are one global scale each and mutually registered, so no unified
   // cell takes a per-cell adjust.
+  // v3.1 rig pilot. Null in the shipped default, and null for every beat the
+  // pilot does not cover, so nothing below it changes when the rig is off.
+  const rigDraw = rigDrawSide(fighter);
   const unifiedActive = unifiedFighterReady(fighter.def.id);
   const moveSheetAdjust = bankSheetAdjust(fighter.def.id, pose.bank)
     * cellDrawAdjust(fighter.def.id, pose.bank, frame, { unified: unifiedActive });
@@ -19767,7 +19869,7 @@ function drawFighter(fighter, time) {
     aura.addColorStop(1, `${fighter.def.accent}00`);
     ctx.fillStyle = aura;
     ctx.fillRect(-auraReach, -renderSize * 0.32 - auraReach, auraReach * 2, auraReach * 2);
-    if (atlas?.complete && atlas.naturalWidth) {
+    if (atlas?.complete && atlas.naturalWidth && !rigDraw) {
       // Pulsing accent outline: a slightly enlarged silhouette behind the
       // sprite leaves a charged fringe all the way around the body (the KI/SF3
       // max-meter read). Feet-anchored scale keeps it grounded.
@@ -19826,7 +19928,7 @@ function drawFighter(fighter, time) {
   if (atlas?.complete && atlas.naturalWidth) {
     // BODY-FIRST (spec 8): trail copies stay OUT of the mirror — the band
     // only ever shows fragments of them, which read as sprite debris.
-    const baseTrails = state.accessibility.reducedMotion || reflectionPassActive
+    const baseTrails = state.accessibility.reducedMotion || reflectionPassActive || rigDraw
       ? 0
       : attack ? (attackKind === "special" ? 3 : activePower > 0.8 ? 2 : 0) : 0;
     const trails = Math.floor(baseTrails * state.performance.trailScale);
@@ -19906,8 +20008,11 @@ function drawFighter(fighter, time) {
       }
     }
 
+    // v3.1: every pass below that blits a SPRITE SILHOUETTE is skipped while
+    // the rig draws the body — a rim light cut from the walk cell behind a
+    // rigged pose is a second, differently-posed fighter peeking out.
     if (!reflectionPassActive && state.performance.shadows && !graphicFatality
-      && !state.accessibility.highContrast) {
+      && !rigDraw && !state.accessibility.highContrast) {
       // Stage-keyed rim light: a tinted silhouette peeking 2-3px past the edge
       // that faces the arena's key light. The sprite draw below covers all but
       // the lit edge; the colour warms while the super spotlight is up.
@@ -19922,7 +20027,7 @@ function drawFighter(fighter, time) {
     }
 
     if (!reflectionPassActive && !graphicFatality && state.performance.trailScale > 0
-      && !state.accessibility.highContrast && state.projectiles.length) {
+      && !rigDraw && !state.accessibility.highContrast && state.projectiles.length) {
       // Projectile rim light (wave 4): the nearest incoming projectile or
       // thrown object tints the fighter's silhouette edge on the side facing
       // it, brightening as it closes in — same offset-silhouette technique as
@@ -19951,7 +20056,7 @@ function drawFighter(fighter, time) {
       }
     }
 
-    if (!reflectionPassActive && hitSmear > 0) {
+    if (!reflectionPassActive && hitSmear > 0 && !rigDraw) {
       // Directional hit-reaction smear: stretched additive ghosts trailing
       // opposite the knockback on the frames the white hit flash is live.
       const knock = Math.abs(fighter.vx) > 30 ? Math.sign(fighter.vx) : -fighter.facing;
@@ -19969,7 +20074,7 @@ function drawFighter(fighter, time) {
       }
     }
 
-    if (!reflectionPassActive && fighter.dizzyFrames > 0
+    if (!reflectionPassActive && fighter.dizzyFrames > 0 && !rigDraw
       && state.performance.trailScale > 0 && !reducedMotion) {
       // Dizzy double vision: two hue-split silhouette ghosts sway apart and
       // drift back; the amplitude collapses with the drain bar so recovery is
@@ -20006,6 +20111,10 @@ function drawFighter(fighter, time) {
       drawGraphicFatalityVictim(atlas, frame, renderSize, graphicFatality, time,
         renderMirror, fighter.cinematicRotation || 0);
     }
+    // v3.1: THE OPT-IN RENDER PATH. One branch, in the same transform, at the
+    // same footprint drawAtlasFrame uses — so the rigged fighter stands in the
+    // same world space, at the same scale, under the same mirror.
+    else if (rigDraw) drawRigFighter(fighter, rigDraw, renderSize);
     else if (!reflectionPassActive && state.performance.shadows && battleDamageMarks[fighter.side].length) {
       // Accumulating battle damage: composite the accrued marks onto this
       // frame's sprite. The mirror pass and the battery profile stay on the
@@ -20023,7 +20132,7 @@ function drawFighter(fighter, time) {
     // MOTION FIX 5: ghost discipline — alpha caps at 30% and the fade is
     // skipped entirely mid-flip where the rotating transform would smear the
     // old cell across the sky.
-    if (!reflectionPassActive && !graphicFatality && state.hitstop <= 0
+    if (!reflectionPassActive && !graphicFatality && state.hitstop <= 0 && !rigDraw
       && Math.abs(motion.flipRotation) < 0.3) {
       const fadeObs = motionObs[fighter.side];
       if (fadeObs.fadeLeft > 0 && (fadeObs.fadeBank !== pose.bank || fadeObs.fadeFrame !== frame)) {
@@ -21903,6 +22012,9 @@ function drawFighterCastShadows() {
   ctx.rect(0, FLOOR + 1, W, REFLECTION_DEPTH);
   ctx.clip();
   for (const fighter of state.fighters) {
+    // v3.1: the cast shadow is a sprite silhouette too, and a rigged fighter's
+    // shadow would be walking a different cycle from his legs.
+    if (rigDrawSide(fighter)) continue;
     const pose = fighterAnimationPose(fighter);
     const atlas = pose.bank === "specials"
       ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
@@ -24205,6 +24317,10 @@ function draw(time) {
     // mode and take the whole draw pass down with it.
     if (key === "lastFighterMirror" || key === "lastWalkKey"
       || key === "motion2CellDraws"
+      // v3.1: the rig pose latch is an array of the same shape and for the same
+      // reason — zeroing it swaps the array for a number and the next write
+      // throws out of the draw pass.
+      || key === "lastRigPose"
       // v2.9 final round: cumulative session tallies, not per-frame counts.
       || key === "reactionDrawPriority" || key === "turnaroundDraws"
       || key === "turnaroundBlocked") continue;
@@ -28833,6 +28949,29 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         slowMotionHits: state.finisher?.slowMotionHits || 0,
         simulationTick: state.simulationTick,
         simulationHz: SIMULATION_HZ,
+      };
+    },
+    // v3.1 SKELETAL RIG PILOT. `qa.rig()` reads; `qa.rig(true|'p1'|'p2'|false)`
+    // switches. Off is the shipped default and `?rig=1` is the other way in.
+    // The returned poses are instrumentation only — nothing here is read by the
+    // simulation, so toggling it cannot desync a match or perturb a replay.
+    rig(mode = null) {
+      if (mode !== null) {
+        const next = mode === true || mode === 1 || mode === "1" || mode === "both" ? "both"
+          : mode === "p1" || mode === "p2" ? mode
+            : "off";
+        rigState.mode = next;
+        if (next !== "off") rigLoad();
+      }
+      return {
+        mode: rigState.mode,
+        fighter: RIG_FIGHTER,
+        loaded: Boolean(rigState.rig),
+        failed: rigState.failed,
+        draws: rigState.draws,
+        bones: rigState.rig ? rigState.rig.bones.length : 0,
+        pieces: rigState.rig ? Object.keys(rigState.rig.pieces).length : 0,
+        pose: presentationDebug.lastRigPose.map((entry) => (entry ? { ...entry } : null)),
       };
     },
     step(seconds) {
