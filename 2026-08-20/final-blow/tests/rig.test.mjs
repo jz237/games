@@ -342,6 +342,138 @@ test("the near-led half and the idle are bit-identical to the shipped 3.2 draw",
   }
 });
 
+// ---------------------------------------------------------------------------
+// v3.4 — WALK DYNAMICS. Live-showcase QA measured the choreographer's real
+// locomotion as ~7-tick bursts with 2-tick stops at 323 px/s, and the rig
+// posed every burst with a constant 17-cell lift, full ankle articulation and
+// a binary walk/idle snap: high-stepping marionette prancing. These tests pin
+// the fixed dynamics — amplitudes that scale with the gait, a signed stride
+// that keeps the back walk planted, and continuous settle/reversal blends.
+// ---------------------------------------------------------------------------
+
+const gaitSim = (walkTime, speedX, speedLift = Math.abs(speedX)) => ({
+  walkTime, animTime: 1.4, speedX, speedLift, pxPerCell: PX_PER_CELL, fatigue: 0,
+});
+
+const swingPeak = (speedX, speedLift = Math.abs(speedX)) => {
+  let peak = 0;
+  for (let i = 0; i < 96; i += 1) {
+    const pose = rigPose(rig, gaitSim(i / 96 / WALK_CYCLES_PER_SECOND, speedX, speedLift));
+    const ankleRow = rig.ground.soleRow - rig.ground.ankleHeight;
+    peak = Math.max(peak, ankleRow - pose.feet.near.y, ankleRow - pose.feet.far.y);
+  }
+  return peak;
+};
+
+test("swing lift scales with the stride: small step, small lift", () => {
+  const full = swingPeak(383);
+  const held = swingPeak(323);
+  const tap = swingPeak(323, 120);   // tap-tap approach: slow average well below vx
+  const creep = swingPeak(40);
+  assert.ok(full > 15, `full stride should keep the authored lift, got ${full}`);
+  assert.ok(held < full, "the showcase's 323 px/s walk must lift less than the reference");
+  assert.ok(tap < held * 0.75, `a tapped approach must stay low, got ${tap} vs held ${held}`);
+  assert.ok(creep < 4, `a creep should barely leave the ground, got ${creep}`);
+  // and the ankle articulation follows: the toe stops pointing on tiny steps.
+  // Measured on the NODE angle (the resolved ankle direction) — the drawn
+  // bone angle also carries the role-swap art delta, which is not articulation.
+  const anklePitchSpan = (speedX) => {
+    const angles = [];
+    for (let i = 0; i < 48; i += 1) {
+      const pose = rigPose(rig, gaitSim(i / 48 / WALK_CYCLES_PER_SECOND, speedX));
+      angles.push(pose.nodes.get("footNear").angle);
+    }
+    return Math.max(...angles) - Math.min(...angles);
+  };
+  assert.ok(anklePitchSpan(40) < anklePitchSpan(383) * 0.2,
+    "tiny steps must flatten the ankle curve, not point the toe");
+});
+
+test("a stopping fighter settles instead of snapping to the stance", () => {
+  // vx in this game is bang-bang; the renderer eases speedX across ticks and
+  // the POSE must be continuous in that eased signal: sweep it to zero at a
+  // frozen walkTime (the sim clock stops with vx) and watch every foot move
+  // smoothly onto its stance mark.
+  const walkTime = 0.31; // mid-swing — the worst place to stop
+  let previous = null;
+  let worstStep = 0;
+  for (let v = 323; v >= 0; v -= 323 / 20) {
+    const pose = rigPose(rig, gaitSim(walkTime, Math.max(0, v)));
+    if (previous) {
+      for (const side of ["near", "far"]) {
+        worstStep = Math.max(worstStep,
+          Math.hypot(pose.feet[side].x - previous.feet[side].x,
+            pose.feet[side].y - previous.feet[side].y));
+      }
+    }
+    previous = pose;
+  }
+  assert.ok(worstStep < 12,
+    `feet must ease onto the stance, worst sweep step was ${worstStep.toFixed(1)} cells`);
+  // ...and the fully settled pose IS the idle pose, bit for bit.
+  const settled = rigPose(rig, gaitSim(0.31, 0));
+  const idle = rigPose(rig, idleSim(1.4));
+  assert.deepEqual(settled.bones, idle.bones,
+    "speedX 0 must reproduce the shipped idle exactly, whatever walkTime froze at");
+  assert.equal(settled.walking, false);
+});
+
+test("a reversal sweeps through a weight shift, not a pop", () => {
+  // Forward-to-back: the eased speedX crosses zero while walkTime keeps
+  // running (|vx| stays above the sim's walk-clock gate through a reversal).
+  let previous = null;
+  let worstStep = 0;
+  const steps = 24;
+  for (let i = 0; i <= steps; i += 1) {
+    const v = 246 - (i / steps) * (246 + 182); // +246 .. -182
+    const pose = rigPose(rig, gaitSim(0.8 + i / 60, v));
+    if (previous) {
+      for (const side of ["near", "far"]) {
+        worstStep = Math.max(worstStep,
+          Math.hypot(pose.feet[side].x - previous.feet[side].x,
+            pose.feet[side].y - previous.feet[side].y));
+      }
+    }
+    previous = pose;
+  }
+  assert.ok(worstStep < 14,
+    `feet must stay continuous through the reversal, worst step ${worstStep.toFixed(1)} cells`);
+});
+
+test("the planted foot stays planted walking BACKWARD too", () => {
+  // The 3.3 rig fed |vx| to the stride, so a retreating body dragged its
+  // planted foot backward at double speed — a moonwalk skate on every back
+  // walk. Signed speedX must cancel the body's motion in both directions.
+  for (const speed of [-182, -299]) {
+    const samples = 240;
+    let worstDrift = 0;
+    let previous = null;
+    for (let i = 0; i < samples; i += 1) {
+      const seconds = i / 60;
+      const pose = rigPose(rig, gaitSim(seconds, speed));
+      const bodyX = speed * seconds; // world px travelled (negative = retreat)
+      const worldFoot = bodyX + pose.feet.near.x * PX_PER_CELL;
+      if (pose.feet.near.planted && previous !== null) {
+        worstDrift = Math.max(worstDrift, Math.abs(worldFoot - previous));
+      }
+      previous = pose.feet.near.planted ? worldFoot : null;
+    }
+    assert.ok(worstDrift < 0.05,
+      `planted foot drifted ${worstDrift.toFixed(4)} world px/tick at speed ${speed}`);
+  }
+});
+
+test("full-speed walk keeps the authored 3.3 read and the legacy sim shape still poses", () => {
+  // At the full reference stride the amplitudes all resolve to exactly the
+  // 3.3 constants (g=1, w=1), so the verified fast-walk strips still hold.
+  const viaLegacy = rigPose(rig, walkSim(0.22));
+  const viaGait = rigPose(rig, gaitSim(0.22, 383));
+  assert.deepEqual(viaGait.bones, viaLegacy.bones,
+    "moving/speed fallback and speedX must agree at the reference speed");
+  assert.equal(viaGait.lift, 17);
+  assert.equal(viaGait.gait, 1);
+});
+
 test("idle breathes without drifting", () => {
   const hips = [];
   const feet = [];

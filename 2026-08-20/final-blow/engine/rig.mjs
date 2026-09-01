@@ -46,11 +46,54 @@ export const WALK_CYCLES_PER_SECOND = 5 / 3;
 // not read as a glide.
 export const STANCE_FRACTION = 0.58;
 
+// ---------------------------------------------------------------------------
+// v3.4 WALK DYNAMICS. Live-showcase QA showed the choreographer's real
+// locomotion is DUTY-CYCLED: the median forward burst is ~7 ticks with ~2-tick
+// stops between (footsies tapping), and held approaches run at 323 px/s, not
+// the 383 the amplitudes were tuned at. Three consequences, all measured:
+//
+//   1. `moving` was a binary |vx| gate, so every 2-tick stop SNAPPED the whole
+//      body to the settled idle stance and back — feet teleporting to the
+//      stance marks at ~8Hz is the "marionette" read.
+//   2. Swing lift, ankle pitch and the secondary motion were CONSTANTS. A
+//      7-tick burst advances the phase ~0.19 cycles and the ground ~28 cells,
+//      but the swing leg posed as if mid-way through a full 144-cell stride —
+//      knees hoisted to the 17-cell lift with the toe pointed, for a step
+//      covering a fifth of that. High-stepping prancing, exactly as reported.
+//   3. The stance constraint used |vx|, so a BACK walk moved the planted foot
+//      backward relative to a body already moving backward — a 2x-speed
+//      moonwalk skate on every retreat.
+//
+// The fix: the pose reads a SIGNED gait velocity (`sim.speedX`, + = advancing
+// along facing) for the stride — sign fixes the back-walk constraint — and an
+// amplitude speed (`sim.speedLift`, a slower-moving average the caller keeps)
+// for lift/ankle/secondary motion, so tap-tap approaches keep the feet low
+// while a genuinely held walk swings full. Posture (walk stance vs settled
+// idle) blends continuously on the same signals instead of a boolean, so a
+// stopping fighter SETTLES — foot lowering, arms coming back to guard — and a
+// reversal passes through a brief weight-shift rather than a pop. Everything
+// stays a pure function of the sim argument; the caller owns any smoothing.
+// ---------------------------------------------------------------------------
+
+// The stride the artwork was authored for (world px/s): the full-amplitude
+// reference. |speedLift| at or above this swings the legs exactly like 3.3.
+export const FULL_STRIDE_SPEED = 383;
+// Below this |speedX| the posture starts blending toward the settled idle
+// stance; at 0 it IS the settled stance, bit-for-bit.
+export const SETTLE_SPEED = 140;
+// Swing-leg lift at the full reference stride, in cell px (the 3.3 constant).
+export const FULL_STRIDE_LIFT = 17;
+
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
 
 const clamp = (value, low, high) => (value < low ? low : value > high ? high : value);
 const lerp = (a, b, t) => a + (b - a) * t;
+// Endpoint-exact mix: at t=0 and t=1 it returns the input UNCHANGED (IEEE
+// `a + (b - a)` is not always `b`), which is what keeps the settled idle
+// bit-identical to the shipped 3.2 idle and the full-speed walk bit-identical
+// to the verified 3.3 walk.
+const mix = (a, b, t) => (t <= 0 ? a : t >= 1 ? b : a + (b - a) * t);
 // Quintic smootherstep: zero first AND second derivative at both ends, so a
 // limb entering or leaving a key has no velocity step. Linear interpolation is
 // what makes cheap rigs look like clockwork.
@@ -214,9 +257,16 @@ export function solveTwoBone(hipX, hipY, targetX, targetY, upper, lower, bend) {
 //   walkTime,   seconds, the fighter's own walk clock (already in the rollback
 //               serialisation, so peers agree)
 //   animTime,   seconds, drives breathing
-//   moving,     boolean
-//   speed,      |vx| in WORLD px/sec — the stride is derived from it, so back
-//               walking automatically shortens the step instead of skating
+//   speedX,     SIGNED gait velocity in WORLD px/sec, + = advancing along the
+//               fighter's facing. Drives the stride: the sign is what keeps the
+//               planted foot planted on a BACK walk too. The caller may ease
+//               this across ticks; the pose is pure in whatever it is handed.
+//   speedLift,  optional, unsigned amplitude speed (defaults to |speedX|) —
+//               a slower-moving average of the same signal, so lift/ankle/
+//               secondary amplitudes track the walk actually being taken
+//               rather than one tick's bang-bang vx.
+//   moving,     legacy boolean  } fallback when speedX is absent:
+//   speed,      legacy |vx|     } speedX = moving ? speed : 0
 //   pxPerCell,  world px per source-cell px (renderSize / 320)
 //   fatigue,    0..1, deepens and quickens the breath
 // }
@@ -228,13 +278,30 @@ export function rigPose(rig, sim) {
   const ankleRow = ground.soleRow - ground.ankleHeight;
   const joints = rig.joints;
 
-  const walking = Boolean(sim.moving);
+  const speedX = Number.isFinite(sim.speedX)
+    ? sim.speedX
+    : (sim.moving ? Math.abs(sim.speed || 0) : 0);
+  const speedLift = Number.isFinite(sim.speedLift) ? Math.abs(sim.speedLift) : Math.abs(speedX);
+  // w — posture: 0 = the settled idle stance (bit-identical to 3.2), 1 = the
+  // full walk posture. Continuous, so stops SETTLE and starts pick up.
+  const w = smoother(clamp(Math.abs(speedX) / SETTLE_SPEED, 0, 1));
+  // g — amplitude: how much of the full authored swing this walk earns. From
+  // the slow average, so a tapped approach keeps the knees low.
+  const g = clamp(speedLift / FULL_STRIDE_SPEED, 0, 1);
+  // Secondary motion (sway, torso counter, arm swing, head bob) fades less
+  // than the legs — a small walk is still a walk, not a glide.
+  const sec = 0.35 + 0.65 * g;
+  // Lift and ankle articulation fade harder: a near-zero step keeps the feet
+  // barely off the ground.
+  const legAmp = Math.pow(g, 0.8);
+
+  const walking = w > 0;
   const phase = wrap01((sim.walkTime || 0) * WALK_CYCLES_PER_SECOND);
-  // stride in CELL pixels: whatever the body actually travels in one cycle
-  const strideCells = walking
-    ? clamp(Math.abs(sim.speed || 0) / WALK_CYCLES_PER_SECOND / pxPerCell, 0, 260)
-    : 0;
-  const lift = 17;
+  // stride in CELL pixels: whatever the body actually travels in one cycle,
+  // SIGNED — negative on a retreat, which reverses the step so the stance
+  // constraint cancels a backward body instead of doubling it.
+  const strideCells = clamp(speedX / WALK_CYCLES_PER_SECOND / pxPerCell, -260, 260);
+  const lift = FULL_STRIDE_LIFT * legAmp;
 
   const breathRate = 5.2 + (sim.fatigue || 0) * 5.6;
   const breath = Math.sin((sim.animTime || 0) * breathRate);
@@ -246,19 +313,27 @@ export function rigPose(rig, sim) {
   const setLocal = (name, value) => local.set(name, value);
 
   // ---- feet ------------------------------------------------------------
+  // Walk targets and the settled stance are BOTH computed and blended on w,
+  // so a stopping fighter's swing foot comes DOWN and slides to its stance
+  // mark over the settle instead of teleporting there the tick vx dies.
   const legPhase = { near: phase, far: wrap01(phase + 0.5) };
   const feet = {};
   for (const side of ["near", "far"]) {
     const leg = rig.legs[side];
     const hip = joints[leg.hip];
-    if (walking) {
+    // Settled stance: feet pinned, so the weight shift below has to be
+    // absorbed by the hips and knees exactly like a real one.
+    const stand = side === "near" ? 30 : -27;
+    const standX = joints.pelvis[0] + stand;
+    if (w > 0) {
       const target = footTarget(legPhase[side], strideCells, lift);
-      feet[side] = { x: hip[0] + target.x, y: ankleRow - target.y, planted: target.planted };
+      feet[side] = {
+        x: mix(standX, hip[0] + target.x, w),
+        y: mix(ankleRow, ankleRow - target.y, w),
+        planted: w < 0.5 ? true : target.planted,
+      };
     } else {
-      // Settled stance: feet pinned, so the weight shift below has to be
-      // absorbed by the hips and knees exactly like a real one.
-      const stand = side === "near" ? 30 : -27;
-      feet[side] = { x: joints.pelvis[0] + stand, y: ankleRow, planted: true };
+      feet[side] = { x: standX, y: ankleRow, planted: true };
     }
   }
 
@@ -269,8 +344,8 @@ export function rigPose(rig, sim) {
   // speed can ever hyper-extend a knee.
   // Standing, the hips ride the breath: the chest fills, the weight settles.
   // Without this the idle is a statue with a moving shirt.
-  let hipRow = ground.restHipRow - (walking ? 6.5 : 3.0)
-    - (walking ? 0 : breath * 0.9 * breathDepth);
+  let hipRow = ground.restHipRow - mix(3.0, 6.5, w)
+    - mix(breath * 0.9 * breathDepth, 0, w);
   for (const side of ["near", "far"]) {
     const leg = rig.legs[side];
     const reach = (rig.byName.get(leg.thigh).length + rig.byName.get(leg.shin).length) * 0.985;
@@ -278,42 +353,43 @@ export function rigPose(rig, sim) {
     const span = Math.sqrt(Math.max(1, reach * reach - dx * dx));
     hipRow = Math.max(hipRow, feet[side].y - span);
   }
-  hipRow += walking ? 2.2 : 3.4;   // knee clearance: never solve dead straight
+  hipRow += mix(3.4, 2.2, w);   // knee clearance: never solve dead straight
 
-  const sway = walking
-    ? Math.sin(phase * TAU) * 1.1
-    : Math.sin((sim.animTime || 0) * 1.19 + 0.7) * 1.7;
+  const sway = mix(
+    Math.sin((sim.animTime || 0) * 1.19 + 0.7) * 1.7,
+    Math.sin(phase * TAU) * 1.1 * sec,
+    w,
+  );
   offset.set("pelvis", [sway, hipRow - ground.restHipRow]);
 
   // Hip twist reads in 2D as a tilt of the pelvis, and it is derived from the
-  // feet rather than authored so it can never disagree with them.
+  // feet rather than authored so it can never disagree with them. The feet
+  // themselves carry the stride scaling, so no extra amplitude factor here.
   const sep = feet.near.x - feet.far.x;
-  const twist = walking ? clamp(sep / 90, -1, 1) * 4.2 * DEG : 0;
+  const twist = w * clamp(sep / 90, -1, 1) * 4.2 * DEG;
   setLocal("pelvis", twist);
 
   // ---- torso / head ----------------------------------------------------
   const torsoPhase = wrap01(phase - LAG.torso);
-  const torsoCounter = walking
-    ? -Math.sin(torsoPhase * TAU) * 3.1 * DEG
-    : 0;
-  const torsoBreath = walking ? 0 : breath * 0.9 * DEG * breathDepth;
-  const walkLean = walking ? 2.4 * DEG : 0;
+  const torsoCounter = -Math.sin(torsoPhase * TAU) * 3.1 * DEG * sec * w;
+  const torsoBreath = mix(breath * 0.9 * DEG * breathDepth, 0, w);
+  const walkLean = 2.4 * DEG * w;
   setLocal("torso", torsoCounter - twist * 0.55 + torsoBreath + walkLean);
   // chest rise. Piece-only scale, so the collar swells without dragging the
   // head with it; the head gets a matching lift below instead.
-  const chest = walking ? 0 : breath * 0.011 * breathDepth;
+  const chest = mix(breath * 0.011 * breathDepth, 0, w);
   scale.set("torso", [1 - chest * 0.45, 1 + chest]);
-  offset.set("torso", [0, walking ? Math.sin(phase * 2 * TAU) * 0.5 : 0]);
+  offset.set("torso", [0, Math.sin(phase * 2 * TAU) * 0.5 * sec * w]);
 
   // The head counter-rotates to stay level. Without this the whole figure
   // reads as a rocking doll: the eyeline is what a viewer tracks.
   const headPhase = wrap01(phase - LAG.head);
   const torsoAbsRough = torsoCounter - twist * 0.55 + twist;
   const headLevel = -torsoAbsRough * 0.85;
-  const headIdle = walking ? 0 : Math.sin((sim.animTime || 0) * 1.94 + 1.3) * 0.85 * DEG;
+  const headIdle = mix(Math.sin((sim.animTime || 0) * 1.94 + 1.3) * 0.85 * DEG, 0, w);
   setLocal("head", headLevel + headIdle
-    + (walking ? Math.sin(headPhase * TAU) * 0.9 * DEG : 0));
-  offset.set("head", [0, walking ? 0 : -chest * 92]);
+    + Math.sin(headPhase * TAU) * 0.9 * DEG * sec * w);
+  offset.set("head", [0, -chest * 92]);
 
   // ---- arms ------------------------------------------------------------
   // The counter-swing: the arm on a side reads the LEG cycle half a period
@@ -321,25 +397,24 @@ export function rigPose(rig, sim) {
   for (const side of ["near", "far"]) {
     const upper = side === "near" ? "upperArmNear" : "upperArmFar";
     const fore = side === "near" ? "foreArmNear" : "foreArmFar";
-    if (walking) {
-      const armPhase = wrap01(legPhase[side] + 0.5);
-      const swing = sampleChannel(ARM_SWING_KEYS, armPhase);
-      const elbow = sampleChannel(ARM_ELBOW_KEYS, armPhase - LAG.foreArm);
-      // + swing is forward; screen-space forward rotation of a downward bone is
-      // NEGATIVE (canvas rotate is clockwise with y down)
-      setLocal(upper, -swing * DEG);
-      setLocal(fore, elbowLocal(rig, side, elbow));
-    } else {
-      // A light guard: forearms up, which is the shipped idle's read. Cheap
-      // secondary motion — the forearm lags the shoulder by a fifth of a beat.
-      const guardShoulder = side === "near" ? -32 : -25;
-      const guardElbow = side === "near" ? 70 : 57;
-      const shoulderSway = breath * 1.5 * breathDepth;
-      const elbowSway = Math.sin((sim.animTime || 0) * breathRate - 0.9) * 2.4 * breathDepth;
-      setLocal(upper, -(guardShoulder + shoulderSway) * DEG);
-      setLocal(fore, elbowLocal(rig, side, guardElbow + elbowSway));
-      offset.set(upper, [0, -chest * 22]);
-    }
+    // The walk swing and the light guard are both computed and blended on w,
+    // so the arms come back UP into guard over the settle — the old boolean
+    // snapped them, which read as a puppet losing its strings. The swing
+    // amplitude rides `sec`: a small approach barely pumps the arms.
+    const armPhase = wrap01(legPhase[side] + 0.5);
+    const swing = sampleChannel(ARM_SWING_KEYS, armPhase) * sec;
+    const elbowWalk = sampleChannel(ARM_ELBOW_KEYS, armPhase - LAG.foreArm);
+    // A light guard: forearms up, which is the shipped idle's read. Cheap
+    // secondary motion — the forearm lags the shoulder by a fifth of a beat.
+    const guardShoulder = side === "near" ? -32 : -25;
+    const guardElbow = side === "near" ? 70 : 57;
+    const shoulderSway = breath * 1.5 * breathDepth;
+    const elbowSway = Math.sin((sim.animTime || 0) * breathRate - 0.9) * 2.4 * breathDepth;
+    // + swing is forward; screen-space forward rotation of a downward bone is
+    // NEGATIVE (canvas rotate is clockwise with y down)
+    setLocal(upper, mix(-(guardShoulder + shoulderSway) * DEG, -swing * DEG, w));
+    setLocal(fore, elbowLocal(rig, side, mix(guardElbow + elbowSway, elbowWalk, w)));
+    offset.set(upper, [0, -chest * 22]);
   }
 
   // ---- legs: IK --------------------------------------------------------
@@ -365,9 +440,14 @@ export function rigPose(rig, sim) {
     const shinAccum = ik.lowerDir - shin.restAngle;
     setLocal(leg.thigh, thighAccum - pelvisNode.angle);
     setLocal(leg.shin, shinAccum - thighAccum);
-    const pitch = walking
-      ? sampleChannel(ANKLE_KEYS, legPhase[side])
-      : (side === "near" ? -4 : -2);
+    // Ankle articulation scales with the step actually being taken: the full
+    // heel-strike/toe-off curve at a full stride, a near-flat sole when the
+    // steps are tiny — the pointed, dangling toe was half the prance read.
+    const pitch = mix(
+      side === "near" ? -4 : -2,
+      sampleChannel(ANKLE_KEYS, legPhase[side]) * legAmp,
+      w,
+    );
     setLocal(leg.foot, (pitch + FOOT_FLAT_TRIM) * DEG - shinAccum);
   }
 
@@ -472,6 +552,11 @@ export function rigPose(rig, sim) {
     frontSide: feet.near.x >= feet.far.x ? "near" : "far",
     bones: draw,
     nodes,
+    // v3.4 gait-dynamics telemetry: the signed velocity the stride was posed
+    // from, the 0..1 amplitude the swing earned, and the swing lift in cells.
+    speedX,
+    gait: g,
+    lift,
   };
 }
 

@@ -1361,9 +1361,16 @@ function rigDrawSide(fighter) {
   // Walk and idle only. Anything else — attacks, reactions, crouch, jumps,
   // fatalities, cinematics — stays on the shipped sprite bank, so the rig can
   // never swallow a beat it has no pose for.
+  //
+  // v3.4: DASHES bail too. They were slipping through (grounded, not
+  // attacking) and the rig walked them: a 622 px/s "walk" poses a clamped
+  // 260-cell stride at walk cadence — giant leaping strides for a move the
+  // sprite side draws as a lunge cell. Live-showcase QA measured ~90 rig
+  // dash ticks in 3 minutes, a real share of the "broken legs" report.
   if (fighter.cinematicFrame !== null || !fighter.grounded || fighter.crouch
     || fighter.attacking || fighter.stun || fighter.down || fighter.block
-    || fighter.dizzyFrames > 0 || fighter.hitstunFrames > 0) return null;
+    || fighter.dizzyFrames > 0 || fighter.hitstunFrames > 0
+    || fighter.dashFrames > 0) return null;
   if (!rigState.rig) { rigLoad(); return null; }
   return rigState.rig;
 }
@@ -1424,17 +1431,76 @@ function rigCellScratch(side) {
  * the same frame shares one rasterisation. Pure render-side cache of a pure
  * function: rollback and both peers still agree on every pose.
  */
+// ---------------------------------------------------------------------------
+// v3.4 GAIT EASE — render-side, per side, on the superDimLevel pattern (module
+// state the sim never reads, never snapshots and rollback never touches).
+//
+// WHY. Locomotion vx in this game is BANG-BANG: held direction sets full walk
+// speed on one tick, release zeroes it on the next, and live-showcase QA
+// measured the choreographer's real approaches as ~7-tick bursts with 2-tick
+// stops. Feeding raw vx to the rig made every stop SNAP the body between the
+// walk pose and the settled stance at ~8Hz — the reported marionette read. A
+// pose that eases across ticks needs one tick of memory, and that memory
+// cannot live in the sim (the rig is a render path; the sim must stay
+// bit-identical with the rig off). So it lives here, advanced by SIM-TICK
+// deltas — pause and 0.25x advance zero ticks, so a paused frame is stable —
+// and it snaps to the target whenever it lands within half a px/s, so a held
+// walk and a settled idle are exactly the steady-state poses, not
+// asymptotically near them.
+//
+//   speedX     signed gait velocity (vx * facing: + = advancing), fast ease —
+//              drives the stride, so the planted-foot constraint stays honest
+//              in both directions and a reversal sweeps through a weight
+//              shift instead of popping.
+//   speedLift  unsigned SLOW average — drives swing lift/ankle/secondary
+//              amplitudes, so tap-tap footsies keep the feet low while a
+//              genuinely held walk earns the full authored swing.
+// ---------------------------------------------------------------------------
+const RIG_GAIT_RISE = 0.30;  // per-tick pull toward a faster gait (~3 ticks to 63%)
+const RIG_GAIT_FALL = 0.14;  // per-tick settle toward a slower one (~7 ticks to 63%)
+const RIG_GAIT_SLOW = 0.09;  // the amplitude average (~11 ticks to 63%)
+const rigGaitEases = [null, null];
+
+function rigGaitEase(fighter) {
+  let gait = rigGaitEases[fighter.side];
+  if (!gait) {
+    gait = { tick: -1, speedX: 0, speedLift: 0 };
+    rigGaitEases[fighter.side] = gait;
+  }
+  const tick = state.simulationTick;
+  const target = fighter.vx * fighter.facing; // draw-space: + = advancing
+  const delta = tick - gait.tick;
+  if (delta < 0 || delta > 30) {
+    // A fresh round, or the rig has been away on a sprite beat (attack,
+    // reaction, dash) long enough that easing from the stale value would
+    // invent motion nobody saw: snap.
+    gait.speedX = target;
+    gait.speedLift = Math.abs(target);
+  } else {
+    for (let i = 0; i < delta; i += 1) {
+      const k = Math.abs(target) > Math.abs(gait.speedX) ? RIG_GAIT_RISE : RIG_GAIT_FALL;
+      gait.speedX += (target - gait.speedX) * k;
+      gait.speedLift += (Math.abs(target) - gait.speedLift) * RIG_GAIT_SLOW;
+    }
+    if (Math.abs(gait.speedX - target) < 0.5) gait.speedX = target;
+    if (Math.abs(gait.speedLift - Math.abs(target)) < 0.5) gait.speedLift = Math.abs(target);
+  }
+  gait.tick = tick;
+  return gait;
+}
+
 function rigFrameCell(fighter, rig, renderSize) {
   const scratch = rigCellScratch(fighter.side);
+  const gait = rigGaitEase(fighter);
   const sim = {
     walkTime: fighter.walkTime,
     animTime: fighter.animTime,
-    moving: Math.abs(fighter.vx) > 22,
-    speed: Math.abs(fighter.vx),
+    speedX: gait.speedX,
+    speedLift: gait.speedLift,
     pxPerCell: renderSize / rig.source.cellSize,
     fatigue: clamp(1 - fighter.health / 100, 0, 1),
   };
-  const key = `${sim.walkTime}|${sim.animTime}|${sim.moving}|${sim.speed}|${sim.pxPerCell}|${sim.fatigue}`;
+  const key = `${sim.walkTime}|${sim.animTime}|${sim.speedX}|${sim.speedLift}|${sim.pxPerCell}|${sim.fatigue}`;
   if (key !== scratch.key) {
     scratch.key = key;
     scratch.tintKey = "";
@@ -1470,10 +1536,21 @@ function drawRigFighter(fighter, rig, renderSize) {
       hipRow: Number(pose.hipRow.toFixed(2)),
       nearFootX: Number(pose.feet.near.x.toFixed(2)),
       farFootX: Number(pose.feet.far.x.toFixed(2)),
+      nearFootY: Number(pose.feet.near.y.toFixed(2)),
+      farFootY: Number(pose.feet.far.y.toFixed(2)),
       nearPlanted: pose.feet.near.planted,
       farPlanted: pose.feet.far.planted,
       // v3.3: which leg wears the leading artwork this frame
       frontSide: pose.frontSide,
+      // v3.4 walk-dynamics telemetry: the tick this pose latched on, the sim
+      // inputs it was posed from, and the gait dynamics the pose resolved —
+      // per-tick truth for the walk QA harness. Instrumentation only.
+      tick: state.simulationTick,
+      vx: Number(fighter.vx.toFixed(2)),
+      walkTime: Number(fighter.walkTime.toFixed(4)),
+      speedX: Number((pose.speedX ?? 0).toFixed(2)),
+      gait: Number((pose.gait ?? (pose.walking ? 1 : 0)).toFixed(3)),
+      lift: Number((pose.lift ?? 0).toFixed(2)),
     };
   }
 }
@@ -29615,6 +29692,43 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         // v3.2: which side's BODY actually came out of which renderer.
         sideDraws: [...rigState.sideDraws],
         spriteSideDraws: [...presentationDebug.spriteBodyDraws],
+      };
+    },
+    // v3.4 — PER-TICK WALK TRUTH. The v3.3 live QA round had no way to read a
+    // fighter's vx/walkTime from the page (game.js is a module; `state` is not
+    // a global), so inline probes for those fields evaluated to undefined and
+    // CDP's returnByValue dropped them — every probe came back `{}`. This is
+    // the missing read: sim-side locomotion fields per fighter, whether each
+    // fighter is rig-ELIGIBLE this tick, and the cumulative draw ledgers whose
+    // per-frame deltas attribute a rendered frame to rig or sprite. Read-only
+    // instrumentation — nothing here writes sim state or perturbs a replay.
+    rigWalk() {
+      return {
+        tick: state.simulationTick,
+        phase: state.phase,
+        screen: state.screen,
+        rigMode: rigState.mode,
+        rigSideDraws: [...rigState.sideDraws],
+        spriteSideDraws: [...presentationDebug.spriteBodyDraws],
+        fighters: state.fighters.map((fighter) => ({
+          side: fighter.side,
+          id: fighter.def.id,
+          x: Number(fighter.x.toFixed(2)),
+          vx: Number(fighter.vx.toFixed(2)),
+          facing: fighter.facing,
+          walkTime: Number(fighter.walkTime.toFixed(4)),
+          animTime: Number(fighter.animTime.toFixed(4)),
+          grounded: fighter.grounded,
+          crouch: Boolean(fighter.crouch),
+          attacking: Boolean(fighter.attacking),
+          stun: fighter.stun > 0,
+          down: Boolean(fighter.down),
+          block: Boolean(fighter.block),
+          hitstunFrames: fighter.hitstunFrames,
+          dizzyFrames: fighter.dizzyFrames,
+          rigEligible: Boolean(rigDrawSide(fighter)),
+        })),
+        pose: presentationDebug.lastRigPose.map((entry) => (entry ? { ...entry } : null)),
       };
     },
     // --- v3.2 SHOWCASE ----------------------------------------------------
