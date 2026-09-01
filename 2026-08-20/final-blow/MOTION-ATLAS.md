@@ -1539,19 +1539,23 @@ either true for every one of the sixteen cells or false for all of them, so no
 tick can exist in which a fighter draws his idle from this bank and his walk
 from another. That is the caveat above, enforced in one function.
 
-**Eight fighters are on the bank: `jez`, `alan`, `post`, `benny`, `donald`,
-`ali`, `commissioner`, `devil`.**
+> **SUPERSEDED IN PART — see "Critic round (3.0) — CONNECTED REGIONS" at the
+> end of this file.** Two things below are now stale: `deathblow` was re-cut to
+> 16/16 and is on the bank (NINE fighters, not eight), and the routing list in
+> "The sixteen beats, and where they are routed" was cut back by measurement —
+> four of the sixteen are drawn, measured, accepted and deliberately NOT
+> routed. The all-or-nothing rule itself is unchanged.
 
-**Two are not, and stay byte-identical to 2.9: `cyraxx` (0/16, failed U1 three
-times) and — read the manifest, not the summary — the `deathblow` PILOT sheet,
-which is 12/16.** His four walk keys are `accept: false` after all four
-generations failed the phase gate, and the rule is not "12 of 16 is most of
-it". A deathblow whose idle, guard and reactions came from the unified sheet
-and whose WALK came from his base atlas is precisely the 11.4-11.9 dE
-glasses-to-sunglasses strobe this programme exists to delete, aimed at the one
-transition the 2.9 round named. He keeps his existing banks whole. When a
-16/16 sheet lands for either of them, dropping it in is the entire integration:
-no code changes.
+**Nine fighters are on the bank: `deathblow`, `jez`, `alan`, `post`, `benny`,
+`donald`, `ali`, `commissioner`, `devil`.**
+
+**One is not, and stays byte-identical to 2.9: `cyraxx` (0/16, failed U1 three
+times).** The rule is not "12 of 16 is most of it" — a fighter whose idle,
+guard and reactions came from the unified sheet and whose WALK came from his
+base atlas is precisely the 11.4-11.9 dE glasses-to-sunglasses strobe this
+programme exists to delete, aimed at the one transition the 2.9 round named.
+`cyraxx` keeps his existing banks whole. When a 16/16 sheet lands for him,
+dropping it in is the entire integration: no code changes.
 
 Measured in the browser, ten fighters x nine scenes (idle, walk, light, heavy
 punch, heavy kick, special, jump, crouch, guard), 490 ticks each:
@@ -1704,3 +1708,241 @@ Named bluntly, because none of it is fixable without more art:
    screen once, before FIGHT!.
 5. **Inside the sixteen: nothing.** Asserted per fighter, per beat, on both the
    ordinary and the bare-handed resolution path.
+
+---
+
+## Critic round (3.0) — CONNECTED REGIONS, the idle/walk height, and the reaction rewind
+
+Two critics scored the first 3.0 cut 6/FIX (costume) and 5/FIX (regressions).
+The headline promise was kept and proven — deathblow's idle->walk costume seam
+measures **0.97-3.36 dE** against a same-generation floor of **3.15** and a
+known-bad strobe of **7.29-7.45** — but the wave had one design flaw and one
+blocker, and both were fixable by ROUTING, not by art. Nothing in
+`assets/unified/` changed in this round except the deletion of one dead file.
+
+### The metric, and the calibration everything below is quoted on
+
+The critics' **weighted-Lab cluster metric**, reproduced verbatim (adaptive
+k-means, k=6, fixed seed, over the Lab colours of a cell's opaque pixels
+(alpha > 200), scored as the mean of the two weighted nearest-cluster
+distances). Deathblow's calibration:
+
+| reference | dE |
+| --- | --- |
+| same-generation floor (his base idle vs his base walk cell 4) | **3.15** |
+| his unified idle vs his four unified walk keys | 1.97 / 3.36 / 1.69 / 0.97 |
+| known-bad strobe (his base idle vs the rejected 2.9 cross-gen walk) | **7.29 - 7.45** |
+
+### RULE 2 — the bank owns CONNECTED REGIONS, not every beat it can draw
+
+The first cut was given ISOLATED BEATS. The measurement that settles it:
+**`motion` and `motion2` are costume-compatible with each other** —
+deathblow's `motion:0` against `motion2:6` is **2.62 dE**, they share the same
+white-side-stripe sneaker. The motion family is ONE generation. So dropping a
+unified cell into the middle of a motion chain does not remove a seam, it CUTS
+a chain that was already consistent. The visible tell was the shoe: unified
+draws a black low-top with a cream midsole and a red heel tab and no side
+stripe, motion/motion2 draw a bold white midsole with a white jazz side stripe,
+`base:11` a cream sole with a red heel patch — three designs alternating five
+times inside one heavy punch.
+
+**THE RULE, now enforced by test (U-F): the unified bank owns a beat only if it
+can own that beat's WHOLE CONNECTED NEIGHBOURHOOD.** Where a beat sits inside a
+chain the motion banks already own consistently, it stays there. This does not
+weaken the all-or-nothing contract — that contract is per FIGHTER (a fighter is
+wholly on the bank or wholly off it, so nobody gets a unified idle with a base
+walk). Which BEATS the bank owns is a uniform design decision applied to every
+fighter identically.
+
+### The ownership decision, and the boundary table that made it
+
+Every candidate assignment was scored on all nine unified fighters. Generation
+crossings are counted over the whole move including its entry from and return
+to the (unified) stance; "worst" is the largest dE of any crossing, quoted on
+deathblow.
+
+| route | 2.9 | first 3.0 cut | **shipping** |
+| --- | --- | --- | --- |
+| heavy punch | 2 crossings, 7.01 | **5 crossings, 9.51** | **2 crossings, 7.01** |
+| heavy kick | 2, 7.01 | **5, 6.14** | **2, 7.01** |
+| jump arc | 2, 6.35 | 2, **7.56** | **2, 5.55** |
+| crouch in / out | 4, 8.61 | **0** | **0** |
+| idle -> walk -> idle | 0 | **0** | **0** |
+| light reaction | 4, 6.60 | 2, 7.98 | **0** |
+| heavy reaction | 2, 5.98 | 2, 6.34 | **0** |
+| air normal | 0 | 1, 6.17 | **0** |
+| air-tech flip | 0 | 1, 7.56 | **0** |
+| throw clinch | 1, 8.65 | 3, 5.25 | **1, 4.80** |
+| blockstun | 2, 7.34 | 2, 5.72 | **2, 5.72** |
+
+**The bank owns two connected regions and nothing else.**
+
+* **GROUNDED NEUTRAL** — `0` idle, `1-4` the walk keys, `5` crouch, `6`
+  crouch-transition (enter, leave and the landing gather), `7` guard. Every
+  neighbour of every one of them is another one of them.
+* **REACTIONS** — `12` light-hit, `13` big-hit, `14` stagger, `15` knockdown,
+  and now the WHOLE ladder rather than three of its bands.
+
+**Four cells are RETIRED FROM ROUTING** — `8` jump-rise, `9` jump-tuck, `10`
+punch-extension, `11` kick-extension:
+
+* **The extensions** sit between the motion smear and the motion follow-through.
+  Routed, deathblow's heavy punch ran `motion2:0 -> motion2:6 -> unified:6 ->
+  motion:2 -> unified:10 -> motion:4 -> base:11` — five crossings, and the
+  follow-through boundary went **3.87 -> 6.95 dE**, into the strobe band. Two
+  of the five had no smear, flash or impact over them at all (`motion2:6 ->
+  unified:6` at 5.26, `motion:4 -> base:11` at 7.01). Off the route the swing is
+  the 2.9 read exactly, one generation from the cock to the follow-through.
+* **The jump cells** were the worst seam in the build: `unified:9 -> motion:11`
+  at **7.56 dE, HELD 15+ ticks fully airborne, centre-frame, with no VFX cover**.
+  The arc's descent, air-recovery and landing all come from motion, so the
+  first two rungs were the odd ones out. Retired, the arc's worst crossing is
+  **5.55 dE** — better than the first cut (7.56) AND better than 2.9 (6.35) —
+  and both surviving crossings are single ticks at the moment the fighter
+  leaves and rejoins the street, under takeoff/landing dust.
+
+The same rule retired `unified:6` from two motion-chain uses it had been given
+(the heavy-windup COMPRESS band and the throw-clinch LOAD band) while keeping
+it in the crouch and landing neighbourhoods where it belongs. **The art stays
+on the sheet**, inside the 16/16 accept gate, measured by the same U1
+benchmark: a future wave that can own a whole airborne or attack chain has the
+drawings waiting. `UNIFIED_ROUTED_CELLS` and `UNIFIED_RETIRED_CELLS` in
+`engine/fighter-kits.mjs` are that decision as data, and the contract test
+walks both lists.
+
+### B1 — THE IDLE<->WALK HEIGHT POP (blocker)
+
+`cellDrawAdjust` returned 1 for every unified cell "by design", on the
+reasoning that one sheet generated in one pass at one global scale needs no
+per-cell correction. The scale is global; the DRAWING is not. Every sheet
+paints the idle as a settled wide fighting stance with the knees bent and the
+walk keys as an upright figure mid-stride, so **inside one self-consistent
+sheet the two beats differ in content height by 3.9-12.9%** — a size change in
+a single tick, on the exact transition this whole bank exists to perfect. The
+costume was finally stable across it and the fighter changed SIZE instead.
+
+Measured at 1:1 (opaque pixels, alpha >= 24, floor row 315):
+
+| fighter | unified idle | unified walk 1-4 | pop | correction applied |
+| --- | --- | --- | --- | --- |
+| deathblow | 272 | 298 / 306 / 300 / 305 | +9.6 .. +12.5% | 0.913 / 0.889 / 0.907 / 0.892 |
+| jez | 271 | 306 / 306 / 300 / 300 | +10.7 .. +12.9% | 0.886 / 0.886 / 0.903 / 0.903 |
+| alan | 274 | 306 / 306 / 303 / 305 | +10.6 .. +11.7% | 0.895 / 0.895 / 0.904 / 0.898 |
+| post | 279 | 295 / 294 / 294 / 290 | +3.9 .. +5.7% | 0.946 / 0.949 / 0.949 / 0.962 |
+| donald | 261 | 286 / 289 / 289 / 285 | +9.2 .. +10.7% | 0.913 / 0.903 / 0.903 / 0.916 |
+| devil | 283 | 303 / 303 / 306 / 303 | +7.1 .. +8.1% | 0.934 / 0.934 / 0.925 / 0.934 |
+| ali | 271 | 303 / 306 / 303 / 301 | +11.1 .. +12.9% | 0.894 / 0.886 / 0.894 / 0.900 |
+| benny | 279 | 306 / 306 / 305 / 303 | +8.6 .. +9.7% | 0.912 / 0.912 / 0.915 / 0.921 |
+| commissioner | 278 | 303 / 306 / 302 / 306 | +8.6 .. +10.1% | 0.917 / 0.908 / 0.921 / 0.908 |
+
+All nine land within **0.05%** of their own idle.
+
+**The IDLE is the anchor**, for three independent reasons: it is the sheet's U1
+reference cell, it is what `WAKEUP_RISE_HEIGHT.standUnified` was measured on,
+and it is what the 2.9 precedent does (`BASE_WALK_ADJUST` lands each walk cell
+on the fighter's own idle height). Only cells that depict an UPRIGHT STANDING
+figure were candidates, and of those only the walk keys needed anything: guard
+measures -2.3..+3.0% of the idle and light-hit +0.0..+4.8%, both inside the 5%
+deadband the T4 table uses. **crouch, crouch-transition, jump-tuck, stagger,
+big-hit and knockdown are legitimately shorter drawings and are deliberately
+untouched** — normalising those would flatten the poses, not the pop.
+
+Unlike T4 the correction goes on ALL FOUR keys whenever ANY is outside the
+deadband (post's cycle spans 3.9-5.7%): correcting only the out-of-band keys
+would flatten the idle->walk step and leave a smaller pop INSIDE the cycle.
+
+**Verified with a 1-tick A/B burst** (deathblow, cruise-deck stage for
+contrast, cap-top tracked by his olive-cap colour signature, 46 ticks of
+idle -> walk -> idle):
+
+| | idle cap-top | walk-key cap-tops | worst single-tick move |
+| --- | --- | --- | --- |
+| before | 325-331 | 285-301 | **41 px** (t7 `unified:0` 328 -> t8 `unified:2` 287) |
+| after | 325-334 | 327-335 | **4 px** — inside the idle bob's own range |
+
+### M1 — THE LIGHT REACTION WAS A-B-A ON ALL NINE
+
+It played the unified stagger, moved to the rubber-legs key, then RETURNED to
+the same stagger drawing for 6-8 ticks:
+
+`unified:12 -> unified:14 -> motion2:10 -> unified:14 -> unified:7`
+
+Returning to a drawing the animation has already left is the exact rewind hitch
+the 2.9 throw-recovery fix (R7) was written to eliminate, and the two `motion2`
+boundaries measured 9.85 dE each on jez with nothing over them. The cause was
+structural: the track's unified links and the CALLER's snap/fold/settle band
+ladder in `game.js` were a band out of step.
+
+The ladder is now ONE table, `unifiedReactionLadder`, read by both the track
+and the caller, and it is explicit, monotonic and entirely inside one
+generation:
+
+```
+light   12 light-hit -> 14 stagger -> 6 crouch-trans -> 7 guard -> 0 idle
+heavy   13 big-hit  -> 12 light-hit -> 14 stagger    -> 7 guard -> 0 idle
+```
+
+Read at 1:1 that is a rising recovery: struck, folded over with the knees
+buckled, half-risen with the guard reforming, braced, back to the stance.
+`crouch-trans` earns its place in the light track — it is not a duck, it is a
+compressed fighting stance with the fists already up, the missing in-between
+between a folded stagger and a standing brace, and the same kind of re-use
+`motion2:4` already gets as the heavy-windup coil and the landing gather. Both
+tracks end on the guard, whose drawn height is within 3% of the idle on all
+nine sheets, so the last transition of every reaction is height-flat. The 2.9
+M5 contract survives: the openings differ (13 vs 12) and so do the middles
+(12 vs 14). Non-unified fighters read byte-for-byte what 2.9 read — every 2.9
+chain is preserved in order and the unified rung is stacked in FRONT of it,
+where `defaultBeatKeyResolve` skips it exactly as it skips a motion3 slot.
+
+### m1 — the Commissioner's settle band
+
+2.9 DROPPED its third tail band for any fighter whose base sheet cannot supply
+three distinct non-attack drawings (`reactionFallbackCells` returns
+`settle: null` when `stagger` is null or equal to `hit`) — that is eight of the
+nine, the Commissioner among them (guard 12 === hit 12, stagger null). The
+first cut handed the band back unconditionally, and because a measured reaction
+runs ~30 ticks against a 44-tick band grid, band 4 is only ever 2-3 ticks: he
+got a **two-tick flash** of the unified brace before the idle. A 2-tick band is
+a blip, not a beat.
+
+Both ladders now hand to the breathing idle **from band 4** on every fighter.
+Confirmed against a 2.9 capture: his 2.9 light reaction runs
+`motion2:9 x7 -> base:12 x7 -> motion2:10 x7 -> base:12 x8 -> idle` and reaches
+the idle cycle at tick 29; the shipping unified read runs
+`unified:12 x7 -> 14 x7 -> 6 x7 -> 7 x8 -> unified:0` and reaches it at tick 29.
+Same handoff tick, no flash, and no per-fighter branch — where the ladder ends
+is a uniform decision, like which beats the bank owns. (2.9's own commissioner
+reaction was itself A-B-A: `base:12 -> motion2:10 -> base:12`. That is gone too.)
+
+### m3 — the dead sheet
+
+`assets/unified/cyraxx.webp` shipped at 293KB while `accept: false` on all
+sixteen. Not one pixel of it could ever reach the screen:
+`buildUnifiedAcceptMasks` collapses a non-16/16 sheet to an all-false mask and
+`unifiedCellDrawable` consults the manifest BEFORE it requests an `Image`. The
+file is removed. His manifest entry, his U1 measurements and his rejection
+reason are kept in full, and `format.cyraxxNote` records WHY he has no sheet so
+a future wave regenerates against the recorded thresholds rather than assuming
+one is missing.
+
+### What still crosses a generation, named bluntly
+
+| where | boundary | dE | ticks | cover |
+| --- | --- | --- | --- | --- |
+| entry to a heavy | `unified:0 -> motion2:0/1` | 5.97 / 6.06 | 1 | the swing's first anticipation frame |
+| a normal's recovery | `motion:4 -> base:11` | 7.01 | 1 | none — **pre-existing in 2.9, unchanged** |
+| return to stance | `base:11 -> unified:7` | 6.40 | 1 | none — the move ending |
+| jump takeoff | `unified:0 -> motion2:7` | 5.13 | 1 | takeoff dust |
+| jump landing | `motion:6 -> unified:6` | 5.55 | 1 | landing dust + squash |
+| blocked hit | `unified:7 -> motion2:8 -> unified:7` | 5.72 / 5.57 | 1 each | the block flash and guard spark |
+| throw release | `motion:4 -> unified:7` | 4.80 | 1 | the hurl's cinematic rotation |
+| knockdown into wake-up | `unified:15 -> motion:9` | 5.65 | 1 | the impact and the landing dust |
+
+Every surviving crossing is a **single tick**, all but one at a genuine action
+boundary, and all of them at or below the same-generation floor's neighbourhood
+rather than in the 7.29-7.45 strobe band — with the one exception of
+`motion:4 -> base:11` at 7.01, which is 2.9's own boundary, is not created by
+this bank, and cannot be closed without an extension/recovery drawing that no
+generation has. **Nothing crosses a generation while the fighter is idle,
+walking, crouching, guarding or reacting.**

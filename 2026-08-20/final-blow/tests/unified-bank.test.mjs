@@ -15,6 +15,9 @@ import {
   UNIFIED_BEATS,
   UNIFIED_CELLS,
   UNIFIED_CELL_COUNT,
+  UNIFIED_CELL_HEIGHT,
+  UNIFIED_RETIRED_CELLS,
+  UNIFIED_ROUTED_CELLS,
   UNIFIED_WALK_KEYS,
   WAKEUP_RISE_HEIGHT,
   airNormalKeys,
@@ -43,8 +46,10 @@ import {
   throwClinchKeys,
   throwRecoveryKeys,
   unifiedFighterIds,
+  unifiedDrawnHeight,
   unifiedPose,
-  unifiedReactionCells,
+  unifiedReactionCellAt,
+  unifiedReactionLadder,
   wakeupKeys,
   wakeupRiseStretch,
   wakeupSettleStart,
@@ -53,23 +58,38 @@ import {
 } from "../engine/fighter-kits.mjs";
 
 // ---------------------------------------------------------------------------
-// v3.0 — THE UNIFIED BANK. Five contracts, and the first one is the wave:
+// v3.0 — THE UNIFIED BANK. TWO RULES, and they answer different questions.
+//
+//   RULE 1  ALL-OR-NOTHING, PER FIGHTER. Every unified sheet is a DIFFERENT
+//           DRAUGHTSMAN from that fighter's base atlas (donald 22.5 dE from his
+//           own base idle), so no beat the bank owns may fall through for a
+//           fighter who is on it. A fighter is wholly on the bank or wholly off
+//           it: nobody gets a unified idle with a base walk.
+//   RULE 2  CONNECTED REGIONS, PER BEAT, uniform across the roster. The bank
+//           owns a beat only if it can own that beat's WHOLE CONNECTED
+//           NEIGHBOURHOOD. motion and motion2 are ONE generation (deathblow
+//           motion:0 vs motion2:6 measures 2.62 dE on the critics' weighted-Lab
+//           cluster metric), so dropping a unified cell into the middle of a
+//           motion chain CUTS a chain that was already consistent. The first
+//           3.0 cut did exactly that and took deathblow's heavy punch from 2
+//           generation crossings to 5.
+//
+// The contracts below:
 //
 //   U-A  THE MANIFEST AND THE MASK — the sheet grammar is the 16-cell one the
 //        art wave shipped, and the accept masks are built from it.
-//   U-B  ALL SIXTEEN OR NOTHING — a fighter is on this bank wholly or not at
-//        all. This is the contract the whole integration exists to hold: every
-//        unified sheet is a DIFFERENT DRAUGHTSMAN from that fighter's base
-//        atlas (donald 22.5 dE from his own base idle), so ONE cell falling
-//        through inside these sixteen beats re-creates the 11-14 dE costume
-//        strobe that put 40 cells behind `accept: false` in 2.9.
+//   U-B  RULE 1 — all sixteen or nothing, per fighter.
 //   U-C  THE UNCHANGED FIGHTER — `cyraxx` (0/16) must be byte-identical to
 //        2.9, using none of it.
-//   U-D  NO CROSS-BANK BEAT — for a whole fighter, not one of the sixteen may
-//        resolve anywhere but `unified`.
+//   U-D  NO CROSS-BANK BEAT — for a whole fighter, no ROUTED beat may resolve
+//        anywhere but `unified`.
 //   U-E  EVERYTHING 2.9 FIXED IS STILL FIXED — the hold budget, the prop
 //        prohibition, airborne body-centre anchoring, the height
 //        reconciliations, the preload path and the SD-only 3D rule.
+//   U-F  RULE 2 — connected regions. No key track may mix generations, no
+//        retired cell may be routed, and the routed assignment must be the
+//        CHEAPEST one available at every boundary the measurements cover.
+//   U-G  THE IDLE<->WALK HEIGHT (B1) and THE MONOTONIC REACTION LADDER (M1).
 // ---------------------------------------------------------------------------
 
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -168,14 +188,14 @@ function testAllOrNothing() {
 }
 
 // ---------------------------------------------------------------------------
-// The sixteen beats, as the descriptors game.js actually builds for them.
+// The ROUTED beats, as the descriptors game.js actually builds for them.
 // Each entry is [unified cell, the exact 2.9 descriptor underneath it].
+// The four RETIRED cells are deliberately absent — see retiredRoutes().
 // ---------------------------------------------------------------------------
 function coveredBeats(fighterId) {
   const roles = baseCellRoles(fighterId);
   const base = (frame) => ({ bank: "base", frame });
   const tail = reactionFallbackCells(roles);
-  const react = unifiedReactionCells();
   const beats = [
     ["idle", unifiedPose(UNIFIED_CELLS.idle, base(roles.idle[0]))],
     ["crouch", unifiedPose(UNIFIED_CELLS.crouch, base(roles.crouch))],
@@ -186,16 +206,6 @@ function coveredBeats(fighterId) {
     ["guard", unifiedPose(UNIFIED_CELLS.guard, base(roles.guard))],
     ["guard (blockstun stance)", beatPoseAt(blockstunKeys(), 0.99,
       unifiedPose(UNIFIED_CELLS.guard, base(roles.guard)))],
-    ["jump-rise", unifiedPose(UNIFIED_CELLS.jumpRise,
-      motion2Pose(MOTION2_CELLS.jumpRise, "base", 13))],
-    ["jump-rise (arc band)", beatPoseAt(jumpArcKeys(0.22), 0, null)],
-    ["jump-tuck (arc band)", beatPoseAt(jumpArcKeys(0.22), 0.30, null)],
-    ["jump-tuck (air-tech flip)", unifiedPose(UNIFIED_CELLS.jumpTuck,
-      motionPose(MOTION_CELLS.tuck, "base", 13))],
-    ["punch-extension", unifiedPose(UNIFIED_CELLS.punchExt,
-      motionPose(MOTION_CELLS.punchExt, "base", 10))],
-    ["kick-extension", unifiedPose(UNIFIED_CELLS.kickExt,
-      motionPose(MOTION_CELLS.kickExt, "base", 13))],
     ["light-hit (flat recoil)", unifiedPose(UNIFIED_CELLS.lightHit, base(roles.hit))],
     ["light-hit (clinch flinch)", unifiedPose(UNIFIED_CELLS.lightHit,
       motion2Pose(MOTION2_CELLS.lightHit, "base", roles.hit))],
@@ -203,8 +213,12 @@ function coveredBeats(fighterId) {
     ["big-hit (reaction open)", beatPoseAt(reactionTrackKeys(true), 0, base(tail.snap))],
     ["big-hit (launched)", unifiedPose(UNIFIED_CELLS.bigHit,
       motionPose(MOTION_CELLS.bighit, "base", roles.down))],
-    ["stagger (reaction fold)", beatPoseAt(reactionTrackKeys(false), REACTION_BANDS[3],
-      unifiedPose(react.fold, base(tail.fold)))],
+    ["stagger (reaction fold)", beatPoseAt(reactionTrackKeys(false), REACTION_BANDS[1],
+      unifiedPose(unifiedReactionCellAt(REACTION_BANDS[1], false), base(tail.snap)))],
+    ["crouch-trans (reaction recover)", beatPoseAt(reactionTrackKeys(false), REACTION_BANDS[2],
+      unifiedPose(unifiedReactionCellAt(REACTION_BANDS[2], false), base(tail.fold)))],
+    ["guard (reaction settle)", beatPoseAt(reactionTrackKeys(true), REACTION_BANDS[3],
+      unifiedPose(unifiedReactionCellAt(REACTION_BANDS[3], true), base(tail.fold)))],
     ["knockdown", unifiedPose(UNIFIED_CELLS.knockdown, base(roles.down))],
     // The wake-up RUNGS are motion/motion2 keys and are not part of the
     // grammar; what the bank owns is what those rungs degrade to — the prone
@@ -216,6 +230,25 @@ function coveredBeats(fighterId) {
     beats.push([`walk key ${step}`, walkCyclePose(step * 0.1, roles)]);
   }
   return beats;
+}
+
+/**
+ * The beats the first 3.0 cut routed through the bank and this round RETIRED.
+ * Each is the descriptor the shipping code now builds, and every one of them
+ * must resolve OFF the bank — for a whole fighter as much as for cyraxx.
+ */
+function retiredRoutes(fighterId) {
+  return [
+    ["jump-rise (ascent)", motion2Pose(MOTION2_CELLS.jumpRise, "base", 13)],
+    ["jump-rise (arc band)", beatPoseAt(jumpArcKeys(0.22), 0, null)],
+    ["jump-tuck (arc band)", beatPoseAt(jumpArcKeys(0.22), 0.30, null)],
+    ["jump-tuck (air-tech flip)", motionPose(MOTION_CELLS.tuck, "base", 13)],
+    ["jump-tuck (air-normal chamber)", beatPoseAt(airNormalKeys(9 / 31, 18 / 31), 0, null)],
+    ["punch-extension", motionPose(MOTION_CELLS.punchExt, "base", 10)],
+    ["kick-extension", motionPose(MOTION_CELLS.kickExt, "base", 13)],
+    ["heavy-windup compress", beatPoseAt(heavyWindupKeys("punch"), 0.99, null)],
+    ["throw-clinch load", beatPoseAt(throwClinchKeys(), 0.40, null)],
+  ].map(([name, pose]) => [`${fighterId} / ${name}`, pose]);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,12 +272,19 @@ function testNoCrossBankBeat() {
       covered.add(resolveMotionPose(pose, drawable, id).frame);
     }
   }
-  // ...and the beats above between them must exercise the WHOLE grammar, or
+  // ...and the beats above between them must exercise every ROUTED cell, or
   // the assertion above is only covering the cells somebody remembered.
-  for (let cell = 0; cell < UNIFIED_CELL_COUNT; cell += 1) {
+  for (const cell of UNIFIED_ROUTED_CELLS) {
     assert.ok(covered.has(cell),
-      `cell ${cell} (${UNIFIED_BEATS[cell]}) is never reached by any routed beat`);
+      `cell ${cell} (${UNIFIED_BEATS[cell]}) is routed but never reached by any beat`);
   }
+  // ...and it must reach NONE of the retired ones.
+  for (const cell of UNIFIED_RETIRED_CELLS) {
+    assert.ok(!covered.has(cell),
+      `cell ${cell} (${UNIFIED_BEATS[cell]}) is RETIRED from routing but a beat reached it`);
+  }
+  assert.equal(UNIFIED_ROUTED_CELLS.length + UNIFIED_RETIRED_CELLS.length, UNIFIED_CELL_COUNT,
+    "every cell of the grammar is either routed or explicitly retired — no third state");
 }
 
 // ---------------------------------------------------------------------------
@@ -346,22 +386,21 @@ function testHoldBudgetUnderUnified() {
   }
   // The reaction LADDER is where a single-bank route is most likely to
   // collapse — 2.9's snap/fold/settle are the same base frame on eight of ten
-  // sheets. The unified grammar carries three distinct drawings on every
-  // sheet, so consecutive bands can never repeat.
-  const react = unifiedReactionCells();
-  const ladder = REACTION_BANDS.map((at) => {
-    if (at < REACTION_BANDS[2]) return react.snap;
-    if (at < REACTION_BANDS[4]) return react.fold;
-    if (at < REACTION_BANDS[5]) return react.settle;
-    return react.idle;
-  });
+  // sheets. The unified grammar carries four distinct drawings before the tail
+  // on every sheet, so consecutive bands can never repeat.
   for (const heavy of [true, false]) {
+    const ladder = unifiedReactionLadder(heavy);
     const drawn = reactionTrackKeys(heavy).map((key, index) => {
       const link = (key.chain || []).find((entry) => entry.bank === UNIFIED_BANK);
       const other = (key.chain || []).find((entry) => entry.bank !== UNIFIED_BANK);
       return link ? `unified:${link.cell}` : other ? `${other.bank}:${other.cell}` : `unified:${ladder[index]}`;
     });
+    // The last two bands are the BREATHING IDLE, which advances on its own and
+    // is not a hold — the same exemption motion-holds.test.mjs already makes
+    // for the reaction tail. Every band before it must be a new drawing.
+    const idleRung = `unified:${UNIFIED_CELLS.idle}`;
     for (let index = 1; index < drawn.length; index += 1) {
+      if (drawn[index] === idleRung && drawn[index - 1] === idleRung) continue;
       assert.notEqual(drawn[index], drawn[index - 1],
         `reaction (${heavy ? "heavy" : "light"}) bands ${index - 1}/${index} are the same `
         + `drawing (${drawn[index]}) — that is R4's tail collapse in a new bank`);
@@ -370,6 +409,225 @@ function testHoldBudgetUnderUnified() {
       `reaction (${heavy ? "heavy" : "light"}) must keep at least four drawings: ${drawn.join(" -> ")}`);
   }
   assert.ok(MOTION_HOLD_BUDGET === 8, "the budget itself is unchanged");
+}
+
+// ---------------------------------------------------------------------------
+// U-F — RULE 2, CONNECTED REGIONS.
+//
+// The measurements are the critics' weighted-Lab CLUSTER metric: adaptive
+// k-means (k=6, fixed seed) over the Lab colours of a cell's opaque pixels,
+// scored as the mean of the two weighted nearest-cluster distances. deathblow's
+// calibration, which is what the numbers below are quoted on: a same-generation
+// floor of 3.15 dE (his base idle against his base walk) and a known-bad strobe
+// of 7.29-7.45 dE (his base idle against the 2.9 cross-generation walk cells
+// that were rejected).
+//
+// Each row is [route, 2.9, first 3.0 cut, shipping] as
+// { crossings, worst } — generation crossings over the whole move, and the
+// largest dE of any of them. "generation" is base / motion-family / unified.
+// ---------------------------------------------------------------------------
+const MEASURED = Object.freeze({
+  "heavy punch": [{ crossings: 2, worst: 7.01 }, { crossings: 5, worst: 9.51 }, { crossings: 2, worst: 7.01 }],
+  "heavy kick": [{ crossings: 2, worst: 7.01 }, { crossings: 5, worst: 6.14 }, { crossings: 2, worst: 7.01 }],
+  "jump arc": [{ crossings: 2, worst: 6.35 }, { crossings: 2, worst: 7.56 }, { crossings: 2, worst: 5.55 }],
+  "crouch in/out": [{ crossings: 4, worst: 8.61 }, { crossings: 0, worst: 0 }, { crossings: 0, worst: 0 }],
+  "idle->walk->idle": [{ crossings: 0, worst: 0 }, { crossings: 0, worst: 0 }, { crossings: 0, worst: 0 }],
+  "light reaction": [{ crossings: 4, worst: 6.60 }, { crossings: 2, worst: 7.98 }, { crossings: 0, worst: 0 }],
+  "heavy reaction": [{ crossings: 2, worst: 5.98 }, { crossings: 2, worst: 6.34 }, { crossings: 0, worst: 0 }],
+  "air normal": [{ crossings: 0, worst: 0 }, { crossings: 1, worst: 6.17 }, { crossings: 0, worst: 0 }],
+  "air-tech flip": [{ crossings: 0, worst: 0 }, { crossings: 1, worst: 7.56 }, { crossings: 0, worst: 0 }],
+  "throw clinch": [{ crossings: 1, worst: 8.65 }, { crossings: 3, worst: 5.25 }, { crossings: 1, worst: 4.80 }],
+  "blockstun": [{ crossings: 2, worst: 7.34 }, { crossings: 2, worst: 5.72 }, { crossings: 2, worst: 5.72 }],
+});
+/** deathblow's calibration, and the reason a boundary is or is not acceptable. */
+const SAME_GENERATION_FLOOR = 3.15;
+const KNOWN_BAD_STROBE = 7.29;
+
+function testConnectedRegions() {
+  // 1. NO KEY TRACK MAY MIX GENERATIONS. This is RULE 2 as a structural
+  //    invariant rather than a table of numbers: a track that resolves to a
+  //    unified cell in one band and a motion cell in another IS a mid-move
+  //    generation crossing, by construction. The reaction tracks are wholly
+  //    unified (their tail hands to the caller's unified idle); every other
+  //    track is wholly motion-family.
+  const ladderFallback = (heavy) => (key) => `unified:${unifiedReactionCellAt(key?.at ?? 0, heavy)}`;
+  const tracks = [
+    ["jump arc", jumpArcKeys(0.22), 46, null],
+    ["jump arc (donald)", jumpArcKeys(0.06), 46, null],
+    ["air normal", airNormalKeys(9 / 31, 18 / 31), 31, null],
+    ["heavy punch windup", heavyWindupKeys("punch"), 17, null],
+    ["heavy kick windup", heavyWindupKeys("kick"), 17, null],
+    ["throw clinch", throwClinchKeys(), 24, null],
+    ["throw recovery", throwRecoveryKeys(), 34, null],
+    ["attack recovery", attackRecoveryKeys(), 28, null],
+    ["blockstun", blockstunKeys(), 17, null],
+    ["dash", dashKeys(), 16, null],
+    ["wake-up", wakeupKeys(16), 16, null],
+    ["reaction (heavy)", reactionTrackKeys(true), 44, ladderFallback(true)],
+    ["reaction (light)", reactionTrackKeys(false), 44, ladderFallback(false)],
+  ];
+  for (const [name, keys, span, fallback] of tracks) {
+    for (const motion3 of [false, true]) {
+      const cells = beatKeyRuns(keys, span,
+        (key) => defaultBeatKeyResolve(key, { motion3, unified: true, fallback }))
+        .map((run) => run.cell);
+      const banks = new Set(cells.map((cell) => (cell.startsWith(`${UNIFIED_BANK}:`) ? "unified" : "other")));
+      assert.equal(banks.size, 1,
+        `${name} (motion3 ${motion3 ? "on" : "off"}) mixes generations mid-track: ${cells.join(" -> ")} — `
+        + "RULE 2: a beat the bank owns must own its whole connected neighbourhood");
+    }
+  }
+
+  // 2. NO RETIRED CELL MAY BE ROUTED, for anyone. The four retired drawings
+  //    stay on the sheet and inside the 16/16 gate; they are simply never
+  //    asked for.
+  for (const id of WHOLE) {
+    const drawable = gate(id);
+    for (const [name, pose] of retiredRoutes(id)) {
+      for (const bareHanded of [false, true]) {
+        const resolved = resolveMotionPose(pose, drawable, id, { bareHanded });
+        assert.notEqual(resolved.bank, UNIFIED_BANK,
+          `${name} resolved to ${resolved.bank}:${resolved.frame} — that beat sits inside a `
+          + "motion chain and routing the bank into it CUTS a chain that was already consistent");
+      }
+    }
+  }
+  // ...and no ukey link anywhere in the engine may name a retired cell.
+  const kitSource = readFileSync(join(testDir, "..", "engine", "fighter-kits.mjs"), "utf8");
+  for (const cell of UNIFIED_RETIRED_CELLS) {
+    const name = Object.entries(UNIFIED_CELLS).find(([, value]) => value === cell)[0];
+    assert.ok(!kitSource.includes(`ukey(UNIFIED_CELLS.${name})`),
+      `engine/fighter-kits.mjs still keys UNIFIED_CELLS.${name} into a track — it is retired`);
+    assert.ok(!gameSource.includes(`UNIFIED_CELLS.${name}`),
+      `game.js still routes UNIFIED_CELLS.${name} — it is retired`);
+  }
+
+  // 3. THE CHEAPEST ASSIGNMENT. For every route the critics measured, the
+  //    shipping assignment must be no worse than BOTH alternatives on
+  //    crossing count, and strictly better than the first 3.0 cut wherever
+  //    that cut opened a crossing above the same-generation floor. This is the
+  //    assertion the brief asks for: no routed beat may create a boundary the
+  //    floor cannot justify when a cheaper assignment exists.
+  for (const [route, [v29, first30, now]] of Object.entries(MEASURED)) {
+    assert.ok(now.crossings <= first30.crossings,
+      `${route}: the shipping assignment has MORE crossings (${now.crossings}) than the first `
+      + `3.0 cut (${first30.crossings}) — a cheaper assignment exists`);
+    assert.ok(now.crossings <= v29.crossings,
+      `${route}: the shipping assignment has MORE crossings (${now.crossings}) than 2.9 `
+      + `(${v29.crossings}) — the bank must not cost the build seams it did not have`);
+    if (now.crossings > 0) {
+      assert.ok(now.worst <= Math.min(v29.worst, first30.worst) + 1e-9 || now.worst < KNOWN_BAD_STROBE,
+        `${route}: worst surviving crossing ${now.worst} dE is above the known-bad strobe band `
+        + `(${KNOWN_BAD_STROBE}) and above both alternatives (${v29.worst} / ${first30.worst})`);
+    } else {
+      assert.equal(now.worst, 0, `${route}: a crossing-free route cannot have a crossing dE`);
+    }
+  }
+  // The two routes the bank OWNS end to end are crossing-free, and they are the
+  // wave's headline: locomotion and crouch.
+  for (const route of ["idle->walk->idle", "crouch in/out", "light reaction", "heavy reaction"]) {
+    assert.equal(MEASURED[route][2].crossings, 0,
+      `${route} must be 100% unified — it is a connected region the bank owns whole`);
+  }
+  assert.ok(SAME_GENERATION_FLOOR < KNOWN_BAD_STROBE, "the calibration must bracket the decision");
+}
+
+// ---------------------------------------------------------------------------
+// U-G — B1 (the idle<->walk height pop) and M1 (the reaction rewind).
+// ---------------------------------------------------------------------------
+function testIdleWalkHeightAndLadder() {
+  // B1. Inside ONE self-consistent sheet the idle is a settled wide fighting
+  // stance and the walk keys are an upright figure mid-stride, so the two beats
+  // differ in CONTENT HEIGHT by 3.9-12.9%. That is a size change in one tick on
+  // the most common transition in the game — measured on deathblow with a
+  // 1-tick burst, the cap top jumped 41px between t7 (idle) and t8 (a walk
+  // key). The four walk keys are corrected onto the fighter's own idle.
+  for (const id of WHOLE) {
+    const idle = UNIFIED_CELL_HEIGHT[id][UNIFIED_CELLS.idle];
+    assert.ok(idle > 200, `${id}: implausible unified idle height ${idle}`);
+    for (const key of UNIFIED_WALK_KEYS) {
+      const raw = UNIFIED_CELL_HEIGHT[id][key];
+      const drawn = unifiedDrawnHeight(id, key);
+      assert.ok(Math.abs(drawn / idle - 1) <= 0.01,
+        `${id}: unified walk key ${key} draws ${drawn.toFixed(1)}px against an idle of ${idle}px `
+        + `(${(100 * (drawn / idle - 1)).toFixed(2)}%) — that is the B1 pop, uncorrected`);
+      assert.ok(Math.abs(raw / idle - 1) > 0.03,
+        `${id}: walk key ${key} needs no correction — drop it from UNIFIED_CELL_ADJUST rather `
+        + "than carry a table entry that does nothing");
+      const adjust = cellDrawAdjust(id, UNIFIED_BANK, key);
+      assert.ok(adjust > 0.8 && adjust < 1.25,
+        `${id}: walk-key adjust ${adjust} is outside the 2.9 cap philosophy`);
+    }
+    // The idle is the ANCHOR — it is the sheet's U1 reference cell and what
+    // WAKEUP_RISE_HEIGHT.standUnified was measured on, so it must never be
+    // rescaled or that whole table drifts.
+    assert.equal(cellDrawAdjust(id, UNIFIED_BANK, UNIFIED_CELLS.idle), 1,
+      `${id}: the unified idle is the anchor and takes no correction`);
+    assert.equal(WAKEUP_RISE_HEIGHT[id].standUnified, idle,
+      `${id}: standUnified must be the measured unified idle height`);
+    // Cells that are legitimately shorter drawings keep their pose.
+    for (const cell of [UNIFIED_CELLS.crouch, UNIFIED_CELLS.crouchTrans, UNIFIED_CELLS.jumpTuck,
+      UNIFIED_CELLS.stagger, UNIFIED_CELLS.bigHit, UNIFIED_CELLS.knockdown]) {
+      assert.equal(cellDrawAdjust(id, UNIFIED_BANK, cell), 1,
+        `${id}: cell ${cell} is a legitimately shorter drawing — normalising it flattens the pose`);
+    }
+    // And the guard, which BOTH reaction ladders end on, is already within the
+    // deadband of the idle, so the last transition of every reaction is
+    // height-flat without a correction.
+    assert.ok(Math.abs(UNIFIED_CELL_HEIGHT[id][UNIFIED_CELLS.guard] / idle - 1) <= 0.05,
+      `${id}: the unified guard must sit within 5% of the idle`);
+  }
+  for (const id of PARTIAL) {
+    for (let cell = 0; cell < UNIFIED_CELL_COUNT; cell += 1) {
+      assert.equal(cellDrawAdjust(id, UNIFIED_BANK, cell), 1,
+        `${id} is off the bank and must take no unified correction`);
+    }
+  }
+
+  // M1. The ladder is MONOTONIC — no rung may be a drawing the beat has
+  // already left. The first 3.0 cut played 12 -> 14 -> motion2:10 -> 14 on
+  // every unified fighter: a return to the stagger for 6-8 ticks, which is the
+  // rewind hitch the 2.9 throw-recovery fix (R7) exists to forbid.
+  for (const heavy of [true, false]) {
+    const label = heavy ? "heavy" : "light";
+    const ladder = unifiedReactionLadder(heavy);
+    assert.equal(ladder.length, REACTION_BANDS.length);
+    const seen = [];
+    for (const rung of ladder) {
+      if (seen.length && seen[seen.length - 1] === rung) continue;   // a merged band
+      assert.ok(!seen.includes(rung),
+        `reaction (${label}) RETURNS to unified:${rung} after leaving it: ${ladder.join(" -> ")}`);
+      seen.push(rung);
+    }
+    // It ends on the breathing idle from band 4 on EVERY fighter, which is the
+    // tick 2.9 handed the eight settle:null sheets (the Commissioner among
+    // them) to it — m1. Band 4 is only 2-3 ticks of a real ~30-tick reaction.
+    assert.equal(ladder[4], UNIFIED_CELLS.idle,
+      `reaction (${label}) must hand to the breathing idle at band 4, not flash a 2-tick rung`);
+    assert.equal(ladder[5], UNIFIED_CELLS.idle);
+    assert.ok(ladder.slice(0, 4).every((cell) => cell !== UNIFIED_CELLS.idle),
+      `reaction (${label}) must not idle before band 4`);
+    // Both tracks end on the guard, whose height matches the idle.
+    assert.equal(ladder[3], UNIFIED_CELLS.guard);
+    // No rung may be a retired cell, and none may read as an attack.
+    for (const rung of ladder) {
+      assert.ok(!UNIFIED_RETIRED_CELLS.includes(rung),
+        `reaction (${label}) rung unified:${rung} is retired from routing`);
+      assert.ok(rung !== UNIFIED_CELLS.punchExt && rung !== UNIFIED_CELLS.kickExt,
+        `reaction (${label}) rung unified:${rung} is a STRIKE — a reaction cell may never read as an attack`);
+    }
+  }
+  // M5's contract survives: the two tracks open and turn on different drawings.
+  assert.notEqual(unifiedReactionLadder(true)[0], unifiedReactionLadder(false)[0],
+    "the reaction openings must differ");
+  assert.notEqual(unifiedReactionLadder(true)[1], unifiedReactionLadder(false)[1],
+    "the reaction MIDDLES must differ");
+  // game.js reads the rung from the same table the track keys it from, or the
+  // two drift apart again — which is exactly the M1 defect.
+  assert.match(gameSource, /const rung = unifiedReactionCellAt\(at, heavyTrack\);/,
+    "the reaction fallback must read the rung from unifiedReactionCellAt");
+  assert.ok(!/uniReact\./.test(gameSource),
+    "the old snap/fold/settle ladder is gone — one table only");
 }
 
 function testPropProhibitionSurvives() {
@@ -460,10 +718,12 @@ function testHeightReconciliationsMoved() {
     assert.equal(wakeupSettleStart(id, "motion2", 15, 16, { unified: true }),
       wakeupSettleStart(id, "motion2", 15, 16));
   }
-  // No unified CELL takes a per-cell draw adjust — the sheets are one global
-  // scale each and mutually registered, which is the whole point of them.
+  // The ONLY unified cells that take a per-cell draw adjust are the four walk
+  // keys (B1 — see testIdleWalkHeightAndLadder). Everything else on the sheet
+  // is one global scale, which is the whole point of the bank.
   for (const id of ROSTER) {
     for (let cell = 0; cell < UNIFIED_CELL_COUNT; cell += 1) {
+      if (WHOLE.includes(id) && UNIFIED_WALK_KEYS.includes(cell)) continue;
       assert.equal(cellDrawAdjust(id, UNIFIED_BANK, cell), 1);
       assert.equal(cellDrawAdjust(id, UNIFIED_BANK, cell, { unified: true }), 1);
     }
@@ -509,12 +769,23 @@ function testBankRegistryAndWiring() {
     /const unifiedCycle = pose\.bank === UNIFIED_BANK && fadeObs\.fadeBank === UNIFIED_BANK[\s\S]{0,200}?fadeObs\.fadeFrame <= UNIFIED_CELLS\.walkPassingB;/,
     "the unified idle/walk cycle must keep the crisp crossfade");
 
-  // Every named cell of the grammar is actually routed somewhere in game.js.
+  // Every ROUTED cell of the grammar is actually routed somewhere in game.js.
   for (const [name, cell] of Object.entries(UNIFIED_CELLS)) {
     if (UNIFIED_WALK_KEYS.includes(cell)) continue;   // routed via walkCyclePose
+    if (UNIFIED_RETIRED_CELLS.includes(cell)) continue;   // deliberately unrouted
     assert.ok(gameSource.includes(`UNIFIED_CELLS.${name}`),
       `game.js never routes UNIFIED_CELLS.${name} — that beat would fall through to another bank`);
   }
+  // The manifest documents the routing decision beside the grammar, so the art
+  // pipeline knows the retired cells are KEPT and not abandoned.
+  assert.match(manifest.format.routingNote, /RETIRED FROM ROUTING/);
+  assert.match(manifest.format.cyraxxNote, /NO SHEET IN THE REPO/);
+  assert.ok(!/NOT WIRED/.test(manifest.format.status),
+    "the manifest still claims the bank is not wired");
+  assert.ok(!/12\/16|12 of 16/.test(manifest.format.status + manifest.format.acceptNote),
+    "the manifest still claims the deathblow pilot is 12/16");
+  assert.ok(!/deathblow.*pilot.*12\/16|cyraxx` 0\/16, the `deathblow` pilot/.test(gameSource),
+    "game.js still claims the deathblow pilot is 12/16");
 }
 
 test("U-A the unified manifest is the 16-cell grammar the routing addresses", testManifestShape);
@@ -527,3 +798,5 @@ test("U-E the prop prohibition survives, and no unified cell is a prop-action ce
 test("U-E airborne body-centre anchoring covers the unified airborne cells", testAirborneAnchoringExtends);
 test("U-E the guard-flinch and wake-up height targets moved with the guard and idle", testHeightReconciliationsMoved);
 test("U-E the bank is registered in every loader, adjust table and both renderers", testBankRegistryAndWiring);
+test("U-F the bank owns CONNECTED REGIONS — no track mixes generations, no retired cell is routed", testConnectedRegions);
+test("U-G the idle<->walk height agrees and the reaction ladder is monotonic", testIdleWalkHeightAndLadder);

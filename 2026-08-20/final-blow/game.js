@@ -63,7 +63,7 @@ import {
   WALK_CELL_COUNT,
   buildUnifiedAcceptMasks,
   unifiedPose,
-  unifiedReactionCells,
+  unifiedReactionCellAt,
   isAuthoredBank,
   walkCyclePose,
   attackAnimationPose,
@@ -1191,9 +1191,16 @@ function motion3KeyDrawable(fighterId, key) {
 // another — which is exactly the cross-generation costume strobe (11-14 dE)
 // that put 40 cells behind `accept: false` in 2.9.
 //
-// Manifest BEFORE sheet, like the walk and motion3 banks: two fighters are not
-// on the bank (`cyraxx` 0/16, the `deathblow` pilot 12/16) and requesting
-// their sheets would be 600KB of download that can never draw a pixel.
+// NINE fighters are on the bank: deathblow, jez, alan, post, benny, donald,
+// ali, commissioner, devil. `cyraxx` alone is off it — 0/16 accept:false after
+// failing U1 in three generations — and his sheet is not in the repo, so the
+// manifest-BEFORE-sheet order (shared with the walk and motion3 banks) is load-
+// bearing rather than an optimisation: the mask says 0/16, no request is made,
+// and there is no 404.
+//
+// Which BEATS this bank is routed into is a separate question from which
+// fighters are on it, and the answer is CONNECTED REGIONS only — see RULE 2 in
+// engine/fighter-kits.mjs and the routing list in fighterAnimationPose.
 // ---------------------------------------------------------------------------
 const fighterUnifiedAtlases = {};
 const unifiedBankState = { masks: null, requested: false, ready: null };
@@ -1291,8 +1298,9 @@ function preloadAuthoredBanks(fighterIds) {
   }
   // v3.0: the unified sheet is warmed through the SAME choke point, but only
   // once the manifest has confirmed the fighter is 16/16 — an incomplete sheet
-  // can never draw a cell, so requesting it would be pure waste (and `cyraxx`
-  // 0/16 plus the `deathblow` pilot 12/16 is 600KB of it).
+  // can never draw a cell, so requesting it would be pure waste. `cyraxx` is
+  // 0/16 and has no sheet in the repo at all, so this gate is also what keeps
+  // the preload from 404ing on him.
   //
   // Warming this one matters MORE than the others, not less. The other banks
   // fall back per beat, so a late sheet costs one beat; this bank's gate is
@@ -17143,15 +17151,24 @@ function fighterPoseDescriptor(fighter) {
   // for the two fighters not on the bank every one of these calls resolves
   // straight through to `pose` and the read is byte-identical to 2.9.
   //
-  // The sixteen beats it owns and where they are routed below: idle (the
-  // breathing cycle and every tail that hands back to it), the four walk keys
-  // (walkCyclePose), crouch, crouch-transition (enter, leave and the landing
-  // gather), guard, jump-rise, jump-tuck, punch- and kick-extension, light-hit
-  // (the flat recoil, the clinch flinch and the reaction snap), big-hit (the
-  // heavy reaction opener and the launched victim), stagger (the reaction
-  // fold and the storm writhe) and knockdown.
+  // v3.0 critic round (RULE 2): the bank owns CONNECTED REGIONS, not every
+  // beat it has a drawing for. Routed below, and nowhere else:
+  //
+  //   GROUNDED NEUTRAL  idle (the breathing cycle and every tail that hands
+  //                     back to it), the four walk keys (walkCyclePose),
+  //                     crouch, crouch-transition (enter, leave and the
+  //                     landing gather), guard (the stance, blockstun's
+  //                     recovery, the throw-tech and both attack tails).
+  //   REACTIONS         light-hit (the flat recoil, the clinch flinch and the
+  //                     reaction snap), big-hit (the heavy opener and the
+  //                     launched victim), stagger (the reaction fold and the
+  //                     storm writhe), knockdown.
+  //
+  // RETIRED from routing and drawn by nobody: jump-rise, jump-tuck, punch-
+  // extension, kick-extension. Each sat inside a motion chain and was cutting
+  // it; see UNIFIED_RETIRED_CELLS in engine/fighter-kits.mjs for the measured
+  // boundaries. The art stays on the sheet and inside the 16/16 accept gate.
   const uni = (cell, pose) => unifiedPose(cell, pose);
-  const uniReact = unifiedReactionCells();
   // v2.9 critic round: every beat below that used to hand off to a hardcoded
   // base index now resolves through the per-fighter semantic map — base(12)
   // is a deep squat and base(13) an attack pose (or, on deathblow, a whole
@@ -17231,8 +17248,12 @@ function fighterPoseDescriptor(fighter) {
   // wears the authored tuck ball, the tail arches into the airrec footing key.
   if (fighter.airTechFlipFrames > 0) {
     const flip = 1 - fighter.airTechFlipFrames / AIR_RECOVERY_RULES.flipFrames;
+    // v3.0 critic round (RULE 2): tuck -> air-recovery is a two-cell motion
+    // chain. Routing the unified tuck into it put a 8.18 dE mean crossing
+    // between them (7.56 on deathblow) to remove none; retired, it is
+    // crossing-free.
     return flip < 0.6
-      ? uni(UNIFIED_CELLS.jumpTuck, motionPose(MOTION_CELLS.tuck, "base", 13))
+      ? motionPose(MOTION_CELLS.tuck, "base", 13)
       : motionPose(MOTION_CELLS.airrec, "base", 13);
   }
   // Release 1.7 wave 11: the taunt holds the fighter's victory pose frame
@@ -17396,23 +17417,24 @@ function fighterPoseDescriptor(fighter) {
       // third band entirely rather than repeat one when the sheet cannot
       // supply three distinct non-attack drawings.
       const tail = reactionFallbackCells(roles);
-      // v3.0: the ladder gets a unified drawing per band ON TOP of the exact
-      // 2.9 base cell. The unified grammar carries a standing recoil, a
-      // stagger step AND a braced stance on every sheet, so a unified
-      // fighter's tail is three distinct drawings on all eight of them —
-      // where R4 had to DROP the third band on the eight base sheets whose
-      // `stagger` is null or equal to `hit`. The `tail.settle === null` case
-      // therefore keeps handing the BASE read to the breathing idle exactly
-      // as it does today while the unified read takes the brace.
+      // v3.0 critic round (M1): the unified rung for a band comes from
+      // unifiedReactionLadder — the SAME table reactionTrackKeys stacks onto
+      // its chains — so the track and this fallback cannot drift out of step.
+      // The first 3.0 cut had them a band apart, which is what made the light
+      // reaction play stagger -> rubber-legs -> STAGGER AGAIN for 6-8 ticks.
+      // The BASE read below is untouched 2.9: snap / fold / settle-or-idle /
+      // idle over the same band groups, so a non-unified fighter is
+      // byte-identical.
       return beatPoseAt(reactionTrackKeys(heavyTrack), sinceHit / 44, (key) => {
         const at = key ? key.at : 0;
         const idle = () => base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]);
-        if (at < REACTION_BANDS[2]) return uni(uniReact.snap, base(tail.snap));
-        if (at < REACTION_BANDS[4]) return uni(uniReact.fold, base(tail.fold));
+        const rung = unifiedReactionCellAt(at, heavyTrack);
+        if (at < REACTION_BANDS[2]) return uni(rung, base(tail.snap));
+        if (at < REACTION_BANDS[4]) return uni(rung, base(tail.fold));
         if (at < REACTION_BANDS[5]) {
-          return uni(uniReact.settle, tail.settle !== null ? base(tail.settle) : idle());
+          return uni(rung, tail.settle !== null ? base(tail.settle) : idle());
         }
-        return uni(uniReact.idle, idle());
+        return uni(rung, idle());
       });
     }
     return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
@@ -17594,10 +17616,20 @@ function fighterPoseDescriptor(fighter) {
     }
     if (beat?.beat === "smear") return motionPose(beat.cell, "base", frames[1]);
     if (beat?.beat === "extension") {
-      // The full-extension cells ARE the unified punch/kick extension beats.
-      const extension = beat.cell === MOTION_CELLS.kickExt
-        ? UNIFIED_CELLS.kickExt : UNIFIED_CELLS.punchExt;
-      return uni(extension, motionPose(beat.cell, "base", frames[2]));
+      // v3.0 critic round (RULE 2) — THE EXTENSION IS RETIRED FROM THE BANK.
+      //
+      // The first 3.0 cut routed unified:10/11 here on the reasoning that the
+      // bank owns the beat. It does own a DRAWING of it; it does not own the
+      // beat's neighbours. The extension sits between the motion smear before
+      // it and the motion follow-through after it, and motion/motion2 are one
+      // generation (deathblow motion:0 vs motion2:6 measures 2.62 dE), so
+      // dropping a unified cell in the middle cut a chain that was already
+      // consistent: the swing went 2 generation crossings to 5, and the
+      // follow-through boundary 3.87 -> 6.95 dE, into deathblow's 7.29-7.45
+      // known-bad strobe band with no flash over it. Off the route it is the
+      // 2.9 read exactly — windup -> smear -> extension -> follow, one
+      // generation end to end — and the cells stay on the sheet.
+      return motionPose(beat.cell, "base", frames[2]);
     }
     if (time < startup * 0.48) return base(frames[0]);
     if (time < startup) return base(frames[1]);
@@ -17651,7 +17683,11 @@ function fighterPoseDescriptor(fighter) {
     // cell was a full air pose arriving instantly at takeoff (and donald's
     // is the golf swing). Covers the reduced-motion path too: it is a pose
     // key, not a transform.
-    if (fighter.vy < 0) return uni(UNIFIED_CELLS.jumpRise, motion2Pose(MOTION2_CELLS.jumpRise, "base", 13));
+    // v3.0 critic round (RULE 2): the unified jump-rise is retired from the
+    // route — every band after it (tuck, apex, descent, air-recovery, landing
+    // gather) is motion-family, and the first cut's unified tuck handed to
+    // motion:11 at 7.56 dE and held it 15+ ticks in mid-air. See jumpArcKeys.
+    if (fighter.vy < 0) return motion2Pose(MOTION2_CELLS.jumpRise, "base", 13);
     // BODY-FIRST (spec 4): the descent cell advances BEFORE touchdown — the
     // legs gather on the crouch cell through the last ~110px of the fall
     // (about five ticks), so the frozen late-fall pair is deduped and the
