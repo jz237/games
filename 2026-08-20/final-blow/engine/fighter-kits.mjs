@@ -3362,7 +3362,7 @@ export const WAKEUP_SETTLE_FRAMES = 8;
 // longer reaches and re-opened the wake-up height step it closed. The unified
 // crouch joins `cells` because the gather rung's fallback now resolves there.
 export const WAKEUP_RISE_HEIGHT = Object.freeze({
-  deathblow: Object.freeze({ stand: 306, cells: Object.freeze({ "motion2:15": 270, "base:12": 304 }) }),
+  deathblow: Object.freeze({ stand: 306, standUnified: 272, cells: Object.freeze({ "motion2:15": 270, "base:12": 304, "unified:5": 180 }) }),
   jez: Object.freeze({ stand: 306, standUnified: 271, cells: Object.freeze({ "motion2:15": 219, "base:12": 305, "unified:5": 161 }) }),
   alan: Object.freeze({ stand: 305, standUnified: 274, cells: Object.freeze({ "motion2:15": 246, "base:12": 299, "unified:5": 199 }) }),
   post: Object.freeze({ stand: 306, standUnified: 279, cells: Object.freeze({ "motion2:15": 266, "base:12": 304, "unified:5": 177 }) }),

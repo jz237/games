@@ -63,8 +63,8 @@ import {
 //        atlas (donald 22.5 dE from his own base idle), so ONE cell falling
 //        through inside these sixteen beats re-creates the 11-14 dE costume
 //        strobe that put 40 cells behind `accept: false` in 2.9.
-//   U-C  THE UNCHANGED FIGHTERS — `cyraxx` (0/16) and the `deathblow` pilot
-//        (12/16) must be byte-identical to 2.9, using none of it.
+//   U-C  THE UNCHANGED FIGHTER — `cyraxx` (0/16) must be byte-identical to
+//        2.9, using none of it.
 //   U-D  NO CROSS-BANK BEAT — for a whole fighter, not one of the sixteen may
 //        resolve anywhere but `unified`.
 //   U-E  EVERYTHING 2.9 FIXED IS STILL FIXED — the hold budget, the prop
@@ -137,9 +137,9 @@ function testManifestShape() {
 // ---------------------------------------------------------------------------
 function testAllOrNothing() {
   assert.deepEqual(WHOLE,
-    ["alan", "ali", "benny", "commissioner", "devil", "donald", "jez", "post"],
-    "eight whole sheets — cyraxx (0/16) and the deathblow pilot (12/16) are not on the bank");
-  assert.deepEqual(PARTIAL.sort(), ["cyraxx", "deathblow"]);
+    ["alan", "ali", "benny", "commissioner", "deathblow", "devil", "donald", "jez", "post"],
+    "nine whole sheets — only cyraxx (0/16) is off the bank");
+  assert.deepEqual(PARTIAL.sort(), ["cyraxx"]);
 
   for (const id of WHOLE) {
     assert.equal(masks[id].whole, true);
@@ -161,10 +161,10 @@ function testAllOrNothing() {
   assert.equal(holed.jez.whole, false);
   assert.equal(holed.jez.accept.some(Boolean), false,
     "one rejected cell must take the other fifteen with it");
-  // ...and the pilot going whole must light all sixteen up with no code change.
+  // ...and cyraxx going whole must light all sixteen up with no code change.
   const healed = JSON.parse(JSON.stringify(manifest));
-  for (const cell of healed.fighters.deathblow.cells) cell.accept = true;
-  assert.equal(buildUnifiedAcceptMasks(healed).deathblow.whole, true);
+  for (const cell of healed.fighters.cyraxx.cells) cell.accept = true;
+  assert.equal(buildUnifiedAcceptMasks(healed).cyraxx.whole, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ function testNoCrossBankBeat() {
 }
 
 // ---------------------------------------------------------------------------
-// U-C — the two fighters not on the bank are byte-identical to 2.9.
+// U-C — the one fighter not on the bank is byte-identical to 2.9.
 // ---------------------------------------------------------------------------
 function testUnchangedFighters() {
   for (const id of PARTIAL) {
@@ -264,15 +264,16 @@ function testUnchangedFighters() {
       }
     }
   }
-  // The pilot's four rejected walk keys are the reason he is off it. Even
-  // with the sheet on disk his locomotion is the 2.9 base walk cell.
+  // The pilot's walk keys are single-phase, which is parity with the shipped
+  // base walk (37 of its 40 cells share one lead foot) — not a rejection
+  // reason. Phase inversion was retired as a gate for the roster, so he is on
+  // the bank and his locomotion must come from it like everyone else's.
   const roles = baseCellRoles("deathblow");
   for (let step = 0; step < 8; step += 1) {
     const walkTime = step * 0.1;
     const resolved = resolveMotionPose(walkCyclePose(walkTime, roles), gate("deathblow"), "deathblow");
-    assert.deepEqual(resolved,
-      { bank: "base", frame: roles.walk[walkCycleFrame(walkTime)] },
-      "deathblow's walk must stay on the base bank exactly as 2.9 ships it");
+    assert.equal(resolved.bank, UNIFIED_BANK,
+      "deathblow's walk must come from the unified bank, not the base atlas he no longer matches");
   }
 }
 
