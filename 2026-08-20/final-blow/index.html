@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Final Blow: Philly After Dark — a playable 1990s-inspired weapon fighter prototype.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23080b13'/%3E%3Cpath d='M14 10h39l-4 12H29l-2 8h18l-4 11H24l-5 15H5z' fill='%23ef2c28'/%3E%3C/svg%3E">
-  <title>Final Blow 3.2: Tape</title>
-  <meta name="application-version" content="3.2">
+  <title>Final Blow 3.3: Fresh</title>
+  <meta name="application-version" content="3.3">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -20,7 +20,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">TAPE <b>3.2</b></div>
+      <div class="build-tag">FRESH <b>3.3</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -50,6 +50,10 @@
         <div id="connMeterDetail" class="conn-meter-detail" hidden></div>
       </div>
       <div id="connToast" class="conn-toast" aria-live="polite" hidden></div>
+      <div id="updateToast" class="update-toast" role="status" aria-live="polite" hidden>
+        <button id="updateReloadButton" type="button">NEW VERSION READY · PRESS TO RELOAD</button>
+        <button id="updateDismissButton" type="button" aria-label="Dismiss update notice — keep playing this build">×</button>
+      </div>
       <div id="syncCountdown" class="sync-countdown" aria-hidden="true" hidden>3</div>
       <div id="replayHud" class="replay-hud" aria-label="Replay controls" hidden>
         <b class="replay-hud-tag">REPLAY</b>
@@ -164,7 +168,7 @@
           <p class="eyebrow">A PHILADELPHIA WEAPON FIGHTER</p>
           <h1 id="gameTitle"><span>FINAL</span><strong>BLOW</strong></h1>
           <h2>PHILLY AFTER DARK</h2>
-          <p id="titleVersion" class="title-version" aria-label="Version 3.2">VERSION 3.2</p>
+          <p id="titleVersion" class="title-version" aria-label="Version 3.3">VERSION 3.3</p>
           <p class="hook">Ten fighters. Six stages. One last chance to finish it.</p>
         </div>
         <div class="menu-stack">
@@ -188,6 +192,7 @@
             <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
             <button class="arcade-button demo-button" id="replayTheaterButton">REPLAY THEATER<small id="replayTheaterStatus">WATCH SAVED MATCHES</small></button>
           </div>
+          <button class="arcade-button demo-button" id="rigShowcaseButton">RIG SHOWCASE<small>RIG VS SPRITE · ANIMATION A/B · DEATHBLOW MIRROR</small></button>
           <button class="arcade-button ghost" id="controlsButton">CONTROLS & OPTIONS</button>
         </div>
         <div class="start-hint">PRESS <kbd>ENTER</kbd> OR <span class="xbox-a">A</span> TO START</div>
@@ -742,6 +747,6 @@
 <script type="importmap">
     { "imports": { "three": "./renderer/vendor/three.module.js", "three/addons/": "./renderer/vendor/jsm/" } }
   </script>
-  <script type="module" src="game.js?v=final-blow-3.2"></script>
+  <script type="module" src="game.js?v=final-blow-3.3"></script>
 </body>
 </html>

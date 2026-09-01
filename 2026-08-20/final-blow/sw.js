@@ -1,7 +1,7 @@
 // Keep offline startup reliable. Images and audio are intentionally fetched on
 // demand: preloading the complete game was a 19 MB / 162-request install that
 // could make Chrome abort the page before it rendered.
-const CACHE_NAME = "final-blow-shell-3.2";
+const CACHE_NAME = "final-blow-shell-3.3";
 const SHELL = [
   "./",
   "./styles.css",
@@ -28,7 +28,32 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: "reload" bypasses the browser HTTP cache for every shell fetch. A
+  // new worker only ever installs because the BUILD changed, so it must never
+  // fill its cache with heuristically HTTP-cached bytes — measured during the
+  // 3.3 update-flow verification: without this, the fresh CacheStorage cache
+  // held the PREVIOUS index.html and the update-reload landed the player on a
+  // mixed-version shell.
+  event.waitUntil(caches.open(CACHE_NAME)
+    .then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
+});
+
+// v3.3 FRESH — the update contract. skipWaiting + clients.claim mean a new
+// worker takes over every open window the moment it finishes installing, and
+// the PAGE decides what to do about it: 3.3+ shells listen for
+// controllerchange and reload themselves when it is safe (never mid-match —
+// see the freshness block next to registerOfflineGame in game.js). Shells
+// OLDER than 3.3 have no such listener — they show their stale build one
+// final time while this worker installs and claims, and every navigation
+// after that serves the fresh cache. (A worker-side client.navigate() rescue
+// for that one visit was built and rejected: timers inside the activate
+// waitUntil died before firing and repeatedly wedged the verification
+// browser — not a risk the offline path can carry for a one-visit win.)
+self.addEventListener("message", (event) => {
+  // Lets a page tell a re-registration echo apart from a real update: a
+  // takeover whose shell matches the page's own build needs no reload.
+  if (event.data?.type === "fb-shell-version?") event.ports[0]?.postMessage({ version: CACHE_NAME });
 });
 
 self.addEventListener("activate", (event) => {

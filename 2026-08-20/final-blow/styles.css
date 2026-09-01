@@ -430,6 +430,19 @@ body.reduced-motion #screenWipe.run {
 .arcade-button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .4; transform: none; }
 .online-button { border-color: #2d8595; background: linear-gradient(180deg, #154d5b, #071d27); color: #b8f6ff; }
 .demo-button { border-color: #a86c19; background: linear-gradient(180deg, #624014, #201105); color: #ffe4a3; }
+/* v3.3: the demo-family buttons carry hint lines now (REPLAY THEATER, RIG
+   SHOWCASE) — same block-small treatment every other hinted title button
+   already has (.daily-button/.ledger-button/.school-button smalls), instead
+   of the label and hint running together on one line. */
+.demo-button small {
+  display: block;
+  margin-top: 2px;
+  font-size: clamp(6px, .62vw, 9px);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .13em;
+  color: #cdae62;
+}
 
 .online-screen {
   align-items: stretch;
@@ -3455,6 +3468,49 @@ body.reduced-motion .cabinet-marquee { animation: none; }
 @keyframes conn-toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* v3.3 FRESH — the NEW VERSION affordance. Shown only when a newer build has
+   already finished caching but reloading right now would interrupt something
+   (a live match, an online session, the showcase). High in the frame, clear
+   of the HUD health bars and the demo speed chip; dismissible; never shown
+   on the resting title screen, which auto-reloads instead. */
+.update-toast {
+  position: absolute;
+  z-index: 40;
+  top: 8px;
+  left: 50%;
+  display: flex;
+  align-items: stretch;
+  transform: translateX(-50%);
+  animation: conn-toast-in .25s ease-out;
+}
+.update-toast[hidden] { display: none !important; }
+.update-toast button {
+  border: 1px solid var(--green);
+  background: rgba(6,16,6,.92);
+  color: var(--green);
+  cursor: pointer;
+  font-size: clamp(8px, .7vw, 11px);
+  font-weight: 900;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+#updateReloadButton { padding: 6px 14px; }
+#updateDismissButton {
+  padding: 6px 10px;
+  border-left: 0;
+  color: #9ab89a;
+  font-size: clamp(10px, .9vw, 14px);
+}
+#updateReloadButton:hover, #updateReloadButton:focus-visible {
+  background: var(--green);
+  color: #06110a;
+  outline: 0;
+}
+#updateDismissButton:hover, #updateDismissButton:focus-visible {
+  color: #eaffea;
+  outline: 0;
 }
 .sync-countdown {
   position: absolute;
