@@ -338,7 +338,9 @@ try {
     soundCaptions: document.querySelector('#soundCaptionsToggle')?.checked,
     onlineButton: document.querySelector('#onlineButton')?.textContent.trim(),
     demoButton: document.querySelector('#demoButton')?.textContent.trim(),
-    rigShowcaseButton: document.querySelector('#rigShowcaseButton')?.textContent.trim(),
+    // 4.0: the retired rig-vs-sprite showcase. Still probed, so its return
+    // would fail here rather than quietly reappearing in the menu.
+    rigShowcaseButton: Boolean(document.querySelector('#rigShowcaseButton')),
     updateToastHidden: document.querySelector('#updateToast')?.hidden,
     attractEnabled: document.querySelector('#attractModeToggle')?.checked,
     graphicFatalities: document.querySelector('#goreToggle')?.checked,
@@ -367,10 +369,11 @@ try {
   assert.equal(title.soundCaptions, false);
   assert.match(title.onlineButton, /PRIVATE ROOM/);
   assert.match(title.demoButton, /WATCH DEMO/);
-  // v3.3 FRESH: the showcase must be findable from the title menu, and the
-  // NEW VERSION affordance must stay hidden on an up-to-date load.
-  assert.match(title.rigShowcaseButton, /RIG SHOWCASE/);
-  assert.match(title.rigShowcaseButton, /RIG VS SPRITE/);
+  // 4.0: the skeletal-rig experiment is retired, so the title menu must NOT
+  // carry a RIG SHOWCASE entry any more.
+  assert.equal(title.rigShowcaseButton, false,
+    "the retired rig showcase must not be in the title menu");
+  // The NEW VERSION affordance must stay hidden on an up-to-date load.
   assert.equal(title.updateToastHidden, true);
   assert.equal(title.attractEnabled, true);
   assert.equal(title.graphicFatalities, true);

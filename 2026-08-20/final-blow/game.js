@@ -1259,448 +1259,6 @@ function unifiedFighterReady(fighterId) {
   return unifiedCellDrawable(fighterId, UNIFIED_CELLS.idle);
 }
 
-// ---------------------------------------------------------------------------
-// v3.1 SKELETAL RIG PILOT — deathblow only, OPT-IN, off by default.
-//
-// Everything below is inert unless somebody asks for it with `?rig=1` (or
-// `?rig=p1` / `?rig=p2` for a side-by-side against the shipped sprite) or calls
-// `window.__finalBlowQa.rig(...)`. With the rig off, `rigDrawSide` returns null
-// on every call, `drawFighter` takes exactly the branches it took at 3.0, and
-// no rig asset is even requested. See engine/rig.mjs for why the pilot exists.
-// ---------------------------------------------------------------------------
-const RIG_FIGHTER = "deathblow";
-
-// ---------------------------------------------------------------------------
-// v3.2 SHOWCASE — CPU RIG-vs-SPRITE. `?rigdemo=1` (rig on P1) / `?rigdemo=2`
-// (rig on P2), both sides CPU, DEATHBLOW VS DEATHBLOW.
-//
-// WHY A MIRROR MATCH. The rig pilot is a RENDER-PATH change, so the only
-// honest comparison is one where the render path is the ONLY difference.
-// Different fighters would put different bodies, different walk speeds and
-// different kits either side of the screen and the viewer would be judging
-// four variables at once. Same character, same kit, same choreographer, same
-// stage: one side resolves WALK and IDLE through engine/rig.mjs and the other
-// through the shipped sprite bank, and nothing else about them differs.
-// ---------------------------------------------------------------------------
-function showcaseRequestedSide() {
-  const raw = new URLSearchParams(location.search).get("rigdemo");
-  if (raw === null) return null;
-  const value = String(raw).toLowerCase();
-  if (value === "0" || value === "off" || value === "false" || value === "no") return null;
-  if (value === "2" || value === "p2" || value === "right") return 1;
-  return 0;
-}
-const SHOWCASE_BOOT_SIDE = showcaseRequestedSide();
-// The share of free decision points the showcase choreographer spends
-// WALKING. The rig covers walk and idle only, so those are the beats where
-// the two paths differ at all — but a pure walk loop is not a fight, and the
-// rig's sprite fallback for attacks/jumps/reactions is part of what is being
-// judged, so the remaining ~38% still runs the ordinary coverage pipeline.
-// Measured against the sim-lite harness: 0 gives 52% of ticks to lead
-// directives and 0% to walking; 0.75 gives 39% to walking and still reaches
-// 30/30 kit coverage. Above ~0.85 the checklist starts to slip.
-const SHOWCASE_LOCOMOTION = 0.75;
-// A fixed seed, so `?rigdemo=1` and `?rigdemo=2` are the SAME choreography
-// with the sides swapped — which is the whole point of the swap.
-const SHOWCASE_SEED = 3200;
-
-// ---------------------------------------------------------------------------
-// v3.5 SHOWCASE SPACING — "separate the players slightly so it doesnt get
-// confusing with them too close."
-//
-// The showcase is a MIRROR MATCH by design: same character, same costume, same
-// kit, one drawn by the rig and one by the sprite bank. That is what makes the
-// comparison honest and it is also what makes an overlap unreadable — when two
-// identical DeathBlows interpenetrate you cannot tell which limb belongs to
-// which renderer, which is the entire thing the viewer is there to judge.
-//
-// Measured over 48s of real choreographer play at the shipped spacing: median
-// separation 164px against a 105px body width, 28% of fight ticks under 120px
-// and a minimum of 1px. So they were inside each other more than a quarter of
-// the time.
-//
-// Three showcase-ONLY nudges, in ascending order of intrusiveness. Every one of
-// them is behind `demoSession.showcase`, so versus, arcade, training, online
-// and the ordinary attract demo are untouched, and none of them changes a
-// pushbox, a hurtbox or a hitbox for real play.
-// ---------------------------------------------------------------------------
-
-/**
- * True only inside a LIVE `?rigdemo=` / `qa.rigShowcase()` session. The one
- * gate everything below hangs off. `demoSession.active` is part of it so a
- * `qa.fight()` staged after a showcase cannot inherit showcase spacing, and so
- * the value is constant for a whole match (which is what keeps the round-start
- * position a deterministic rebuild for rollback and replay).
- */
-function showcaseActive() {
-  return Boolean(demoSession.active && demoSession.showcase);
-}
-
-// 1. A wider opening. The pair still starts well inside the stage walls
-//    (stageMinX 76 / stageMaxX 1204), so neither is cornered at the bell.
-const SHOWCASE_HOME_X = Object.freeze([288, 992]);
-
-// 2. The legibility floor: how far apart two bodies have to be before they
-//    read as two bodies. 105px of body plus the arm swing either side.
-const SHOWCASE_LEGIBLE_GAP = 250;
-
-// 3. How hard the floor pushes, per fighter per tick. Deliberately far BELOW
-//    a walk step (~5.4px/tick) so it can never stop the choreographer closing
-//    distance for a throw or a point-blank normal — it is a drift that fixes
-//    the resting spacing, not a wall. At 1.6 each the pair opens ~192px/s when
-//    neither of them is committed, and loses ~30% of an approach when one of
-//    them means it.
-const SHOWCASE_DRIFT_PER_TICK = 1.6;
-
-/** Round-start position. Identical to the shipped pair outside the showcase. */
-function fighterHomeX(side) {
-  const home = showcaseActive() ? SHOWCASE_HOME_X : FIGHTER_HOME_X;
-  return side === 0 ? home[0] : home[1];
-}
-
-/**
- * A fighter is COMMITTED when moving him would change what the fight does:
- * a live hitbox (the swing must connect at the range the choreographer staged
- * it for), a reaction, a throw, a dash or an airborne arc. Everything else —
- * idle, walking, crouching, and an attack's RECOVERY, whose hitboxes have
- * already closed — is safe to nudge, and the recovery tail is precisely where
- * a landed exchange leaves the pair standing inside each other.
- */
-function showcaseCommitted(fighter) {
-  if (!fighter.grounded || fighter.down || fighter.grabbing || fighter.grabbed) return true;
-  if (fighter.hitstunFrames > 0 || fighter.blockstunFrames > 0 || fighter.pendingKnockdown) return true;
-  if (fighter.knockdownFrames > 0 || fighter.wakeupFrames > 0) return true;
-  if (fighter.dizzyFrames > 0 || fighter.guardCrushFrames > 0 || fighter.dashFrames > 0) return true;
-  // Startup and the active window are committed; the recovery is not.
-  if (fighter.attacking) return fighter.attackFrame <= fighter.attacking.activeEndFrame;
-  return false;
-}
-
-/**
- * The showcase legibility drift. Runs immediately after the real pushbox
- * separation and only while NEITHER fighter is committed. A live exchange
- * therefore has the shipped spacing exactly, so every staged move connects at
- * the range the choreographer picked it for; what changes is where the pair
- * SETTLES around the exchanges, which is where the overlap the owner reported
- * actually lived.
- */
-function driftShowcaseFightersApart() {
-  if (!showcaseActive() || state.phase !== "fight" || state.finisher) return;
-  const [a, b] = state.fighters;
-  if (!a || !b) return;
-  if (showcaseCommitted(a) || showcaseCommitted(b)) return;
-  const gap = Math.abs(a.x - b.x);
-  if (gap >= SHOWCASE_LEGIBLE_GAP) return;
-  // Never push a fighter into the wall — if one is cornered the other takes
-  // the whole step, so the pair still separates instead of jamming.
-  const step = Math.min(SHOWCASE_DRIFT_PER_TICK, (SHOWCASE_LEGIBLE_GAP - gap) * 0.5);
-  const left = a.x <= b.x ? a : b;
-  const right = left === a ? b : a;
-  const leftRoom = left.x - MOVEMENT_RULES.stageMinX;
-  const rightRoom = MOVEMENT_RULES.stageMaxX - right.x;
-  const leftStep = Math.min(step + (rightRoom < step ? step - rightRoom : 0), leftRoom);
-  const rightStep = Math.min(step + (leftRoom < step ? step - leftRoom : 0), rightRoom);
-  left.x -= leftStep;
-  right.x += rightStep;
-}
-
-const rigState = {
-  mode: (() => {
-    // v3.2: the showcase implies the rig on exactly one side; it is the same
-    // `rigDrawSide` gate `?rig=p1` already uses, so nothing new can draw.
-    if (SHOWCASE_BOOT_SIDE !== null) return SHOWCASE_BOOT_SIDE === 1 ? "p2" : "p1";
-    const requested = new URLSearchParams(location.search).get("rig");
-    if (requested === "1" || requested === "true" || requested === "both") return "both";
-    if (requested === "p1" || requested === "p2") return requested;
-    return "off";
-  })(),
-  module: null,
-  rig: null,
-  image: null,
-  loading: false,
-  failed: false,
-  draws: 0,
-  // v3.2: per side, so a probe can prove WHICH fighter took the rig branch
-  // rather than inferring it from a global total.
-  sideDraws: [0, 0],
-};
-
-function rigLoad() {
-  if (rigState.loading || rigState.failed || rigState.rig) return;
-  rigState.loading = true;
-  // Dynamic import: the module and its atlas are never fetched in the shipped
-  // default, so the service-worker shell stays exactly the size it was.
-  Promise.all([
-    import("./engine/rig.mjs"),
-    fetch(`assets/rig/${RIG_FIGHTER}-rig.json`).then((response) => response.json()),
-    new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = `assets/rig/${RIG_FIGHTER}-pieces.webp`;
-    }),
-  ]).then(([module, json, image]) => {
-    rigState.module = module;
-    rigState.rig = module.prepareRig(json);
-    rigState.image = image;
-  }).catch((error) => {
-    rigState.failed = true;
-    console.warn("rig pilot unavailable", error);
-  }).finally(() => {
-    rigState.loading = false;
-  });
-}
-
-/**
- * Should THIS fighter draw from the rig on this frame? The only entry point;
- * returns null for every fighter, every mode and every beat the pilot does not
- * cover, which is what keeps the shipped path byte-identical.
- */
-function rigDrawSide(fighter) {
-  if (rigState.mode === "off") return null;
-  if (fighter.def.id !== RIG_FIGHTER) return null;
-  if (rigState.mode === "p1" && fighter.side !== 0) return null;
-  if (rigState.mode === "p2" && fighter.side !== 1) return null;
-  // Walk and idle only. Anything else — attacks, reactions, crouch, jumps,
-  // fatalities, cinematics — stays on the shipped sprite bank, so the rig can
-  // never swallow a beat it has no pose for.
-  //
-  // v3.4: DASHES bail too. They were slipping through (grounded, not
-  // attacking) and the rig walked them: a 622 px/s "walk" poses a clamped
-  // 260-cell stride at walk cadence — giant leaping strides for a move the
-  // sprite side draws as a lunge cell. Live-showcase QA measured ~90 rig
-  // dash ticks in 3 minutes, a real share of the "broken legs" report.
-  if (fighter.cinematicFrame !== null || !fighter.grounded || fighter.crouch
-    || fighter.attacking || fighter.stun || fighter.down || fighter.block
-    || fighter.dizzyFrames > 0 || fighter.hitstunFrames > 0
-    || fighter.dashFrames > 0) return null;
-  if (!rigState.rig) { rigLoad(); return null; }
-  return rigState.rig;
-}
-
-// ---------------------------------------------------------------------------
-// v3.3 — RENDER-PASS PARITY FOR THE RIG.
-//
-// 3.1 shipped the rig by skipping every pass that blits a sprite silhouette
-// (rim light, cast shadow, projectile glow), because a silhouette cut from the
-// walk CELL behind a differently-posed rig is a second, wrongly-posed fighter
-// peeking out. Right call, wrong end state: in the 3.2 showcase the sprite
-// side wore the stage's rim light and threw a cast shadow while the rigged
-// side did neither, so a viewer read a LIGHTING difference as an animation
-// difference.
-//
-// The answer is to run those passes ON THE RIG'S OWN PIXELS. Every one of
-// them is a transform + composite around a single body blit, so the rig is
-// rasterised ONCE per pose into an offscreen the size of a source sprite cell
-// (RIG_CELL — twice RIG_CELL, so the rig keeps its 3.2 native-draw
-// crispness at fight render sizes), and each pass blits THAT. This also fixes a parity break in the passes the rig already
-// ran: drawRig lays down 14 overlapping pieces, so the floor reflection's
-// per-draw opacity filter and the body drop shadow applied fourteen times,
-// stacking toward full opacity where torso, pelvis and arm overlap — the
-// rig's reflection read hotter than the sprite's. One blit, one alpha, one
-// filter, one shadow: a sprite cell's compositing exactly.
-//
-// Per-side scratches, keyed on the pose inputs: the cast shadow, the rim
-// light, the mirror pass and the main pass share one rasterisation per tick.
-// Nothing here allocates or runs with the rig off.
-// ---------------------------------------------------------------------------
-// 2x the sprite cell: renderSize tops out near 430px, so the blit is a mild
-// DOWNscale and the rig stays as crisp as its 3.2 native-resolution draw.
-const RIG_CELL = 640;
-const rigCellScratches = [null, null];
-
-function rigCellScratch(side) {
-  let scratch = rigCellScratches[side];
-  if (!scratch) {
-    const cell = document.createElement("canvas");
-    cell.width = RIG_CELL;
-    cell.height = RIG_CELL;
-    const tint = document.createElement("canvas");
-    tint.width = RIG_CELL;
-    tint.height = RIG_CELL;
-    scratch = {
-      cell, cellContext: cell.getContext("2d"),
-      tint, tintContext: tint.getContext("2d"),
-      key: "", tintKey: "", pose: null,
-    };
-    rigCellScratches[side] = scratch;
-  }
-  return scratch;
-}
-
-/**
- * Resolve this fighter's rig pose and rasterise it into its side's cell —
- * memoised on the pose inputs, so every pass that asks for the same pose in
- * the same frame shares one rasterisation. Pure render-side cache of a pure
- * function: rollback and both peers still agree on every pose.
- */
-// ---------------------------------------------------------------------------
-// v3.4 GAIT EASE — render-side, per side, on the superDimLevel pattern (module
-// state the sim never reads, never snapshots and rollback never touches).
-//
-// WHY. Locomotion vx in this game is BANG-BANG: held direction sets full walk
-// speed on one tick, release zeroes it on the next, and live-showcase QA
-// measured the choreographer's real approaches as ~7-tick bursts with 2-tick
-// stops. Feeding raw vx to the rig made every stop SNAP the body between the
-// walk pose and the settled stance at ~8Hz — the reported marionette read. A
-// pose that eases across ticks needs one tick of memory, and that memory
-// cannot live in the sim (the rig is a render path; the sim must stay
-// bit-identical with the rig off). So it lives here, advanced by SIM-TICK
-// deltas — pause and 0.25x advance zero ticks, so a paused frame is stable —
-// and it snaps to the target whenever it lands within half a px/s, so a held
-// walk and a settled idle are exactly the steady-state poses, not
-// asymptotically near them.
-//
-//   speedX     signed gait velocity (vx * facing: + = advancing), fast ease —
-//              drives the stride, so the planted-foot constraint stays honest
-//              in both directions and a reversal sweeps through a weight
-//              shift instead of popping.
-//   speedLift  unsigned SLOW average — drives swing lift/ankle/secondary
-//              amplitudes, so tap-tap footsies keep the feet low while a
-//              genuinely held walk earns the full authored swing.
-// ---------------------------------------------------------------------------
-const RIG_GAIT_RISE = 0.30;  // per-tick pull toward a faster gait (~3 ticks to 63%)
-const RIG_GAIT_FALL = 0.14;  // per-tick settle toward a slower one (~7 ticks to 63%)
-const RIG_GAIT_SLOW = 0.09;  // the amplitude average (~11 ticks to 63%)
-const rigGaitEases = [null, null];
-
-function rigGaitEase(fighter) {
-  let gait = rigGaitEases[fighter.side];
-  if (!gait) {
-    gait = { tick: -1, speedX: 0, speedLift: 0 };
-    rigGaitEases[fighter.side] = gait;
-  }
-  const tick = state.simulationTick;
-  // v3.5: the eased signal is a WALK signal, so it is capped at the fastest
-  // walk this fighter has. rigDrawSide already refuses to pose a dash, but the
-  // ease carries momentum ACROSS the bail: a 622 px/s forward dash is still in
-  // this average on the first rig-eligible ticks after it ends, and the rig
-  // dutifully posed the stride for it. Live `?rigdemo=1` telemetry caught it —
-  // speedX reaching 622 and -534, a stride pinned at the MAX_STRIDE_CELLS
-  // runaway guard (which is itself a skate), and the hips driven to row 280
-  // against a settled 192. Both walk speeds already carry any House Rules
-  // speedScale, so the cap moves with the mutators instead of fighting them.
-  const walkCap = Math.max(fighter.movement.forwardWalkSpeed, fighter.movement.backWalkSpeed);
-  const target = clamp(fighter.vx * fighter.facing, -walkCap, walkCap);
-  const delta = tick - gait.tick;
-  if (delta < 0 || delta > 30) {
-    // A fresh round, or the rig has been away on a sprite beat (attack,
-    // reaction, dash) long enough that easing from the stale value would
-    // invent motion nobody saw: snap.
-    gait.speedX = target;
-    gait.speedLift = Math.abs(target);
-  } else {
-    for (let i = 0; i < delta; i += 1) {
-      const k = Math.abs(target) > Math.abs(gait.speedX) ? RIG_GAIT_RISE : RIG_GAIT_FALL;
-      gait.speedX += (target - gait.speedX) * k;
-      gait.speedLift += (Math.abs(target) - gait.speedLift) * RIG_GAIT_SLOW;
-    }
-    if (Math.abs(gait.speedX - target) < 0.5) gait.speedX = target;
-    if (Math.abs(gait.speedLift - Math.abs(target)) < 0.5) gait.speedLift = Math.abs(target);
-  }
-  gait.tick = tick;
-  return gait;
-}
-
-function rigFrameCell(fighter, rig, renderSize) {
-  const scratch = rigCellScratch(fighter.side);
-  const gait = rigGaitEase(fighter);
-  const sim = {
-    walkTime: fighter.walkTime,
-    animTime: fighter.animTime,
-    speedX: gait.speedX,
-    speedLift: gait.speedLift,
-    pxPerCell: renderSize / rig.source.cellSize,
-    fatigue: clamp(1 - fighter.health / 100, 0, 1),
-  };
-  const key = `${sim.walkTime}|${sim.animTime}|${sim.speedX}|${sim.speedLift}|${sim.pxPerCell}|${sim.fatigue}`;
-  if (key !== scratch.key) {
-    scratch.key = key;
-    scratch.tintKey = "";
-    scratch.pose = rigState.module.rigPose(rig, sim);
-    const cellContext = scratch.cellContext;
-    cellContext.setTransform(1, 0, 0, 1, 0, 0);
-    cellContext.globalCompositeOperation = "source-over";
-    cellContext.clearRect(0, 0, RIG_CELL, RIG_CELL);
-    cellContext.save();
-    // drawRig lands its figure on (-size/2, -size)..(size/2, 0) — the box
-    // drawAtlasFrame blits a cell into. Shifting the origin puts that box on
-    // (0,0)..(cell,cell): the same cell, as a source rect.
-    cellContext.translate(RIG_CELL * 0.5, RIG_CELL);
-    rigState.module.drawRig(cellContext, rig, rigState.image, scratch.pose, RIG_CELL);
-    cellContext.restore();
-  }
-  return scratch;
-}
-
-function drawRigFighter(fighter, rig, renderSize) {
-  const scratch = rigFrameCell(fighter, rig, renderSize);
-  const pose = scratch.pose;
-  // drawAtlasFrame's exact footprint — and now its exact compositing too: the
-  // caller's alpha, filter and drop shadow land on ONE image of the body.
-  ctx.drawImage(scratch.cell, -renderSize * 0.5, -renderSize, renderSize, renderSize);
-  if (!reflectionPassActive) {
-    rigState.draws += 1;
-    rigState.sideDraws[fighter.side] += 1;
-    presentationDebug.lastRigPose[fighter.side] = {
-      walking: pose.walking,
-      phase: Number(pose.phase.toFixed(4)),
-      strideCells: Number(pose.strideCells.toFixed(2)),
-      hipRow: Number(pose.hipRow.toFixed(2)),
-      nearFootX: Number(pose.feet.near.x.toFixed(2)),
-      farFootX: Number(pose.feet.far.x.toFixed(2)),
-      nearFootY: Number(pose.feet.near.y.toFixed(2)),
-      farFootY: Number(pose.feet.far.y.toFixed(2)),
-      nearPlanted: pose.feet.near.planted,
-      farPlanted: pose.feet.far.planted,
-      // v3.5 STANCE: the two planted ankles no longer share a ground row — each
-      // leg stands on the row its own foot artwork actually reaches at its own
-      // phase — so the QA read now needs (a) how far apart the ankles are,
-      // which is the stance-width number the walk was failing on, and (b) where
-      // each SOLE ended up, which is the no-float/no-sink contract restated for
-      // ankle rows that are allowed to differ.
-      ankleSeparation: Number((pose.ankleSeparation ?? 0).toFixed(2)),
-      nearSoleRow: Number((pose.soleRows?.near ?? 0).toFixed(2)),
-      farSoleRow: Number((pose.soleRows?.far ?? 0).toFixed(2)),
-      heelLiftNear: Number((pose.heelLift?.near ?? 0).toFixed(2)),
-      heelLiftFar: Number((pose.heelLift?.far ?? 0).toFixed(2)),
-      // v3.3: which leg wears the leading artwork this frame
-      frontSide: pose.frontSide,
-      // v3.4 walk-dynamics telemetry: the tick this pose latched on, the sim
-      // inputs it was posed from, and the gait dynamics the pose resolved —
-      // per-tick truth for the walk QA harness. Instrumentation only.
-      tick: state.simulationTick,
-      vx: Number(fighter.vx.toFixed(2)),
-      walkTime: Number(fighter.walkTime.toFixed(4)),
-      speedX: Number((pose.speedX ?? 0).toFixed(2)),
-      gait: Number((pose.gait ?? (pose.walking ? 1 : 0)).toFixed(3)),
-      lift: Number((pose.lift ?? 0).toFixed(2)),
-    };
-  }
-}
-
-/**
- * drawSilhouetteFrame's rig twin — a flat tinted cut-out of the RIG's own
- * pixels, cached per colour and invalidated with the pose. This is what lets
- * the rim light, the cast shadow and the projectile glow run on a rigged
- * fighter without blitting a differently-posed sprite behind him.
- */
-function drawRigSilhouetteFrame(fighter, rig, renderSize, color) {
-  const scratch = rigFrameCell(fighter, rig, renderSize);
-  if (scratch.tintKey !== color) {
-    scratch.tintKey = color;
-    const tintContext = scratch.tintContext;
-    tintContext.setTransform(1, 0, 0, 1, 0, 0);
-    tintContext.globalCompositeOperation = "source-over";
-    tintContext.clearRect(0, 0, RIG_CELL, RIG_CELL);
-    tintContext.drawImage(scratch.cell, 0, 0);
-    tintContext.globalCompositeOperation = "source-in";
-    tintContext.fillStyle = color;
-    tintContext.fillRect(0, 0, RIG_CELL, RIG_CELL);
-  }
-  ctx.drawImage(scratch.tint, -renderSize * 0.5, -renderSize, renderSize, renderSize);
-}
-
 /** Bank-routed drawable gate for resolveMotionPose (all five authored banks). */
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
@@ -1861,19 +1419,6 @@ function paletteAtlas(fighterId, side, bank = "base") {
 /** Set the active per-side palettes for the match being built. */
 function applyMatchPalettes(defs, picks) {
   matchPalettes = resolveMatchPalettes(defs.map((def) => def?.id), picks);
-  // v3.2 SHOWCASE — THE MIRROR AUTO-ALT IS A CONFOUND HERE.
-  //
-  // resolveMatchPalettes forces side 1 onto the alt colours whenever both
-  // seats pick the same fighter, which is exactly right for a normal mirror
-  // (you have to be able to tell the two players apart) and exactly wrong for
-  // this one: the rig-vs-sprite comparison is supposed to leave the RENDER
-  // PATH as the only difference, and a different-coloured opponent is a second
-  // one. Worse, `deathblow-pieces.webp` is cut from the BASE sheet only, so an
-  // alt-palette rigged side would draw base-coloured limbs and the comparison
-  // would be measuring a palette bug. Both seats take palette 0; the RIG /
-  // SPRITE pills and the seat tags are what tell them apart. Demo-scoped —
-  // every other mirror, ranked ones included, keeps the auto-alt.
-  if (demoSession.showcase) matchPalettes = [0, 0];
   paletteFxDebug.altSides = matchPalettes.filter((palette) => palette === 1).length;
 }
 
@@ -2298,15 +1843,9 @@ const demoSession = {
   // cabinet has NOT shown for it yet. Bounded by the roster (10 fighters x
   // 30 ids), reset with the session, and never read by the sim.
   coverageCarry: {},
-  // v3.2 SHOWCASE: null for every ordinary/attract exhibition. When set it is
-  // { fighterId, rigSide } and this demo session is the rig-vs-sprite mirror
-  // match — the director's matchup is overridden, the choreographer is built
-  // with a locomotion bias and the two on-screen tags draw. Meta state on the
-  // demoSession pattern: never snapshotted, never read by the checksummed sim.
-  showcase: null,
 };
 
-// v3.2 SHOWCASE — the demo speed transport. See engine/demo-speed.mjs for why
+// v3.2 — the demo speed transport. See engine/demo-speed.mjs for why
 // this scales the TICK CADENCE and never dt. `?speed=` seeds it at boot; the
 // keys, the qa hooks and the on-screen chip all drive this one object.
 const demoSpeed = createDemoSpeed({
@@ -3873,7 +3412,6 @@ function demoSnapshot() {
     resultScheduled: Boolean(demoSession.resultTimer),
     idleScheduled: Boolean(demoSession.idleTimer),
     director: demoSession.director?.snapshot() || null,
-    showcase: demoSession.showcase ? { ...demoSession.showcase } : null,
   };
 }
 
@@ -3926,7 +3464,6 @@ function endDemoSession() {
   demoSession.choreo = null;
   demoSession.pairsSeen = [];
   demoSession.coverageCarry = {};
-  demoSession.showcase = null;
   document.body.classList.remove("demo-active");
   $("#demoHud").hidden = true;
   $("#demoResultStatus").hidden = true;
@@ -3940,63 +3477,6 @@ function exitDemo() {
   endDemoSession();
   showScreen("title");
   return true;
-}
-
-// ---------------------------------------------------------------------------
-// v3.2 SHOWCASE — entry, side swap and the transport scoping.
-// ---------------------------------------------------------------------------
-
-/**
- * Land straight in a CPU-vs-CPU DeathBlow mirror with the rig on one side and
- * the shipped sprite on the other. `rigSide` 0 puts the rig on P1 (the left
- * fighter), 1 puts it on P2 — the swap exists purely so the owner can rule
- * out a left/right or facing bias in what he is seeing.
- */
-function startRigShowcase(rigSide = 0, { seed = SHOWCASE_SEED, qa = false } = {}) {
-  const side = rigSide === 1 || rigSide === "p2" || rigSide === "2" ? 1 : 0;
-  rigState.mode = side === 1 ? "p2" : "p1";
-  rigLoad();
-  startDemo({
-    showcase: { fighterId: RIG_FIGHTER, rigSide: side },
-    seed,
-    qa: Boolean(qa),
-  });
-  demoSpeed.hintUntilMs = performance.now() + DEMO_SPEED_HINT_MS;
-  return showcaseSnapshot();
-}
-
-/**
- * Flip which side wears the rig, live. Pure render-path state — the sim, the
- * choreographer and both rng streams are untouched, so the fight the owner is
- * watching carries straight on with the labels and the render paths swapped.
- */
-function swapShowcaseSides() {
-  if (!demoSession.showcase) return null;
-  const side = demoSession.showcase.rigSide === 1 ? 0 : 1;
-  demoSession.showcase.rigSide = side;
-  rigState.mode = side === 1 ? "p2" : "p1";
-  return showcaseSnapshot();
-}
-
-function showcaseSnapshot() {
-  const showcase = demoSession.showcase;
-  return {
-    active: Boolean(showcase),
-    fighter: showcase?.fighterId || null,
-    rigSide: showcase ? showcase.rigSide : null,
-    spriteSide: showcase ? 1 - showcase.rigSide : null,
-    rigMode: rigState.mode,
-    rigLoaded: Boolean(rigState.rig),
-    rigFailed: rigState.failed,
-    // The ledger the comparison lives or dies on: which side's BODY came out
-    // of which renderer, counted at the two draw sites themselves.
-    rigSideDraws: [...rigState.sideDraws],
-    spriteSideDraws: [...presentationDebug.spriteBodyDraws],
-    tagDraws: presentationDebug.showcaseTagDraws,
-    locomotion: demoSession.choreo ? demoSession.choreo.locomotion() : 0,
-    matchup: demoSession.cycle ? [...demoSession.cycle.picks] : null,
-    speed: demoSpeed.snapshot(),
-  };
 }
 
 /**
@@ -4036,7 +3516,7 @@ function demoSpeedSnapshot() {
 
 /**
  * The transport keys. Runs BEFORE the any-input-exits-the-demo rule in the
- * keydown listener — otherwise every one of these would quit the showcase.
+ * keydown listener — otherwise every one of these would quit the demo.
  */
 function handleDemoSpeedKey(event) {
   if (!demoSpeedScoped() || event.altKey || event.ctrlKey || event.metaKey) return false;
@@ -4060,8 +3540,6 @@ function handleDemoSpeedKey(event) {
     case "Digit2": demoSpeed.setRate(0.5); break;
     case "Digit3": demoSpeed.setRate(0.25); break;
     case "Digit4": demoSpeed.setRate(0.1); break;
-    // The side swap only means anything in the showcase itself.
-    case "KeyR": if (!swapShowcaseSides()) return false; break;
     default: return false;
   }
   demoSpeed.hintUntilMs = performance.now() + DEMO_SPEED_HINT_MS;
@@ -4078,35 +3556,14 @@ function startNextDemoMatch() {
   if (demoSession.choreo) {
     Object.assign(demoSession.coverageCarry, demoSession.choreo.carryover());
   }
-  const directed = demoSession.director.next();
-  // v3.2 SHOWCASE: the rig-vs-sprite exhibition overrides the director's
-  // MATCHUP only — the stage, the track and the cycle counter still come off
-  // the director's deterministic bags, so the showcase still rotates scenery
-  // instead of staring at one street. A COPY, because the director freezes
-  // the cycles it hands out and its own bag state must stay untouched: an
-  // ordinary attract run is unchanged either side of this branch.
-  const cycle = demoSession.showcase
-    ? { ...directed, picks: [demoSession.showcase.fighterId, demoSession.showcase.fighterId] }
-    : directed;
+  const cycle = demoSession.director.next();
   const picks = cycle.picks.map((id) => roster.findIndex((fighter) => fighter.id === id));
-  // A mirror is invalid for the DIRECTOR (its bags are unordered pairs of
-  // distinct fighters) and is the entire point of the showcase, so the guard
-  // keeps its teeth everywhere except there.
   if (picks.some((index) => index < 0)
-    || (!demoSession.showcase && picks[0] === picks[1])) throw new Error("Demo director produced an invalid matchup.");
+    || picks[0] === picks[1]) throw new Error("Demo director produced an invalid matchup.");
   demoSession.cycle = cycle;
   demoSession.matches += 1;
   demoSession.superSide = (cycle.cycle - 1) % 2;
-  // v3.2 SHOWCASE: the attract loop's GUARANTEED OPENING SUPER hijacks BOTH
-  // CPUs for the first seconds of every round — one marches in and supers
-  // while the other stands and guards. That is the wrong opening for this
-  // exhibition twice over: it is a beat the rig has no pose for (so both
-  // sides are on the sprite bank and nothing is being compared), and
-  // deathblow's authored super art puts him in a visibly DIFFERENT OUTFIT
-  // from his walk cells, which reads as "the rig changed the character" to
-  // anyone watching. Pre-marking it shown skips the whole override and hands
-  // the opening to the locomotion bias. Attract is untouched.
-  demoSession.superShown = Boolean(demoSession.showcase);
+  demoSession.superShown = false;
   $("#attractScores").hidden = true;
   state.mode = "demo";
   state.arcadeRun = null;
@@ -4119,9 +3576,7 @@ function startNextDemoMatch() {
   state.stage = cycle.stage;
   $("#demoResultStatus").hidden = true;
   startMatch(true);
-  // ...and without the forced super there is no reason to hand one side a
-  // full Grit bar either; both showcase fighters build meter normally.
-  if (!demoSession.showcase) state.fighters[demoSession.superSide].meter = GRIT_RULES.maximum;
+  state.fighters[demoSession.superSide].meter = GRIT_RULES.maximum;
   // v2.9 FLOW: a fresh coverage choreographer per exhibition. It works from
   // kit ids (what beginAttack resolves moves through) and knows whether this
   // stage/round actually planned a weapon, so the pickup beat is only chased
@@ -4133,11 +3588,6 @@ function startNextDemoMatch() {
     hasStageWeapon: Boolean(state.stageWeapon),
     seed: hashSeed(demoSession.director.snapshot().seed, "choreo", cycle.cycle),
     priorShown: demoSession.coverageCarry,
-    // v3.2 SHOWCASE: bias the free decision points toward walking, because
-    // walk is the only beat the rig currently owns. 0 for every other
-    // exhibition, and at 0 the choreographer does not so much as draw an rng
-    // number for it — the attract stream stays bit-identical to 3.1.
-    locomotion: demoSession.showcase ? SHOWCASE_LOCOMOTION : 0,
   });
   const pairKey = demoMatchupKey(...cycle.picks);
   if (!demoSession.pairsSeen.includes(pairKey)) demoSession.pairsSeen.push(pairKey);
@@ -4150,26 +3600,30 @@ function startNextDemoMatch() {
   return true;
 }
 
-function startDemo({ attract = false, qa = false, seed = null, showcase = null } = {}) {
+function startDemo({ attract = false, qa = false, seed = null } = {}) {
   if (onlineSession.role) disconnectOnline(true);
   if (demoSession.active) endDemoSession();
   clearIdleDemoTimer();
-  // v3.2 SHOWCASE: the showcase is a cold-load deep link, so it must not need
-  // a user gesture — fullscreen and the audio unlock both throw or warn
-  // without one. Same exemption attract already has, for the same reason.
-  if (!attract && !qa && !showcase) {
+  if (!attract && !qa) {
     enterImmersiveMode();
     unlockAudio();
   }
   demoSession.active = true;
   demoSession.attract = Boolean(attract);
   demoSession.qa = Boolean(qa);
-  demoSession.showcase = showcase ? { ...showcase } : null;
   // v3.2: a demo always STARTS running. The rate is deliberately kept (it is
-  // what `?speed=` set, and it should survive the showcase's own match loop),
-  // but a pause left latched from a previous session would open the next one
+  // what `?speed=` set, and it should survive the demo's own match loop), but
+  // a pause left latched from a previous session would open the next one
   // frozen with no obvious cause.
   demoSpeed.setPaused(false);
+  // v4.0: THE LEGEND'S HOME. The speed transport's key legend used to be armed
+  // only by the retired A/B exhibition's entry point, so on its own the demo
+  // never announced the transport at all — the keys worked, but the only way
+  // to discover them was to already know one and press it. Arming the hint on
+  // every demo start puts the legend where the controls are actually useful:
+  // nine seconds under the floor line at the top of a WATCH DEMO (and of the
+  // attract loop), then out of the way, and any transport key brings it back.
+  demoSpeed.hintUntilMs = performance.now() + DEMO_SPEED_HINT_MS;
   // v2.9 FLOW round 2 — SAME-PAGE DETERMINISM. A seeded demo is the QA
   // reproduction path, and every match seed derives from state.matchSerial
   // (see seedMatch), which only ever GROWS across a page's lifetime. A second
@@ -6706,9 +6160,7 @@ function makeFighter(index, side, overrideDef = null) {
       dashSpeed: movement.dashSpeed * 1.03,
     } : movement,
     side,
-    // v3.5: FIGHTER_HOME_X outside the rig showcase — the shipped 355/925 —
-    // and the wider showcase pair inside it. See fighterHomeX.
-    x: fighterHomeX(side),
+    x: FIGHTER_HOME_X[side],
     y: FLOOR,
     vx: 0,
     vy: 0,
@@ -6841,9 +6293,6 @@ const presentationDebug = {
   // authored atlas facing — so QA can prove a mixed-orientation sheet (post)
   // renders toward the opponent instead of trusting numeric facing alone.
   lastFighterMirror: [null, null],
-  // v3.1 rig pilot: the last resolved rig pose per side, or null on a side the
-  // rig never drew. Instrumentation ONLY — read by qa.rig(), never by the sim.
-  lastRigPose: [null, null],
   practicalLights: 0, weatherParticles: 0, foregroundOccluders: 0, crowdFlashes: 0,
   counterFlashes: 0, projectileGlows: 0, swipeRibbons: 0, wallSplats: 0,
   focusLines: 0, lightSpills: 0,
@@ -6865,10 +6314,6 @@ const presentationDebug = {
   // 0→1→2→3 rather than trusting the descriptor alone.
   walkCells: 0,
   lastWalkKey: [null, null],
-  // v3.2 SHOWCASE: per-side body draws that took the SPRITE branch, and the
-  // on-screen RIG/SPRITE tags. Instrumentation only — never read by the sim.
-  spriteBodyDraws: [0, 0],
-  showcaseTagDraws: 0,
   // v2.9 final round (R9/T6): draw-site instrumentation. reactionDrawPriority
   // counts the frames the reacting fighter was promoted above the attacker in
   // the pair sort; turnaroundDraws / turnaroundBlocked are the TURNAROUND
@@ -11163,9 +10608,9 @@ function startMatch(resetSet = true) {
   // Wave 19: any match that is NOT a bracket bout clears the pending bracket
   // outcome so the result screen never wears the wrong buttons.
   if (!bracketSession.playing) bracketSession.lastOutcome = null;
-  // v3.2: the showcase boots cold from a URL, so it has no user gesture to
-  // unlock audio with either — same exemption, same reason as attract.
-  if (!(state.mode === "demo" && (demoSession.attract || demoSession.showcase))) unlockAudio();
+  // The attract loop starts itself with no user gesture, so it must never try
+  // to unlock audio — the call warns without one.
+  if (!(state.mode === "demo" && demoSession.attract)) unlockAudio();
   // Release 1.6: AUTO mode now picks the stage-matched track instead of
   // cycling the jukebox. Demo/attract keeps whatever was already playing.
   if (state.mode !== "demo") applyAutoStageMusic();
@@ -13032,13 +12477,7 @@ function updateHud() {
   if (rollbackResimulating) return;
   if (!state.fighters.length) return;
   const sideTags = $$(".side-tag");
-  // v3.2 SHOWCASE: in a mirror match the health-bar names are identical, so
-  // the seat tags carry the render path too — a second, DOM-side statement of
-  // the same fact the in-world pills make, in case one is ever missed.
-  const showcaseRig = demoSession.showcase ? demoSession.showcase.rigSide : null;
-  const seatTag = (side) => (state.mode !== "demo" ? `P${side + 1}`
-    : showcaseRig === null ? `CPU ${side + 1}`
-      : `CPU ${side + 1} · ${side === showcaseRig ? "RIG" : "SPRITE"}`);
+  const seatTag = (side) => (state.mode !== "demo" ? `P${side + 1}` : `CPU ${side + 1}`);
   if (sideTags[0]) sideTags[0].textContent = seatTag(0);
   if (sideTags[1]) sideTags[1].textContent = seatTag(1);
   state.fighters.forEach((fighter, side) => {
@@ -16644,10 +16083,6 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     updatePaintTraps();
     resolveCombatInteractions();
     separateFighters();
-    // v3.5 SHOWCASE SPACING: a showcase-only legibility drift, AFTER the real
-    // pushbox pass so it can never mask or fight it. Returns immediately in
-    // every other mode.
-    driftShowcaseFightersApart();
     updateFacings();
   }
   updateComboState();
@@ -20276,9 +19711,6 @@ function drawFighter(fighter, time) {
   // height-matched to. Nothing else in the correction changes — the unified
   // sheets are one global scale each and mutually registered, so no unified
   // cell takes a per-cell adjust.
-  // v3.1 rig pilot. Null in the shipped default, and null for every beat the
-  // pilot does not cover, so nothing below it changes when the rig is off.
-  const rigDraw = rigDrawSide(fighter);
   const unifiedActive = unifiedFighterReady(fighter.def.id);
   const moveSheetAdjust = bankSheetAdjust(fighter.def.id, pose.bank)
     * cellDrawAdjust(fighter.def.id, pose.bank, frame, { unified: unifiedActive });
@@ -20493,7 +19925,7 @@ function drawFighter(fighter, time) {
     aura.addColorStop(1, `${fighter.def.accent}00`);
     ctx.fillStyle = aura;
     ctx.fillRect(-auraReach, -renderSize * 0.32 - auraReach, auraReach * 2, auraReach * 2);
-    if (atlas?.complete && atlas.naturalWidth && !rigDraw) {
+    if (atlas?.complete && atlas.naturalWidth) {
       // Pulsing accent outline: a slightly enlarged silhouette behind the
       // sprite leaves a charged fringe all the way around the body (the KI/SF3
       // max-meter read). Feet-anchored scale keeps it grounded.
@@ -20552,7 +19984,7 @@ function drawFighter(fighter, time) {
   if (atlas?.complete && atlas.naturalWidth) {
     // BODY-FIRST (spec 8): trail copies stay OUT of the mirror — the band
     // only ever shows fragments of them, which read as sprite debris.
-    const baseTrails = state.accessibility.reducedMotion || reflectionPassActive || rigDraw
+    const baseTrails = state.accessibility.reducedMotion || reflectionPassActive
       ? 0
       : attack ? (attackKind === "special" ? 3 : activePower > 0.8 ? 2 : 0) : 0;
     const trails = Math.floor(baseTrails * state.performance.trailScale);
@@ -20632,12 +20064,6 @@ function drawFighter(fighter, time) {
       }
     }
 
-    // v3.1 skipped every silhouette pass while the rig drew the body — a rim
-    // light cut from the walk cell behind a rigged pose is a second,
-    // differently-posed fighter peeking out. v3.3: the rim light and the
-    // projectile glow run on a silhouette of the RIG'S OWN pixels instead
-    // (drawRigSilhouetteFrame), under the sprite path's exact alpha, offset
-    // and composite — so both showcase sides finally wear the same light.
     if (!reflectionPassActive && state.performance.shadows && !graphicFatality
       && !state.accessibility.highContrast) {
       // Stage-keyed rim light: a tinted silhouette peeking 2-3px past the edge
@@ -20648,8 +20074,7 @@ function drawFighter(fighter, time) {
       ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha = 0.35;
       ctx.translate(rim.direction * fighter.facing * 3, -2);
-      if (rigDraw) drawRigSilhouetteFrame(fighter, rigDraw, renderSize, stageRimColor());
-      else drawSilhouetteFrame(atlas, frame, renderSize, stageRimColor());
+      drawSilhouetteFrame(atlas, frame, renderSize, stageRimColor());
       ctx.restore();
       presentationDebug.rimLights += 1;
     }
@@ -20678,14 +20103,13 @@ function drawFighter(fighter, time) {
         ctx.globalCompositeOperation = "screen";
         ctx.globalAlpha = 0.55 * strength;
         ctx.translate(towardLocal * 5, -2);
-        if (rigDraw) drawRigSilhouetteFrame(fighter, rigDraw, renderSize, tint);
-        else drawSilhouetteFrame(atlas, frame, renderSize, tint);
+        drawSilhouetteFrame(atlas, frame, renderSize, tint);
         ctx.restore();
         presentationDebug.projectileGlows += 1;
       }
     }
 
-    if (!reflectionPassActive && hitSmear > 0 && !rigDraw) {
+    if (!reflectionPassActive && hitSmear > 0) {
       // Directional hit-reaction smear: stretched additive ghosts trailing
       // opposite the knockback on the frames the white hit flash is live.
       const knock = Math.abs(fighter.vx) > 30 ? Math.sign(fighter.vx) : -fighter.facing;
@@ -20703,7 +20127,7 @@ function drawFighter(fighter, time) {
       }
     }
 
-    if (!reflectionPassActive && fighter.dizzyFrames > 0 && !rigDraw
+    if (!reflectionPassActive && fighter.dizzyFrames > 0
       && state.performance.trailScale > 0 && !reducedMotion) {
       // Dizzy double vision: two hue-split silhouette ghosts sway apart and
       // drift back; the amplitude collapses with the drain bar so recovery is
@@ -20740,10 +20164,6 @@ function drawFighter(fighter, time) {
       drawGraphicFatalityVictim(atlas, frame, renderSize, graphicFatality, time,
         renderMirror, fighter.cinematicRotation || 0);
     }
-    // v3.1: THE OPT-IN RENDER PATH. One branch, in the same transform, at the
-    // same footprint drawAtlasFrame uses — so the rigged fighter stands in the
-    // same world space, at the same scale, under the same mirror.
-    else if (rigDraw) drawRigFighter(fighter, rigDraw, renderSize);
     else if (!reflectionPassActive && state.performance.shadows && battleDamageMarks[fighter.side].length) {
       // Accumulating battle damage: composite the accrued marks onto this
       // frame's sprite. The mirror pass and the battery profile stay on the
@@ -20751,11 +20171,6 @@ function drawFighter(fighter, time) {
       drawDamagedAtlasFrame(fighter.side, atlas, frame, renderSize);
       presentationDebug.battleDamage += battleDamageMarks[fighter.side].length;
     } else drawAtlasFrame(atlas, frame, renderSize);
-    // v3.2 SHOWCASE: the honest per-side counterpart to rigState.sideDraws.
-    // The pose/walk-cell tallies above run for BOTH paths (the descriptor is
-    // resolved either way), so they cannot answer "did this fighter's body
-    // come out of the sprite sheet". This counts the branch that actually did.
-    if (!reflectionPassActive && !rigDraw) presentationDebug.spriteBodyDraws[fighter.side] += 1;
     ctx.restore();
 
     // v2.6 MOTION pose cross-fade (spec 3): the previous atlas cell lingers
@@ -20766,7 +20181,7 @@ function drawFighter(fighter, time) {
     // MOTION FIX 5: ghost discipline — alpha caps at 30% and the fade is
     // skipped entirely mid-flip where the rotating transform would smear the
     // old cell across the sky.
-    if (!reflectionPassActive && !graphicFatality && state.hitstop <= 0 && !rigDraw
+    if (!reflectionPassActive && !graphicFatality && state.hitstop <= 0
       && Math.abs(motion.flipRotation) < 0.3) {
       const fadeObs = motionObs[fighter.side];
       if (fadeObs.fadeLeft > 0 && (fadeObs.fadeBank !== pose.bank || fadeObs.fadeFrame !== frame)) {
@@ -22484,53 +21899,6 @@ function drawCinematicGoreOverlay() {
 }
 
 // Unmistakable dizzy feedback: a ring of stars orbiting the head plus a label.
-// ---------------------------------------------------------------------------
-// v3.2 SHOWCASE — the fighter tags.
-//
-// The whole exercise is worthless if the viewer has to guess which DeathBlow
-// is which, and in a mirror match the palette auto-alt is the only other
-// difference on screen. So each fighter wears a small persistent pill:
-//
-//   RIG    — this side resolves walk/idle through engine/rig.mjs
-//   SPRITE — this side is the shipped painted bank, unchanged
-//
-// Anchored to the DRAWN sprite height and pushed clear above the head, never
-// below: the legs are what is being judged and a tag across them would be
-// worse than no tag at all. Render-only; nothing here is read by the sim.
-// ---------------------------------------------------------------------------
-function drawShowcaseTag(fighter) {
-  if (!demoSession.showcase || !fighter) return;
-  const rigged = fighter.side === demoSession.showcase.rigSide;
-  // Honest labelling: the rig only draws walk/idle, so a RIG tag over a
-  // fighter whose rig asset never loaded would be a lie. It says SPRITE until
-  // the rig is genuinely available on that side.
-  const label = rigged && rigState.rig && !rigState.failed ? "RIG" : "SPRITE";
-  const accent = label === "RIG" ? "#4eddf5" : "#ffb347";
-  const drawnHeight = fighterRenderSize(fighter.def.id) * 0.956;
-  const centreX = fighter.x;
-  const baseY = fighter.y - drawnHeight - 34;
-  ctx.save();
-  ctx.font = "900 22px ui-monospace, monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const width = ctx.measureText(label).width + 26;
-  ctx.fillStyle = "rgba(4,9,14,.82)";
-  ctx.fillRect(centreX - width / 2, baseY - 16, width, 32);
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(centreX - width / 2, baseY - 16, width, 32);
-  ctx.fillStyle = accent;
-  ctx.fillText(label, centreX, baseY + 1);
-  // A short stem down toward the head, so a tag can never be read as
-  // belonging to the other fighter when the two overlap at point-blank range.
-  ctx.beginPath();
-  ctx.moveTo(centreX, baseY + 16);
-  ctx.lineTo(centreX, baseY + 28);
-  ctx.stroke();
-  ctx.restore();
-  presentationDebug.showcaseTagDraws += 1;
-}
-
 function drawDizzyStars(fighter, time) {
   if (!fighter || fighter.dizzyFrames <= 0) return;
   const centreX = fighter.x;
@@ -22693,18 +22061,13 @@ function drawFighterCastShadows() {
   ctx.rect(0, FLOOR + 1, W, REFLECTION_DEPTH);
   ctx.clip();
   for (const fighter of state.fighters) {
-    // v3.1 skipped rigged fighters — a sprite-silhouette shadow would walk a
-    // different cycle from the rig's legs. v3.3: the shadow is cut from the
-    // RIG'S OWN pixels instead, under the same transform and alpha, so the
-    // rigged side of the showcase throws the same raked shadow as the sprite.
-    const rigDraw = rigDrawSide(fighter);
     const pose = fighterAnimationPose(fighter);
     const atlas = pose.bank === "specials"
       ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
       : pose.bank === "motion"
         ? fighterMotionAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
         : fighterAtlases[fighter.def.id];
-    if (!rigDraw && (!atlas?.complete || !atlas.naturalWidth)) continue;
+    if (!atlas?.complete || !atlas.naturalWidth) continue;
     const renderSize = fighterRenderSize(fighter.def.id) * bankSheetAdjust(fighter.def.id, pose.bank);
     const jump = Math.max(0, FLOOR - fighter.y);
     const airFade = clamp(1 - jump / 520, 0.25, 1);
@@ -22716,8 +22079,7 @@ function drawFighterCastShadows() {
     // shadow of a mixed-orientation sheet cannot point opposite its fighter.
     ctx.scale(fighter.facing * atlasFrameFacing(fighter.def.id, pose.bank, pose.frame), -stretch);  // flip into the floor, squashed long
     ctx.globalAlpha = (0.3 + deepen * 0.22) * airFade;
-    if (rigDraw) drawRigSilhouetteFrame(fighter, rigDraw, renderSize, "#04060a");
-    else drawSilhouetteFrame(atlas, pose.frame, renderSize, "#04060a");
+    drawSilhouetteFrame(atlas, pose.frame, renderSize, "#04060a");
     ctx.restore();
     presentationDebug.castShadows += 1;
   }
@@ -25001,14 +24363,6 @@ function draw(time) {
     // mode and take the whole draw pass down with it.
     if (key === "lastFighterMirror" || key === "lastWalkKey"
       || key === "motion2CellDraws"
-      // v3.1: the rig pose latch is an array of the same shape and for the same
-      // reason — zeroing it swaps the array for a number and the next write
-      // throws out of the draw pass.
-      || key === "lastRigPose"
-      // v3.2: the same rule again — spriteBodyDraws is a per-side CUMULATIVE
-      // array (zeroing it swaps the array for a number and the next write
-      // throws), and showcaseTagDraws is a cumulative session tally.
-      || key === "spriteBodyDraws" || key === "showcaseTagDraws"
       // v2.9 final round: cumulative session tallies, not per-frame counts.
       || key === "reactionDrawPriority" || key === "turnaroundDraws"
       || key === "turnaroundBlocked") continue;
@@ -25080,10 +24434,6 @@ function draw(time) {
       ordered.forEach((fighter) => drawFighter(fighter, time));
       state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
       state.fighters.forEach((fighter) => drawGuardCrushMarker(fighter, time));
-      // v3.2 SHOWCASE: which fighter is which render path. Drawn in the world
-      // pass so the tag tracks its fighter, and anchored ABOVE THE HEAD —
-      // the legs are the thing under evaluation and nothing may cover them.
-      state.fighters.forEach((fighter) => drawShowcaseTag(fighter));
       drawParticles();
       drawElementalVfx();
       drawForegroundOccluders(state.fighters.length
@@ -25133,7 +24483,7 @@ function draw(time) {
 }
 
 // ---------------------------------------------------------------------------
-// v3.2 SHOWCASE — the transport readout. A persistent rate chip (so the owner
+// v3.2 — the transport readout. A persistent rate chip (so the owner
 // always knows what he is looking at) plus a key legend that shows itself for
 // nine seconds whenever the transport is armed or touched, then gets out of
 // the way. Screen space, after the world restore, top-left — clear of both
@@ -25141,18 +24491,15 @@ function draw(time) {
 // ---------------------------------------------------------------------------
 function drawDemoSpeedHud(nowMs) {
   if (!demoSpeedScoped()) return;
-  const showcase = Boolean(demoSession.showcase);
   const rateLabel = demoSpeed.paused ? "PAUSED" : `${demoSpeed.rate}x`;
   const accent = demoSpeed.paused ? "#ffb347" : demoSpeed.rate === 1 ? "#4eddf5" : "#8affc1";
   const originX = 26;
-  let originY = 122;
+  const originY = 122;
   ctx.save();
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.font = "900 20px ui-monospace, monospace";
-  const head = showcase
-    ? `RIG SHOWCASE · ${rateLabel}`
-    : `DEMO SPEED · ${rateLabel}`;
+  const head = `DEMO SPEED · ${rateLabel}`;
   const headWidth = ctx.measureText(head).width + 24;
   ctx.fillStyle = "rgba(4,9,14,.78)";
   ctx.fillRect(originX, originY - 16, headWidth, 32);
@@ -25161,28 +24508,17 @@ function drawDemoSpeedHud(nowMs) {
   ctx.strokeRect(originX, originY - 16, headWidth, 32);
   ctx.fillStyle = accent;
   ctx.fillText(head, originX + 12, originY + 1);
-  if (showcase) {
-    originY += 30;
-    ctx.font = "900 14px ui-monospace, monospace";
-    const rigSide = demoSession.showcase.rigSide;
-    const sides = `P${rigSide + 1} = RIG   ·   P${2 - rigSide} = SPRITE`;
-    ctx.fillStyle = "rgba(4,9,14,.7)";
-    const sideWidth = ctx.measureText(sides).width + 24;
-    ctx.fillRect(originX, originY - 12, sideWidth, 24);
-    ctx.fillStyle = "#dfe9f2";
-    ctx.fillText(sides, originX + 12, originY + 1);
-  }
   if (nowMs < demoSpeed.hintUntilMs) {
-    // The legend lives BELOW THE FLOOR LINE, not under the chip. A standing
-    // fighter's RIG/SPRITE pill sits around y 165-200 and this panel is the
-    // one overlay wide enough to swallow it — which it did, on the first
-    // capture. Down here it is over the reflection band, clear of both
-    // fighters entirely, and it hides itself after nine seconds anyway.
+    // The legend lives BELOW THE FLOOR LINE, not under the chip: down here it
+    // is over the reflection band, clear of both fighters entirely, and it
+    // hides itself after nine seconds anyway. Armed on every demo start (see
+    // startDemo) and re-armed by any transport key, so the controls announce
+    // themselves once and then stay out of the way.
     ctx.font = "900 14px ui-monospace, monospace";
     const lines = [
       `[  ]  RATE  ${DEMO_SPEED_RATES.join(" / ")}      1 2 3 4  DIRECT`,
       "\\ or SPACE  PAUSE      .  STEP ONE FRAME",
-      showcase ? "R  SWAP RIG/SPRITE SIDES      any other key  EXIT" : "any other key  EXIT",
+      "any other key  EXIT",
     ];
     const width = Math.max(...lines.map((line) => ctx.measureText(line).width)) + 24;
     const legendY = H - 92;
@@ -25213,7 +24549,7 @@ function loop(now) {
   // Wave 15: the adaptive governor watches real frame times (all gates,
   // including the online/forced-profile exclusions, live inside).
   feedPerformanceGovernor(elapsed * 1000);
-  // v3.2 SHOWCASE — ADJUSTABLE DEMO SPEED. The rate scales the WALL-CLOCK
+  // v3.2 ADJUSTABLE DEMO SPEED. The rate scales the WALL-CLOCK
   // SECONDS handed to the fixed-step clock, never the step itself: the clock's
   // accumulator crosses `stepSeconds` proportionally less often and every tick
   // it does take still runs at exactly 1/60s, so the tick STREAM is identical
@@ -27257,10 +26593,10 @@ async function registerOfflineGame() {
 // without knowing what a hard reload is. The worker already skipWaiting()s and
 // claim()s, so when a new version installs, controllerchange fires on every
 // open window — and before 3.3 nothing listened: the page kept running the
-// stale shell it booted from, silently, forever (the owner's ?rigdemo link
-// "did nothing" because a months-old game.js was answering it). Now: if the
+// stale shell it booted from, silently, forever (a deep link the owner was
+// sent "did nothing" because a months-old game.js was answering it). Now: if the
 // player is safely on the title screen, reload straight onto the fresh cache;
-// if a fight (or anything else — a live online session, the showcase he is
+// if a fight (or anything else — a live online session, the demo he is
 // watching) is in progress, never yank the shell out from under it — show a
 // dismissible NEW VERSION toast instead and let the player choose. Offline
 // play is untouched: controllerchange only ever fires after a complete new
@@ -27272,7 +26608,7 @@ let updateToastDismissed = false;
 
 function updateReloadSafe() {
   // Deliberately narrow: only the resting title screen with no online session
-  // and no demo/showcase running. Everything else gets the toast.
+  // and no demo running. Everything else gets the toast.
   return state.screen === "title" && !onlineSession.role && !demoSession.active;
 }
 
@@ -27508,9 +26844,9 @@ function titleKeyboard(event) {
 }
 
 window.addEventListener("keydown", (event) => {
-  // v3.2 SHOWCASE: the transport claims its keys FIRST. Everything below this
+  // v3.2: the transport claims its keys FIRST. Everything below this
   // treats any keypress during a demo as "the viewer wants out", so without
-  // this the slow-motion and frame-step keys would each quit the showcase on
+  // this the slow-motion and frame-step keys would each quit the demo on
   // their first press. Demo/training scoped exactly like the scaler itself.
   if (handleDemoSpeedKey(event)) {
     event.preventDefault();
@@ -27902,17 +27238,6 @@ function menuPadLoop() {
 $$('[data-mode]').forEach((button) => button.addEventListener("click", () => startSelect(button.dataset.mode)));
 $("#onlineButton").addEventListener("click", openOnlineLobby);
 $("#demoButton").addEventListener("click", () => startDemo());
-// v3.3 FRESH: the rig-vs-sprite showcase is reachable from the title menu, not
-// just the invisible `?rigdemo=1` URL param (which the owner could not find).
-// Selecting it does exactly what `?rigdemo=1` does — same seed, same
-// choreography, rig on P1 — plus the gesture perks every other menu-started
-// mode gets and the URL boot path cannot have (startDemo skips both for the
-// showcase because a cold-load deep link has no user gesture to spend).
-$("#rigShowcaseButton").addEventListener("click", () => {
-  enterImmersiveMode();
-  unlockAudio();
-  startRigShowcase(0);
-});
 // Wave 19: THE PHILLY OPEN bracket screen.
 $("#phillyOpenButton")?.addEventListener("click", showPhillyOpen);
 $("#bracketSize4Button")?.addEventListener("click", () => { bracketSession.setupSize = 4; renderBracketSetup(true); });
@@ -29581,10 +28906,6 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         carry: { ...demoSession.coverageCarry },
         hasStageWeapon: demoSession.choreo.hasStageWeapon(),
         cyclePairsSeen: [...demoSession.pairsSeen],
-        // v3.2 SHOWCASE: the locomotion share this exhibition was built with
-        // (0 for every ordinary/attract one) and the mirror assignment.
-        locomotion: demoSession.choreo.locomotion(),
-        showcase: demoSession.showcase ? { ...demoSession.showcase } : null,
         // v2.9 round 4 — THE HONEST HALF OF THE BEAT LEDGER. `beats` above is
         // a sim-state count; this is what the RENDERER actually put on screen,
         // cell index -> cumulative draws (motion2:5 is the turnaround pivot).
@@ -29853,87 +29174,6 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         simulationTick: state.simulationTick,
         simulationHz: SIMULATION_HZ,
       };
-    },
-    // v3.1 SKELETAL RIG PILOT. `qa.rig()` reads; `qa.rig(true|'p1'|'p2'|false)`
-    // switches. Off is the shipped default and `?rig=1` is the other way in.
-    // The returned poses are instrumentation only — nothing here is read by the
-    // simulation, so toggling it cannot desync a match or perturb a replay.
-    rig(mode = null) {
-      if (mode !== null) {
-        const next = mode === true || mode === 1 || mode === "1" || mode === "both" ? "both"
-          : mode === "p1" || mode === "p2" ? mode
-            : "off";
-        rigState.mode = next;
-        if (next !== "off") rigLoad();
-      }
-      return {
-        mode: rigState.mode,
-        fighter: RIG_FIGHTER,
-        loaded: Boolean(rigState.rig),
-        failed: rigState.failed,
-        draws: rigState.draws,
-        bones: rigState.rig ? rigState.rig.bones.length : 0,
-        pieces: rigState.rig ? Object.keys(rigState.rig.pieces).length : 0,
-        pose: presentationDebug.lastRigPose.map((entry) => (entry ? { ...entry } : null)),
-        // v3.2: which side's BODY actually came out of which renderer.
-        sideDraws: [...rigState.sideDraws],
-        spriteSideDraws: [...presentationDebug.spriteBodyDraws],
-      };
-    },
-    // v3.4 — PER-TICK WALK TRUTH. The v3.3 live QA round had no way to read a
-    // fighter's vx/walkTime from the page (game.js is a module; `state` is not
-    // a global), so inline probes for those fields evaluated to undefined and
-    // CDP's returnByValue dropped them — every probe came back `{}`. This is
-    // the missing read: sim-side locomotion fields per fighter, whether each
-    // fighter is rig-ELIGIBLE this tick, and the cumulative draw ledgers whose
-    // per-frame deltas attribute a rendered frame to rig or sprite. Read-only
-    // instrumentation — nothing here writes sim state or perturbs a replay.
-    rigWalk() {
-      return {
-        tick: state.simulationTick,
-        phase: state.phase,
-        screen: state.screen,
-        rigMode: rigState.mode,
-        rigSideDraws: [...rigState.sideDraws],
-        spriteSideDraws: [...presentationDebug.spriteBodyDraws],
-        fighters: state.fighters.map((fighter) => ({
-          side: fighter.side,
-          id: fighter.def.id,
-          x: Number(fighter.x.toFixed(2)),
-          vx: Number(fighter.vx.toFixed(2)),
-          facing: fighter.facing,
-          walkTime: Number(fighter.walkTime.toFixed(4)),
-          // v3.5 BACK-WALK: the signed stride clock the sprite cycle rides.
-          // A retreat makes it go DOWN — that is the read that proves the
-          // cycle is running in reverse rather than just running.
-          strideTime: Number(fighter.strideTime.toFixed(4)),
-          animTime: Number(fighter.animTime.toFixed(4)),
-          grounded: fighter.grounded,
-          crouch: Boolean(fighter.crouch),
-          attacking: Boolean(fighter.attacking),
-          stun: fighter.stun > 0,
-          down: Boolean(fighter.down),
-          block: Boolean(fighter.block),
-          hitstunFrames: fighter.hitstunFrames,
-          dizzyFrames: fighter.dizzyFrames,
-          rigEligible: Boolean(rigDrawSide(fighter)),
-        })),
-        pose: presentationDebug.lastRigPose.map((entry) => (entry ? { ...entry } : null)),
-      };
-    },
-    // --- v3.2 SHOWCASE ----------------------------------------------------
-    // `qa.rigShowcase()` reads; `qa.rigShowcase(0|1)` starts the CPU-vs-CPU
-    // DeathBlow mirror with the rig on that side. `manual: true` runs it under
-    // qaManualMode so a probe owns the clock (and the speed transport stands
-    // down), which is the reproduction path determinism is measured on.
-    rigShowcase(side = null, { manual = false, seed = SHOWCASE_SEED } = {}) {
-      if (side !== null) startRigShowcase(side, { qa: manual, seed });
-      return showcaseSnapshot();
-    },
-    rigShowcaseSwap() {
-      const swapped = swapShowcaseSides();
-      if (!swapped) throw new Error("Start a rig showcase first");
-      return swapped;
     },
     // The transport. `qa.demoSpeed()` reads; `qa.demoSpeed(0.25)` sets the
     // rate. It is a TICK CADENCE multiplier — the fixed step it scales the
@@ -30529,15 +29769,7 @@ if (pendingOnlineInvite) {
   // Wave 15 PWA shortcuts: ?mode=arcade|survival|daily deep-links from the
   // manifest jump list land past the title, straight into their mode.
   const bootMode = new URLSearchParams(location.search).get("mode");
-  // v3.2 SHOWCASE: `?rigdemo=1` / `?rigdemo=2` lands straight in the CPU-vs-CPU
-  // DeathBlow mirror with the rig on P1 / P2 — no menu, no gesture, no
-  // navigation. Checked before the PWA deep links because it is a strictly
-  // more specific request than any of them.
-  if (SHOWCASE_BOOT_SIDE !== null) {
-    showScreen("title");
-    suppressImmersivePrompt = true;
-    startRigShowcase(SHOWCASE_BOOT_SIDE);
-  } else if (bootMode === "arcade" || bootMode === "survival") {
+  if (bootMode === "arcade" || bootMode === "survival") {
     showScreen("title");
     suppressImmersivePrompt = true;
     startSelect(bootMode);

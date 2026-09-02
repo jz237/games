@@ -1,5 +1,5 @@
 // ===========================================================================
-// v3.2 SHOWCASE — the adjustable demo speed contract.
+// v3.2 — the adjustable demo speed contract.
 //
 // The single most important assertion in this file is that the scaler is a
 // TICK CADENCE multiplier and NOT a dt change. Everything about this sim is
@@ -27,7 +27,6 @@ import {
   nextDemoSpeed,
   parseDemoSpeed,
 } from "../engine/demo-speed.mjs";
-import { createMockWorld } from "./demo-mock-world.mjs";
 
 const gameRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -232,7 +231,7 @@ test("game.js gates every transport call site on the scoping helper", async () =
   assert.doesNotMatch(game, /demoSpeed\.rate\s*\*\s*SIMULATION_STEP_SECONDS/);
   assert.doesNotMatch(game, /runSimulationStep\([^)]*demoSpeed/);
   // The transport keys have to be claimed before the any-key-exits-the-demo
-  // rule, or every one of them would quit the showcase on first press.
+  // rule, or every one of them would quit the demo on first press.
   const transportAt = game.indexOf("if (handleDemoSpeedKey(event)) {");
   const exitAt = game.indexOf("if (demoSession.active) {\n    event.preventDefault();\n    noteUserActivity();");
   assert.ok(transportAt > 0 && exitAt > 0 && transportAt < exitAt,
@@ -244,26 +243,6 @@ test("game.js gates every transport call site on the scoping helper", async () =
   assert.ok(game.includes(
     "if (keyMaps.some((map) => Object.values(map).includes(event.code))) return false;",
   ), "the transport must defer to any key the player has bound");
-});
-
-test("the showcase is a DeathBlow mirror with the rig on exactly one side", async () => {
-  const game = await readFile(join(gameRoot, "game.js"), "utf8");
-  // ?rigdemo=1 -> rig on P1, ?rigdemo=2 -> rig on P2, and the rig side is
-  // expressed through the SAME rigDrawSide gate `?rig=p1` already used, so the
-  // showcase cannot make the rig draw a beat the 3.1 pilot does not cover.
-  assert.match(game, /if \(SHOWCASE_BOOT_SIDE !== null\) return SHOWCASE_BOOT_SIDE === 1 \? "p2" : "p1";/);
-  assert.match(game, /rigState\.mode = side === 1 \? "p2" : "p1";/);
-  // The mirror override copies the director's cycle rather than mutating it,
-  // and the distinct-fighter guard keeps its teeth outside the showcase.
-  assert.match(game, /\{ \.\.\.directed, picks: \[demoSession\.showcase\.fighterId, demoSession\.showcase\.fighterId\] \}/);
-  assert.match(game, /\(!demoSession\.showcase && picks\[0\] === picks\[1\]\)\) throw new Error/);
-  // Both seats take palette 0: the mirror auto-alt would otherwise put a
-  // differently-coloured fighter opposite the rig and confound the comparison.
-  assert.match(game, /if \(demoSession\.showcase\) matchPalettes = \[0, 0\];/);
-  // Both fighters wear a persistent render-path tag, anchored above the head.
-  assert.match(game, /const label = rigged && rigState\.rig && !rigState\.failed \? "RIG" : "SPRITE";/);
-  // Demo-scoped throughout: nothing here can reach online/ranked/arcade.
-  assert.doesNotMatch(game, /state\.mode === "online"[^\n]*demoSession\.showcase/);
 });
 
 // ---------------------------------------------------------------------------
@@ -298,69 +277,4 @@ test("?speed= parses, snaps to the ladder and rejects nonsense", () => {
   assert.equal(clampDemoSpeed(0.24), 0.25);
 });
 
-// ---------------------------------------------------------------------------
-// The showcase choreographer's locomotion bias
-// ---------------------------------------------------------------------------
-
-const SHOWCASE_PAIR = ["deathblow", "deathblow"];
-
-function runChoreo({ locomotion = 0, seed = 3200, ticks = 2400 } = {}) {
-  const { choreo, tick, census } = createMockWorld({
-    pair: SHOWCASE_PAIR, stageId: "somerset", hasStageWeapon: false, seed, locomotion,
-  });
-  for (let frame = 0; frame < ticks; frame += 1) tick();
-  return { choreo, census };
-}
-
-test("a mirror pair is a legal showcase matchup for the choreographer", () => {
-  const { choreo } = runChoreo({ locomotion: 0.62, ticks: 900 });
-  assert.deepEqual(choreo.pair(), ["deathblow", "deathblow"]);
-  const perFighter = choreo.coverage();
-  // A mirror collapses to one entry keyed by fighter id; both sides still
-  // resolve their own checklist, which is what the showcase needs.
-  assert.ok(Object.keys(perFighter).includes("deathblow"));
-  assert.ok(perFighter.deathblow.movesTotal > 0);
-});
-
-test("locomotion 0 is BYTE-IDENTICAL to the shipped attract choreography", () => {
-  // The whole bias is written to be unreachable at 0 — including the rng
-  // draw, which is why the shipped attract stream cannot shift under it.
-  const plain = runChoreo({ locomotion: 0, ticks: 1800 });
-  assert.equal(plain.choreo.locomotion(), 0);
-  assert.equal(plain.choreo.stats().strollLeases, 0);
-  assert.equal(plain.choreo.stats().strollTicks, 0);
-
-  // Same seed, same pair, no bias: identical ledger and identical stats.
-  const repeat = runChoreo({ locomotion: 0, ticks: 1800 });
-  assert.deepEqual(repeat.choreo.coverage(), plain.choreo.coverage());
-  assert.deepEqual(repeat.choreo.stats(), plain.choreo.stats());
-});
-
-test("the locomotion bias spends real time walking and still shows moves", () => {
-  const { choreo } = runChoreo({ locomotion: 0.62, ticks: 3000 });
-  const stats = choreo.stats();
-  assert.equal(choreo.locomotion(), 0.62);
-  assert.ok(stats.strollLeases >= 8,
-    `expected repeated locomotion leases, got ${stats.strollLeases}`);
-  assert.ok(stats.strollTicks / 3000 > 0.2,
-    `expected a real share of walking ticks, got ${(stats.strollTicks / 3000).toFixed(3)}`);
-  // ...and it is a BIAS, not a takeover: the coverage pipeline still runs, and
-  // moves still actually come out in the sim-lite world.
-  assert.ok(stats.movePicks > 0, "the showcase must still exercise moves");
-  assert.ok(stats.movesNoted > 0, "no move ever came out under the bias");
-  const shown = choreo.coverage().deathblow.movesShown;
-  assert.ok(shown > 0, "the showcase must still land checklist moves");
-});
-
-test("the locomotion bias replays exactly from its seed", () => {
-  const first = runChoreo({ locomotion: 0.62, seed: 3200, ticks: 1500 });
-  const second = runChoreo({ locomotion: 0.62, seed: 3200, ticks: 1500 });
-  assert.deepEqual(second.choreo.coverage(), first.choreo.coverage());
-  assert.deepEqual(second.choreo.stats(), first.choreo.stats());
-  // A different seed is a different exhibition — otherwise the equality above
-  // would be proving nothing.
-  const other = runChoreo({ locomotion: 0.62, seed: 77, ticks: 1500 });
-  assert.notDeepEqual(other.choreo.stats(), first.choreo.stats());
-});
-
-console.log("Final Blow demo-speed / showcase tests passed");
+console.log("Final Blow demo-speed tests passed");
