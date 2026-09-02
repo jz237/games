@@ -762,6 +762,11 @@ const YIELD_RELEASE_FRAMES = 40;
 const STROLL_MIN_FRAMES = 54;
 const STROLL_SPAN_FRAMES = 66;
 const STROLL_REST_FRAMES = 26;
+// v3.5 SHOWCASE SPACING — added to both edges of a stroll band. The stroll
+// lease is showcase-only machinery (an attract exhibition passes locomotion 0
+// and bails before the lease is ever cut), so this constant is unreachable
+// outside `?rigdemo=`.
+const STROLL_SHOWCASE_FLOOR = 110;
 
 /**
  * @param {object} options
@@ -2399,8 +2404,19 @@ export function createDemoChoreographer({
     lease.next = lease.until + STROLL_REST_FRAMES;
     // Fresh band per lease, so the pair does not settle into one range: the
     // approach and the retreat are both long enough to read as travel.
-    lease.near = 150 + Math.floor(rng.nextFloat() * 95);
-    lease.far = 380 + Math.floor(rng.nextFloat() * 170);
+    //
+    // v3.5 SHOWCASE SPACING: the stroll's CLOSE end is lifted by
+    // STROLL_SHOWCASE_FLOOR. The rig showcase is a DeathBlow mirror match, so
+    // at the shipped near edge (150px against a 105px body) the two identical
+    // fighters overlap and the viewer cannot tell the rig limbs from the
+    // sprite ones, which is the whole point of the exhibition. The band keeps
+    // its full width and its randomness, so it still reads as footsies rather
+    // than two men in separate corners; it just stops walking all the way into
+    // each other. Reached only when a locomotion lease exists at all, i.e.
+    // ONLY in the showcase — an attract exhibition rolls the identical numbers
+    // off the identical rng draws it always has.
+    lease.near = STROLL_SHOWCASE_FLOOR + 150 + Math.floor(rng.nextFloat() * 95);
+    lease.far = STROLL_SHOWCASE_FLOOR + 380 + Math.floor(rng.nextFloat() * 170);
     lease.dash = rng.nextFloat() < 0.3;
     lease.out = rng.nextFloat() < 0.5;
     stats.strollLeases += 1;

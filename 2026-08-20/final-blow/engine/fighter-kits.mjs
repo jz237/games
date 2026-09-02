@@ -3788,6 +3788,112 @@ export function walkCyclePose(walkTime, roles = DEFAULT_BASE_ROLES) {
     walkPose(key, "base", walk[key % walk.length]));
 }
 
+// ---------------------------------------------------------------------------
+// v3.5 BACK-WALK — the retreat is a WALK, not a stance.
+//
+// THE BUG, as it shipped. This game guards the SF2 way: there is no guard
+// button, you hold away. `updateFighter` therefore sets `guarding`/`block` on
+// EVERY tick a fighter holds back — including the ticks he is simply walking
+// backwards at his kit's own `backWalkSpeed` (the kits have carried a distinct
+// one per fighter since the first wave: 182 on deathblow against 246 forward,
+// 304 on donald against 246). The sim modelled the retreat perfectly. The
+// RENDERER then asked "is he blocking?" before it asked "is he moving?", so
+// the standing-guard branch outranked the locomotion branch and every fighter
+// on the roster drew ONE cell -- unified:7, the guard -- for the whole retreat
+// while his x slid out from under him. Measured before the fix on all ten:
+// back-walk resolved to exactly one distinct cell (`unified:7`) across 30
+// ticks, against the four-key cycle `unified:1/2/3/4` a forward walk of the
+// same fighter drew over the same span. That is the reported glide, and it was
+// universal because the ROUTING decided it, not the art.
+//
+// Two pure functions fix it, and they live here rather than in the renderer so
+// both renderers, the tests and any future consumer share one answer.
+// ---------------------------------------------------------------------------
+
+/**
+ * The locomotion gate, in world px/sec of |vx|. Below it a fighter is standing
+ * still as far as pose selection is concerned. This is the same threshold the
+ * 2D renderer's walk branch has always used, named so the guard branch and the
+ * walk branch cannot drift apart.
+ */
+export const WALK_POSE_MIN_SPEED = 22;
+
+/**
+ * THE STANCE DECISION for a grounded fighter — "crouch", "guard", "walk" or
+ * null (this is not a guard/crouch tick at all; carry on down the chain).
+ *
+ * The judgement call it encodes: the standing guard drawing owns the beats
+ * where GUARDING IS WHAT THE BODY IS DOING, and nothing else.
+ *
+ *   blockstun   -> "guard". He is pinned, absorbing a hit; the sim is already
+ *                  bleeding his vx and he is not taking steps. This is also
+ *                  the beat that makes the guard read appear exactly when the
+ *                  guard is doing work, which is the tell a player needs.
+ *   crouch      -> "crouch". Crouch-guard has vx forced to 0 upstream, so
+ *                  there is no locomotion to draw in the first place.
+ *   held guard,
+ *   not moving  -> "guard". Standing his ground: the stance is correct.
+ *   held guard,
+ *   MOVING      -> "walk". A retreating fighter animates his retreat. This is
+ *                  what every 2D fighter in the genre does -- backing up while
+ *                  blocking still moves the legs -- and it costs the defence
+ *                  nothing: `block` is SIM state and is untouched here, so the
+ *                  fighter guards exactly as hard as he did before. Only the
+ *                  drawing changed.
+ *
+ * `dashExiting` keeps the dash-brake window (which owns the velocity decay out
+ * of a back dash and has its own authored key) from being claimed as a walk,
+ * so exactly one branch can win a tick.
+ *
+ * Pure function of snapshotted sim state — no observer latch, no Math.random —
+ * so rollback resimulation and both online peers agree.
+ */
+export function groundedStanceBeat({
+  block = false, blockstunFrames = 0, crouch = false, grounded = true,
+  vx = 0, dashExiting = false,
+} = {}) {
+  if (crouch) return "crouch";
+  if (blockstunFrames > 0) return "guard";
+  if (!block) return null;
+  const moving = grounded && !dashExiting
+    && Math.abs(Number.isFinite(vx) ? vx : 0) > WALK_POSE_MIN_SPEED;
+  return moving ? "walk" : "guard";
+}
+
+/**
+ * One tick of the STRIDE CLOCK, signed along the fighter's own facing.
+ *
+ * Why a second clock instead of reusing `walkTime`. `walkTime` advances at a
+ * flat `dt` whenever |vx| > 20, so the stride cadence is a constant 10 keys/s
+ * no matter how fast the body is actually travelling. Forward that is the
+ * cadence the walk art was drawn for; on a retreat at 0.74x the speed it means
+ * the same number of steps over 26% less ground, i.e. the feet skate backwards
+ * on top of the glide. This returns `dt` scaled by the fraction of the
+ * fighter's OWN forward walk speed he is currently making, so one stride
+ * always covers the same distance and the plant rate tracks the ground.
+ *
+ * It is SIGNED by `vx * facing`: advancing winds the clock forward and
+ * retreating winds it BACK, so `walkCycleFrame` (which already normalises a
+ * negative phase into the grammar) plays the identical four keys in reverse
+ * and the legs un-step. A reversal is therefore continuous -- no phase jump at
+ * the tick the fighter turns round -- and the phase is a function of NET
+ * DISTANCE TRAVELLED, which is exactly the non-skating condition.
+ *
+ * At a full-speed forward walk the ratio is 1 and this returns `dt` unchanged,
+ * so a fighter walking forwards keeps the shipped cadence byte-for-byte.
+ */
+export function strideClockAdvance(vx, facing, forwardWalkSpeed, dt) {
+  const speed = Number.isFinite(vx) ? vx : 0;
+  if (Math.abs(speed) <= WALK_POSE_MIN_SPEED) return 0;
+  const reference = Number.isFinite(forwardWalkSpeed) && forwardWalkSpeed > 0
+    ? forwardWalkSpeed : Math.abs(speed);
+  const gait = speed * (facing < 0 ? -1 : 1);
+  // Capped so a scripted or mutator-boosted overspeed cannot spin the cycle
+  // into a strobe; 1.6x the kit's own walk is already a run.
+  const rate = Math.max(-1.6, Math.min(1.6, gait / reference));
+  return (Number.isFinite(dt) ? dt : 0) * rate;
+}
+
 /**
  * Per-fighter accept masks (+ build scale, kept for reference) from
  * assets/motion/MANIFEST.json. A cell missing from the manifest is treated as

@@ -61,7 +61,10 @@ import {
   UNIFIED_BANK,
   UNIFIED_CELLS,
   WALK_CELL_COUNT,
+  WALK_POSE_MIN_SPEED,
   buildUnifiedAcceptMasks,
+  groundedStanceBeat,
+  strideClockAdvance,
   unifiedPose,
   unifiedReactionCellAt,
   isAuthoredBank,
@@ -1300,6 +1303,106 @@ const SHOWCASE_LOCOMOTION = 0.75;
 // A fixed seed, so `?rigdemo=1` and `?rigdemo=2` are the SAME choreography
 // with the sides swapped — which is the whole point of the swap.
 const SHOWCASE_SEED = 3200;
+
+// ---------------------------------------------------------------------------
+// v3.5 SHOWCASE SPACING — "separate the players slightly so it doesnt get
+// confusing with them too close."
+//
+// The showcase is a MIRROR MATCH by design: same character, same costume, same
+// kit, one drawn by the rig and one by the sprite bank. That is what makes the
+// comparison honest and it is also what makes an overlap unreadable — when two
+// identical DeathBlows interpenetrate you cannot tell which limb belongs to
+// which renderer, which is the entire thing the viewer is there to judge.
+//
+// Measured over 48s of real choreographer play at the shipped spacing: median
+// separation 164px against a 105px body width, 28% of fight ticks under 120px
+// and a minimum of 1px. So they were inside each other more than a quarter of
+// the time.
+//
+// Three showcase-ONLY nudges, in ascending order of intrusiveness. Every one of
+// them is behind `demoSession.showcase`, so versus, arcade, training, online
+// and the ordinary attract demo are untouched, and none of them changes a
+// pushbox, a hurtbox or a hitbox for real play.
+// ---------------------------------------------------------------------------
+
+/**
+ * True only inside a LIVE `?rigdemo=` / `qa.rigShowcase()` session. The one
+ * gate everything below hangs off. `demoSession.active` is part of it so a
+ * `qa.fight()` staged after a showcase cannot inherit showcase spacing, and so
+ * the value is constant for a whole match (which is what keeps the round-start
+ * position a deterministic rebuild for rollback and replay).
+ */
+function showcaseActive() {
+  return Boolean(demoSession.active && demoSession.showcase);
+}
+
+// 1. A wider opening. The pair still starts well inside the stage walls
+//    (stageMinX 76 / stageMaxX 1204), so neither is cornered at the bell.
+const SHOWCASE_HOME_X = Object.freeze([288, 992]);
+
+// 2. The legibility floor: how far apart two bodies have to be before they
+//    read as two bodies. 105px of body plus the arm swing either side.
+const SHOWCASE_LEGIBLE_GAP = 250;
+
+// 3. How hard the floor pushes, per fighter per tick. Deliberately far BELOW
+//    a walk step (~5.4px/tick) so it can never stop the choreographer closing
+//    distance for a throw or a point-blank normal — it is a drift that fixes
+//    the resting spacing, not a wall. At 1.6 each the pair opens ~192px/s when
+//    neither of them is committed, and loses ~30% of an approach when one of
+//    them means it.
+const SHOWCASE_DRIFT_PER_TICK = 1.6;
+
+/** Round-start position. Identical to the shipped pair outside the showcase. */
+function fighterHomeX(side) {
+  const home = showcaseActive() ? SHOWCASE_HOME_X : FIGHTER_HOME_X;
+  return side === 0 ? home[0] : home[1];
+}
+
+/**
+ * A fighter is COMMITTED when moving him would change what the fight does:
+ * a live hitbox (the swing must connect at the range the choreographer staged
+ * it for), a reaction, a throw, a dash or an airborne arc. Everything else —
+ * idle, walking, crouching, and an attack's RECOVERY, whose hitboxes have
+ * already closed — is safe to nudge, and the recovery tail is precisely where
+ * a landed exchange leaves the pair standing inside each other.
+ */
+function showcaseCommitted(fighter) {
+  if (!fighter.grounded || fighter.down || fighter.grabbing || fighter.grabbed) return true;
+  if (fighter.hitstunFrames > 0 || fighter.blockstunFrames > 0 || fighter.pendingKnockdown) return true;
+  if (fighter.knockdownFrames > 0 || fighter.wakeupFrames > 0) return true;
+  if (fighter.dizzyFrames > 0 || fighter.guardCrushFrames > 0 || fighter.dashFrames > 0) return true;
+  // Startup and the active window are committed; the recovery is not.
+  if (fighter.attacking) return fighter.attackFrame <= fighter.attacking.activeEndFrame;
+  return false;
+}
+
+/**
+ * The showcase legibility drift. Runs immediately after the real pushbox
+ * separation and only while NEITHER fighter is committed. A live exchange
+ * therefore has the shipped spacing exactly, so every staged move connects at
+ * the range the choreographer picked it for; what changes is where the pair
+ * SETTLES around the exchanges, which is where the overlap the owner reported
+ * actually lived.
+ */
+function driftShowcaseFightersApart() {
+  if (!showcaseActive() || state.phase !== "fight" || state.finisher) return;
+  const [a, b] = state.fighters;
+  if (!a || !b) return;
+  if (showcaseCommitted(a) || showcaseCommitted(b)) return;
+  const gap = Math.abs(a.x - b.x);
+  if (gap >= SHOWCASE_LEGIBLE_GAP) return;
+  // Never push a fighter into the wall — if one is cornered the other takes
+  // the whole step, so the pair still separates instead of jamming.
+  const step = Math.min(SHOWCASE_DRIFT_PER_TICK, (SHOWCASE_LEGIBLE_GAP - gap) * 0.5);
+  const left = a.x <= b.x ? a : b;
+  const right = left === a ? b : a;
+  const leftRoom = left.x - MOVEMENT_RULES.stageMinX;
+  const rightRoom = MOVEMENT_RULES.stageMaxX - right.x;
+  const leftStep = Math.min(step + (rightRoom < step ? step - rightRoom : 0), leftRoom);
+  const rightStep = Math.min(step + (leftRoom < step ? step - leftRoom : 0), rightRoom);
+  left.x -= leftStep;
+  right.x += rightStep;
+}
 
 const rigState = {
   mode: (() => {
@@ -6571,7 +6674,7 @@ function makeFighter(index, side, overrideDef = null) {
   // the rollback snapshot), and mutators are constant for the whole match, so
   // a rollback rebuild derives the identical object.
   const movement = scaleMovementForRules(getFighterMovement(kitId, MOVEMENT_RULES), state.matchRules);
-  return {
+  const fighter = {
     def,
     kitId,
     kit,
@@ -6582,7 +6685,9 @@ function makeFighter(index, side, overrideDef = null) {
       dashSpeed: movement.dashSpeed * 1.03,
     } : movement,
     side,
-    x: side === 0 ? 355 : 925,
+    // v3.5: FIGHTER_HOME_X outside the rig showcase — the shipped 355/925 —
+    // and the wider showcase pair inside it. See fighterHomeX.
+    x: fighterHomeX(side),
     y: FLOOR,
     vx: 0,
     vy: 0,
@@ -6670,6 +6775,12 @@ function makeFighter(index, side, overrideDef = null) {
     specialGlow: 0,
     animTime: visualRandom() * 2,
     walkTime: visualRandom(),
+    // v3.5 BACK-WALK: the SIGNED, speed-scaled stride clock the sprite walk
+    // cycle rides (see strideClockAdvance in engine/fighter-kits.mjs). Seeded
+    // from `walkTime` just below the literal, so the two fighters start out of
+    // phase with each other exactly as they always have and a full-speed
+    // forward walk keeps the shipped cadence byte-for-byte.
+    strideTime: 0,
     cinematicFrame: null,
     cinematicRotation: 0,
     cinematicScale: 1,
@@ -6682,6 +6793,12 @@ function makeFighter(index, side, overrideDef = null) {
     stateEnteredTick: state.simulationTick,
     inputBuffer: new FrameInputBuffer(DEFAULT_INPUT_BUFFER_FRAMES),
   };
+  // v3.5 BACK-WALK: the stride clock starts on the key `walkTime` would have
+  // put it on. Assigned AFTER the literal on purpose — drawing its own
+  // visualRandom() here would consume an extra value from the seeded visual
+  // stream and shift every downstream visual phase in the match.
+  fighter.strideTime = fighter.walkTime;
+  return fighter;
 }
 
 let rollbackResimulating = false;
@@ -9837,7 +9954,11 @@ function drawRoundWinBeat(frame, centre) {
 }
 const rollbackFighterReferences = new Set(["def", "kit", "movement", "combo", "directionTapTracker", "inputBuffer", "projectileSpawnFrames"]);
 const rollbackPresentationFighterFields = new Set([
-  "animTime", "walkTime", "hitFlash", "specialGlow", "cinematicFrame", "cinematicRotation", "cinematicScale", "lastHitResult",
+  // v3.5: "strideTime" joins "walkTime" here — same class of field (a seeded
+  // presentation clock that drives which drawing shows, never what the sim
+  // resolves), so it is snapshotted and restored with everything else but
+  // stays out of the combat checksum exactly as walkTime always has.
+  "animTime", "walkTime", "strideTime", "hitFlash", "specialGlow", "cinematicFrame", "cinematicRotation", "cinematicScale", "lastHitResult",
 ]);
 
 function cloneRollbackValue(value) {
@@ -10206,6 +10327,8 @@ function updateIntroWalkIns(dt) {
     } else {
       fighter.x += step;
       fighter.walkTime += dt * 2;
+      // The walk-on marches toward the fighter's own slot, i.e. forwards.
+      fighter.strideTime += dt * 2;
     }
   }
 }
@@ -14617,6 +14740,13 @@ function updateFighter(fighter, opponent, input, dt) {
             fighter.vx = direction.absolute * speed * flowSpeed * snare * carry;
           } else fighter.vx = 0;
           if (Math.abs(fighter.vx) > 20) fighter.walkTime += dt;
+          // v3.5 BACK-WALK: the stride clock rides the same tick, but SIGNED
+          // along facing and scaled by the share of this fighter's own forward
+          // walk speed he is actually making — so a retreat at `backWalkSpeed`
+          // steps at the rate the ground goes past, and winds the four-key
+          // cycle BACKWARDS. Full-speed forward walk returns exactly `dt`.
+          fighter.strideTime += strideClockAdvance(fighter.vx, fighter.facing,
+            fighter.movement.forwardWalkSpeed, dt);
         }
 
         // Down + HP over a grounded weapon picks it up; outside pickup range the
@@ -16493,6 +16623,10 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     updatePaintTraps();
     resolveCombatInteractions();
     separateFighters();
+    // v3.5 SHOWCASE SPACING: a showcase-only legibility drift, AFTER the real
+    // pushbox pass so it can never mask or fight it. Returns immediately in
+    // every other mode.
+    driftShowcaseFightersApart();
     updateFacings();
   }
   updateComboState();
@@ -18051,11 +18185,33 @@ function fighterPoseDescriptor(fighter) {
   }
   // v2.9 critic round (B5): crouching keeps the low stance; STANDING guard
   // gets the map's braced standing cell instead of borrowing the crouch.
-  if (fighter.block || fighter.blockstunFrames > 0 || fighter.crouch) {
-    return fighter.crouch
-      ? uni(UNIFIED_CELLS.crouch, base(roles.crouch))
-      : uni(UNIFIED_CELLS.guard, base(roles.guard));
-  }
+  //
+  // v3.5 BACK-WALK — THE OWNER'S "NOBODY WALKS BACKWARDS, THEY SLIDE". This
+  // branch used to read `if (block || blockstun || crouch)` and it sat ABOVE
+  // the locomotion branch, so on a game with SF2 directional guarding — where
+  // holding away sets `block` on every single tick — a RETREAT could never
+  // reach the walk cycle. Every fighter on the roster drew one frozen
+  // unified:7 while his x slid, on all ten sheets, which is exactly the glide
+  // that was reported. `groundedStanceBeat` is the whole decision, and it is
+  // in engine/fighter-kits.mjs so the tests and both renderers share it: the
+  // stance still owns blockstun, crouch-guard and a STANDING hold, and a
+  // fighter who is genuinely moving falls through to the walk cycle below.
+  // See that function for the guard-state judgement call in full.
+  const stance = groundedStanceBeat({
+    block: fighter.block,
+    blockstunFrames: fighter.blockstunFrames,
+    crouch: fighter.crouch,
+    grounded: fighter.grounded,
+    vx: fighter.vx,
+    dashExiting: turnObs?.dashExitFrames > 0,
+  });
+  if (stance === "crouch") return uni(UNIFIED_CELLS.crouch, base(roles.crouch));
+  if (stance === "guard") return uni(UNIFIED_CELLS.guard, base(roles.guard));
+  // stance === "walk" deliberately falls through. `block` is only ever set on
+  // a grounded, non-attacking, non-dashing tick, so the branches between here
+  // and the locomotion branch cannot claim it — except the crouch-LEAVE
+  // in-between, which is the correct drawing for standing up out of a
+  // crouch-guard and lasts two ticks.
   if (fighter.attacking) {
     const attack = fighter.attacking;
     const kitPose = attackAnimationPose(attack, fighter.attackFrame);
@@ -18287,7 +18443,7 @@ function fighterPoseDescriptor(fighter) {
     && Math.abs(fighter.vx) > MOTION_RULES.dashBrakeReleaseSpeed) {
     return motion2Pose(MOTION2_CELLS.dashBrake, "base", 12);
   }
-  if (Math.abs(fighter.vx) > 22 && !(transObs?.dashExitFrames > 0)) {
+  if (Math.abs(fighter.vx) > WALK_POSE_MIN_SPEED && !(transObs?.dashExitFrames > 0)) {
     // v2.10 WALK — the SELF-CONTAINED four-key cycle (assets/walk).
     //
     // The 2.9 read interleaved the motion2 walk-a/b pair with the base walk
@@ -18313,7 +18469,16 @@ function fighterPoseDescriptor(fighter) {
     // it, and the fallback on each descriptor is exactly the base cell that
     // phase used to show. Eight of ten fighters have no accepted sheet and so
     // still render that base cell, byte-identically to 2.9.
-    return walkCyclePose(fighter.walkTime, roles);
+    //
+    // v3.5 BACK-WALK: the phase source is the SIGNED, speed-scaled stride
+    // clock rather than the flat `walkTime`. Advancing forwards at the kit's
+    // own walk speed the two are the same number, so a forward walk is the
+    // shipped read unchanged; retreating winds the clock backwards and the
+    // identical four keys play in reverse — the legs un-step, which is what
+    // walking backwards looks like — at the cadence `backWalkSpeed` earns,
+    // so a slow retreat takes fewer, shorter-looking steps instead of the
+    // same ten a second the forward walk takes over more ground.
+    return walkCyclePose(fighter.strideTime, roles);
   }
   // v3.0: the neutral idle. A unified fighter has exactly ONE idle drawing
   // where the base bank has a four-cell breathing cycle, and that is a real
@@ -29717,6 +29882,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
           vx: Number(fighter.vx.toFixed(2)),
           facing: fighter.facing,
           walkTime: Number(fighter.walkTime.toFixed(4)),
+          // v3.5 BACK-WALK: the signed stride clock the sprite cycle rides.
+          // A retreat makes it go DOWN — that is the read that proves the
+          // cycle is running in reverse rather than just running.
+          strideTime: Number(fighter.strideTime.toFixed(4)),
           animTime: Number(fighter.animTime.toFixed(4)),
           grounded: fighter.grounded,
           crouch: Boolean(fighter.crouch),
