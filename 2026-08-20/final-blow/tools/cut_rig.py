@@ -584,6 +584,39 @@ def angle_of(a, b):
     return math.atan2(b[1] - a[1], b[0] - a[0])
 
 
+def sole_hull(image, pivot):
+    """Lower convex hull of a foot piece, in ANKLE-RELATIVE cell pixels.
+
+    v3.5. The engine used to assume one constant `ankleHeight` for the drop from
+    the ankle pivot to the floor, read off the flat rest pose and then applied at
+    every ankle pitch the walk reaches. It is only true at rest: rotate the
+    sneaker to its heel strike and the sole sinks 0.8px through the floor,
+    rotate it to toe-off and it floats 2.7 above. So the shape is measured here
+    and carried in the rig JSON instead, and engine/rig.mjs solves
+
+        soleDrop(theta) = max over hull of (x*sin(theta) + y*cos(theta))
+
+    for the row that actually puts this drawing on the ground. Only the points
+    that are extreme for SOME rotation survive — eighteen of them for deathblow's
+    sneaker — so the runtime loop is a dozen multiply-adds on a value that is
+    already cached per pose.
+    """
+    alpha = image.split()[3]
+    width, height = image.size
+    px, py = pivot
+    data = alpha.load()
+    points = [(x - px, y - py)
+              for y in range(height) for x in range(width) if data[x, y] >= 24]
+    if not points:
+        return []
+    keep = set()
+    for step in range(-360, 361):
+        angle = math.radians(step * 0.5)
+        sin_a, cos_a = math.sin(angle), math.cos(angle)
+        keep.add(max(points, key=lambda p: p[0] * sin_a + p[1] * cos_a))
+    return [[round(x, 2), round(y, 2)] for x, y in sorted(keep)]
+
+
 def build(fighter, cell_index, debug_dir=None):
     sheet = Image.open(os.path.join(ROOT, "assets", "unified", f"{fighter}.webp")).convert("RGBA")
     cx, cy = (cell_index % 4) * CELL, (cell_index // 4) * CELL
@@ -830,6 +863,12 @@ def build(fighter, cell_index, debug_dir=None):
             "soleRow": SOLE_ROW,
             "ankleHeight": round(SOLE_ROW - JOINTS["ankleN"][1], 2),
             "restHipRow": JOINTS["hipN"][1],
+            # v3.5: the same question asked of the PIXELS at every pitch rather
+            # than of one rest pose. See sole_hull().
+            "soleHull": sole_hull(
+                cut["footNear"]["image"],
+                [bone["piecePivot"] for bone in bones_json if bone["name"] == "footNear"][0],
+            ),
         },
         "atlas": {"file": f"{fighter}-pieces.webp", "w": atlas_w, "h": atlas_h},
         "pieces": pieces_json,

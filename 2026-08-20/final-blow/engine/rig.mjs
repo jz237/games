@@ -23,28 +23,63 @@
 
 export const RIG_FORMAT = "final-blow-rig-1";
 
-// The sprite walk advances its 4 keys on `Math.floor(walkTime * 10) % 4` — 10
-// keys/sec over a 4-key cycle, so 2.5 cycles/sec. The rig runs 5/3, exactly two
-// thirds of it (3 rig cycles per 5 sprite cycles), and the reason is a
-// measurement worth writing down:
+// CADENCE, and why it is the ONLY lever on stance width.
 //
-//   forward walk is 383 world px/s and one sprite cycle is 0.4s, so the body
-//   only travels 153 world px = 122 source-cell px per cycle. Held to that, a
-//   NON-SKATING rig puts the feet 71 cell px apart at contact. The shipped walk
-//   drawings put them 128-130 apart. The sprite cycle is therefore drawn at
-//   roughly 1.8x the stride the simulation actually covers — i.e. the shipped
-//   walk skates, and it has to, because a drawing cannot know the speed.
+// A non-skating rig has no free parameter here. While both feet are planted
+// their world positions are fixed, so the gap between them IS the distance the
+// body covered since the trailing foot landed — half a cycle. Therefore
 //
-// A rig can. At 5/3 the stride is 183 cell px and the feet land 106 apart,
-// which is close to what the artist drew and is what a 1.85m man moving at
-// 1.76 m/s actually does. Nothing about the phase source changed: it is still a
-// pure function of the same `walkTime`.
-export const WALK_CYCLES_PER_SECOND = 5 / 3;
+//     ankle separation at contact  =  speed / (2 * cadence * pxPerCell)
+//
+// exactly, with nothing else to tune. Measured live (`?rig=p1`, held forward
+// walk, engine `qa.rigWalk()`): deathblow walks 323 world px/s — his KIT speed,
+// not the 383 roster default the 3.1 comment above was written from — and the
+// rig draws at 1.116-1.147 world px per source-cell px, which is
+// `fighterRenderSize/320` (1.2557) times the UNIFIED_CELL_ADJUST of whichever
+// walk cell the sprite path would have drawn (0.889-0.913, cycling with the
+// walk). At 5/3 cycles/s that put his feet 86.7 cell px apart at contact. The
+// identity predicts 86.7.
+//
+// The drawings put them 123-127 apart: 123 between the two ankle joints of the
+// rig's own source cell (ankleN 224, ankleF 101) and 126.8 between the sole
+// centroids of the shipped walk bank's two contact keys. Hitting 123 exactly is
+// arithmetic — 323 / (2 * 123 * 1.13) — and it lands on 1.16 cycles/s.
+//
+// 1.25 is where this actually sits, and the last 6% is bought back for hip
+// height. Every cell of stance width is stance EXCURSION a single leg has to
+// span, and a 97.16-cell leg spanning it drops the hips: at 1.16 they sit 20.5
+// cells below the settled row at the stride extremes, at 1.25 they sit 17.0 —
+// inside the 18 cells of figure height deathblow's OWN walk drawings lose
+// between their passing keys (304px tall) and their contact keys (286). The
+// artwork's own bob is the ceiling, and 1.25 is the widest stance that stays
+// under it: 115.6 cell px at contact, 94% of the drawing's own. See STANCE_LEAD
+// and HEEL_LIFT_KEYS for where the rest of that budget came from — without them
+// the same width costs 24 cells of squat instead of 17.
+//
+// Nothing about the phase source changed: it is still a pure function of the
+// same `walkTime`, and 1.25 cycles/s at 323 px/s is 2.5 steps/s over a 0.63 m
+// step — a real cadence for a 1.85 m man at 1.56 m/s, where 5/3 was 3.3 steps/s
+// (a jog's cadence walked at a walk's speed, which is what "mincing" means).
+export const WALK_CYCLES_PER_SECOND = 1.25;
 
 // Fraction of the cycle each foot spends planted. > 0.5 means both feet are
-// down for 16% of the cycle — real double support, and the reason the walk does
-// not read as a glide.
-export const STANCE_FRACTION = 0.58;
+// down for 12% of the cycle — real double support, and the reason the walk does
+// not read as a glide. Every point above 0.5 is also stance excursion a single
+// leg has to span at full stride, which is why 3.5 spends four of the sixteen
+// on stance width instead.
+export const STANCE_FRACTION = 0.56;
+
+// WHERE THE STANCE SITS RELATIVE TO THE HIP — the fraction of the stance
+// excursion that is ahead of the hip at heel strike. 0.5 is symmetric, which is
+// what 3.1-3.4 assumed and what pins the hips too low: the leading leg reaches
+// forward over a foot that is FLAT on the floor, so every cell it gains costs
+// the full reach budget, while the trailing leg reaches back over a foot that
+// has rolled onto its toe and has 16 cells of ankle lift to spend (HEEL_LIFT
+// below). Splitting the excursion in the drawing's own proportion — its leading
+// ankle is 46 cells ahead of its hip and its trailing ankle 67 behind, so 0.41
+// — overshoots the other way once the lift is modelled; 0.46 is where the two
+// legs bind at the same hip row, which is the definition of the cheapest split.
+export const STANCE_LEAD = 0.46;
 
 // ---------------------------------------------------------------------------
 // v3.4 WALK DYNAMICS. Live-showcase QA showed the choreographer's real
@@ -83,6 +118,10 @@ export const FULL_STRIDE_SPEED = 383;
 export const SETTLE_SPEED = 140;
 // Swing-leg lift at the full reference stride, in cell px (the 3.3 constant).
 export const FULL_STRIDE_LIFT = 17;
+// Runaway guard on the stride, in cell px. See the note where it is applied:
+// this is a ceiling above every walk speed the game can hand the rig, NOT a
+// tuning knob — a stride capped below the body's actual travel skates.
+export const MAX_STRIDE_CELLS = 420;
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -128,6 +167,45 @@ function sampleChannel(keys, phase) {
 const ANKLE_KEYS = [
   [0.00, -11], [0.12, 2], [0.42, 4], [0.52, 13], [0.58, 25],
   [0.68, 9], [0.80, -2], [0.92, -13],
+];
+
+// ---------------------------------------------------------------------------
+// v3.5 HEEL LIFT — the ankle rises over a foot that has rolled onto its toe.
+//
+// THE MEASUREMENT THIS COMES FROM. In the rig's own source drawing the two
+// ankle joints are not on the same row: ankleN sits at cell row 286 and ankleF
+// at 270, sixteen pixels higher, while BOTH sneakers bottom out on the floor
+// (rows 318 and 316). That is not perspective — the shipped walk bank registers
+// both feet to one floor row (315) and its two contact keys measure 2 px apart
+// — it is PLANTARFLEXION: the trailing leg is pushing off, its heel is up, and
+// an ankle over a foot standing on its toe is higher than one over a foot lying
+// flat. Every 3/4 walk drawing in the bank does it, and it is exactly the pose
+// that lets the artwork open a 123-cell stance with its hips still at row 200.
+//
+// The rig could not reproduce it because `footFar` is a CLONE of the near
+// sneaker (tools/cut_rig.py, `clone_pivot: ankleN`) — the drawn push-off shoe
+// was never cut as its own piece — and the near sneaker is drawn nearly flat
+// with its toe only 3 px below the ankle. Rotating that piece toe-down does not
+// raise its ankle; measured against the piece's own alpha the drop from ankle to
+// lowest pixel goes 32.8 -> 29.3 across the whole authored pitch range, i.e.
+// the foot roll is worth three cells, not sixteen.
+//
+// So the lift is modelled instead of rotated: the ANKLE rides up by this curve
+// while the SHOE is offset back down by the same amount in world space. The
+// sole therefore lands exactly where the foot curve puts it at every phase
+// (`soleRow - swingLift`, which is the ground during the whole of stance), the
+// shin — which is cut 21 px past its own ankle — covers the seam, and the read
+// is a lengthening achilles over a heel coming off the floor. It is a cut-out
+// cheat, and it is the one this rig cannot buy any other way.
+//
+// Peak 16 at toe-off is the drawing's own figure. Degrees of freedom it buys:
+// at hip row 205 the trailing leg's horizontal reach goes 53.7 -> 70.4 cells.
+// Heel-off starts at ~40% of a real gait cycle, and it has to here too: the
+// double-support window IS the trailing leg's last tenth of stance, so a curve
+// that only peaks at toe-off delivers its lift after the frame that needed it.
+const HEEL_LIFT_KEYS = [
+  [0.00, 0], [0.28, 0], [0.42, 5], [0.50, 11], [0.56, 16],
+  [0.68, 9], [0.82, 0], [0.92, 0],
 ];
 
 // Upper-arm swing, degrees, + = forward. Sampled half a cycle out of phase with
@@ -211,20 +289,50 @@ export function createRig(json) {
 // at exactly the body's speed. That is a constraint, not a taste, and writing it
 // as a straight line is what makes the planted foot stay planted at every walk
 // speed instead of at one tuned speed. The swing half is the authored part.
-export function footTarget(t, stride, lift) {
+//
+// v3.5: `lead` slides that whole line forward or back relative to the hip. It
+// changes WHERE the foot is planted, never HOW FAST it travels while planted —
+// the stance slope is still exactly -stride per cycle — so the no-skate
+// guarantee is untouched by it and so is near-minus-far, which is what the
+// crossings and the leading-artwork handoff are cut on.
+export function footTarget(t, stride, lift, lead = 0.5) {
   const phase = wrap01(t);
-  const half = (STANCE_FRACTION * stride) / 2;
+  const span = STANCE_FRACTION * stride;
+  const front = span * lead;
   if (phase < STANCE_FRACTION) {
-    return { x: half - stride * phase, y: 0, planted: true };
+    return { x: front - stride * phase, y: 0, planted: true };
   }
   const u = (phase - STANCE_FRACTION) / (1 - STANCE_FRACTION);
   const eased = smoother(u);
   return {
-    x: lerp(-half, half, eased),
+    x: lerp(front - span, front, eased),
     // biased early: the toe leaves the ground fast and the heel drifts down
     y: lift * Math.sin(Math.PI * Math.pow(u, 0.82)),
     planted: false,
   };
+}
+
+// How far below its ankle pivot the foot ARTWORK actually reaches once the
+// piece is rotated by `theta` (screen radians, + = toe down). `hull` is the
+// lower convex hull of the sneaker's own alpha in ankle-relative cell pixels,
+// cut by tools/cut_rig.py and carried in the rig JSON — so "where does this
+// drawing touch the floor" is measured off the pixels rather than assumed to be
+// the one constant the flat rest pose happens to have.
+//
+// Through 3.4 the engine used that single constant (`ground.ankleHeight` = 32)
+// at every pitch, so a heel-struck sole sank 0.8 cells THROUGH the floor and a
+// toed-off one floated 2.7 above it. Small, but it is the same class of error
+// as the one that lost the shin: a number read off one drawn pose and then
+// applied to every pose the rig can reach.
+export function soleDrop(hull, theta) {
+  const sin = Math.sin(theta);
+  const cos = Math.cos(theta);
+  let deepest = -Infinity;
+  for (let i = 0; i < hull.length; i += 1) {
+    const drop = hull[i][0] * sin + hull[i][1] * cos;
+    if (drop > deepest) deepest = drop;
+  }
+  return deepest;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +383,7 @@ export function solveTwoBone(hipX, hipY, targetX, targetY, upper, lower, bend) {
 export function rigPose(rig, sim) {
   const pxPerCell = sim.pxPerCell > 0 ? sim.pxPerCell : 1;
   const ground = rig.ground;
-  const ankleRow = ground.soleRow - ground.ankleHeight;
+  const soleHull = ground.soleHull || [[0, ground.ankleHeight]];
   const joints = rig.joints;
 
   const speedX = Number.isFinite(sim.speedX)
@@ -300,7 +408,17 @@ export function rigPose(rig, sim) {
   // stride in CELL pixels: whatever the body actually travels in one cycle,
   // SIGNED — negative on a retreat, which reverses the step so the stance
   // constraint cancels a backward body instead of doubling it.
-  const strideCells = clamp(speedX / WALK_CYCLES_PER_SECOND / pxPerCell, -260, 260);
+  // The clamp is a runaway guard for a speed no walk can produce, and it has to
+  // stay clear of every one that can: ENGAGING IT BREAKS THE PLANTED FOOT.
+  // Inside the clamp the stance line's slope is exactly the body's speed and
+  // the foot cannot slide; the moment the stride is capped below what the body
+  // is actually covering, the planted foot skates by the difference. 260 was
+  // sized against the 5/3 cadence; at 1.1 the same speeds ask for 50% more
+  // stride, and 383 px/s — the roster's fastest forward walk — wanted 277.
+  // MAX_STRIDE_CELLS covers every walk in the game with room over, and dashes
+  // (622 px/s) never reach here: rigDrawSide bails on them.
+  const strideCells = clamp(speedX / WALK_CYCLES_PER_SECOND / pxPerCell,
+    -MAX_STRIDE_CELLS, MAX_STRIDE_CELLS);
   const lift = FULL_STRIDE_LIFT * legAmp;
 
   const breathRate = 5.2 + (sim.fatigue || 0) * 5.6;
@@ -318,6 +436,26 @@ export function rigPose(rig, sim) {
   // mark over the settle instead of teleporting there the tick vx dies.
   const legPhase = { near: phase, far: wrap01(phase + 0.5) };
   const feet = {};
+  // v3.5 PER-LEG GROUND ROWS. The ankle row is no longer one number shared by
+  // both legs: each leg gets the row that puts ITS OWN foot artwork, at ITS OWN
+  // phase, on the floor — the rotated sneaker's real depth below the ankle
+  // (`soleDrop`) plus the heel lift modelled over a foot rolled onto its toe.
+  // Inside the double-support window the leading leg is flat at row ~285 and
+  // the trailing leg is on its toe up to 11.6 cells above it (the source
+  // drawing's own ankleN/ankleF split is 16, reached at toe-off — by which
+  // point that foot has already left stance). That split is where the stance
+  // width below comes from: the trailing leg reaches back across a shorter
+  // vertical span, so it can reach FURTHER back at the same hip height.
+  const pitchOf = {};
+  const heelOf = {};
+  for (const side of ["near", "far"]) {
+    pitchOf[side] = mix(
+      side === "near" ? -4 : -2,
+      sampleChannel(ANKLE_KEYS, legPhase[side]) * legAmp,
+      w,
+    );
+    heelOf[side] = mix(0, sampleChannel(HEEL_LIFT_KEYS, legPhase[side]) * legAmp, w);
+  }
   for (const side of ["near", "far"]) {
     const leg = rig.legs[side];
     const hip = joints[leg.hip];
@@ -325,15 +463,24 @@ export function rigPose(rig, sim) {
     // absorbed by the hips and knees exactly like a real one.
     const stand = side === "near" ? 30 : -27;
     const standX = joints.pelvis[0] + stand;
+    // this leg's own contact row, this frame
+    const contactRow = ground.soleRow
+      - soleDrop(soleHull, (pitchOf[side] + FOOT_FLAT_TRIM) * DEG)
+      - heelOf[side];
     if (w > 0) {
-      const target = footTarget(legPhase[side], strideCells, lift);
+      const target = footTarget(legPhase[side], strideCells, lift, STANCE_LEAD);
       feet[side] = {
         x: mix(standX, hip[0] + target.x, w),
-        y: mix(ankleRow, ankleRow - target.y, w),
+        // The swing lift blends on `w` exactly as it did through 3.4 — a
+        // stopping fighter's foot comes DOWN over the settle instead of hanging
+        // in the air on a frame the pose already calls planted. (`contactRow`
+        // is the settled row at w=0 by construction: the heel lift is mixed on
+        // w and the pitch has already resolved to the standing pitch.)
+        y: mix(contactRow, contactRow - target.y, w),
         planted: w < 0.5 ? true : target.planted,
       };
     } else {
-      feet[side] = { x: standX, y: ankleRow, planted: true };
+      feet[side] = { x: standX, y: contactRow, planted: true };
     }
   }
 
@@ -471,12 +618,9 @@ export function rigPose(rig, sim) {
     // Ankle articulation scales with the step actually being taken: the full
     // heel-strike/toe-off curve at a full stride, a near-flat sole when the
     // steps are tiny — the pointed, dangling toe was half the prance read.
-    const pitch = mix(
-      side === "near" ? -4 : -2,
-      sampleChannel(ANKLE_KEYS, legPhase[side]) * legAmp,
-      w,
-    );
-    setLocal(leg.foot, (pitch + FOOT_FLAT_TRIM) * DEG - shinAccum);
+    // Resolved BEFORE the feet now (the contact row depends on it), so this is
+    // the same number the ground row was solved against, not a second copy.
+    setLocal(leg.foot, (pitchOf[side] + FOOT_FLAT_TRIM) * DEG - shinAccum);
   }
 
   const nodes = resolveChain(rig, local, offset, null);
@@ -547,12 +691,24 @@ export function rigPose(rig, sim) {
     }
   }
 
+  // The heel lift moves the ANKLE, not the shoe: the sneaker is pushed back
+  // down by the same amount so its sole lands exactly where the foot curve put
+  // it (on the floor for the whole of stance). The offset has to be applied in
+  // WORLD space — straight down the screen — so it is expressed in the piece's
+  // own rotated frame here, where drawImage will undo the rotation.
+  const footShift = new Map([
+    [rig.legs.near.foot, heelOf.near],
+    [rig.legs.far.foot, heelOf.far],
+  ]);
+
   const draw = rig.bones
     .map((bone) => {
       const node = nodes.get(bone.name);
       const art = legArt.get(bone.name) || bone;
       const piece = rig.pieces[art.piece];
       const s = scale.get(bone.name);
+      const shift = footShift.get(bone.name) || 0;
+      const drawAngle = node.angle + (art === bone ? 0 : bone.restAngle - art.restAngle);
       return {
         name: bone.name,
         piece: art.piece,
@@ -561,12 +717,13 @@ export function rigPose(rig, sim) {
         // the piece's pixels are pre-rotated for the ART bone's rest, so a
         // swapped piece needs the rest delta to land at the same absolute
         // limb direction: restArt + drawn = restBone + node.angle.
-        angle: node.angle + (art === bone ? 0 : bone.restAngle - art.restAngle),
+        angle: drawAngle,
         z: art === bone ? zOf.get(bone.name) : art.z,
         scaleX: s ? s[0] : 1,
         scaleY: s ? s[1] : 1,
         sx: piece.x, sy: piece.y, sw: piece.w, sh: piece.h,
-        ox: -art.piecePivot[0], oy: -art.piecePivot[1],
+        ox: -art.piecePivot[0] + shift * Math.sin(drawAngle),
+        oy: -art.piecePivot[1] + shift * Math.cos(drawAngle),
       };
     })
     .sort((a, b) => a.z - b.z || a.name.localeCompare(b.name));
@@ -585,6 +742,16 @@ export function rigPose(rig, sim) {
     speedX,
     gait: g,
     lift,
+    // v3.5 stance telemetry. `soleRows` is where each foot's ARTWORK bottoms
+    // out this frame — the number the no-float/no-sink contract is written on,
+    // since the ankle rows now differ per leg by design. `heelLift` is how much
+    // of that difference is the modelled push-off.
+    heelLift: { near: heelOf.near, far: heelOf.far },
+    soleRows: {
+      near: feet.near.y + soleDrop(soleHull, (pitchOf.near + FOOT_FLAT_TRIM) * DEG) + heelOf.near,
+      far: feet.far.y + soleDrop(soleHull, (pitchOf.far + FOOT_FLAT_TRIM) * DEG) + heelOf.far,
+    },
+    ankleSeparation: Math.abs(feet.near.x - feet.far.x),
   };
 }
 
@@ -669,8 +836,8 @@ export function walkAlternates(rig, samples = 24, stride = 120) {
   const far = [];
   for (let i = 0; i < samples; i += 1) {
     const t = i / samples;
-    near.push(footTarget(t, stride, 17));
-    far.push(footTarget(wrap01(t + 0.5), stride, 17));
+    near.push(footTarget(t, stride, 17, STANCE_LEAD));
+    far.push(footTarget(wrap01(t + 0.5), stride, 17, STANCE_LEAD));
   }
   let leadFlips = 0;
   let previous = Math.sign(near[0].x - far[0].x);

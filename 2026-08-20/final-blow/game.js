@@ -1571,7 +1571,17 @@ function rigGaitEase(fighter) {
     rigGaitEases[fighter.side] = gait;
   }
   const tick = state.simulationTick;
-  const target = fighter.vx * fighter.facing; // draw-space: + = advancing
+  // v3.5: the eased signal is a WALK signal, so it is capped at the fastest
+  // walk this fighter has. rigDrawSide already refuses to pose a dash, but the
+  // ease carries momentum ACROSS the bail: a 622 px/s forward dash is still in
+  // this average on the first rig-eligible ticks after it ends, and the rig
+  // dutifully posed the stride for it. Live `?rigdemo=1` telemetry caught it —
+  // speedX reaching 622 and -534, a stride pinned at the MAX_STRIDE_CELLS
+  // runaway guard (which is itself a skate), and the hips driven to row 280
+  // against a settled 192. Both walk speeds already carry any House Rules
+  // speedScale, so the cap moves with the mutators instead of fighting them.
+  const walkCap = Math.max(fighter.movement.forwardWalkSpeed, fighter.movement.backWalkSpeed);
+  const target = clamp(fighter.vx * fighter.facing, -walkCap, walkCap);
   const delta = tick - gait.tick;
   if (delta < 0 || delta > 30) {
     // A fresh round, or the rig has been away on a sprite beat (attack,
@@ -1643,6 +1653,17 @@ function drawRigFighter(fighter, rig, renderSize) {
       farFootY: Number(pose.feet.far.y.toFixed(2)),
       nearPlanted: pose.feet.near.planted,
       farPlanted: pose.feet.far.planted,
+      // v3.5 STANCE: the two planted ankles no longer share a ground row — each
+      // leg stands on the row its own foot artwork actually reaches at its own
+      // phase — so the QA read now needs (a) how far apart the ankles are,
+      // which is the stance-width number the walk was failing on, and (b) where
+      // each SOLE ended up, which is the no-float/no-sink contract restated for
+      // ankle rows that are allowed to differ.
+      ankleSeparation: Number((pose.ankleSeparation ?? 0).toFixed(2)),
+      nearSoleRow: Number((pose.soleRows?.near ?? 0).toFixed(2)),
+      farSoleRow: Number((pose.soleRows?.far ?? 0).toFixed(2)),
+      heelLiftNear: Number((pose.heelLift?.near ?? 0).toFixed(2)),
+      heelLiftFar: Number((pose.heelLift?.far ?? 0).toFixed(2)),
       // v3.3: which leg wears the leading artwork this frame
       frontSide: pose.frontSide,
       // v3.4 walk-dynamics telemetry: the tick this pose latched on, the sim
