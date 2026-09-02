@@ -56,6 +56,7 @@ import {
   unifiedReactionLadder,
   wakeupKeys,
   wakeupRiseStretch,
+  wakeupRiseTransform,
   wakeupSettleStart,
   walkCyclePose,
   walkCycleFrame,
@@ -512,7 +513,17 @@ function testConnectedRegions() {
   // generation. A fighter with no ext sheet still takes the 3.0 array, retired
   // cells and all, so the source check is scoped to the arrays that ship for
   // him — which is what "retired" has always meant.
-  const shippingKitSource = kitSource.replace(/if \(extended\) \{[\s\S]*?\n  \}\n/g, "");
+  // v4.1: `jumpTuck` joins it, inside the `extended && descend` branch only,
+  // where 8 -> 19 -> 9 -> 20 is a whole airborne chain from one generation. The
+  // strip therefore covers every extended-GUARDED branch rather than only the
+  // bare one; the SCOPE is unchanged — the arrays that ship for a fighter who
+  // cannot draw the cell — and only the spelling of the guard has moved.
+  const shippingKitSource = kitSource.replace(/if \(extended[^)]*\) \{[\s\S]*?\n  \}\n/g, "");
+  // The strip must not be able to swallow the whole file and pass vacuously.
+  assert.ok(shippingKitSource.length > kitSource.length * 0.9,
+    "the extended-branch strip removed too much to be checking anything");
+  assert.ok(shippingKitSource.includes("UNIFIED_CELLS.walkContactA"),
+    "the strip removed the plain arrays it is supposed to be checking");
   for (const cell of UNIFIED_RETIRED_CELLS) {
     const name = Object.entries(UNIFIED_CELLS).find(([, value]) => value === cell)[0];
     assert.ok(!shippingKitSource.includes(`ukey(UNIFIED_CELLS.${name})`),
@@ -570,13 +581,32 @@ function testIdleWalkHeightAndLadder() {
       assert.ok(Math.abs(drawn / idle - 1) <= 0.01,
         `${id}: unified walk key ${key} draws ${drawn.toFixed(1)}px against an idle of ${idle}px `
         + `(${(100 * (drawn / idle - 1)).toFixed(2)}%) — that is the B1 pop, uncorrected`);
-      assert.ok(Math.abs(raw / idle - 1) > 0.03,
-        `${id}: walk key ${key} needs no correction — drop it from UNIFIED_CELL_ADJUST rather `
-        + "than carry a table entry that does nothing");
       const adjust = cellDrawAdjust(id, UNIFIED_BANK, key);
       assert.ok(adjust > 0.8 && adjust < 1.25,
         `${id}: walk-key adjust ${adjust} is outside the 2.9 cap philosophy`);
+      // No entry may be a no-op. This is the "carry a table entry that does
+      // nothing" guard, and it is asserted where it belongs — on the CORRECTION.
+      assert.ok(Math.abs(adjust - 1) > 1e-9,
+        `${id}: walk key ${key} carries an adjust of exactly 1 — drop it from `
+        + "UNIFIED_CELL_ADJUST rather than carry a table entry that does nothing");
     }
+    // ...and the TABLE as a whole must be earning its place: at least one key of
+    // the cycle outside the 5% deadband's 3% reporting line is what justifies
+    // correcting all four.
+    //
+    // v4.1: this was asserted PER KEY until ali's 24-cell sheet, whose cycle is
+    // the tightest on the roster (+1.4% to +4.1% against his own idle). Per key
+    // it directly contradicts the rule this table is built on and states three
+    // lines above it — "the correction is applied to ALL FOUR keys whenever ANY
+    // of them is outside the deadband, because correcting only the out-of-band
+    // keys would flatten the idle->walk step and leave a smaller pop INSIDE the
+    // cycle". It only ever passed because no sheet before ali had one key under
+    // the line while another was over it. Per fighter it says what was meant,
+    // and the drawn-height assertion above is what actually holds the quality.
+    assert.ok(UNIFIED_WALK_KEYS.some(
+      (key) => Math.abs(UNIFIED_CELL_HEIGHT[id][key] / idle - 1) > 0.03),
+      `${id}: no walk key leaves the deadband — drop the whole UNIFIED_CELL_ADJUST `
+      + "row rather than carry a table that does nothing");
     // The idle is the ANCHOR — it is the sheet's U1 reference cell and what
     // WAKEUP_RISE_HEIGHT.standUnified was measured on, so it must never be
     // rescaled or that whole table drifts.
@@ -748,13 +778,48 @@ function testHeightReconciliationsMoved() {
     // v4.0: stated as "clear of the floor with margin" rather than as the 0.94
     // constant it was calibrated to in 3.0. jez's redrawn idle is 6px taller and
     // his getup rung is unchanged, so his required stretch now exceeds
-    // WAKEUP_STRETCH_CAP and he settles at 0.932 instead of 0.953. The property
-    // the assertion exists to protect is intact and is checked directly: nobody
-    // lands on the floor, and every fighter is still BETTER off aiming at the
-    // unified idle than at the base one (asserted above).
-    assert.ok(wakeupSettleStart(id, rung[0], rung[1], 16, { unified: true })
-      > WAKEUP_SETTLE_FLOOR + 0.05,
-      `${id}: the unified wake-up must stay clear of the ${WAKEUP_SETTLE_FLOOR} settle floor`);
+    // WAKEUP_STRETCH_CAP and he settles at 0.932 instead of 0.953.
+    //
+    // v4.1: stated as the PROPERTY instead of as a margin, because ali's redraw
+    // moved him the same way and further — his 4.1 idle is 23px taller than his
+    // 3.0 one against the same unchanged getup rung, so he settles at 0.898.
+    // The margin was a proxy and this is the thing it was proxying for: the
+    // settle must not be CLAMPED. wakeupSettleStart returns `last / stand`
+    // clamped into [FLOOR, 1], so an unclamped value means the standing cell
+    // arrives at EXACTLY the stretched rung's height and the wake-up seam is
+    // 0px. A clamp means the two drawings no longer meet and the seam reopens,
+    // which is the whole defect R5 exists to close. Strictly stated, and
+    // strictly stronger than "> floor + 0.05" is at describing what matters.
+    const settle = wakeupSettleStart(id, rung[0], rung[1], 16, { unified: true });
+    assert.ok(settle > WAKEUP_SETTLE_FLOOR,
+      `${id}: the unified wake-up settle is CLAMPED at the ${WAKEUP_SETTLE_FLOOR} floor — `
+      + "the two drawings no longer meet and the seam is open");
+    // ...and where the settle actually ENGAGES, the seam it produces is
+    // genuinely zero, checked against the rise transform rather than inferred
+    // from the clamp. Above 0.999 wakeupSettleTransform returns null and the
+    // standing cell simply draws at full height — the rung already reaches it,
+    // which is the case on six of the nine and on the devil is the upper clamp
+    // (his getup rung is TALLER than his unified idle).
+    if (settle < 0.999) {
+      const stretched = WAKEUP_RISE_HEIGHT[id].cells[`${rung[0]}:${rung[1]}`]
+        * wakeupRiseTransform(1, 16, wakeupRiseStretch(id, rung[0], rung[1], { unified: true })).scaleY;
+      assert.ok(Math.abs(settle * WAKEUP_RISE_HEIGHT[id].standUnified - stretched) < 0.5,
+        `${id}: the wake-up hands off with a ${(settle * WAKEUP_RISE_HEIGHT[id].standUnified
+          - stretched).toFixed(1)}px height seam`);
+    }
+  }
+  // The deepest compression on the roster is PINNED, so a future sheet that
+  // pushes a fighter further toward the floor than the worst one today is a
+  // failure rather than a silent drift. ali is the deepest at 0.898 (a 23px
+  // taller idle against an unchanged getup rung), jez next at 0.932.
+  {
+    const settles = WHOLE.map((id) => [id, wakeupSettleStart(id, "motion2", 15, 16, { unified: true })])
+      .sort((a, b) => a[1] - b[1]);
+    assert.deepEqual(settles.slice(0, 2).map(([id]) => id), ["ali", "jez"],
+      "the two deepest wake-up settles on the roster are ali's and jez's");
+    assert.ok(settles[0][1] > 0.89,
+      `${settles[0][0]} settles at ${settles[0][1].toFixed(4)} — deeper than any sheet `
+      + "shipped so far, which means the getup rung can no longer reach its own idle");
   }
   // The two fighters off the bank keep their 2.9 numbers through every path.
   for (const id of PARTIAL) {

@@ -1356,6 +1356,20 @@ function unifiedFighterExtReady(fighterId) {
   return unifiedExtCellDrawable(fighterId, UNIFIED_EXT_CELLS.idleBreathe);
 }
 
+/**
+ * v4.1 — is this fighter's cell 20 a DESCENT rather than a flinch?
+ *
+ * The second ext capability, and the only one that is per-fighter rather than
+ * per-sheet. It reads the same mask every other ext cell reads, so the answer
+ * cannot drift from what the cell will actually draw: `UNIFIED_EXT_OPTIONAL_CELLS`
+ * leaves frame 4 drawable exactly when that fighter's manifest block accepts
+ * it, which is false on the five 4.0 sheets and true on ali's. A fighter who
+ * fails this takes the 4.0 arc, which hands the fall back to the motion family.
+ */
+function unifiedFighterExtDescendReady(fighterId) {
+  return unifiedExtCellDrawable(fighterId, UNIFIED_EXT_CELLS.jumpDescend);
+}
+
 /** Bank-routed drawable gate for resolveMotionPose (all six authored banks). */
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
@@ -17400,6 +17414,12 @@ function showcasePoseDescriptor(fighter) {
 // v4.0: the one options object every ext-aware beat track is handed, frozen so
 // a track cannot mutate the caller's capability answer.
 const EXTENDED = Object.freeze({ extended: true });
+// v4.1: the same object for a fighter whose cell 20 is a real descent, so the
+// jump arc can own the whole airborne chain 8 -> 19 -> 9 -> 20. Only the jump
+// arc reads `descend`; every other track destructures `extended` alone and is
+// handed this object unchanged, which keeps "one capability answer per pose"
+// true rather than nearly true.
+const EXTENDED_DESCEND = Object.freeze({ extended: true, descend: true });
 // Idle breaths per second on a fighter with an ext sheet. Two drawings at 7.5/s
 // is 8 ticks each at 60fps — exactly MOTION_HOLD_BUDGET, so the most-seen beat
 // in the game sits precisely at the limit the budget sets rather than holding
@@ -17437,7 +17457,9 @@ function fighterPoseDescriptor(fighter) {
   // Five fighters have no ext sheet and take `false` through every branch,
   // which is the byte-identical 3.5 read.
   const ext = unifiedFighterExtReady(fighter.def.id);
-  const extOpt = ext ? EXTENDED : undefined;
+  const extOpt = ext
+    ? (unifiedFighterExtDescendReady(fighter.def.id) ? EXTENDED_DESCEND : EXTENDED)
+    : undefined;
   // The BREATHING IDLE, and the only place a unified fighter's idle comes from.
   // 3.0 collapsed the idle to ONE drawing on purpose — the base bank's
   // four-cell breathing cycle is 9.5-22.5 dE of costume away from the unified

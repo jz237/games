@@ -1,27 +1,34 @@
 // ---------------------------------------------------------------------------
 // v4.0 — THE EXT SHEET, THE SIX-KEY WALK, AND cyraxx.
+// v4.1 — ali joins on both sheets, and brings the roster's first usable descent.
 //
 // The 4.0 art wave drew four fighters (and archived a fifth) at TWENTY-FOUR
 // cells from one generation instead of sixteen: the 3.0 grammar in <id>.webp
 // plus eight more in <id>-ext.webp. This suite covers what wiring them means.
 //
 //   X-A  THE MANIFEST is the spec, and the two blocks agree with each other.
-//   X-B  ALL EIGHT OR NONE, and a fighter must be whole on BOTH sheets. Half an
-//        ext sheet is a walk cycle that changes drawing-count halfway round.
-//   X-C  THE FIVE HOLDOUTS ARE UNTOUCHED. deathblow, post, donald, ali and the
-//        devil have no ext block, and EVERY re-framed beat must hand them back
-//        the byte-identical 3.5 key array. This is the load-bearing test of the
-//        whole wave: five fighters keep their 3.0 sheets and must keep their
-//        3.0 motion.
+//   X-B  ALL SEVEN ROUTED CELLS OR NONE, and a fighter must be whole on BOTH
+//        sheets. Half an ext sheet is a walk cycle that changes drawing-count
+//        halfway round. The eighth cell is per-fighter; see X-E.
+//   X-C  THE HOLDOUTS ARE UNTOUCHED. deathblow, post, donald and the devil have
+//        no ext block, and EVERY re-framed beat must hand them back the
+//        byte-identical 3.5 key array. This is the load-bearing test of the
+//        whole wave: the holdouts keep their 3.0 sheets and must keep their
+//        3.0 motion. (ali was the fifth until 4.1 gave him a 24-cell sheet.)
 //   X-D  THE SIX-KEY WALK. The cycle order, the CADENCE (six keys at 15/s is
 //        the same 0.4s gait period four keys at 10/s ran at, or the fighter
 //        skates), and the reversal a retreat depends on.
-//   X-E  ROUTING. Six ext cells are spent on the beat they were drawn for; one
-//        is retired because the drawing is not the beat.
+//   X-E  ROUTING. Seven ext cells are spent on the beat they were drawn for on
+//        every sheet. The eighth, the jump-descend, is routed PER FIGHTER off
+//        his own accept flag, because on that cell alone the routing depends on
+//        whether the DRAWING is the beat: it came back as a hit reaction on all
+//        five 4.0 sheets and as a real descent on ali's 4.1 one.
 //   X-F  THE HOLD BUDGET may not get worse for a fighter who gains a sheet.
 //   X-G  cyraxx, on the bank for the first time.
 //   X-H  REGISTRATION — the height and body-centre tables the ext cells need,
 //        and the padding both renderers depend on.
+//   X-I  ali, the sixth fighter on the bank, and the per-fighter tables his
+//        REPLACED sheet made stale.
 // ---------------------------------------------------------------------------
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -31,6 +38,7 @@ import { fileURLToPath } from "node:url";
 import {
   AUTHORED_BANKS,
   CELL_BODY_CENTRE,
+  MOTION2_CELLS,
   MOTION_HOLD_BUDGET,
   REACTION_BANDS,
   UNIFIED_BANK,
@@ -42,12 +50,13 @@ import {
   UNIFIED_EXT_CELLS,
   UNIFIED_EXT_CELL_COUNT,
   UNIFIED_EXT_CELL_HEIGHT,
-  UNIFIED_EXT_RETIRED_CELLS,
+  UNIFIED_EXT_OPTIONAL_CELLS,
   UNIFIED_EXT_ROUTED_CELLS,
   UNIFIED_EXT_WALK_KEYS,
   UNIFIED_EXT_WALK_KEY_COUNT,
   UNIFIED_EXT_WALK_RATE,
   UNIFIED_WALK_KEYS,
+  WAKEUP_RISE_HEIGHT,
   WALK_CELL_COUNT,
   airNormalKeys,
   airborneAnchorOffset,
@@ -60,7 +69,9 @@ import {
   cellDrawAdjust,
   dashKeys,
   defaultBeatKeyResolve,
+  guardFlinchAdjust,
   heavyWindupKeys,
+  isPropActionCell,
   isUnifiedExtCell,
   jumpArcKeys,
   reactionTrackKeys,
@@ -92,6 +103,8 @@ const EXT = unifiedExtFighterIds(extMasks);
 const NO_EXT = ROSTER.filter((id) => !EXT.includes(id));
 
 const EXTENDED = { extended: true };
+/** v4.1 — a fighter whose cell 20 is a real descent, so the arc completes. */
+const DESCENDING = { extended: true, descend: true };
 /** How a fighter WITH an ext sheet resolves a key. */
 const withExt = (key) => defaultBeatKeyResolve(key, { motion3: true, unified: true, ext: true });
 /** How a fighter WITHOUT one resolves it — the 3.5 read. */
@@ -105,6 +118,10 @@ const noExt = (key) => defaultBeatKeyResolve(key, { motion3: true, unified: true
 const EXT_AWARE_TRACKS = [
   ["jump arc", (o) => jumpArcKeys(0.22, o), 46],
   ["jump arc (donald)", (o) => jumpArcKeys(0.06, o), 46],
+  // The completed arc. Flagged, because it is the ONE track that may key an
+  // optional cell — X-E's reachability sweep is over what a fighter WITHOUT
+  // that capability can reach, and must not count this one.
+  ["jump arc (descending)", (o) => jumpArcKeys(0.22, o && { ...o, descend: true }), 46, true],
   ["windup punch", (o) => heavyWindupKeys("punch", o), 11],
   ["windup kick", (o) => heavyWindupKeys("kick", o), 17],
   ["reaction heavy", (o) => reactionTrackKeys(true, o), 44],
@@ -179,22 +196,32 @@ function testManifestShape() {
 // X-B — all eight or none, and only on top of a whole main sheet.
 // ---------------------------------------------------------------------------
 function testAllOrNothing() {
-  assert.deepEqual(EXT, ["alan", "benny", "commissioner", "cyraxx", "jez"],
-    "five fighters carry an ext sheet");
+  assert.deepEqual(EXT, ["alan", "ali", "benny", "commissioner", "cyraxx", "jez"],
+    "six fighters carry an ext sheet");
   for (const id of EXT) {
     assert.equal(extMasks[id].accept.length, UNIFIED_EXT_CELL_COUNT);
-    // Every ROUTED frame is drawable and the retired one is forced false in the
-    // mask, so the routing refusal is enforced at the gate as well as in the
-    // tracks — a stray descriptor naming cell 20 draws nothing.
+    // Every ROUTED frame is drawable on every sheet.
     for (const frame of UNIFIED_EXT_ROUTED_CELLS) {
       assert.equal(extMasks[id].accept[frame], true, `${id}: routed ext frame ${frame}`);
     }
-    for (const frame of UNIFIED_EXT_RETIRED_CELLS) {
-      assert.equal(extMasks[id].accept[frame], false,
-        `${id}: the retired ext frame must be undrawable, not merely unrouted`);
+    // An OPTIONAL frame is drawable EXACTLY when that fighter's own manifest
+    // block accepts it — a biconditional, which is strictly stronger than the
+    // 4.0 "must be false": it still forbids a rejected descent from drawing
+    // (the flinch-in-mid-air the refusal exists to stop), and it now also
+    // forbids an accepted one from being silently dropped. The routing refusal
+    // stays enforced at the gate as well as in the tracks.
+    for (const frame of UNIFIED_EXT_OPTIONAL_CELLS) {
+      assert.equal(extMasks[id].accept[frame], manifest.fighters[id].extCells[frame].accept === true,
+        `${id}: optional ext frame ${frame} must draw exactly when his own block accepts it`);
     }
     assert.equal(masks[id].whole, true, `${id}: an ext sheet needs a whole main sheet under it`);
   }
+  // ...and the split is pinned BY NAME, so a sheet silently losing or gaining a
+  // usable descent is a test failure rather than a change in how jumps look.
+  const descends = EXT.filter((id) => extMasks[id].accept[UNIFIED_EXT_CELLS.jumpDescend]);
+  assert.deepEqual(descends, ["ali"],
+    "ali is the only fighter whose cell 20 is a real descent — on the other five it "
+    + "drew as a hit reaction and routing it would flinch every jump on the way down");
   for (const id of NO_EXT) {
     assert.equal(extMasks[id].whole, false);
     assert.equal(extMasks[id].accept.some(Boolean), false,
@@ -209,13 +236,26 @@ function testAllOrNothing() {
     assert.equal(built.jez.whole, false, `rejecting ext frame ${frame} must collapse the sheet`);
     assert.equal(built.jez.accept.some(Boolean), false);
   }
-  // ...and the RETIRED cell is not gated on, or alan and benny would lose their
-  // whole sheet over a cell no beat can reach. Accepting it changes nothing.
-  const revived = JSON.parse(JSON.stringify(manifest));
-  for (const frame of UNIFIED_EXT_RETIRED_CELLS) revived.fighters.jez.extCells[frame].accept = true;
-  assert.deepEqual(buildUnifiedExtAcceptMasks(revived, masks).jez.accept,
-    extMasks.jez.accept,
-    "accepting the retired cell must not make it drawable");
+  // ...and the OPTIONAL cell is not gated on, in EITHER direction, or alan and
+  // benny would lose their whole sheet over a cell no beat of theirs can reach.
+  // This is the load-bearing half and it is unchanged: wholeness must not move.
+  for (const accept of [true, false]) {
+    const flipped = JSON.parse(JSON.stringify(manifest));
+    for (const frame of UNIFIED_EXT_OPTIONAL_CELLS) {
+      flipped.fighters.jez.extCells[frame].accept = accept;
+      flipped.fighters.ali.extCells[frame].accept = accept;
+    }
+    const built = buildUnifiedExtAcceptMasks(flipped, masks);
+    assert.equal(built.jez.whole, true, "an optional cell may not decide a sheet");
+    assert.equal(built.ali.whole, true, "an optional cell may not decide a sheet");
+    // What it DOES decide is that one cell's drawability, and only that.
+    for (const id of ["jez", "ali"]) {
+      assert.equal(built[id].accept[UNIFIED_EXT_CELLS.jumpDescend], accept);
+      assert.deepEqual(built[id].accept.filter((_, f) => f !== UNIFIED_EXT_CELLS.jumpDescend),
+        extMasks[id].accept.filter((_, f) => f !== UNIFIED_EXT_CELLS.jumpDescend),
+        `${id}: the optional cell must not disturb any other frame`);
+    }
+  }
   // ...and so does losing the main sheet under it, however good the ext block is.
   const orphan = JSON.parse(JSON.stringify(manifest));
   orphan.fighters.jez.cells[0].accept = false;
@@ -257,6 +297,16 @@ function testHoldoutsUnchanged() {
     assert.deepEqual(beatKeyRuns(track(EXTENDED), span, withExt),
       beatKeyRuns(track(undefined), span, noExt),
       `${name}: this beat is not part of the ext wave and must not have moved`);
+  }
+  // THE DESCEND FLAG IS INERT WITHOUT A SHEET. `descend` rides the same options
+  // object as `extended`, so a leaked flag on a fighter with no ext sheet must
+  // change NOTHING — otherwise a holdout could take the completed arc, whose
+  // cells he cannot draw, and fall through to a differently-shaped chain.
+  for (const bandStart of [0.22, 0.06]) {
+    assert.deepEqual(jumpArcKeys(bandStart, { descend: true }), jumpArcKeys(bandStart),
+      "descend without extended must be the byte-identical 3.5 arc");
+    assert.deepEqual(jumpArcKeys(bandStart, { extended: false, descend: true }),
+      jumpArcKeys(bandStart), "descend may never engage without an ext sheet under it");
   }
   // The walk is the beat with a genuinely separate code path, so it is checked
   // by descriptor identity rather than by resolution.
@@ -346,15 +396,25 @@ function testSixKeyWalk() {
 // X-E — routing: six cells spent, one retired.
 // ---------------------------------------------------------------------------
 function testRouting() {
-  assert.deepEqual([...UNIFIED_EXT_ROUTED_CELLS, ...UNIFIED_EXT_RETIRED_CELLS].sort((a, b) => a - b),
+  assert.deepEqual([...UNIFIED_EXT_ROUTED_CELLS, ...UNIFIED_EXT_OPTIONAL_CELLS].sort((a, b) => a - b),
     [0, 1, 2, 3, 4, 5, 6, 7],
-    "every ext cell is either routed or explicitly retired — no cell may be forgotten");
-  assert.deepEqual([...UNIFIED_EXT_RETIRED_CELLS], [UNIFIED_EXT_CELLS.jumpDescend],
-    "cell 20 is the only retired ext cell: the drawing came back as a hit reaction");
+    "every ext cell is either routed for everyone or explicitly per-fighter — no cell "
+    + "may be forgotten");
+  assert.deepEqual([...UNIFIED_EXT_OPTIONAL_CELLS], [UNIFIED_EXT_CELLS.jumpDescend],
+    "cell 20 is the only per-fighter ext cell: it is the one whose routing depends on "
+    + "whether the DRAWING is the beat rather than on where it sits in a chain");
+  // The two lists may not overlap, or a cell would be both unconditional and
+  // conditional and the mask's union would hide the contradiction.
+  for (const frame of UNIFIED_EXT_OPTIONAL_CELLS) {
+    assert.ok(!UNIFIED_EXT_ROUTED_CELLS.includes(frame),
+      `ext frame ${frame} is in both routing lists`);
+  }
 
-  // Every ROUTED cell is genuinely reachable from the engine or the renderer.
+  // Every ROUTED cell is genuinely reachable from the engine or the renderer,
+  // by a fighter who has ONLY the plain ext capability.
   const reachable = new Set();
-  for (const [, track] of EXT_AWARE_TRACKS) {
+  for (const [, track, , descending] of EXT_AWARE_TRACKS) {
+    if (descending) continue;
     for (const key of track(EXTENDED)) {
       for (const link of key.chain || []) {
         if (link.bank === UNIFIED_EXT_BANK) reachable.add(link.cell);
@@ -370,21 +430,39 @@ function testRouting() {
     assert.ok(reachable.has(cell),
       `ext cell ${unifiedExtCell(cell)} is listed as routed but no beat can reach it`);
   }
-  // ...and the retired one is reachable from NOTHING.
-  for (const cell of UNIFIED_EXT_RETIRED_CELLS) {
+  // ...and the OPTIONAL one is reachable from nothing a fighter without the
+  // capability can call. This keeps the 4.0 refusal at full strength — the five
+  // holdouts must be unable to reach cell 20 by ANY path — while letting the one
+  // fighter whose drawing is a real descent have it. The `extended` arrays are
+  // stripped before the source check for exactly the reason unified-bank.test
+  // strips them around the retired jump-rise: "retired" has always meant "not in
+  // the arrays that ship for a fighter who cannot draw it".
+  for (const cell of UNIFIED_EXT_OPTIONAL_CELLS) {
     assert.ok(!reachable.has(cell),
-      `ext cell ${unifiedExtCell(cell)} is retired but a track still keys it`);
-    assert.ok(!kitSource.includes(`xkey(UNIFIED_EXT_CELLS.jumpDescend)`),
-      "engine/fighter-kits.mjs still keys the retired descent into a track");
-    assert.ok(!gameSource.includes("UNIFIED_EXT_CELLS.jumpDescend"),
-      "game.js still routes the retired descent");
+      `ext cell ${unifiedExtCell(cell)} is optional but the plain extended track keys it`);
   }
-  // The reason is recorded beside the art, so a future wave knows the cell was
-  // DRAWN AND REFUSED rather than overlooked.
+  const shippingKitSource = kitSource.replace(/if \(extended[^)]*\) \{[\s\S]*?\n  \}\n/g, "");
+  assert.ok(!shippingKitSource.includes("xkey(UNIFIED_EXT_CELLS.jumpDescend)"),
+    "engine/fighter-kits.mjs keys the descent OUTSIDE an extended branch — a fighter "
+    + "whose cell 20 is a hit reaction would flinch on the way down");
+  // game.js may only reach it through the ONE capability gate, never directly.
+  const descendMentions = gameSource.match(/UNIFIED_EXT_CELLS\.jumpDescend/g) || [];
+  assert.equal(descendMentions.length, 1,
+    "game.js must name the descent exactly once — inside unifiedFighterExtDescendReady");
+  assert.match(gameSource,
+    /function unifiedFighterExtDescendReady\(fighterId\) \{\s*\n\s*return unifiedExtCellDrawable\(fighterId, UNIFIED_EXT_CELLS\.jumpDescend\);/,
+    "the descent capability must be the same mask read every other ext cell takes");
+  assert.match(gameSource, /unifiedFighterExtDescendReady\(fighter\.def\.id\) \? EXTENDED_DESCEND : EXTENDED/,
+    "the jump arc must select the descend arc from that one capability answer");
+
+  // Every fighter's cell 20 carries its verdict beside the art, so a future wave
+  // knows the cell was DRAWN AND JUDGED rather than overlooked — refused on the
+  // five, and routed on the one whose drawing is the beat.
   for (const id of EXT) {
-    assert.match(manifest.fighters[id].extCells[UNIFIED_EXT_CELLS.jumpDescend].note,
-      /RETIRED FROM ROUTING/,
-      `${id}: the retired descent must carry its reason in the manifest`);
+    const note = manifest.fighters[id].extCells[UNIFIED_EXT_CELLS.jumpDescend].note;
+    const routed = extMasks[id].accept[UNIFIED_EXT_CELLS.jumpDescend];
+    assert.match(note, routed ? /ROUTED/ : /RETIRED FROM ROUTING/,
+      `${id}: the descent must carry its routing verdict in the manifest`);
   }
 
   // The reaction ladders keep the M5 distinctness contract with the new rung.
@@ -409,13 +487,37 @@ function testRouting() {
   assert.equal(unifiedRungPose(UNIFIED_CELLS.guard, null).bank, UNIFIED_BANK);
   assert.equal(unifiedRungPose(UNIFIED_CELLS.guard, null).frame, UNIFIED_CELLS.guard);
 
-  // The jump owns the ASCENT and stops: cell 19 in, cell 20 and the tuck out.
+  // WITHOUT a usable descent the jump owns the ASCENT and stops: cell 19 in,
+  // cell 20 and the tuck out. Unchanged from 4.0 and it must stay that way —
+  // this is the arc five of the six fighters still play.
   const arc = jumpArcKeys(0.22, EXTENDED).flatMap((k) => k.chain);
   assert.ok(arc.some((l) => l.bank === UNIFIED_EXT_BANK && l.cell === UNIFIED_EXT_CELLS.jumpAscent));
   assert.ok(arc.some((l) => l.bank === UNIFIED_BANK && l.cell === UNIFIED_CELLS.jumpRise),
     "the ascent is only a connected region if the rise comes with it");
   assert.ok(!arc.some((l) => l.bank === UNIFIED_BANK && l.cell === UNIFIED_CELLS.jumpTuck),
     "the tuck stays retired — with no usable descent after it it hands to motion in mid-air");
+  assert.ok(!arc.some((l) => l.bank === UNIFIED_EXT_BANK && l.cell === UNIFIED_EXT_CELLS.jumpDescend),
+    "the plain extended arc must never key a descent that drew as a hit reaction");
+
+  // WITH one, the arc owns the WHOLE airborne chain 8 -> 19 -> 9 -> 20: four
+  // consecutive drawings from one generation, which is the "whole airborne
+  // chain" routingNote kept cells 8 and 9 on the sheet waiting for. The tuck
+  // comes in ONLY here — its retirement was always conditional on there being
+  // nothing usable after it.
+  const full = jumpArcKeys(0.22, DESCENDING);
+  const own = full.flatMap((k) => k.chain)
+    .filter((l) => l.bank === UNIFIED_BANK || l.bank === UNIFIED_EXT_BANK)
+    .map((l) => (l.bank === UNIFIED_EXT_BANK ? unifiedExtCell(l.cell) : l.cell));
+  assert.deepEqual(own, [8, 19, 9, 20],
+    "the descend arc must be the integration order's chain, in order and with no gaps");
+  // ...and it may not reorder or drop anything BELOW the fall: from the descent
+  // down it is the 3.0 arc, which is what keeps the crossing count at one.
+  const tail = (keys) => keys.flatMap((k) => k.chain)
+    .filter((l) => l.bank !== UNIFIED_BANK && l.bank !== UNIFIED_EXT_BANK)
+    .map((l) => `${l.bank}:${l.cell ?? l.key}`);
+  assert.deepEqual(tail(full), tail(jumpArcKeys(0.22, EXTENDED)),
+    "the descend arc must hand back to the SAME motion-family cells the 4.0 arc uses, "
+    + "or the fall degrades to a different shape of arc when a sheet is missing");
 }
 
 function walkKeysOf() {
@@ -447,6 +549,29 @@ function testHoldBudget() {
     "the ext jump must add exactly one drawing to the arc");
   assert.ok(after[0].ticks <= Math.ceil(before[0].ticks / 2) + 1,
     `the ascent hold must halve: ${before[0].ticks} -> ${after[0].ticks}`);
+  // v4.1: the COMPLETED arc must buy the same split and spend it on more of the
+  // fighter's own drawings, not on a longer hold somewhere else. It replaces two
+  // motion-family airborne cells with two of his own, so the drawing count is
+  // unchanged against the 4.0 arc and every band stays inside the budget.
+  const done = beatKeyRuns(jumpArcKeys(0.22, DESCENDING), 46, withExt);
+  assert.equal(done.length, after.length,
+    "the completed arc must draw as many times as the 4.0 one — it substitutes, not pads");
+  assert.ok(done[0].ticks <= Math.ceil(before[0].ticks / 2) + 1,
+    `the ascent hold must still halve: ${before[0].ticks} -> ${done[0].ticks}`);
+  for (const run of done) {
+    assert.ok(run.ticks <= Math.max(...before.map((r) => r.ticks)),
+      `completing the arc lengthened a hold: ${run.cell}x${run.ticks}`);
+  }
+  // The four airborne drawings it owns must be HIS, consecutive, and in order —
+  // this is the "connected region" RULE 2 asks for, asserted on what actually
+  // draws rather than on the descriptor list.
+  const ownRuns = done.map((r) => r.cell)
+    .filter((c) => c.startsWith("unified:") || c.startsWith("unified-ext:"));
+  assert.deepEqual(ownRuns, ["unified:8", "unified-ext:3", "unified:9", "unified-ext:4"],
+    "the completed arc must play 8 -> 19 -> 9 -> 20 with nothing cutting into it");
+  assert.deepEqual(done.slice(0, 4).map((r) => r.cell), ownRuns,
+    "his four drawings must be the FIRST four runs — a motion cell inside them is a "
+    + "generation crossing in mid-air, which is what the 3.0 critic round removed");
   // The two chambers are inside budget on the longest windup on the roster.
   for (const limb of ["punch", "kick"]) {
     const runs = beatKeyRuns(heavyWindupKeys(limb, EXTENDED), 17, withExt);
@@ -486,6 +611,67 @@ function testCyraxx() {
   // The manifest's own history must not still claim he has no art.
   assert.ok(!/NO SHEET IN THE REPO, on purpose/.test(manifest.format.cyraxxNote),
     "the manifest still claims cyraxx has no sheet");
+}
+
+// ---------------------------------------------------------------------------
+// X-I — ali, the sixth fighter on the ext bank, and the tables his redraw made
+// stale. His 3.0 sheet was REPLACED, not supplemented, so every per-fighter
+// number fitted to the old art is a live defect until it is re-measured — the
+// trap MOTION-ATLAS records the 3.1 wave falling into with four fighters at
+// once. These are the measured values, and they are asserted here so a future
+// wave that swaps his sheet again cannot quietly leave them behind.
+// ---------------------------------------------------------------------------
+function testAli() {
+  assert.ok(WHOLE.includes("ali"), "ali is on the unified bank");
+  assert.ok(EXT.includes("ali"), "ali carries a 24-cell sheet as of 4.1");
+  const entry = manifest.fighters.ali;
+  assert.equal(entry.cells.every((c) => c.accept), true);
+  for (const frame of UNIFIED_EXT_ROUTED_CELLS) {
+    assert.equal(entry.extCells[frame].accept, true, `ali: ext frame ${frame}`);
+  }
+  // The pending-key hold is discharged. Naming them anything else parks the
+  // sheet at the loader again, silently — the mask simply reports not-whole.
+  assert.equal(entry.extSheet, "ali-ext.webp");
+  assert.equal(entry.extCellsPending, undefined, "the 4.0 hold key is still in the manifest");
+  assert.equal(entry.extSheetPending, undefined, "the 4.0 hold key is still in the manifest");
+  for (const sheet of [entry.sheet, entry.extSheet]) {
+    assert.ok(statSync(join(assetDir, sheet)).size > 100000, `${sheet} is missing or truncated`);
+  }
+
+  // THE RE-MEASURED TABLES. Every value below was measured on the sheet in the
+  // repo with the method validated by reproducing the UNTOUCHED fighters'
+  // recorded rows exactly, so these are facts about the art rather than
+  // preferences — if the art changes they must change with it.
+  assert.deepEqual([...UNIFIED_CELL_HEIGHT.ali],
+    [294, 306, 298, 300, 303, 226, 242, 294, 315, 194, 278, 273, 290, 274, 279, 106]);
+  assert.deepEqual([...UNIFIED_EXT_CELL_HEIGHT.ali], [297, 303, 303, 267, 275, 250, 298, 237]);
+  assert.deepEqual([...CELL_BODY_CENTRE.ali[UNIFIED_BANK]],
+    [168, 162, 166, 164, 163, 202, 194, 168, 157, 218, 176, 178, 170, 178, 175, 262]);
+  assert.deepEqual([...CELL_BODY_CENTRE.ali[UNIFIED_EXT_BANK]],
+    [166, 163, 163, 181, 176, 188, 166, 196]);
+  // The 3.0 row is GONE, and cell 8 is the one that mattered: it is the
+  // jump-rise the airborne anchor reads, it drifted 35 rows, and 4.1 routes it.
+  assert.notEqual(CELL_BODY_CENTRE.ali[UNIFIED_BANK][UNIFIED_CELLS.jumpRise], 192,
+    "ali still carries the 3.0 body-centre for his jump-rise — 35 rows stale");
+  assert.notEqual(CELL_BODY_CENTRE.ali[UNIFIED_BANK][UNIFIED_CELLS.jumpTuck], 234,
+    "ali still carries the 3.0 body-centre for his jump-tuck — 16 rows stale");
+  // The height tables and the draw adjust must agree about his own idle, or the
+  // B1 pop is back on the fighter whose sheet just changed under it.
+  const idle = UNIFIED_CELL_HEIGHT.ali[UNIFIED_CELLS.idle];
+  assert.equal(WAKEUP_RISE_HEIGHT.ali.standUnified, idle);
+  assert.equal(WAKEUP_RISE_HEIGHT.ali.cells["unified:5"], UNIFIED_CELL_HEIGHT.ali[UNIFIED_CELLS.crouch]);
+  // His guard grew 274 -> 294 with the redraw, which is what moved the flinch.
+  assert.equal(guardFlinchAdjust("ali", "motion2", MOTION2_CELLS.blockHit, { unified: true }), 1.135);
+
+  // THE MICROPHONE. His prop is in his near fist in all 24 cells and it is the
+  // anchor the whole 4.1 walk technique hangs on — the model swaps the mic
+  // between hands where it refuses to swap a leg, so a cell that loses it loses
+  // the phase reversal too. The bank-wide prohibition still applies: no cell of
+  // this sheet may be treated as a prop-ACTION cell.
+  for (let frame = 0; frame < UNIFIED_EXT_CELL_COUNT; frame += 1) {
+    assert.equal(isPropActionCell("ali", UNIFIED_EXT_BANK, frame), false,
+      `ali: ext cell ${unifiedExtCell(frame)} must not be a prop-action cell`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -544,6 +730,24 @@ function testRegistration() {
     // the rise it follows — that would drop the body mid-climb.
     assert.ok(offset >= airborneAnchorOffset(id, UNIFIED_BANK, UNIFIED_CELLS.jumpTuck),
       `${id}: the ext ascent must sit higher than the apex tuck`);
+
+    // v4.1 — the DESCENT, on the fighter who routes it. It is the last airborne
+    // drawing before the anchor ramps out, so an unmeasured or badly-ordered row
+    // is a body-drop on the tick the fall reads fastest.
+    if (extMasks[id].accept[UNIFIED_EXT_CELLS.jumpDescend]) {
+      const fall = airborneAnchorOffset(id, UNIFIED_EXT_BANK, UNIFIED_EXT_CELLS.jumpDescend);
+      assert.ok(Number.isFinite(fall) && Math.abs(fall) < 120,
+        `${id}: implausible airborne anchor ${fall} on the ext descent`);
+      // Legs REACHING DOWN is a taller, more upright body plan than the balled
+      // tuck it follows, so it must sit closer to the standing reference — the
+      // figure unfolding toward the street rather than staying curled.
+      assert.ok(fall > airborneAnchorOffset(id, UNIFIED_BANK, UNIFIED_CELLS.jumpTuck),
+        `${id}: the descent must unfold out of the tuck, not stay balled up`);
+      // ...and it must be REGISTERED, not defaulted: a missing row silently
+      // returns 0 from airborneAnchorOffset, which is the B2 defect restored.
+      assert.notEqual(CELL_BODY_CENTRE[id][UNIFIED_EXT_BANK][UNIFIED_EXT_CELLS.jumpDescend],
+        undefined, `${id}: the routed descent has no body-centre row`);
+    }
   }
   for (const id of NO_EXT) {
     assert.equal(CELL_BODY_CENTRE[id][UNIFIED_EXT_BANK], undefined,
@@ -585,10 +789,11 @@ function testRegistration() {
 }
 
 test("X-A the ext manifest is the 8-cell grammar the routing addresses", testManifestShape);
-test("X-B an ext sheet is ALL EIGHT cells or none, and needs a whole main sheet", testAllOrNothing);
-test("X-C the five fighters without an ext sheet render exactly what 3.5 rendered", testHoldoutsUnchanged);
+test("X-B an ext sheet is ALL SEVEN routed cells or none, and needs a whole main sheet", testAllOrNothing);
+test("X-C the four fighters without an ext sheet render exactly what 3.5 rendered", testHoldoutsUnchanged);
 test("X-D the walk is a six-key alternating cycle at the 3.5 gait period, reversible", testSixKeyWalk);
-test("X-E six ext cells are routed on the beat they were drawn for, one is retired", testRouting);
+test("X-E seven ext cells are routed for everyone and the descent is routed per fighter", testRouting);
 test("X-F gaining an ext sheet lengthens no hold and collapses no band", testHoldBudget);
+test("X-I ali is the sixth fighter on the ext bank, on re-measured tables", testAli);
 test("X-G cyraxx is on the bank for the first time, on both sheets", testCyraxx);
 test("X-H the ext cells are registered, anchored and padded for both renderers", testRegistration);

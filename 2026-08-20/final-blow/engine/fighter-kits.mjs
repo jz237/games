@@ -2059,7 +2059,13 @@ const UNIFIED_CELL_ADJUST = Object.freeze({
   post: Object.freeze({ 1: 0.946, 2: 0.949, 3: 0.949, 4: 0.962 }),
   donald: Object.freeze({ 1: 0.913, 2: 0.903, 3: 0.903, 4: 0.916 }),
   devil: Object.freeze({ 1: 0.934, 2: 0.934, 3: 0.925, 4: 0.934 }),
-  ali: Object.freeze({ 1: 0.894, 2: 0.886, 3: 0.894, 4: 0.900 }),
+  // v4.1: re-measured on his 24-cell sheet. His new idle is a much taller
+  // drawing (271 -> 294), so the 4.0 row was over-correcting every key by
+  // ~7.5%. His cycle is the tightest on the roster after the correction —
+  // +1.4% to +4.1% raw — so only key 1 leaves the 3% deadband, and all four
+  // are corrected anyway: that is the rule this table has always used, and
+  // correcting only key 1 would leave a 2.7% pop INSIDE his stride.
+  ali: Object.freeze({ 1: 0.961, 2: 0.987, 3: 0.980, 4: 0.970 }),
   benny: Object.freeze({ 1: 0.943, 2: 0.943, 3: 0.933, 4: 0.912 }),
   commissioner: Object.freeze({ 1: 0.947, 2: 0.938, 3: 0.966, 4: 0.950, 7: 1.067 }),
   // cyraxx's cycle is the tightest on the roster at +3.0% to +3.4%, but the
@@ -2116,6 +2122,11 @@ const UNIFIED_EXT_CELL_ADJUST = Object.freeze({
   // cyraxx needs a height term for 17 (+3.0%) and none for 18 (+0.3%), and has
   // no sheet adjust.
   cyraxx: Object.freeze({ 1: 0.970 }),
+  // v4.1: ali's two in-betweens both measure 303px against a 294px idle
+  // (+3.06% each), so both take the same term. He has NO sheet adjust, so
+  // nothing is folded in here beyond the height reconciliation — see the
+  // commissioner's block above for the one entry that is not a height term.
+  ali: Object.freeze({ 1: 0.970, 2: 0.970 }),
 });
 
 /**
@@ -2131,7 +2142,8 @@ export const UNIFIED_CELL_HEIGHT = Object.freeze({
   post: Object.freeze([279, 295, 294, 294, 290, 177, 246, 273, 283, 166, 273, 284, 292, 306, 248, 107]),
   donald: Object.freeze([261, 286, 289, 289, 285, 193, 243, 255, 306, 157, 245, 251, 266, 256, 230, 122]),
   devil: Object.freeze([283, 303, 303, 306, 303, 191, 242, 284, 292, 176, 266, 268, 294, 296, 254, 123]),
-  ali: Object.freeze([271, 303, 306, 303, 301, 199, 252, 274, 256, 165, 250, 256, 284, 272, 238, 128]),
+  // v4.1: re-measured on the 24-cell sheet that replaced his 3.0 one.
+  ali: Object.freeze([294, 306, 298, 300, 303, 226, 242, 294, 315, 194, 278, 273, 290, 274, 279, 106]),
   benny: Object.freeze([279, 296, 296, 299, 306, 195, 216, 274, 310, 149, 264, 248, 279, 271, 272, 73]),
   commissioner: Object.freeze([287, 303, 306, 297, 302, 196, 235, 269, 313, 171, 273, 261, 270, 273, 275, 86]),
   cyraxx: Object.freeze([296, 305, 306, 305, 305, 207, 253, 281, 315, 150, 282, 278, 287, 268, 292, 72]),
@@ -2148,6 +2160,7 @@ export const UNIFIED_EXT_CELL_HEIGHT = Object.freeze({
   benny: Object.freeze([282, 293, 291, 288, 271, 264, 291, 202]),
   commissioner: Object.freeze([287, 290, 282, 320, 315, 263, 284, 241]),
   cyraxx: Object.freeze([294, 305, 297, 290, 297, 280, 290, 247]),
+  ali: Object.freeze([297, 303, 303, 267, 275, 250, 298, 237]),
 });
 
 /** Drawn (corrected) content height of a unified cell, in cell pixels. */
@@ -2258,9 +2271,14 @@ const GUARD_FLINCH_ADJUST = Object.freeze({
 // actually in the repo. The five untouched fighters reproduce their recorded
 // numbers exactly, which is what confirms the rule; the four redrawn ones had
 // drifted because their guard cell changed height with the redraw.
+// v4.1: ali re-measured for the same reason — his unified guard cell grew from
+// 274px to 294px with the redraw, so the 4.0 number would have let his blocked
+// hit draw 7% SHORT of his own guard. 294 : 259 -> 1.135. The other eight
+// reproduce their recorded values exactly on the sheets in the repo, which is
+// what confirms the measurement rather than the number.
 const UNIFIED_GUARD_FLINCH_ADJUST = Object.freeze({
   jez: 1.063, alan: 0.940, post: 1.038, donald: 0.962,
-  devil: 1.127, ali: 1.058, benny: 0.996, commissioner: 1.029,
+  devil: 1.127, ali: 1.135, benny: 0.996, commissioner: 1.029,
   cyraxx: 1.053,
 });
 
@@ -2440,7 +2458,15 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion: Object.freeze([172, 176, 180, 163, 177, 237, 214, 220, 197, 214, 202, 216, 203, 160, 160, 160]),
     motion2: Object.freeze([173, 163, 164, 169, 197, 174, 201, 186, 186, 184, 188, 189, 192, 182, 215, 204]),
     motion3: Object.freeze([172, 158, 158, 158, 158, 201, 158, 172, -1, -1, -1, -1, -1, -1, -1, -1]),
-    unified: Object.freeze([180, 165, 162, 165, 166, 217, 190, 178, 192, 234, 192, 188, 174, 184, 196, 252]),
+    // v4.1 — RE-MEASURED. His 3.0 sheet was replaced by a 24-cell one and the
+    // old row was fitted to art that no longer exists. Drift per cell:
+    // [-12,-3,4,-1,-3,-15,4,-10,-35,-16,-16,-10,-4,-6,-21,10]. Cell 8 (the
+    // jump-rise the airborne anchor reads) was stale by 35 rows and cell 9
+    // (the tuck) by 16, so the old row visibly misplaced him in the air —
+    // and 4.1 routes BOTH of those cells for him. This is the exact trap the
+    // 3.1 wave fell into with four fighters at once.
+    unified: Object.freeze([168, 162, 166, 164, 163, 202, 194, 168, 157, 218, 176, 178, 170, 178, 175, 262]),
+    "unified-ext": Object.freeze([166, 163, 163, 181, 176, 188, 166, 196]),
     ref: 162,
   }),
   benny: Object.freeze({
@@ -3045,27 +3071,48 @@ export const UNIFIED_EXT_BEATS = Object.freeze([
 ]);
 
 /**
- * RULE 2 for the ext sheet: the frames that are ROUTED, and the one that is not.
+ * RULE 2 for the ext sheet: the frames every whole sheet routes, and the one
+ * whose routing is decided PER FIGHTER by the drawing he actually got.
  *
- * Six of the eight are spent on the beat they were drawn for. `jumpDescend` is
- * RETIRED FROM ROUTING — not because of where it sits in a chain, which is why
- * 3.0 retired four main cells, but because THE DRAWING IS NOT THE BEAT. On all
- * five sheets cell 20 came back as a hit reaction (head thrown back, spine
- * arched backward, arms flung limp) rather than the "torso upright, legs
- * reaching down" fall the prompt asked for; at 1:1 it is a sibling of that
- * fighter's own cells 12 and 13. Routed, every jump would flinch on the way
- * down. It stays on the sheet and inside the 8/8 accept gate — it is a
- * competent, correctly-costumed, correctly-registered drawing — and wave 15
- * closes this by redrawing ONE panel.
+ * Seven of the eight are spent on the beat they were drawn for on every sheet,
+ * and the accept gate counts exactly these.
  *
- * `jumpAscent` is routed and its neighbour `jumpDescend` is not, which is why
- * the jump arc owns the ascent only; see jumpArcKeys.
+ * `jumpDescend` is the eighth and it is the one cell on this bank whose routing
+ * is a property of the ART rather than of the chain. 3.0 retired four MAIN
+ * cells for where they sat in a chain — a roster-uniform decision, because the
+ * chain is the same for everyone. Cell 20 is different: on jez, alan, benny,
+ * the commissioner and cyraxx it came back as a HIT REACTION (head thrown back,
+ * spine arched backward, arms flung limp) rather than the "torso upright, legs
+ * reaching down" fall the prompt asked for, and at 1:1 it is a sibling of that
+ * fighter's own cells 12 and 13 (IoU 0.47-0.77 against them). Routed on those
+ * five, every jump would flinch on the way down.
+ *
+ * v4.1 — ali's is the first one that is genuinely a descent, so the roster no
+ * longer has one answer and pretending it does would mean either throwing away
+ * a correct drawing or shipping five flinching jumps. Measured on his sheet:
+ * torso upright, head LEVEL and carried 24.7px FORWARD of his torso centre
+ * where his own cells 12/13/14 carry it 6.1px, 3.9px and 0.7px BACK, and legs
+ * straight and reaching down. It reads as his own ascent's other half (IoU
+ * 0.493 against cell 19, the highest on the roster by a third).
+ *
+ * So the routing is DATA, and the data already exists: the manifest's own
+ * `accept` flag on extCells[4], which the art waves have been setting honestly
+ * all along (false on all five, true on ali). No new manifest key, and a future
+ * whole-sheet regeneration switches a fighter on by flipping that flag.
+ *
+ * The gate deliberately does NOT count this cell — see buildUnifiedExtAcceptMasks.
  */
 export const UNIFIED_EXT_ROUTED_CELLS = Object.freeze([
   0, 1, 2, 3, 5, 6, 7,
 ]);
 
-export const UNIFIED_EXT_RETIRED_CELLS = Object.freeze([4]);
+/**
+ * Routed only for a fighter whose own manifest block accepts them. A fighter
+ * who does not gets them forced FALSE in his mask, so a stray descriptor draws
+ * nothing rather than a flinch in mid-air — exactly what "retired" meant before
+ * the answer stopped being roster-uniform.
+ */
+export const UNIFIED_EXT_OPTIONAL_CELLS = Object.freeze([4]);
 
 /** Grammar cell (16..23) -> sheet frame (0..7). Returns -1 for a main cell. */
 export function unifiedExtFrame(cell) {
@@ -3171,9 +3218,17 @@ export function buildUnifiedExtAcceptMasks(manifest, unifiedMasks = null) {
     // The retired frame is additionally forced false in the mask, so a stray
     // descriptor naming it draws nothing rather than a flinch in mid-air. The
     // routing refusal and the gate say the same thing in two places on purpose.
+    //
+    // v4.1: an OPTIONAL cell is not gated on either, for the same reason and
+    // with the same arithmetic — but it is no longer forced false for everyone.
+    // A fighter whose own block accepts it routes it; a fighter whose block
+    // rejects it is exactly as retired as he was before. That is one rule, read
+    // off the manifest, and it is why ali's correct descent can ship without
+    // giving the other five a flinch on the way down.
     const routedOk = UNIFIED_EXT_ROUTED_CELLS.every((frame) => accept[frame]);
     const whole = Boolean(entry?.extSheet) && mainWhole && routedOk;
-    const gated = accept.map((ok, frame) => ok && UNIFIED_EXT_ROUTED_CELLS.includes(frame));
+    const gated = accept.map((ok, frame) => ok
+      && (UNIFIED_EXT_ROUTED_CELLS.includes(frame) || UNIFIED_EXT_OPTIONAL_CELLS.includes(frame)));
     masks[fighterId] = Object.freeze({
       whole,
       accept: Object.freeze(whole ? gated : new Array(UNIFIED_EXT_CELL_COUNT).fill(false)),
@@ -3595,7 +3650,7 @@ export function wakeupKeys(totalFrames = 16, roles = DEFAULT_BASE_ROLES) {
  * ascent cell is his golf swing, so his opens almost immediately — kept
  * exactly as 2.7 shipped it).
  */
-export function jumpArcKeys(bandStart = 0.17, { extended = false } = {}) {
+export function jumpArcKeys(bandStart = 0.17, { extended = false, descend = false } = {}) {
   // donald's band used to open at 0.06 because his BASE ascent cell is the
   // golf swing and a plain jump wore it for ~10 ticks. That workaround is
   // superseded: since 2.9 the ascent wears the authored jump-rise key, so his
@@ -3675,6 +3730,49 @@ export function jumpArcKeys(bandStart = 0.17, { extended = false } = {}) {
   //
   // A fighter WITHOUT an ext sheet takes the 3.0 array below unchanged, retired
   // cells and all.
+  //
+  // v4.1 — AND ON ONE FIGHTER THE WHOLE CHAIN IS NOW OWNABLE.
+  //
+  // Everything above is a statement about the five 4.0 sheets. ali's cell 20
+  // came back as a real feet-first descent (see UNIFIED_EXT_OPTIONAL_CELLS for
+  // the measurement), which is the cell this arc has been missing since 3.0 —
+  // and its absence is the ONLY reason unified:9 was retired with it: "with no
+  // usable descent after it the tuck would hand straight to a motion cell in
+  // mid-air". That reason is conditional and it no longer holds for him.
+  //
+  // So `descend` takes the integration order's whole airborne chain, 8 -> 19 ->
+  // 9 -> 20: rise, ascent, apex tuck and fall, FOUR consecutive drawings from
+  // one generation, which is precisely the "whole airborne chain" routingNote
+  // said cells 8 and 9 were being kept on the sheet to wait for. RULE 2 is
+  // satisfied by a connected region, not by a roster-wide identical answer.
+  //
+  // CROSSING COUNT IS UNCHANGED AT ONE and it moves LATER. The 4.0 extended arc
+  // crosses at ascent -> motion tuck, near the apex, with the fighter centre
+  // frame and nothing over it. This crosses at descend -> motion3 descent,
+  // deep into the fall where the landing is already reading. Everything from
+  // there down — descent, air-recovery, landing gather — is the motion family
+  // exactly as 3.0 shipped it.
+  //
+  // The apex band keeps motion3 rather than stretching his tuck across it: the
+  // tuck would then hold 12 ticks against a budget of 8, which is the very hold
+  // this track exists to break.
+  if (extended && descend) {
+    return [
+      // TAKEOFF and ASCENT, identical to the extended arc below.
+      { at: 0, chain: [ukey(UNIFIED_CELLS.jumpRise), m2key(MOTION2_CELLS.jumpRise)] },
+      { at: open * 0.5, chain: [xkey(UNIFIED_EXT_CELLS.jumpAscent), m2key(MOTION2_CELLS.jumpRise)] },
+      // THE APEX TUCK, now his own drawing instead of the motion tuck.
+      { at: open, chain: [ukey(UNIFIED_CELLS.jumpTuck), m1key(MOTION_CELLS.tuck)] },
+      // THE FALL — the drawing 3.0 never had. Fallbacks are the exact cells the
+      // 4.0 arc plays here, so a fighter who loses his sheet mid-session
+      // degrades to it band for band rather than to a different shape of arc.
+      { at: open + span * 0.30, chain: [xkey(UNIFIED_EXT_CELLS.jumpDescend), m3key(MOTION3_KEYS.jumpApex), m1key(MOTION_CELLS.tuck)] },
+      // From here down, byte-for-byte the 3.0 arc.
+      { at: open + span * 0.50, chain: [m3key(MOTION3_KEYS.jumpDescent), m1key(MOTION_CELLS.airrec)] },
+      { at: open + span * 0.66, chain: [m1key(MOTION_CELLS.airrec)] },
+      { at: 0.72, chain: [m1key(MOTION_CELLS.land)] },
+    ];
+  }
   if (extended) {
     return [
       // TAKEOFF, on the fighter's own rise instead of motion2:7.
@@ -4178,7 +4276,10 @@ export const WAKEUP_RISE_HEIGHT = Object.freeze({
   post: Object.freeze({ stand: 306, standUnified: 279, cells: Object.freeze({ "motion2:15": 266, "base:12": 304, "unified:5": 177 }) }),
   donald: Object.freeze({ stand: 306, standUnified: 261, cells: Object.freeze({ "motion2:15": 231, "base:12": 304, "unified:5": 193 }) }),
   devil: Object.freeze({ stand: 301, standUnified: 283, cells: Object.freeze({ "motion2:15": 287, "base:12": 234, "unified:5": 191 }) }),
-  ali: Object.freeze({ stand: 306, standUnified: 271, cells: Object.freeze({ "motion2:15": 224, "base:12": 304, "unified:5": 199 }) }),
+  // v4.1: `standUnified` and the unified crouch rung re-measured on the 24-cell
+  // sheet (271 -> 294 and 199 -> 226). His base and motion2 rungs are untouched
+  // art and re-measure to their recorded values exactly.
+  ali: Object.freeze({ stand: 306, standUnified: 294, cells: Object.freeze({ "motion2:15": 224, "base:12": 304, "unified:5": 226 }) }),
   benny: Object.freeze({ stand: 306, standUnified: 279, cells: Object.freeze({ "motion2:15": 244, "base:12": 304, "unified:5": 195 }) }),
   commissioner: Object.freeze({ stand: 316, standUnified: 287, cells: Object.freeze({ "motion2:15": 237, "base:12": 288, "unified:5": 196 }) }),
   cyraxx: Object.freeze({ stand: 302, standUnified: 296, cells: Object.freeze({ "motion2:15": 284, "base:12": 241, "unified:5": 207 }) }),
