@@ -90,9 +90,9 @@ const DEG = Math.PI / 180;
 const clamp = (value, low, high) => (value < low ? low : value > high ? high : value);
 const lerp = (a, b, t) => a + (b - a) * t;
 // Endpoint-exact mix: at t=0 and t=1 it returns the input UNCHANGED (IEEE
-// `a + (b - a)` is not always `b`), which is what keeps the settled idle
-// bit-identical to the shipped 3.2 idle and the full-speed walk bit-identical
-// to the verified 3.3 walk.
+// `a + (b - a)` is not always `b`), so a fighter that is genuinely stopped and
+// one that is genuinely at full stride each land on ONE authored pose rather
+// than on an interpolation that happens to round there.
 const mix = (a, b, t) => (t <= 0 ? a : t >= 1 ? b : a + (b - a) * t);
 // Quintic smootherstep: zero first AND second derivative at both ends, so a
 // limb entering or leaving a key has no velocity step. Linear interpolation is
@@ -282,8 +282,8 @@ export function rigPose(rig, sim) {
     ? sim.speedX
     : (sim.moving ? Math.abs(sim.speed || 0) : 0);
   const speedLift = Number.isFinite(sim.speedLift) ? Math.abs(sim.speedLift) : Math.abs(speedX);
-  // w — posture: 0 = the settled idle stance (bit-identical to 3.2), 1 = the
-  // full walk posture. Continuous, so stops SETTLE and starts pick up.
+  // w — posture: 0 = the settled idle stance, 1 = the full walk posture.
+  // Continuous, so stops SETTLE and starts pick up.
   const w = smoother(clamp(Math.abs(speedX) / SETTLE_SPEED, 0, 1));
   // g — amplitude: how much of the full authored swing this walk earns. From
   // the slow average, so a tapped approach keeps the knees low.
@@ -342,24 +342,52 @@ export function rigPose(rig, sim) {
   // legs inside their reach. That makes the two dips per cycle fall out of the
   // stride, so a long step automatically drops the hips further, and no walk
   // speed can ever hyper-extend a knee.
-  // Standing, the hips ride the breath: the chest fills, the weight settles.
-  // Without this the idle is a statue with a moving shirt.
-  let hipRow = ground.restHipRow - mix(3.0, 6.5, w)
-    - mix(breath * 0.9 * breathDepth, 0, w);
-  for (const side of ["near", "far"]) {
-    const leg = rig.legs[side];
-    const reach = (rig.byName.get(leg.thigh).length + rig.byName.get(leg.shin).length) * 0.985;
-    const dx = feet[side].x - joints[rig.legs[side].hip][0];
-    const span = Math.sqrt(Math.max(1, reach * reach - dx * dx));
-    hipRow = Math.max(hipRow, feet[side].y - span);
-  }
-  hipRow += mix(3.4, 2.2, w);   // knee clearance: never solve dead straight
-
+  //
+  // v3.5 — THE HIPS HANG FROM THE LEGS. Through 3.4 the line above read
+  // `restHipRow - crouch` and the reach loop below could only push the hips
+  // DOWN from that constant. So the constant won on every frame where the feet
+  // were near the body centre — most of the cycle, and the whole settled idle —
+  // and a 97.65-cell leg was asked to span the ~90 cells between a pinned hip
+  // and the ankle row. The leftover length has to go somewhere and it went into
+  // the knee: 45-75 degrees of fold on frames the artwork was drawn at 7. A
+  // painted 3/4 leg folded that far swings its calf sideways under a thigh
+  // piece that is still covering it, and the rendered figure loses its shin.
+  //
+  // A walking body does the opposite: it hangs off whichever leg is carrying
+  // it. So the hip row IS the reach constraint — a max over the legs, not a
+  // floor under a constant — and it rides up at mid-stance and drops at the
+  // stride extremes, which is the real two-dips-per-cycle the comment above
+  // always described. Measured effect: mid-stance knee fold 45 deg -> 20 deg,
+  // support-leg extension 0.92 -> 0.99 of bone reach.
+  //
+  // The clamp stays just inside full extension because acos has infinite
+  // angular gain there; 0.995 plus a cell of clearance is close enough to read
+  // as a straight leg and far enough to keep the knee solve stable.
+  // The lateral weight shift is resolved FIRST because the reach budget below
+  // is measured from the hip the IK will actually solve against. Through 3.4
+  // the reach loop used the REST hip x and the slack in the old constant floor
+  // absorbed the difference; with the hips carried tight against the reach
+  // limit, a 1.7-cell sway is enough to put a planted foot out of range and
+  // break the no-skate guarantee.
   const sway = mix(
     Math.sin((sim.animTime || 0) * 1.19 + 0.7) * 1.7,
     Math.sin(phase * TAU) * 1.1 * sec,
     w,
   );
+
+  let hipRow = -Infinity;
+  for (const side of ["near", "far"]) {
+    const leg = rig.legs[side];
+    const reach = (rig.byName.get(leg.thigh).length + rig.byName.get(leg.shin).length) * 0.995;
+    const dx = feet[side].x - (joints[leg.hip][0] + sway);
+    const span = Math.sqrt(Math.max(1, reach * reach - dx * dx));
+    hipRow = Math.max(hipRow, feet[side].y - span);
+  }
+  // Standing, the hips ride the breath: the chest fills, the weight settles.
+  // Without this the idle is a statue with a moving shirt.
+  hipRow -= mix(breath * 0.9 * breathDepth, 0, w);
+  hipRow += mix(1.6, 1.0, w);   // knee clearance: never solve dead straight
+
   offset.set("pelvis", [sway, hipRow - ground.restHipRow]);
 
   // Hip twist reads in 2D as a tilt of the pelvis, and it is derived from the
@@ -510,7 +538,7 @@ export function rigPose(rig, sim) {
   // pure function of the same foot targets — deterministic, rollback-safe.
   //
   // When the near foot leads (the whole idle stance, and the already-approved
-  // half of the walk) the map is empty and the output is bit-identical to 3.2.
+  // half of the walk) the map is empty and every bone wears its own artwork.
   const legArt = new Map();
   if (feet.near.x < feet.far.x) {
     for (const part of ["thigh", "shin", "foot"]) {

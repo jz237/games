@@ -322,9 +322,11 @@ test("no leg piece is ever drawn a quarter-turn from its authored orientation", 
   }
 });
 
-test("the near-led half and the idle are bit-identical to the shipped 3.2 draw", () => {
+test("the near-led half and the idle keep every bone in its own artwork", () => {
   // The role map is empty whenever the near foot leads — including the whole
-  // idle — so the pilot-approved half of the walk cannot have moved a pixel.
+  // idle — so no bone on the pilot-approved half wears a swapped piece.
+  // (v3.5 moved the hip row and the leg layering, so this is an ART-ASSIGNMENT
+  // check, not the pixel-parity claim the name used to make.)
   for (const sim of [idleSim(0.7), idleSim(2.9)]) {
     const pose = rigPose(rig, sim);
     assert.equal(pose.frontSide, "near", "the idle stance leads with the near foot");
@@ -563,4 +565,125 @@ test("the service worker shell did not grow for the pilot", () => {
   assert.doesNotMatch(worker, /rig\.mjs/,
     "the rig is dynamically imported precisely so the install cache stays the size it was");
   assert.doesNotMatch(worker, /assets\/rig/);
+});
+
+// ---------------------------------------------------------------------------
+// v3.5 — THE LEG STRUCTURE.
+//
+// Three rounds of walk work verified BONE ANGLES, STRIDE MATH and FOOT-TARGET
+// POSITIONS. All three measured correct, and all three missed that the RENDERED
+// figure had no lower leg: shorts hem, a stub of thigh, then the shoe. What was
+// never measured was whether the shin's pixels reach the canvas.
+//
+// Two independent things put them there, and both are pinned below because both
+// are invisible to an angle check:
+//
+//   1. DRAW ORDER. The thigh capsule runs 10px past the knee with a 16px end
+//      radius, so the thigh art covers ~26px of a 42px shin and the shoe collar
+//      takes 12 more. Layered thigh-over-shin (the pre-3.5 order) that is
+//      harmless only while the leg is straight, because the covering pixels ARE
+//      the drawn knee. Bend the knee and the thigh's rounded end sweeps ACROSS
+//      the calf: measured 4-25% of the shin survived to the canvas.
+//   2. LEG EXTENSION. The hip row used to be a constant that the reach
+//      constraint could only push DOWN, so a 97.65-cell leg spanned the ~90
+//      cells to the ankle row and put the difference in the knee — 45-75deg of
+//      fold where the artwork was drawn at 7.
+//
+// Pixel compositing is not available in node, so these pin the geometry that
+// PRODUCES the pixels: the layering, the extension, and the ground contact.
+// ---------------------------------------------------------------------------
+
+test("v3.5 leg pieces layer proximal -> distal so a bent knee cannot eat the shin", () => {
+  const zOf = (pose, name) => pose.bones.find((bone) => bone.name === name).z;
+  const poses = [idleSim(0), idleSim(1.7), ...Array.from({ length: 40 }, (_, i) => walkSim(i / 40))];
+  for (const sim of poses) {
+    const pose = rigPose(rig, sim);
+    for (const side of ["near", "far"]) {
+      const leg = rig.legs[side];
+      const thigh = zOf(pose, leg.thigh);
+      const shin = zOf(pose, leg.shin);
+      const foot = zOf(pose, leg.foot);
+      assert.ok(thigh < shin,
+        `${side} shin must draw OVER its own thigh (${shin} vs ${thigh})`);
+      assert.ok(shin < foot,
+        `${side} foot must draw over its own shin (${foot} vs ${shin})`);
+      // and the shorts still hide both hips, which is what the leg z slots
+      // were kept below the pelvis for
+      assert.ok(zOf(pose, "pelvis") > thigh, "shorts draw over the thighs");
+    }
+  }
+});
+
+test("v3.5 the support leg stays extended — the hips hang from it", () => {
+  const reach = rig.byName.get("thighNear").length + rig.byName.get("shinNear").length;
+  const worst = { ext: 1, bend: 0, phase: null };
+  for (let i = 0; i < 60; i += 1) {
+    const pose = rigPose(rig, walkSim(i / 60));
+    // the SUPPORT leg is the most extended one — whichever is carrying
+    let best = 0;
+    for (const side of ["near", "far"]) {
+      const leg = rig.legs[side];
+      const hip = pose.nodes.get(leg.thigh);
+      const ankle = pose.nodes.get(leg.foot);
+      best = Math.max(best, Math.hypot(ankle.x - hip.x, ankle.y - hip.y) / reach);
+    }
+    if (best < worst.ext) { worst.ext = best; worst.phase = pose.phase; }
+  }
+  // pre-3.5 this bottomed out at 0.925 (a 45deg knee) at every foot crossing
+  assert.ok(worst.ext > 0.97,
+    `the carrying leg must stay near full extension, worst ${worst.ext.toFixed(3)} at phase ${worst.phase}`);
+
+  // the hips must actually MOVE with it — a constant hip row is the bug
+  const hips = [];
+  for (let i = 0; i < 60; i += 1) hips.push(rigPose(rig, walkSim(i / 60)).hipRow);
+  const travel = Math.max(...hips) - Math.min(...hips);
+  assert.ok(travel > 4, `the hips must rise and fall over the stride (${travel.toFixed(2)})`);
+  assert.ok(travel < 24, `...as a walk bob, not a squat (${travel.toFixed(2)})`);
+});
+
+test("v3.5 the rest pose reproduces the drawing, and the sole sits on the ground row", () => {
+  const zero = rigPose(rig, { walkTime: 0, animTime: 0, speedX: 0, pxPerCell: PX_PER_CELL, fatigue: 0 });
+  // The pivot chain: every leg piece's pivot must sit on the joint it was cut
+  // from, or the art and the skeleton disagree before a pose is even applied.
+  for (const [piece, joint] of [["thighNear", "hipN"], ["shinNear", "kneeN"], ["footNear", "ankleN"],
+                                ["thighFar", "hipF"], ["shinFar", "kneeF"]]) {
+    const spec = definition.pieces[piece];
+    const bone = rig.byName.get(piece);
+    assert.deepEqual(
+      [spec.cellX + bone.piecePivot[0], spec.cellY + bone.piecePivot[1]],
+      definition.joints[joint],
+      `${piece}'s pivot must land on ${joint}`);
+  }
+  // segment lengths ARE the authored joint distances — a shin whose bone is
+  // shorter than its drawing is the other way this defect can come back
+  const dist = (a, b) => Math.hypot(definition.joints[a][0] - definition.joints[b][0],
+                                    definition.joints[a][1] - definition.joints[b][1]);
+  for (const [bone, a, b] of [["thighNear", "hipN", "kneeN"], ["shinNear", "kneeN", "ankleN"],
+                              ["thighFar", "hipF", "kneeF"], ["shinFar", "kneeF", "ankleF"]]) {
+    assert.ok(Math.abs(rig.byName.get(bone).length - dist(a, b)) < 0.05,
+      `${bone} bone length must equal the ${a}->${b} joint distance`);
+  }
+  // the two legs are the SAME length: a rig with mismatched legs limps
+  const nearLeg = rig.byName.get("thighNear").length + rig.byName.get("shinNear").length;
+  const farLeg = rig.byName.get("thighFar").length + rig.byName.get("shinFar").length;
+  assert.ok(Math.abs(nearLeg - farLeg) / nearLeg < 0.02, "both legs must measure the same");
+
+  // GROUND CONTACT: a planted ankle sits exactly ankleHeight above the sole row,
+  // and the sole row is the floor the stage draws its reflection from.
+  const ankleRow = definition.ground.soleRow - definition.ground.ankleHeight;
+  for (const side of ["near", "far"]) {
+    assert.ok(zero.feet[side].planted, `${side} foot is planted in the settled stance`);
+    assert.equal(zero.feet[side].y, ankleRow, `${side} planted ankle sits on the ground row`);
+  }
+  for (let i = 0; i < 60; i += 1) {
+    const pose = rigPose(rig, walkSim(i / 60));
+    for (const side of ["near", "far"]) {
+      if (!pose.feet[side].planted) continue;
+      assert.ok(Math.abs(pose.feet[side].y - ankleRow) < 0.001,
+        `a planted ${side} foot never leaves the ground row`);
+      const ankle = pose.nodes.get(rig.legs[side].foot);
+      assert.ok(Math.hypot(ankle.x - pose.feet[side].x, ankle.y - pose.feet[side].y) < 0.5,
+        "and the solved ankle actually reaches it — no float, no skate");
+    }
+  }
 });

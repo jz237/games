@@ -178,7 +178,7 @@
    ],
    "restAngle": 2.20482,
    "length": 42.2,
-   "z": 4
+   "z": 5
   },
   {
    "name": "footFar",
@@ -194,7 +194,7 @@
    ],
    "restAngle": 0.28379,
    "length": 50.25,
-   "z": 5
+   "z": 6
   },
   {
    "name": "thighFar",
@@ -210,7 +210,7 @@
    ],
    "restAngle": 2.4194,
    "length": 55.97,
-   "z": 6
+   "z": 4
   },
   {
    "name": "shinNear",
@@ -226,7 +226,7 @@
    ],
    "restAngle": 1.02225,
    "length": 42.19,
-   "z": 7
+   "z": 8
   },
   {
    "name": "footNear",
@@ -242,7 +242,7 @@
    ],
    "restAngle": 0.28379,
    "length": 50.0,
-   "z": 8
+   "z": 9
   },
   {
    "name": "hipFill",
@@ -274,7 +274,7 @@
    ],
    "restAngle": 1.12328,
    "length": 55.46,
-   "z": 9
+   "z": 7
   },
   {
    "name": "pelvis",

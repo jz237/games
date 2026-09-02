@@ -255,17 +255,30 @@ PIECES = [
 BONES = [
     ("foreArmFar",   "upperArmFar", "elbowF",    "wristF",    "foreArmFar",    2),
     ("upperArmFar",  "torso",       "shoulderF", "elbowF",    "upperArmFar",   3),
-    # shin under foot (the shoe collar hides the ankle cut) and under thigh (the
-    # quad hides the knee cut) — both cut lines end up buried by design
-    ("shinFar",      "thighFar",    "kneeF",     "ankleF",    "shinFar",       4),
-    ("footFar",      "shinFar",     "ankleF",    None,        "footFar",       5),
-    ("thighFar",     "pelvis",      "hipF",      "kneeF",     "thighFar",      6),
-    ("shinNear",     "thighNear",   "kneeN",     "ankleN",    "shinNear",      7),
-    ("footNear",     "shinNear",    "ankleN",    None,        "footNear",      8),
+    # Within a leg the order is PROXIMAL -> DISTAL: thigh, then shin, then foot.
+    #
+    # v3.5. Until 3.4 it was shin, foot, THIGH — the quad drew over its own
+    # calf, "so the quad hides the knee cut". That is true at the drawn pose and
+    # false at every other one. The thigh capsule runs 10px past the knee with a
+    # 16px end radius, so the thigh art covers ~26px of a 42px shin; the shoe
+    # collar takes 12 more from the bottom. Collinear that is invisible (the
+    # covered part IS the drawn knee). Bend the knee — which the walk does on
+    # every frame — and the thigh's rounded end sweeps ACROSS the calf instead
+    # of along it, and the shin stops reaching the canvas: measured 4-25% of its
+    # pixels survived, so the rendered figure had a thigh stub and a shoe with
+    # no lower leg between them. Distal-over-proximal is what the overlap was
+    # cut for: the shin's own knee end (8px + 16px radius of real drawn leg,
+    # feathered) covers the joint from the front, and the thigh's overlap does
+    # its actual job of filling the gap BEHIND a bending knee.
+    ("thighFar",     "pelvis",      "hipF",      "kneeF",     "thighFar",      4),
+    ("shinFar",      "thighFar",    "kneeF",     "ankleF",    "shinFar",       5),
+    ("footFar",      "shinFar",     "ankleF",    None,        "footFar",       6),
+    ("thighNear",    "pelvis",      "hipN",      "kneeN",     "thighNear",     7),
+    ("shinNear",     "thighNear",   "kneeN",     "ankleN",    "shinNear",      8),
+    ("footNear",     "shinNear",    "ankleN",    None,        "footNear",      9),
     # the crotch patch sits behind BOTH thighs, so it is invisible until a thigh
     # swings off its opening and something has to be there
     ("hipFill",      "pelvis",      "pelvis",    "waist",     "hipFill",     3.5),
-    ("thighNear",    "pelvis",      "hipN",      "kneeN",     "thighNear",     9),
     ("pelvis",       None,          "pelvis",    "waist",     "pelvis",       10),
     ("torso",        "pelvis",      "waist",     "neck",      "torso",        12),
     ("head",         "torso",       "neck",      None,        "head",         14),
