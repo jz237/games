@@ -2346,3 +2346,504 @@ they were in 3.5: the ext sheet contains no drawing for any of them, and the
 honest answer to "why is this beat still one drawing for 9 ticks" is that the
 art for it has not been made. Those four are the shopping list for wave 15,
 alongside the two redraws.
+
+## v4.1 — PROPS AND THE WALK IN ONE GENERATION: ali converts, and what actually carries a phase reversal
+
+The 3.1 wave ended with a precise open problem: *"Fixing props and walk phase in the
+same single generation is the open problem for the next wave."* Three fighters —
+post, ali, donald — had produced a genuinely alternating walk and then dropped
+their signature prop, and `buildUnifiedAcceptMasks` voids a fighter for one empty
+hand. Two more — deathblow and devil — had never inverted at all across five and
+seven generations.
+
+**One fighter converted.** ali ships a 24-cell sheet from one generation whose two
+contact keys genuinely lead with opposite legs and whose prop is in his fist in all
+24 cells. post, deathblow, donald keep their 3.0 sheets; devil was not reached.
+Eight fal calls, no regressions shipped.
+
+### The finding: markers make legs trackable, props make them reverse
+
+Three levers were tried. The results separate cleanly and the separation is the
+useful part of this wave.
+
+**LEVER 1 — bind the tonal/occlusion anchor to the PROP HAND, so the prop and the
+walk are one instruction instead of two competing ones. THIS IS THE ONE THAT
+WORKED.** The wording makes the prop hand *be* the near hand — same physical hand,
+always gripping, always drawn in front, always lit — and then makes the single thing
+that reverses between panels 3 and 4 **where the prop is**: swung back behind the hip
+in panels 1-3, forward past the front hip in panels 4-6. The near leg is then pinned
+to it by ordinary anatomy, because a man's near arm and near leg always point
+opposite ways.
+
+That is deliberately the swap this file already recorded the model performing: 3.1
+noted that donald's generations *"applied the swap rule to his GOLF CLUB correctly
+while drawing all six walk panels in the same stride phase."* The model will swap a
+held prop. So stop asking it to swap a leg and ask it to swap the prop instead.
+
+On ali it landed on the first attempt and the legs followed: the named leg marker
+sits FORWARD in all three A-half keys (1 +0.210, 17 +0.333, 2 +0.140) and REAR in all
+three B-half keys (3 −0.445, 18 −0.398, 4 −0.450). A clean 3/3 split with the swap
+exactly where it was asked for. His shipped 3.0 sheet does not alternate at all
+(+0.319 / +0.275, both forward, contact keys 92% identical).
+
+**LEVER 2 — name an existing asymmetry, or introduce a minimal in-character one.
+This half-worked, and the half that failed is the interesting half.** A
+presence/absence marker — an object on ONE leg and absent from the other — is
+*reliably drawn*. deathblow's black shin wrap, donald's single knee guard and post's
+single rolled cuff were each held on exactly one leg across all six walk panels,
+never duplicated, never jumping legs. The design works.
+
+**And every one of those legs was still the FORWARD leg in all six panels.** The
+marker made the two legs trackable; it did not make them exchange.
+
+> **Tracking is not reversing.** A marker tells the model which leg is which. It does
+> not give the model a reason to put the marked one behind him. Something that
+> physically *swings* — a held prop — is what carries the reversal, and the leg comes
+> along because arm and leg oppose.
+
+That predicts the roster exactly: the fighters who converted this wave and last are
+the ones with a swinging anchor, and the two that have never inverted in twelve
+generations between them — deathblow and devil — have no prop at all. **Giving a
+prop-less fighter something that swings is the next thing to try**, not another
+marker.
+
+**LEVER 3 — prop loss is repairable by same-generation compositing.** True, and it
+mattered, but not in the direction expected. With the LEVER 1 prop block the props
+**stopped going missing altogether** and started occasionally **duplicating** instead:
+ali's cells 2 and 11 each carried a second microphone head at the hip as well as the
+one in the raised fist, because the bible stages the mic both "in the near fist" and
+"raised beside his jaw". That is a strictly better failure mode. Both were removed by
+cloning clean thigh from elsewhere in the same cell, feathered, clipped to the
+original alpha, and verified at 11x: the thigh gradient and the fabric fold lines run
+straight through and there is no seam.
+
+**Removals composite invisibly; additions do not.** An addition was attempted on gen
+1's cell 13 — transplanting a fist-and-mic onto a splayed open hand — and abandoned:
+the donor could not be masked cleanly out of its own cell, and the paste read as
+pasted. That cell was fixed by **regenerating with better wording** instead. The
+honest ordering is therefore: *repair removals, regenerate additions.*
+
+The wording that fixed it is worth keeping. Every prop the wave lost went missing in a
+pose that OPENS THE HANDS — big-hit, mid-reaction, jump-descend. Rewriting exactly
+those panels so the **far** arm opens while **"HIS NEAR FIST STAYS CLENCHED SHUT"** on
+the prop took ali from 15/16 to 24/24 without touching the walk block, so the
+inversion survived the fix.
+
+### Both 4.0 ext defects are fixed at the source, and cannot be back-fitted
+
+The v4.1 pose lines fix both defects this file shipped in 4.0, on any sheet
+regenerated with them. Cell 20 was rewritten to forbid the hit-reaction reading
+outright — torso upright, head level, legs reaching down, *"THIS IS NOT A HIT
+REACTION"* — and came back as a real feet-first descent. Cell 18 came back on the
+correct half of the cycle. **ali's new sheet has neither defect** and his cell 20 is
+the first routable jump-descend on the roster.
+
+**They stay retired on jez, alan, benny, commissioner and cyraxx, and this wave
+establishes why they cannot be patched.** Both are WHOLE-BODY POSE errors, not missing
+objects: cell 20 measures IoU 0.47–0.77 against that fighter's own hit cells, and cell
+18 measures +26.15 / +42.34 / +39.40 / +3.98 / +47.46, all positive where their own
+cell 3 is negative. Same-generation compositing can transplant a **rigid prop**; it
+cannot synthesise a new drawing of a whole figure, and no other cell on those sheets
+contains a B-half weight-sink or a controlled descent to lift from. A single-panel
+**regeneration** is worse: it is a different generation, 11–14 dE against a 0–3.4 dE
+same-generation floor, so the repaired panel would strobe against its own sheet every
+time it played. The fix is a whole-sheet regeneration with the v4.1 pose lines —
+proven, but wave 15's job, not a patch.
+
+### The despill bug, which cost three generations
+
+A despill written as `max(green, channel - spill)` **clamps every channel up to
+green**, destroying any colour whose blue sits below its green — which is every gold,
+orange and warm skin tone on this roster. It turned post's safety orange into salmon
+and ali's gold satin into pink, and three generations were rejected as "colour
+regressions" that were in fact clean. It was caught by sampling the RAW png: raw torso
+[125, 74, 11] against a keyed [123, 74, 74], blue lifted 63 points to meet green.
+
+The corrected slicer reproduces the archived cyraxx sheet within **0.93–2.14 dE**
+(it was validated against that sheet before any judgement was spent, which is the
+only reason the bug was found at all). **Sample the raw generation before blaming the
+model for a colour shift**, and validate a slicer against a known-good sheet first.
+
+Two other measurement notes. `CELL_BODY_CENTRE` is the **bounding-box midpoint**,
+`round((y0 + y1 - 1) / 2)`; this was re-confirmed by reproducing post's recorded
+16-value row **exactly, 16/16**. And sheets are written **lossless** — lossy WebP at
+q97 introduces a mean |dRGB| of 3.29 on this art, which would consume the entire
+same-generation floor the one-generation law rests on. The cost is size: ali.webp is
+937KB against the 3.0 sheet's 415KB.
+
+### What shipped
+
+| fighter | gens | walk alternates | contact IoU new / 3.0 | prop | outcome |
+| --- | --- | --- | --- | --- | --- |
+| **ali** | 2 | **yes** (+0.210 → −0.445, 3/3 split) | **0.609 / 0.922** | 24/24 after 2 repairs | **ships, 24 cells** |
+| post | 2 | no (+0.502 / +0.458) | 0.602 / 0.895 | 16/16 | keeps 3.0 |
+| deathblow | 1 | no (marker held, stayed forward) | 0.455 / 0.842 | n/a | keeps 3.0 |
+| donald | 1 | no (marker held, stayed forward) | 0.620 / 0.808 | 24/24 | keeps 3.0 |
+| devil | 0 | not attempted | — | — | keeps 3.0 |
+
+ali's other gates: identity 4.19 dE against the shipped idle torso; ground
+registration 1px spread with the torso-band centre column inside 159.3–160.8 (sd
+0.38); adjacent walk IoU max 0.839 against a 0.922 bar; all 24 cells read as their
+named beat. W2 is **mixed and shipped anyway** — his costume is tighter than the 3.0
+sheet (18.26 / 10.47 dE against 21.26 / 13.94) and his head anchor is looser (beanie
+width spread 52.8% / 25.9% against 30.7% / 16.1%), with both far tighter than the
+base atlas's 123.6% / 118.3%, which is the identity reference itself.
+
+**The leg-luminance proxy is blind on ali** — his gold satin is uniformly specular, so
+it reads +20.9 / +17.6 and sees nothing where the marker metric reads +0.210 / −0.445.
+This is the same blindness this file records on the Commissioner's all-black suit.
+**A named physical marker is measurable where luminance is not**, and it is the metric
+to use on any fighter whose costume defeats the tonal read.
+
+One deliberate design change carries the result: ali's broad black outside-seam stripe
+is now on **one** trouser leg where the 3.0 sheet had one on each. That is what makes
+his two legs trackable and is the direct cause of the inversion. A single side-stripe
+is ordinary tracksuit styling and reads as the same costume at gameplay size.
+
+### ali's ext sheet was held at the loader, and was wired in 4.1 (commit 9735785)
+
+> RESOLVED — the four steps below were performed: the pending keys were renamed,
+> the ext roster went five to six, his stale tables were re-measured (CELL_BODY_CENTRE
+> drift up to 35 rows at the jump-rise), and his cell 20 routed as the roster's first
+> real jump-descend. The historical note is kept below for the reasoning.
+
+### (historical) ali's ext sheet is held at the loader, and his main sheet is not
+
+`ali-ext.webp` is on disk and its eight cells are measured and accepted, but the data
+is parked under `extCellsPending` / `extSheetPending` rather than `extCells`. This is
+the same hold 3.1 used on cyraxx and for the same reason: `buildUnifiedExtAcceptMasks`
+keys off `extCells`, so naming it that takes the ext roster from five fighters to six,
+and `tests/unified-ext.test.mjs` pins that roster **by name** in three places. This
+wave is asset-only and may not touch tests. All 44 test files pass as delivered.
+
+**His main sheet is not held.** `ali.webp` is a 16-cell drop-in on the unchanged
+1280x1280 / 4x4 / 320px geometry, so his alternating walk is live on the four main
+walk keys the moment it lands.
+
+Turning the ext sheet on takes four steps and no new art, all specified in
+`fighters.ali.wave14Hold` and `internal.wave14.integrationNotes`: rename the two
+pending keys; add ali to the by-name roster in X-B/X-E/X-H; install the measured
+`CELL_BODY_CENTRE` ext row and refit his `UNIFIED_CELL_ADJUST` (his old unified row is
+stale by up to **35 rows** at cell 8, the jump-rise the airborne anchor reads); and
+relax the X-E assertion that every cell-20 note matches `/RETIRED FROM ROUTING/`,
+because ali's is the first one that does not need to.
+
+## v4.2 — THE SWINGING ANCHOR REVERSES ON EVERY FIGHTER, AND THE LEGS STILL DO NOT FOLLOW
+
+4.1 ended on a hypothesis and a prediction. The hypothesis: *"Tracking is not
+reversing. A phase reversal needs a SWINGING anchor; a static marker will never
+supply one."* The prediction: *"Giving a prop-less fighter something that swings
+is the next thing to try."*
+
+This wave tried it on all four remaining fighters. On the two prop-less ones the
+anchor was something they already own, named as an object and swung: deathblow's
+**red-and-black armoured gauntleted fist**, devil's **clawed hand**, each
+described as *"ONE SOLID PROP that his arm carries around, exactly as if he were
+holding a weapon."* On post and donald the anchor was the actual prop.
+
+**The anchor reverses. On all four fighters, on demand, usually first time,
+including on the two that have no prop at all — which is new, and which 4.1
+predicted. The legs still do not follow it.** Twelve fal calls, nothing shipped,
+no regression shipped. The full table is in `unified-v42/RESULTS.txt`.
+
+### The numbers
+
+Cycle order is the six walk keys 1, 17, 2 | 3, 18, 4. Positive = the thing sits on
+the FORWARD (right) half of the figure, negative = the REAR half. An inversion
+flips sign between the two halves.
+
+| gen | anchor | leg marker | |
+| --- | --- | --- | --- |
+| deathblow g2 | −0.454 −0.488 −0.563 \| −0.047 +0.004 +0.002 | +0.430 +0.426 +0.124 \| +0.422 +0.497 +0.479 | anchor reverses, legs forward in all six |
+| devil g2 | −0.277 −0.183 −0.143 \| **+0.370 +0.350 +0.343** | +0.392 +0.463 +0.425 \| +0.125 +0.233 +0.245 | textbook 3/3 anchor swap, legs never cross |
+| post g1 | −0.325 −0.214 −0.292 \| **+0.857 +0.859 +0.845** | +0.725 +0.747 +0.388 \| +0.684 +0.458 +0.452 | textbook anchor swap, legs forward |
+| **post g2** | −0.208 na na \| **+0.698 +0.767 +0.804** | +0.727 +0.720 +0.755 \| +0.437 **−0.616 −0.557** | **legs partially follow, one panel late** |
+| donald g2 | reverses (verified by eye) | +0.416 +0.719 +0.602 \| +0.748 na +0.751 | club swaps perfectly, legs forward |
+
+`unified-v42/viz-deathblow-g2.png` is the wave in one picture. The cyan overlay is
+the shin-wrap detector. The gauntlet is down at his hip in panels 1–3 and folded
+high in front of his chest in panels 4–6, exactly as instructed. The wrapped leg
+is the forward leg in every panel regardless.
+
+### post moved, and that is the one result worth building on
+
+`unified-v42/viz-post-g2.png`: the pale rolled cuff is cleanly on exactly one leg
+in all six panels, forward in panels 1–4 and **genuinely on the rear leg in panels
+5 and 6.** The legs really do exchange. **They exchange one panel late** — the arm
+swaps between panels 3 and 4 as instructed (cell 3's anchor is already +0.698),
+the legs swap between 4 and 5.
+
+That is a different failure from deathblow's, devil's and donald's, where the legs
+never move at all, and a much smaller one. So the honest statement of the result
+is not "the legs never follow" but:
+
+> **A swinging anchor reverses reliably on every fighter. Whether the legs follow
+> it is fighter-dependent, and where they do follow, they lag it by one panel.**
+> Necessary, still not sufficient, but not inert either.
+
+### Four levers, and which one to keep
+
+**LEVER 1 — make the anchor's two states impossible to confuse. This is what
+fixed the anchor.** 4.1 already recorded that post and donald were given the
+held-prop block and did not convert, which means "has a prop" was never the
+discriminator. Putting the three 4.1 filmstrips side by side shows what is: ali's
+microphone travels from *down at his hip, half hidden behind him* to *raised in
+front of his chest, silhouetted against the magenta*, while donald's club sat in
+the same diagonal in all six panels and post's can moved a few centimetres. 4.1
+asked for "swung back behind the hip" versus "forward past the front hip", and
+**those two states look nearly identical on the page**, so the model drew one of
+them six times. v4.2 replaces them with LOW-AND-BEHIND-THE-HIP versus
+HIGH-AND-IN-FRONT-OF-THE-CHEST, and the anchor has reversed on every fighter
+since, prop or no prop.
+
+**LEVER 2 — stop binding the marker to prominence. This is the one that moved a
+leg, and the wording to keep is `unified-v42/p-post-g2.txt`.** Every walk block
+since 3.1 bound three properties to the marked leg at once: it is the MARKED leg,
+it is DRAWN ON TOP, and it is THE LIT one. In a side-view stride the leg that is
+naturally on top and lit **is the front leg.** So the prompt had been quietly
+requesting that the marker sit on the front leg in every panel, and that is
+exactly what sixteen generations delivered. It was never "the model refuses to
+reverse a leg" — it was asked twice, contradictorily, and obeyed the easier half.
+v4.2 hands on-top-and-lit to whichever leg happens to be in front, leaves the
+marking as the only property that persists with its limb, and adds *"if you find
+yourself drawing the marker on the front leg in panel 4 just because the front leg
+is the prominent one, STOP — that is the mistake."* post g2 is the result.
+
+**LEVER 3 — drop anatomy, specify raw panel geometry.** Per-panel lines reading
+"IN THIS PANEL THE MARKED BOOT IS THE RIGHT-HAND ONE OF HIS TWO BOOTS" for panels
+1–3 and "THE LEFT-HAND ONE" for 4–6, plus a closing *"which boot is further right
+on the page"* checklist — literally the quantity the gate measures, with no
+anatomical inference required. It did not help. On devil the B-half drifted from
++0.427 to +0.201 and never crossed zero; on post g5 it scrambled the phase
+outright (+0.508 +0.502 −0.030 | −0.249 −0.314 +0.547) and regressed W2 and W3.
+
+**LEVER 4 — a timing-only instruction, tried alone: "THE LEGS EXCHANGE ON THE SAME
+FRAME AS THE ARM, NOT ONE FRAME LATER". It backfired.** On post g4 it desynced the
+*arm* instead of advancing the legs — the prop swap itself landed late. Naming the
+lag makes the model move the wrong end of the coupling. Do not use it alone.
+
+### What this means for ali
+
+4.1 read ali's conversion as caused by the microphone. post g2 partially
+reproduces that causation and is the first independent support it has had — but
+three other fighters given the same, better-specified mechanism did not convert.
+The defensible position is that **the anchor raises the probability of a leg swap
+rather than determining it.** ali's sheet is good and still ships; it is not a
+reproducible recipe, and no future wave should budget as though it were.
+
+### Two measurement traps, both of which cost real time here
+
+**devil's leg-marker row is invalid and is published only for completeness.** He
+wears moss-green wraps on BOTH lower legs by design; only one is *torn*. No colour
+key separates them, so the detector returns the centroid of both
+(`unified-v42/viz-devil-g2.png` shows it lighting up each leg). His
+non-alternation rests on the picture and on adjacent IoU, not on that row.
+
+**donald's anchor row is invalid in the opposite direction, and it briefly
+produced a false negative.** `ANCHORS["donald"]` keys his WHITE SHIRT — 950–1260px,
+large and centred — so it returns ≈0.0 in every panel and reads as *"the club never
+moved."* That is wrong. A second attempt keyed warm gold instead and caught his
+GOLDEN-BLONDE HAIR, also ~1000px and hard right in every panel, and was equally
+wrong. `viz-donald-g2-row1.png` settles it by eye: the club trails down and back
+with its head near the ground in panels 1–3 and is raised up and forward at head
+height in panels 4–6. A textbook reversal that two different detectors denied.
+
+The rule, which also caught 4.1's despill bug: **render the selection mask over
+the cell and look at it before believing any marker number** — and on a costume
+that repeats the marker's colour elsewhere, just look at the picture.
+
+deathblow's marker is the counter-example that makes the wave conclusive: a single
+black sleeve on an otherwise bare tanned leg, cleanly separable, unambiguous at a
+glance. **He is the clean experiment and the conclusion rests on him.**
+
+### Registration, and a manifest correction
+
+The four 3.0 sheets measured here (deathblow, devil, donald, post) sit at floor
+rows **315–319, a 4px spread**, against a manifest recording a flat `floorRow:
+315`. That passes the 6px gate, but the recorded value is the minimum, not the
+row. Horizontal registration on those sheets spans 142.5–174.4 (torso-band
+centroid, sd 3.5–5.4). Every v4.2 sheet came off the slicer on row **314** with a
+0–1px spread and a torso sd of 0.31–2.0. **Registration was never what is holding
+these fighters back**, and the 4.1 slicer needs no further work.
+
+The slicer was re-validated against the archived cyraxx sheet before any colour
+judgement was spent — **0.41–3.56 dE across the 16 torso bands, floor row 314 on
+both** — so the 4.1 despill fix is intact. `measure42.py` was validated the same
+way, reproducing ali's recorded 4.1 marker row **exactly, 6/6**.
+
+### Where the roster goes from here
+
+**Prompt wording is exhausted.** Twenty-two generations across three waves, four
+fundamentally different framings, and the failure is now precisely located: it is
+not in the instruction, it is in what the generator will condition the lower body
+on. It draws a walking figure from a side-view prior in which one particular leg
+leads, restates the arm/leg opposition rule back at you correctly, and still does
+not re-derive the legs from the arm. More words will not move it.
+
+Three things might, none of which is a prompt. In cost order:
+
+* **Mirror the legs inside one cell.** Generate one contact key and build the
+  opposite key by horizontally mirroring the leg region only, compositing within
+  the same cell. The pixels are same-generation so nothing strobes, and 4.1
+  already established that same-cell compositing is invisible when it *removes*
+  or *relocates* existing material. The open question is only whether a leg-only
+  mirror reads cleanly at the hip. **This is the cheapest of the three and the
+  only one that respects every law already established — it should be wave 16's
+  first move.**
+* **Generate the walk row on its own** as a 6x1 image and composite it in. Breaks
+  the one-generation law across cells, so it needs the cross-generation problem
+  solved first (11–14 dE against a 0–3.4 dE same-generation floor).
+* **An image-to-image / edit endpoint.** The fal tool in use is prompt-only, so
+  this needs a different endpoint entirely.
+
+deathblow, devil, donald and post all keep their 3.0 sheets.
+
+## v4.3 — THE OPPOSITE CONTACT KEY, BUILT FROM PIXELS. THREE SHIP, ZERO GENERATIONS
+
+4.2 ended by saying prompt wording was exhausted and naming the mirror as wave
+16's first move. This wave took that instruction and found that the mirror is
+the *second*-best answer, and that the first is simpler, cheaper and provably
+invisible.
+
+**Three of the four remaining fighters — deathblow, post and devil — now lead
+with opposite limbs on their two contact keys. No fal call was made. Not one.
+donald keeps his 3.0 sheet.**
+
+### The thing that reframes it: the two contact keys have the SAME silhouette
+
+`fb.iou(cell1, cell3)` on the shipped 3.0 sheets is **0.842 (deathblow), 0.895
+(post), 0.808 (donald), 0.668 (devil)**. In this art the two contact keys of a
+stride are the *same stride shape drawn twice*. That is not a defect — it is what
+a side-view contact pose is: both legs at maximum extension, heel forward, toe
+back, and the pose is nearly symmetric about the hip.
+
+Which means **the lead foot is not carried by the outline. It is carried by limb
+identity — which leg is drawn on top, which is lit, which wears the marker.** So
+"build the opposite contact key" does not require moving a leg anywhere. It
+requires the two legs to *exchange roles in place.*
+
+That is Method A in the brief — "exchange their roles… each keeping its own
+painted shading and its own foot" — read literally, and it turns out to have a
+form with no seam in it at all.
+
+### METHOD A, as shipped: the in-place leg-region role exchange
+
+Segment the two legs below the garment split. Repaint each with the *other*
+limb's tonal statistics, taken from the same fighter's own cell 1 (the
+best-exposed contact key). Each leg is split into a mask-aware blurred BASE — the
+depth modelling, which is exchanged outright through a gain/offset learned from
+cell 1 — and a high-pass DETAIL layer, which keeps its own structure but is
+rescaled to the other limb's amplitude, so the newly-near leg crisps up and the
+newly-far leg softens instead of merely changing brightness.
+
+**Nothing moves.** Silhouettes, both feet, soles, floor contact, the ink outline
+and the light direction are the source pixels. The alpha channel is
+**bit-identical on all 16 cells**. Cells 0, 1, 2 and 5–15 are **byte-identical
+everywhere alpha>0**, so W2 (headW spread, costume dEmax), W3 (idle torso/head
+dE), W3-PROP and W4 (floor rows, torso column) are not merely passing, they are
+**unchanged to the digit — 0.000 dE, identical floor rows**. There is no
+regression available to make.
+
+Restricted to a per-fighter MATERIAL mask (bare tanned skin / safety-orange twill
+/ olive hide and moss wrap) so the shared black footwear and the shared outline
+are never touched.
+
+### The numbers
+
+W1 sign convention: **+ = the NEAR (lit, drawn-on-top) limb is the FORWARD one,
+− = the REAR one.** A genuine inversion flips the sign between cells 1/2 and 3/4.
+This replaces v4.2's colour-keyed marker row, which was **structurally incapable
+of showing an inversion on two of these three fighters** — post's rolled cuff is
+on BOTH legs and devil's moss wrap is on BOTH legs, so the detector returned the
+centroid of two markers. That is the same trap 4.2 documented for devil; post had
+it too and it was not noticed.
+
+| fighter | 3.0 on disk (cells 1 2 3 4) | v4.3 | contact keys |
+| --- | --- | --- | --- |
+| deathblow | +0.318 −0.079 +0.245 +0.003 | +0.318 −0.079 **−0.300 −0.523** | +0.318 vs **−0.300** — OPPOSITE |
+| post | +0.270 +0.047 +0.286 +0.070 | +0.270 +0.047 **−0.245 −0.455** | +0.270 vs **−0.245** — OPPOSITE |
+| devil | +0.212 +0.134 +0.031 +0.186 | +0.212 +0.134 **−0.394 −0.180** | +0.212 vs **−0.394** — OPPOSITE |
+| donald | +0.619 +0.401 +0.482 +0.447 (gold row) | unchanged | still same-sign — KEEPS 3.0 |
+
+The wave-13 band metric agrees: deathblow's cell-3 `legLumDelta` goes **+21.1 →
+−21.3**, post's **+11.5 → −12.5**, devil's **+7.5 → −6.7**.
+
+### METHOD B — the mirror — was built, and it is the runner-up
+
+`comp.mirror_shear` reflects the leg block about an axis that **slides linearly
+from the hip silhouette midpoint down to the midpoint of the two ankles**, so the
+cut row reflects onto itself (no step at the hip) and each shin lands exactly on
+the other leg's foot. Every row is still a pure reflection, so widths and painted
+material are preserved; rows below the ankle are never touched.
+
+It works, and it has one advantage the role exchange does not: **it moves
+asymmetric hardware.** On donald it put the gold knee plate on the rear leg
+first try. Three findings, all reusable:
+
+* **A pure mirror points the feet backwards.** They must be handled separately —
+  either left in place (the shear axis makes the shins land on them) or
+  translated unmirrored. Reflecting the shoes is never acceptable.
+* **The ankle x must be read from the LAST SHIN ROW, not the first shoe row.**
+  A shoe collar flares immediately and its centre is not the ankle's; using it
+  puts a skin wedge through the heel. That cost three iterations.
+* **A kept prop must be excluded from the SOURCE as well as the destination**, or
+  it reappears mirrored on the far side. donald's club head landed at x=65.
+* **The hip join needs a garment edge.** Where the cut falls mid-fabric the
+  tonal discontinuity is visible and needs a 6-row feather; where it falls on a
+  hem (deathblow's shorts) it is free.
+
+**But the mirror flips each limb's internal lighting, and at 11x that is
+detectable.** On donald the relocated knee plate's gold rim highlight and its
+teal specular end up facing left while every other specular in the cell faces
+right. By the stated W6 rule — *if a composite is detectable, it fails* — that is
+a fail. **Method A won on all three shipping fighters and would have won on
+donald too if he had no plate.**
+
+### Why donald keeps 3.0, and it is not close
+
+He is the only one of the four with a genuinely **asymmetric leg detail** — a
+large gold-rimmed knee plate on one knee, a smaller gold thigh strap on the
+other. A tonal role exchange cannot move it, so the hard marker would fight the
+soft shading cue. The mirror does move it, but **cannot be applied to cell 4 at
+all**: cell 4 is a passing key with one leg lifted and largely hidden, and
+reflecting it puts the lifted leg in front. Mirroring cell 3 alone would make the
+plate read *front, front, REAR, front* across the stride — precisely the
+mid-cycle marker flicker that wave 13 recorded as animating **worse than a
+consistent non-inversion**. Rejected on that alone, before the 11x lighting
+failure was even counted.
+
+One more thing about donald for whoever picks him up: **his two trouser legs
+merge into a single raster run on cells 1, 3 and 4.** Run-based leg segmentation
+returns one limb. Any region method on him needs a hand mask or a real matte, not
+a smarter heuristic.
+
+### Two segmentation traps, in the v4.2 tradition of writing them down
+
+* **devil's tail hijacks the rear-leg label.** It is thin, it is attached at the
+  hip and it swings out to the left, so a run-chaining segmenter adopts it as
+  limb 1 and the two real legs both become limb 2. Seed on runs ≥18px wide and
+  chain on ≥12px with a gap tolerance of 5 and it resolves. His legs also only
+  separate cleanly **below row 250**, so only his shanks carry the exchange.
+* **Never pick near/far from brightness on a passing key.** deathblow's cell 4
+  shows 1932px of front leg and **144px** of rear leg — a sliver of lifted shoe —
+  and a brightness test picked the sliver as "near" and turned his planted leg
+  grey. On every one of these sheets the right-hand limb is the near one in all
+  four walk cells; that IS the defect being repaired, so assert it, do not infer
+  it.
+
+### Housekeeping
+
+The slicer was re-validated against the archived cyraxx sheet before any colour
+judgement was spent: **0.41–3.56 dE across the 16 torso bands, floor row 314 on
+both**, reproducing v4.2's record exactly. Floor rows were measured per fighter
+this wave, not read from the manifest: **315–319, a 4px spread, on all four**,
+unchanged by the composite because every operation is horizontal or tonal.
+
+A caution for anyone copying assets in this tree: **`assets/unified/*.webp` were
+hardlinked to an earlier session's scratchpad snapshot**, so `cp` over them
+silently rewrote the "before" backup too. Replace the file (`rm` then `cp`), do
+not overwrite it in place. `final-blow-goal` was never linked and was never
+touched.
+
+Everything — the three shipped sheets, the compositor, the gates and the
+before/after crops — is archived in `unified-v43/`.

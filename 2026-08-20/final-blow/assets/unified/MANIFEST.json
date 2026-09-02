@@ -102,14 +102,16 @@
      "id": "walk-contact-b",
      "accept": true,
      "note": "U2 FAIL (phase). Should be the PHASE MIRROR of cell 1 and is not: separation 129.5px, leg luminance +16.4 against cell 1's +21.2, no inversion. Four generations were spent on this cell alone; see MOTION-ATLAS.md for what was tried.",
-     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. "
+     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. ",
+     "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 1. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
      "frame": 4,
      "id": "walk-passing-b",
      "accept": true,
      "note": "U2 FAIL (phase). Separation 72.0px, one foot planted; near-duplicate of cell 2 (IoU 0.878).",
-     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. "
+     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. ",
+     "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 2. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
      "frame": 5,
@@ -178,7 +180,35 @@
      "note": "on the ground on his side, hip and shoulder down, cap still on. 320px wide and 99px tall after the global scale, so it clamps to the cell width."
     }
    ],
-   "wave13": "WAVE 13: KEPT THE 3.0 SHEET. Five generations across two sessions and the walk never alternated -- leg luminance came back same-sign every time (+19.5/+9.6, +32.5/+23.5, +55.3/+54.1). Generation 5 finally inverted panel 4 by eye, the first compliance in this project, but panel 5 snapped straight back to bright-front, so the near-leg identity flickered mid-cycle, which animates worse than a consistent non-inversion; it also had two near-duplicate walk frames (adjacent IoU 0.947 against a 0.922 base-bank bar). DIAGNOSIS, and it is the mirror image of the Commissioner's problem: with BOTH LOWER LEGS BARE AND THE SAME SKIN TONE the model binds 'lit leg' to the POSE -- whichever leg catches the key light, always the forward one -- so a fixed-near-leg contract has nothing to grip, and his black-on-black sneakers put the pale sole strip on whichever shoe faces the light. Bare symmetric legs are as hard as uniformly dark trousers, for the opposite reason. Separately, every new generation degraded his CLEAR PRESCRIPTION GLASSES -- into a pale blotch in gen 3, into a pink/magenta or gold blob in gen 4 -- and gen 4 also dropped a gauntlet in three cells. The shipped 3.0 sheet does not invert either (+21.9/+17.6) but beats all five new sheets on upright head consistency (33.0% / 3.64 dE) and on walk-frame variety (adjacent IoU 0.57 vs 0.805), with clean glasses and gauntlets throughout. WAVE 14 LEVER: break the leg symmetry in his bible -- a taped shin, a knee brace, one sock -- so the model has a named object to track across the swap."
+   "wave13": "WAVE 13: KEPT THE 3.0 SHEET. Five generations across two sessions and the walk never alternated -- leg luminance came back same-sign every time (+19.5/+9.6, +32.5/+23.5, +55.3/+54.1). Generation 5 finally inverted panel 4 by eye, the first compliance in this project, but panel 5 snapped straight back to bright-front, so the near-leg identity flickered mid-cycle, which animates worse than a consistent non-inversion; it also had two near-duplicate walk frames (adjacent IoU 0.947 against a 0.922 base-bank bar). DIAGNOSIS, and it is the mirror image of the Commissioner's problem: with BOTH LOWER LEGS BARE AND THE SAME SKIN TONE the model binds 'lit leg' to the POSE -- whichever leg catches the key light, always the forward one -- so a fixed-near-leg contract has nothing to grip, and his black-on-black sneakers put the pale sole strip on whichever shoe faces the light. Bare symmetric legs are as hard as uniformly dark trousers, for the opposite reason. Separately, every new generation degraded his CLEAR PRESCRIPTION GLASSES -- into a pale blotch in gen 3, into a pink/magenta or gold blob in gen 4 -- and gen 4 also dropped a gauntlet in three cells. The shipped 3.0 sheet does not invert either (+21.9/+17.6) but beats all five new sheets on upright head consistency (33.0% / 3.64 dE) and on walk-frame variety (adjacent IoU 0.57 vs 0.805), with clean glasses and gauntlets throughout. WAVE 14 LEVER: break the leg symmetry in his bible -- a taped shin, a knee brace, one sock -- so the model has a named object to track across the swap.",
+   "wave15": "2 generations (unified-v42/raw-deathblow-g1.png, -g2.png). KEEPS ITS 3.0 SHEET -- nothing better was produced and both candidates regressed W2. This fighter is the CLEAN EXPERIMENT of the v4.2 wave: his marker is a single matte black shin sleeve on an otherwise bare tanned leg, so the detector is unambiguous (see unified-v42/viz-deathblow-g2.png, where the cyan overlay isolates it exactly). g2's ARM ANCHOR -- the red-and-black gauntleted fist, named as an object and swung -- REVERSED EXACTLY WHERE ASKED, between panels 3 and 4: -0.454 -0.488 -0.563 | -0.047 +0.004 +0.002. His LEG MARKER stayed on the FORWARD leg in all six panels anyway: +0.430 +0.426 +0.124 | +0.422 +0.497 +0.479. That is the whole finding of the wave and it rests on him. He is now 7 generations with no inversion. g2 also regressed W2 (headW spread upright 122.8% against this sheet's 47.8%), so shipping it would have been a regression on two counts.",
+   "wave15Measured": {
+    "sheetUnchanged": true,
+    "cellsUnchanged": "every accept flag on this sheet is untouched by wave 15 -- no cell was regenerated, repaired or re-accepted.",
+    "floorRowMeasured": "rows 315-319 across the 16 cells, a 4px spread. The manifest's flat floorRow:315 is the MINIMUM, not the row. Passes the 6px gate. Verified per fighter, not taken from this file.",
+    "torsoColMeasured": "torso-band centroid spans 153.6-170.2, sd 3.51 (registration column is the centroid of rows 20%-57.5% of figure height).",
+    "v42SlicerWouldGive": "floor row 314 with a 0-1px spread and torso sd 0.31-2.0 -- registration is not what is holding this fighter back."
+   },
+   "wave16": "WAVE 16 / v4.3 -- ZERO NEW GENERATIONS. The opposite contact key was BUILT BY COMPOSITING from this sheet's own pixels rather than prompted. Cells 3 and 4 (the phase-B walk keys) had their two leg regions' ROLES EXCHANGED IN PLACE: each limb was repainted with the other limb's tonal statistics, taken from this fighter's own cell 1. No geometry moved -- every silhouette, foot, sole, outline, floor contact and the light direction are unchanged, and the alpha channel is bit-identical on all 16 cells -- so the only thing that changed is WHICH LEG READS AS NEAR. That is the quantity that carries walk phase on this roster: cells 1 and 3 have contact IoU 0.67-0.90, i.e. near-identical stride silhouettes, so the lead foot is identified by limb identity (near/far shading), not by outline. Cells 0, 1, 2 and 5-15 are byte-identical to the 3.0 sheet everywhere alpha>0, so W2, W3, W3-PROP and W4 cannot have regressed and were measured at exactly 0.000 dE / identical floor rows. He was v4.2's clean experiment and its negative result; he is v4.3's cleanest positive one. His legs are bare and symmetric, so near/far shading is the ONLY thing that distinguishes them -- exactly the wave-13 diagnosis -- which makes an in-place role exchange not a workaround but the correct repair.",
+   "wave16Measured": {
+    "method": "METHOD A -- LEG-REGION SWAP, executed as an in-place role exchange. Method B (mirror the leg block about the hip) was built and tested too; see wave16MethodB on donald and MOTION-ATLAS.md section v4.3.",
+    "generationsUsed": 0,
+    "cellsRebuilt": [
+     3,
+     4
+    ],
+    "cellsByteIdenticalToPrevious": "0,1,2,5,6,7,8,9,10,11,12,13,14,15 -- verified identical everywhere alpha>0; the alpha channel itself is identical on all 16 cells.",
+    "W1limbSign": "+ = the NEAR (lit, drawn-on-top) limb is the FORWARD one, - = the REAR one. A genuine inversion flips the sign between cells 1/2 and cells 3/4. 3.0 on disk: 1=+0.318 2=-0.079 3=+0.245 4=+0.003   v4.3: 1=+0.318 2=-0.079 3=-0.300 4=-0.523. The two CONTACT keys (1 and 3) now carry OPPOSITE signs, which is the gate.",
+    "W1legLumDelta": "the wave-13 band metric, kept for continuity. 3.0: 1=+24.8 2=+32.5 3=+21.1 4=+42.2   v4.3: 1=+24.8 2=+32.5 3=-21.3 4=+22.5",
+    "W1contactIoU": "unchanged by construction -- no geometry moved.",
+    "W2": "headW spread and costume dEmax are unchanged to the digit; both are measured on bands above the cut row, which were not touched.",
+    "W3": "idle torso dE 0.000 and idle head dE 0.000 against the 3.0 sheet; cells 3 and 4 also read 0.000 on the torso and head bands.",
+    "W3prop": "props are above the cut on every rebuilt cell and are byte-identical.",
+    "W4floorRowMeasured": "[316, 318, 315, 315, 315, 316, 315, 316, 318, 319, 317, 317, 316, 319, 316, 319], spread 4px, IDENTICAL to the 3.0 sheet",
+    "W4torsoColMeasured": "153.6..170.2, sd 3.51, identical to the 3.0 sheet",
+    "W6compositeInvisibility": "inspected at 8-11x on both rebuilt cells. There is no seam to find because nothing was cut, moved or pasted: the leg silhouettes, both feet, the soles, the outline and the floor contact are the source pixels. No doubled or missing foot, no depth-order change, no lighting contradiction -- the light direction is untouched and only the near/far tonal role swaps. PASS.",
+    "composite": "cell 3 cut row 229, cell 4 cut row 237 -- both sit on the BLACK CARGO-SHORTS HEM, a hard garment edge, so the join carries no tonal step and needs no feather. Material mask = bare tanned skin (L>46, r>b+18, r>60); the black sneakers and the ink outline are excluded and untouched."
+   }
   },
   "jez": {
    "sheet": "jez.webp",
@@ -1136,13 +1166,15 @@
      "frame": 3,
      "id": "walk-contact-b",
      "accept": true,
-     "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."
+     "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note.",
+     "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 1. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
      "frame": 4,
      "id": "walk-passing-b",
      "accept": true,
-     "note": "walk passing key B: one foot planted, the other swung through and lifted clear"
+     "note": "walk passing key B: one foot planted, the other swung through and lifted clear",
+     "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 2. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
      "frame": 5,
@@ -1452,7 +1484,35 @@
      "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
     }
    },
-   "wave13": "WAVE 13: KEPT THE 3.0 SHEET, and this one hurts. Generation 1 produced a GENUINELY ALTERNATING WALK (+26.5 / -8.6, confirmed at 1:1) with contact keys 43% more distinct than the shipped sheet's (0.573 vs 0.888) and 1px ground registration -- but it DROPPED THE SPRAY CAN from cells 2, 6 and 13. Cell 2 is a walk key, so shipping it would pop the can in and out on EVERY STRIDE, which is exactly the per-frame flicker this bank exists to remove, and buildUnifiedAcceptMasks makes it all-16-or-nothing so the cell cannot be flagged out. Four further generations hardened the prop language -- the can named in the walk block, in every panel description, with a closing 24-can census, and a structural 'his right hand is the CAN HAND, never empty' rule -- and every one of them lost MORE cans (5 of 16) and lost the walk inversion as well. Across five generations the inversion landed exactly once and was uncorrelated with the prop wording. His saturated orange coveralls give the tonal rule almost no headroom, which is likely why the read is so unstable. Two bible corrections were verified against the shipped art and are worth keeping for wave 14: he wears a SLEEVELESS ORANGE BOILER SUIT ZIPPED UP THE FRONT, not unzipped over a bare chest, and CHUNKY BLACK WORK BOOTS, not sneakers."
+   "wave13": "WAVE 13: KEPT THE 3.0 SHEET, and this one hurts. Generation 1 produced a GENUINELY ALTERNATING WALK (+26.5 / -8.6, confirmed at 1:1) with contact keys 43% more distinct than the shipped sheet's (0.573 vs 0.888) and 1px ground registration -- but it DROPPED THE SPRAY CAN from cells 2, 6 and 13. Cell 2 is a walk key, so shipping it would pop the can in and out on EVERY STRIDE, which is exactly the per-frame flicker this bank exists to remove, and buildUnifiedAcceptMasks makes it all-16-or-nothing so the cell cannot be flagged out. Four further generations hardened the prop language -- the can named in the walk block, in every panel description, with a closing 24-can census, and a structural 'his right hand is the CAN HAND, never empty' rule -- and every one of them lost MORE cans (5 of 16) and lost the walk inversion as well. Across five generations the inversion landed exactly once and was uncorrelated with the prop wording. His saturated orange coveralls give the tonal rule almost no headroom, which is likely why the read is so unstable. Two bible corrections were verified against the shipped art and are worth keeping for wave 14: he wears a SLEEVELESS ORANGE BOILER SUIT ZIPPED UP THE FRONT, not unzipped over a bare chest, and CHUNKY BLACK WORK BOOTS, not sneakers.",
+   "wave15": "4 usable generations (unified-v42/raw-post-g1, -g2, -g4, -g5; a fifth came back with 23 figures). KEEPS ITS 3.0 SHEET, but he produced the best result of the wave and the wording that did it is archived as unified-v42/p-post-g2.txt. POST g2 IS THE ONLY SHEET IN ~18 GENERATIONS IN WHICH A LEG MARKER CROSSED THE MIDLINE: marker +0.727 +0.720 +0.755 | +0.437 -0.616 -0.557, confirmed by eye in unified-v42/viz-post-g2.png, where the pale rolled cuff is cleanly on one leg in every panel and genuinely on the REAR leg in panels 5 and 6. His spray can reversed on time (cell 3 anchor already +0.698); THE LEGS FOLLOWED ONE PANEL LATE. NOT SHIPPED because the two CONTACT keys are what read as the stride and both stayed forward (cell 1 +0.727, cell 3 +0.437), so the live four-key main-sheet walk still leads with the same foot on both contacts; and because it regressed W2 costume dEmax to 18.98 against this sheet's 12.49 and shifted W3 idle torso by 11.93 dE. It did win W4 outright (floor spread 0px, torso col sd 0.31, against this sheet's 4px spread).",
+   "wave15Measured": {
+    "sheetUnchanged": true,
+    "cellsUnchanged": "every accept flag on this sheet is untouched by wave 15 -- no cell was regenerated, repaired or re-accepted.",
+    "floorRowMeasured": "rows 315-319 across the 16 cells, a 4px spread. The manifest's flat floorRow:315 is the MINIMUM, not the row. Passes the 6px gate. Verified per fighter, not taken from this file.",
+    "torsoColMeasured": "torso-band centroid spans 154.9-174.4, sd 5.12 (registration column is the centroid of rows 20%-57.5% of figure height).",
+    "v42SlicerWouldGive": "floor row 314 with a 0-1px spread and torso sd 0.31-2.0 -- registration is not what is holding this fighter back."
+   },
+   "wave16": "WAVE 16 / v4.3 -- ZERO NEW GENERATIONS. The opposite contact key was BUILT BY COMPOSITING from this sheet's own pixels rather than prompted. Cells 3 and 4 (the phase-B walk keys) had their two leg regions' ROLES EXCHANGED IN PLACE: each limb was repainted with the other limb's tonal statistics, taken from this fighter's own cell 1. No geometry moved -- every silhouette, foot, sole, outline, floor contact and the light direction are unchanged, and the alpha channel is bit-identical on all 16 cells -- so the only thing that changed is WHICH LEG READS AS NEAR. That is the quantity that carries walk phase on this roster: cells 1 and 3 have contact IoU 0.67-0.90, i.e. near-identical stride silhouettes, so the lead foot is identified by limb identity (near/far shading), not by outline. Cells 0, 1, 2 and 5-15 are byte-identical to the 3.0 sheet everywhere alpha>0, so W2, W3, W3-PROP and W4 cannot have regressed and were measured at exactly 0.000 dE / identical floor rows. His ROLLED CUFF IS ON BOTH LEGS, so v4.2's colour-keyed cuff row was measuring the centroid of two cuffs and could never have shown an inversion -- the same trap devil's wraps set. The limb-identity sign replaces it. Both legs stay fully exposed even on the passing keys, so this is the best-conditioned sheet of the three.",
+   "wave16Measured": {
+    "method": "METHOD A -- LEG-REGION SWAP, executed as an in-place role exchange. Method B (mirror the leg block about the hip) was built and tested too; see wave16MethodB on donald and MOTION-ATLAS.md section v4.3.",
+    "generationsUsed": 0,
+    "cellsRebuilt": [
+     3,
+     4
+    ],
+    "cellsByteIdenticalToPrevious": "0,1,2,5,6,7,8,9,10,11,12,13,14,15 -- verified identical everywhere alpha>0; the alpha channel itself is identical on all 16 cells.",
+    "W1limbSign": "+ = the NEAR (lit, drawn-on-top) limb is the FORWARD one, - = the REAR one. A genuine inversion flips the sign between cells 1/2 and cells 3/4. 3.0 on disk: 1=+0.270 2=+0.047 3=+0.286 4=+0.070   v4.3: 1=+0.270 2=+0.047 3=-0.245 4=-0.455. The two CONTACT keys (1 and 3) now carry OPPOSITE signs, which is the gate.",
+    "W1legLumDelta": "the wave-13 band metric, kept for continuity. 3.0: 1=+12.6 2=+7.6 3=+11.5 4=+6.8   v4.3: 1=+12.6 2=+7.6 3=-12.5 4=-14.4",
+    "W1contactIoU": "unchanged by construction -- no geometry moved.",
+    "W2": "headW spread and costume dEmax are unchanged to the digit; both are measured on bands above the cut row, which were not touched.",
+    "W3": "idle torso dE 0.000 and idle head dE 0.000 against the 3.0 sheet; cells 3 and 4 also read 0.000 on the torso and head bands.",
+    "W3prop": "props are above the cut on every rebuilt cell and are byte-identical.",
+    "W4floorRowMeasured": "[315, 316, 316, 316, 316, 316, 315, 315, 319, 317, 315, 316, 316, 318, 315, 319], spread 4px, IDENTICAL to the 3.0 sheet",
+    "W4torsoColMeasured": "154.9..174.4, sd 5.12, identical to the 3.0 sheet",
+    "W6compositeInvisibility": "inspected at 8-11x on both rebuilt cells. There is no seam to find because nothing was cut, moved or pasted: the leg silhouettes, both feet, the soles, the outline and the floor contact are the source pixels. No doubled or missing foot, no depth-order change, no lighting contradiction -- the light direction is untouched and only the near/far tonal role swaps. PASS.",
+    "composite": "cell 3 cut row 214, cell 4 cut row 209, both at the crotch where the trouser legs part. Material mask = safety-orange twill and the pale rolled cuff (r>70, r>b+30, r>g+12); the black boots are excluded and untouched."
+   }
   },
   "benny": {
    "sheet": "benny.webp",
@@ -2256,7 +2316,24 @@
      "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
     }
    },
-   "wave13": "WAVE 13: KEPT THE 3.0 SHEET. Five generations, no walk inversion. The failure is precise and worth recording: the model obeys the FIRST half of the proven technique -- one fixed physical leg is drawn on top and lit in all six panels -- and ignores the SECOND half, so that leg points forward in all six and every frame is the same stride phase. A fighter-specific census bound to his gold-rimmed knee guard, the most unmissable object on his lower body, was ignored exactly as the bright-shoe census was. Telling detail: the model DID apply the 'swap once between panel 3 and 4' rule to his GOLF CLUB in both generations -- it will swap a held prop and will not swap his legs. Generation 3 also dropped the club from cell 6 and rendered his armour as brassy gold domes instead of black plates with gold trim; generation 4 fixed the club and the armour but drew cell 6 as a full deep squat indistinguishable from cell 5, and threw the head so far back in cells 12/13/14 that at gameplay size those cells read as a flesh-coloured blob where the shipped sheet keeps a legible profile; generation 5 fixed cell 6 and then dropped the club from cell 10. No generation cleared W1, so there was no headline gain to pay for the regressions."
+   "wave13": "WAVE 13: KEPT THE 3.0 SHEET. Five generations, no walk inversion. The failure is precise and worth recording: the model obeys the FIRST half of the proven technique -- one fixed physical leg is drawn on top and lit in all six panels -- and ignores the SECOND half, so that leg points forward in all six and every frame is the same stride phase. A fighter-specific census bound to his gold-rimmed knee guard, the most unmissable object on his lower body, was ignored exactly as the bright-shoe census was. Telling detail: the model DID apply the 'swap once between panel 3 and 4' rule to his GOLF CLUB in both generations -- it will swap a held prop and will not swap his legs. Generation 3 also dropped the club from cell 6 and rendered his armour as brassy gold domes instead of black plates with gold trim; generation 4 fixed the club and the armour but drew cell 6 as a full deep squat indistinguishable from cell 5, and threw the head so far back in cells 12/13/14 that at gameplay size those cells read as a flesh-coloured blob where the shipped sheet keeps a legible profile; generation 5 fixed cell 6 and then dropped the club from cell 10. No generation cleared W1, so there was no headline gain to pay for the regressions.",
+   "wave15": "2 usable generations (unified-v42/raw-donald-g2.png; g1 and g3 came back with 23 and 21 figures and were discarded before measurement). KEEPS ITS 3.0 SHEET. HIS GOLF CLUB REVERSED PERFECTLY -- trailing down and back with the brass head near the ground in panels 1-3, raised up and forward at head height in panels 4-6, verified by eye in unified-v42/viz-donald-g2-row1.png. His knee-guard marker stayed forward throughout: +0.416 +0.719 +0.602 | +0.748 na +0.751. DO NOT TRUST THE PUBLISHED ANCHOR NUMBER FOR HIM: measure42.py's ANCHORS['donald'] keys his WHITE SHIRT (950-1260px, large and centred) and returns ~0.0 in every panel, reading as 'the club never moved', which is false; a second attempt keyed warm gold and caught his GOLDEN-BLONDE HAIR instead and was equally wrong. g2 also failed the pose-variety check with adjacent IoU 0.963 -- panels 4-6 are near-identical drawings with only the club angle changed.",
+   "wave15Measured": {
+    "sheetUnchanged": true,
+    "cellsUnchanged": "every accept flag on this sheet is untouched by wave 15 -- no cell was regenerated, repaired or re-accepted.",
+    "floorRowMeasured": "rows 315-319 across the 16 cells, a 4px spread. The manifest's flat floorRow:315 is the MINIMUM, not the row. Passes the 6px gate. Verified per fighter, not taken from this file.",
+    "torsoColMeasured": "torso-band centroid spans 151.9-169.0, sd 3.57 (registration column is the centroid of rows 20%-57.5% of figure height).",
+    "v42SlicerWouldGive": "floor row 314 with a 0-1px spread and torso sd 0.31-2.0 -- registration is not what is holding this fighter back."
+   },
+   "wave16": "WAVE 16 / v4.3 -- KEEPS ITS 3.0 SHEET. He is the only fighter of the four with a genuinely ASYMMETRIC leg detail: a large gold-rimmed knee plate on one knee and a smaller gold thigh strap on the other. An in-place tonal role exchange (the method that shipped for deathblow, post and devil) cannot move that plate, so the hard marker would have contradicted the soft shading cue. METHOD B -- reflecting the leg block about a hip-to-ankle shear axis -- WAS BUILT AND DOES MOVE THE PLATE onto the rear leg on cell 3 (contact key), with the club correctly held out of the reflection and the shoes untouched below the trouser break. It was rejected on two counts. (1) W6: at 11x the plate's gold rim highlight and its teal specular now face LEFT while every other specular in the cell faces right -- a lighting contradiction, which is a W6 failure by the stated rule. (2) It cannot be applied to cell 4 at all: cell 4 is a PASSING key with one leg lifted and largely hidden, and reflecting it puts the lifted leg in front. Shipping the mirror on cell 3 alone would have made the plate read front, front, REAR, front across the stride -- exactly the mid-cycle marker flicker that wave 13 recorded as animating WORSE than a consistent non-inversion. Also note for future waves: his cells are not merely hard to composite, his two trouser legs MERGE INTO ONE RASTER RUN on cells 1, 3 and 4, so run-based leg segmentation returns a single limb and any region method needs a hand mask or a real matte.",
+   "wave16Measured": {
+    "sheetUnchanged": true,
+    "generationsUsed": 0,
+    "cellsUnchanged": "every accept flag and every pixel on this sheet is untouched by wave 16.",
+    "W1limbSign3_0": "1=+0.619 2=+0.401 3=+0.482 4=+0.447 on the gold-keyed marker row (v4.2 numbers, re-measured identical). All four walk keys lead with the plated leg forward. STILL FAILS W1.",
+    "floorRowMeasured": "rows 315-319 across the 16 cells, a 4px spread, measured this wave, not taken from this file. Passes the 6px gate.",
+    "torsoColMeasured": "torso-band centroid spans 151.9-169.0, sd 3.57."
+   }
   },
   "cyraxx": {
    "scale": 1.4712,
@@ -3802,13 +3879,15 @@
      "frame": 3,
      "id": "walk-contact-b",
      "accept": true,
-     "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."
+     "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note.",
+     "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 1. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
      "frame": 4,
      "id": "walk-passing-b",
      "accept": true,
-     "note": "U2 note: this passing key plants two ground-contact runs where the grammar wants one; the swing foot is set down early"
+     "note": "U2 note: this passing key plants two ground-contact runs where the grammar wants one; the swing foot is set down early",
+     "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 2. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
      "frame": 5,
@@ -4118,7 +4197,35 @@
      "noAttackMisreads": "cells 12, 13, 14 and 15 all read as reactions. None of them reads as a strike -- the failure class that caused a real bug this month."
     }
    },
-   "wave13": "WAVE 13: KEPT THE 3.0 SHEET. Seven generations across two sessions, and the walk never alternated -- the bright moss-green shin wrap sits on the FORWARD leg, drawn on top, in all six panels of every generation, and the closing 'if your panel 4 has the bright foot in front you have drawn it wrong' was ignored four times running. The earlier panel-dropout problem WAS solved: a pre-slice figure count before spending any judgement meant all four later rolls came back 24/24 and none had to be re-rolled -- that check is worth keeping in the pipeline. His new sheets do win on head consistency in the upright cells (37.8% vs the shipped 120.9%) and on ground registration (1px vs 4px), but the six new walk frames look MORE alike than the shipped four (adjacent IoU 0.811 vs 0.604), so the cycle is stiffer than what already ships. The decisive objection is character design, not metrics: the shipped devil has a long dragon-crocodilian snout with backswept spines and every new generation drew a ram-horned humanoid demon face. Side by side they read as different creatures. Replacing an established look with a different one is not an upgrade, so the bible needs the snout written into it before devil is attempted again."
+   "wave13": "WAVE 13: KEPT THE 3.0 SHEET. Seven generations across two sessions, and the walk never alternated -- the bright moss-green shin wrap sits on the FORWARD leg, drawn on top, in all six panels of every generation, and the closing 'if your panel 4 has the bright foot in front you have drawn it wrong' was ignored four times running. The earlier panel-dropout problem WAS solved: a pre-slice figure count before spending any judgement meant all four later rolls came back 24/24 and none had to be re-rolled -- that check is worth keeping in the pipeline. His new sheets do win on head consistency in the upright cells (37.8% vs the shipped 120.9%) and on ground registration (1px vs 4px), but the six new walk frames look MORE alike than the shipped four (adjacent IoU 0.811 vs 0.604), so the cycle is stiffer than what already ships. The decisive objection is character design, not metrics: the shipped devil has a long dragon-crocodilian snout with backswept spines and every new generation drew a ram-horned humanoid demon face. Side by side they read as different creatures. Replacing an established look with a different one is not an upgrade, so the bible needs the snout written into it before devil is attempted again.",
+   "wave15": "2 generations (unified-v42/raw-devil-g1.png, -g2.png). KEEPS ITS 3.0 SHEET. g2's arm anchor -- the clawed hand -- produced the cleanest reversal of the wave, a textbook 3/3 split: -0.277 -0.183 -0.143 | +0.370 +0.350 +0.343. The legs did not cross the midline. WARNING ON HIS METRIC: devil wears MOSS-GREEN WRAPS ON BOTH LOWER LEGS by design and only one is torn, so no colour key can separate the marked leg -- the detector returns the centroid of both wraps and his marker row (+0.392 +0.463 +0.425 | +0.125 +0.233 +0.245) is NOT a valid marker read. See unified-v42/viz-devil-g2.png. His non-alternation is established visually and by adjacent IoU (panels 4-6 near-identical), not by that row. He is now 9 generations with no inversion. g2 regressed W2 costume dEmax to 20.17 against this sheet's 5.65 and W3 idle-head to 14.61 dE.",
+   "wave15Measured": {
+    "sheetUnchanged": true,
+    "cellsUnchanged": "every accept flag on this sheet is untouched by wave 15 -- no cell was regenerated, repaired or re-accepted.",
+    "floorRowMeasured": "rows 315-319 across the 16 cells, a 4px spread. The manifest's flat floorRow:315 is the MINIMUM, not the row. Passes the 6px gate. Verified per fighter, not taken from this file.",
+    "torsoColMeasured": "torso-band centroid spans 142.5-166.1, sd 5.36 (registration column is the centroid of rows 20%-57.5% of figure height).",
+    "v42SlicerWouldGive": "floor row 314 with a 0-1px spread and torso sd 0.31-2.0 -- registration is not what is holding this fighter back."
+   },
+   "wave16": "WAVE 16 / v4.3 -- ZERO NEW GENERATIONS. The opposite contact key was BUILT BY COMPOSITING from this sheet's own pixels rather than prompted. Cells 3 and 4 (the phase-B walk keys) had their two leg regions' ROLES EXCHANGED IN PLACE: each limb was repainted with the other limb's tonal statistics, taken from this fighter's own cell 1. No geometry moved -- every silhouette, foot, sole, outline, floor contact and the light direction are unchanged, and the alpha channel is bit-identical on all 16 cells -- so the only thing that changed is WHICH LEG READS AS NEAR. That is the quantity that carries walk phase on this roster: cells 1 and 3 have contact IoU 0.67-0.90, i.e. near-identical stride silhouettes, so the lead foot is identified by limb identity (near/far shading), not by outline. Cells 0, 1, 2 and 5-15 are byte-identical to the 3.0 sheet everywhere alpha>0, so W2, W3, W3-PROP and W4 cannot have regressed and were measured at exactly 0.000 dE / identical floor rows. The weakest of the three and the one to re-check first if anything looks wrong in motion: only his SHANKS carry the exchange, his thighs above row 250 keep their original tone, and his 3.0 cell-3 sign was already close to zero (+0.031) so the pre-existing near/far separation there was faint. The band-based legLumDelta on cell 4 only reaches +1.5 (it averages in the untouched thigh and the claws); the limb-restricted sign, which is the honest measurement, is -0.180.",
+   "wave16Measured": {
+    "method": "METHOD A -- LEG-REGION SWAP, executed as an in-place role exchange. Method B (mirror the leg block about the hip) was built and tested too; see wave16MethodB on donald and MOTION-ATLAS.md section v4.3.",
+    "generationsUsed": 0,
+    "cellsRebuilt": [
+     3,
+     4
+    ],
+    "cellsByteIdenticalToPrevious": "0,1,2,5,6,7,8,9,10,11,12,13,14,15 -- verified identical everywhere alpha>0; the alpha channel itself is identical on all 16 cells.",
+    "W1limbSign": "+ = the NEAR (lit, drawn-on-top) limb is the FORWARD one, - = the REAR one. A genuine inversion flips the sign between cells 1/2 and cells 3/4. 3.0 on disk: 1=+0.212 2=+0.134 3=+0.031 4=+0.186   v4.3: 1=+0.212 2=+0.134 3=-0.394 4=-0.180. The two CONTACT keys (1 and 3) now carry OPPOSITE signs, which is the gate.",
+    "W1legLumDelta": "the wave-13 band metric, kept for continuity. 3.0: 1=+15.5 2=+15.4 3=+7.5 4=+11.9   v4.3: 1=+15.5 2=+15.4 3=-6.7 4=+1.5",
+    "W1contactIoU": "unchanged by construction -- no geometry moved.",
+    "W2": "headW spread and costume dEmax are unchanged to the digit; both are measured on bands above the cut row, which were not touched.",
+    "W3": "idle torso dE 0.000 and idle head dE 0.000 against the 3.0 sheet; cells 3 and 4 also read 0.000 on the torso and head bands.",
+    "W3prop": "props are above the cut on every rebuilt cell and are byte-identical.",
+    "W4floorRowMeasured": "[317, 315, 315, 315, 316, 317, 316, 317, 319, 316, 318, 319, 318, 319, 319, 319], spread 4px, IDENTICAL to the 3.0 sheet",
+    "W4torsoColMeasured": "142.5..166.1, sd 5.36, identical to the 3.0 sheet",
+    "W6compositeInvisibility": "inspected at 8-11x on both rebuilt cells. There is no seam to find because nothing was cut, moved or pasted: the leg silhouettes, both feet, the soles, the outline and the floor contact are the source pixels. No doubled or missing foot, no depth-order change, no lighting contradiction -- the light direction is untouched and only the near/far tonal role swaps. PASS.",
+    "composite": "cut row 250 on BOTH cells 3 and 4 -- his digitigrade legs merge into one raster run above that, so the segmentation only resolves the shanks. Because 250 falls mid-limb rather than on a garment edge, the transform is ramped in over 16 rows (a vertical feather) so the join cannot show a step; verified at 9x. Material mask = olive hide and moss wrap (L>40, g>b+6); claws and outline untouched. The tail is excluded from the leg labelling (seed_minw 18, chain_minw 12, gap 5) -- it otherwise hijacks the rear-leg label, which is what broke the first attempt."
+   }
   }
  },
  "internal": {
