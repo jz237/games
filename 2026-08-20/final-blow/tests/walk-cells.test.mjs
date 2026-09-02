@@ -208,7 +208,9 @@ function testDescriptorDeterminism() {
 function testAuthoredBankRegistry() {
   // Both renderers and resolveMotionPose route off this one list, so the walk
   // bank cannot be gated in 2D and ungated in 3D.
-  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", "unified"]);
+  // v4.0 appends the ext sheet: index-addressed against a fixed grammar on a
+  // 320px-cell sheet, so it rides the identical sheet + accept-mask gate.
+  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", "unified", "unified-ext"]);
   for (const bank of AUTHORED_BANKS) assert.equal(isAuthoredBank(bank), true);
   for (const bank of ["base", "specials", undefined]) {
     assert.equal(isAuthoredBank(bank), false);

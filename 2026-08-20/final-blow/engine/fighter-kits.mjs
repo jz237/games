@@ -1983,6 +1983,7 @@ export function safeBaseFrame(fighterId, frame) {
  * it, exactly as they already do for the sheet adjust.
  */
 export function baseCellDrawAdjust(fighterId, bank, frame) {
+  if (bank === UNIFIED_EXT_BANK) return UNIFIED_EXT_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_BANK) return UNIFIED_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank !== "base") return 1;
   const roles = BASE_CELL_ROLES[fighterId];
@@ -2036,16 +2037,85 @@ export function baseCellDrawAdjust(fighterId, bank, frame) {
 // out-of-band keys would flatten the idle->walk step and leave a smaller pop
 // INSIDE the cycle. All nine sheets need it; all nine land within 0.05%.
 // ---------------------------------------------------------------------------
+// v4.0 — RE-MEASURED, because the sheets under this table CHANGED.
+//
+// The 4.0 art wave redrew jez, alan, benny and the commissioner at 24 cells and
+// was correctly asset-only, so it could not touch this file. That left four
+// fighters wearing a correction fitted to sheets that no longer exist. Measured
+// on the sheets actually in the repo (opaque pixels, alpha >= 24, cell of 320),
+// the stale table was UNDERSHOOTING every one of them — benny's contact key
+// drew 3.3% below his idle and the commissioner's second contact 4.7% below —
+// i.e. the idle<->walk height pop B1 removed had quietly re-opened in the other
+// direction. The five holdout fighters keep their 3.0 sheets byte-identically
+// and their rows here are therefore untouched and still correct.
+//
+// The rule is unchanged: every key of the walk cycle is corrected onto that
+// fighter's own idle, all keys whenever any one of them leaves the 5% deadband.
+// All four re-measured fighters land within 0.4% of their idle.
 const UNIFIED_CELL_ADJUST = Object.freeze({
   deathblow: Object.freeze({ 1: 0.913, 2: 0.889, 3: 0.907, 4: 0.892 }),
-  jez: Object.freeze({ 1: 0.886, 2: 0.886, 3: 0.903, 4: 0.903 }),
-  alan: Object.freeze({ 1: 0.895, 2: 0.895, 3: 0.904, 4: 0.898 }),
+  jez: Object.freeze({ 1: 0.908, 2: 0.917, 3: 0.905, 4: 0.936 }),
+  alan: Object.freeze({ 1: 0.904, 2: 0.895, 3: 0.904, 4: 0.907 }),
   post: Object.freeze({ 1: 0.946, 2: 0.949, 3: 0.949, 4: 0.962 }),
   donald: Object.freeze({ 1: 0.913, 2: 0.903, 3: 0.903, 4: 0.916 }),
   devil: Object.freeze({ 1: 0.934, 2: 0.934, 3: 0.925, 4: 0.934 }),
   ali: Object.freeze({ 1: 0.894, 2: 0.886, 3: 0.894, 4: 0.900 }),
-  benny: Object.freeze({ 1: 0.912, 2: 0.912, 3: 0.915, 4: 0.921 }),
-  commissioner: Object.freeze({ 1: 0.917, 2: 0.908, 3: 0.921, 4: 0.908 }),
+  benny: Object.freeze({ 1: 0.943, 2: 0.943, 3: 0.933, 4: 0.912 }),
+  commissioner: Object.freeze({ 1: 0.947, 2: 0.938, 3: 0.966, 4: 0.950, 7: 1.067 }),
+  // cyraxx's cycle is the tightest on the roster at +3.0% to +3.4%, but the
+  // contract is `raw deviation over 3% must draw within 1% of the idle`, so he
+  // is corrected like everyone else rather than left just over the line.
+  cyraxx: Object.freeze({ 1: 0.970, 2: 0.967, 3: 0.970, 4: 0.970, 7: 1.053 }),
+});
+
+/**
+ * v4.0 — the same reconciliation for the EXT sheet, indexed by SHEET FRAME.
+ *
+ * Only the two walk in-betweens need one: they are the other half of the same
+ * upright mid-stride cycle and measure +1.0% to +7.9% of their fighter's idle.
+ * They are corrected onto the idle exactly like cells 1-4, so the six-key cycle
+ * is height-flat all the way round instead of pulsing twice per stride on the
+ * two new drawings.
+ *
+ * Nothing else on the ext sheet is corrected, for the 3.0 reasons: the idle
+ * breathe IS the idle (within 1.1% on all four), and the ascent, descent,
+ * chambers and mid-reaction are legitimately different body plans — an airborne
+ * figure is not a standing one, and normalising those flattens the pose rather
+ * than the pop.
+ */
+const UNIFIED_EXT_CELL_ADJUST = Object.freeze({
+  jez: Object.freeze({ 1: 0.926, 2: 0.936 }),
+  alan: Object.freeze({ 1: 0.935, 2: 0.945 }),
+  benny: Object.freeze({ 1: 0.952, 2: 0.959 }),
+  // THE COMMISSIONER'S WHOLE-SHEET CORRECTION LIVES HERE, and it is the one
+  // entry in this table that is not a height reconciliation.
+  //
+  // He is the single fighter with a UNIFIED_SHEET_ADJUST (1.033): his older
+  // base atlas normalises to the full cell where every other fighter's
+  // standing cells are 305-306, so his unified sheet is drawn 3.3% larger. The
+  // ext sheet is the SAME generation at the SAME global scale, so it needs the
+  // identical correction — and without it his idle would pulse 3.2% every
+  // eight ticks as it alternates 0 <-> 16, and his walk twice per stride.
+  //
+  // It is folded in HERE rather than added to `bankSheetAdjust` because the
+  // per-cell adjust is the only correction channel BOTH renderers read for
+  // this bank: CINEMA 3D's sheet-adjust chain tests `bankName === UNIFIED_BANK`
+  // and has no ext branch, so a sheet-level fix would land on the 2D canvas
+  // only and the two renderers would draw him at different sizes. Both call
+  // `cellDrawAdjust` for every bank, so this reaches both.
+  //
+  // DO NOT also add an ext branch to bankSheetAdjust without removing this —
+  // the two would multiply. game.js carries the same warning at that function.
+  //
+  // 1.033 flat: his two walk in-betweens measure +1.0% and -1.7% of his idle,
+  // inside the correction band, so neither carries a height term on top.
+  commissioner: Object.freeze({
+    0: 1.033, 1: 1.033, 2: 1.033, 3: 1.033,
+    4: 1.033, 5: 1.033, 6: 1.033, 7: 1.033,
+  }),
+  // cyraxx needs a height term for 17 (+3.0%) and none for 18 (+0.3%), and has
+  // no sheet adjust.
+  cyraxx: Object.freeze({ 1: 0.970 }),
 });
 
 /**
@@ -2055,20 +2125,41 @@ const UNIFIED_CELL_ADJUST = Object.freeze({
  */
 export const UNIFIED_CELL_HEIGHT = Object.freeze({
   deathblow: Object.freeze([272, 298, 306, 300, 305, 180, 259, 279, 278, 145, 250, 268, 272, 241, 212, 99]),
-  jez: Object.freeze([271, 306, 306, 300, 300, 161, 240, 279, 249, 148, 261, 266, 280, 283, 219, 101]),
-  alan: Object.freeze([274, 306, 306, 303, 305, 199, 257, 276, 272, 178, 257, 269, 277, 291, 244, 125]),
+  // v4.0: re-measured on the redrawn 24-cell sheets.
+  jez: Object.freeze([277, 305, 302, 306, 296, 218, 241, 271, 300, 168, 261, 260, 267, 277, 282, 70]),
+  alan: Object.freeze([274, 303, 306, 303, 302, 210, 226, 265, 297, 158, 249, 259, 267, 281, 266, 98]),
   post: Object.freeze([279, 295, 294, 294, 290, 177, 246, 273, 283, 166, 273, 284, 292, 306, 248, 107]),
   donald: Object.freeze([261, 286, 289, 289, 285, 193, 243, 255, 306, 157, 245, 251, 266, 256, 230, 122]),
   devil: Object.freeze([283, 303, 303, 306, 303, 191, 242, 284, 292, 176, 266, 268, 294, 296, 254, 123]),
   ali: Object.freeze([271, 303, 306, 303, 301, 199, 252, 274, 256, 165, 250, 256, 284, 272, 238, 128]),
-  benny: Object.freeze([279, 306, 306, 305, 303, 184, 222, 286, 265, 158, 263, 287, 283, 291, 237, 73]),
-  commissioner: Object.freeze([278, 303, 306, 302, 306, 158, 221, 279, 259, 122, 260, 244, 284, 275, 256, 75]),
+  benny: Object.freeze([279, 296, 296, 299, 306, 195, 216, 274, 310, 149, 264, 248, 279, 271, 272, 73]),
+  commissioner: Object.freeze([287, 303, 306, 297, 302, 196, 235, 269, 313, 171, 273, 261, 270, 273, 275, 86]),
+  cyraxx: Object.freeze([296, 305, 306, 305, 305, 207, 253, 281, 315, 150, 282, 278, 287, 268, 292, 72]),
+});
+
+/**
+ * v4.0 — the same audit hook for the EXT sheet, by SHEET FRAME. The contract
+ * test asserts the two walk in-betweens land on the fighter's own idle once
+ * UNIFIED_EXT_CELL_ADJUST is applied, exactly as cells 1-4 do.
+ */
+export const UNIFIED_EXT_CELL_HEIGHT = Object.freeze({
+  jez: Object.freeze([278, 299, 296, 284, 250, 265, 279, 233]),
+  alan: Object.freeze([274, 293, 290, 309, 289, 262, 270, 245]),
+  benny: Object.freeze([282, 293, 291, 288, 271, 264, 291, 202]),
+  commissioner: Object.freeze([287, 290, 282, 320, 315, 263, 284, 241]),
+  cyraxx: Object.freeze([294, 305, 297, 290, 297, 280, 290, 247]),
 });
 
 /** Drawn (corrected) content height of a unified cell, in cell pixels. */
 export function unifiedDrawnHeight(fighterId, cell) {
   const raw = UNIFIED_CELL_HEIGHT[fighterId]?.[cell];
   return Number.isFinite(raw) ? raw * baseCellDrawAdjust(fighterId, UNIFIED_BANK, cell) : 0;
+}
+
+/** Drawn (corrected) content height of an ext cell, by SHEET FRAME. */
+export function unifiedExtDrawnHeight(fighterId, frame) {
+  const raw = UNIFIED_EXT_CELL_HEIGHT[fighterId]?.[frame];
+  return Number.isFinite(raw) ? raw * baseCellDrawAdjust(fighterId, UNIFIED_EXT_BANK, frame) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -2163,9 +2254,14 @@ const GUARD_FLINCH_ADJUST = Object.freeze({
 // `deathblow` and `cyraxx` are not on the bank and are not in this table, so
 // they keep their 2.9 values through the default path.
 // ---------------------------------------------------------------------------
+// v4.0: re-measured as unified-guard-height / motion2:8-height on the sheets
+// actually in the repo. The five untouched fighters reproduce their recorded
+// numbers exactly, which is what confirms the rule; the four redrawn ones had
+// drifted because their guard cell changed height with the redraw.
 const UNIFIED_GUARD_FLINCH_ADJUST = Object.freeze({
-  jez: 1.094, alan: 0.979, post: 1.038, donald: 0.962,
-  devil: 1.127, ali: 1.058, benny: 1.040, commissioner: 1.000,
+  jez: 1.063, alan: 0.940, post: 1.038, donald: 0.962,
+  devil: 1.127, ali: 1.058, benny: 0.996, commissioner: 1.029,
+  cyraxx: 1.053,
 });
 
 /**
@@ -2302,7 +2398,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion: Object.freeze([187, 182, 189, 163, 179, 228, 220, 227, 197, 229, 198, 195, 175, 160, 160, 190]),
     motion2: Object.freeze([173, 163, 165, 169, 196, 174, 204, 186, 187, 181, 186, 211, 209, 172, 221, 206]),
     motion3: Object.freeze([182, 160, 158, 158, 182, 222, 168, 186, -1, -1, -1, -1, -1, -1, -1, -1]),
-    unified: Object.freeze([180, 164, 162, 168, 166, 235, 196, 176, 195, 244, 185, 182, 176, 176, 206, 269]),
+    unified: Object.freeze([176, 162, 164, 162, 166, 206, 194, 179, 164, 230, 184, 184, 181, 176, 174, 280]),
+    "unified-ext": Object.freeze([176, 165, 166, 172, 190, 182, 175, 198]),
     ref: 162,
   }),
   alan: Object.freeze({
@@ -2310,7 +2407,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion: Object.freeze([186, 188, 185, 163, 183, 231, 214, 242, 191, 233, 188, 200, 166, 160, 160, 191]),
     motion2: Object.freeze([171, 163, 163, 166, 186, 166, 189, 168, 175, 171, 178, 210, 200, 185, 212, 193]),
     motion3: Object.freeze([160, 158, 158, 161, 168, 214, 158, 172, -1, -1, -1, -1, -1, -1, -1, -1]),
-    unified: Object.freeze([178, 166, 164, 165, 163, 216, 187, 178, 182, 228, 188, 181, 177, 174, 194, 255]),
+    unified: Object.freeze([178, 163, 162, 163, 164, 210, 202, 182, 166, 236, 190, 185, 181, 174, 182, 266]),
+    "unified-ext": Object.freeze([178, 168, 170, 160, 170, 184, 180, 192]),
     ref: 162,
   }),
   post: Object.freeze({
@@ -2350,7 +2448,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion: Object.freeze([189, 184, 208, 160, 185, 240, 234, 206, 197, 238, 190, 192, 182, 160, 161, 180]),
     motion2: Object.freeze([171, 163, 163, 165, 199, 173, 185, 164, 178, 174, 182, 193, 194, 168, 213, 194]),
     motion3: Object.freeze([160, 158, 158, 158, 158, 204, 158, 179, -1, -1, -1, -1, -1, -1, -1, -1]),
-    unified: Object.freeze([176, 164, 162, 165, 164, 224, 204, 172, 186, 238, 184, 173, 174, 173, 197, 283]),
+    unified: Object.freeze([175, 166, 166, 165, 162, 217, 206, 178, 160, 240, 182, 190, 175, 179, 178, 278]),
+    "unified-ext": Object.freeze([174, 168, 169, 170, 179, 182, 169, 214]),
     ref: 162,
   }),
   commissioner: Object.freeze({
@@ -2358,7 +2457,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion: Object.freeze([181, 180, 184, 163, 187, 229, 225, 205, 199, 233, 193, 194, 193, 163, 160, 171]),
     motion2: Object.freeze([168, 163, 163, 163, 198, 170, 204, 183, 176, 176, 190, 197, 167, 174, 199, 197]),
     motion3: Object.freeze([160, 158, 158, 158, 166, 204, 158, 187, -1, -1, -1, -1, -1, -1, -1, -1]),
-    unified: Object.freeze([176, 165, 164, 166, 162, 236, 205, 176, 190, 256, 188, 198, 174, 182, 190, 282]),
+    unified: Object.freeze([171, 163, 162, 166, 164, 216, 197, 180, 158, 229, 178, 184, 180, 178, 177, 272]),
+    "unified-ext": Object.freeze([171, 170, 174, 160, 157, 183, 172, 194]),
     ref: 158,
   }),
   cyraxx: Object.freeze({
@@ -2366,7 +2466,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion: Object.freeze([178, 180, 186, 160, 189, 229, 222, 227, 181, 221, 189, 202, 183, 160, 160, 160]),
     motion2: Object.freeze([175, 163, 163, 165, 195, 164, 201, 188, 175, 175, 182, 206, 204, 160, 208, 174]),
     motion3: Object.freeze([162, 158, 158, 158, 158, 214, 158, 170, -1, -1, -1, -1, -1, -1, -1, -1]),
-    unified: Object.freeze([176, 166, 165, 168, 164, 237, 189, 175, 185, 242, 173, 178, 162, 166, 194, 267]),
+    unified: Object.freeze([166, 162, 162, 162, 162, 211, 188, 174, 157, 240, 174, 176, 171, 180, 168, 278]),
+    "unified-ext": Object.freeze([168, 162, 166, 170, 166, 174, 170, 191]),
     ref: 165,
   }),
 });
@@ -2421,6 +2522,21 @@ export function auditBodyCentres() {
         // airborneAnchorOffset reads as "no measurement, no correction".
         if (!Number.isFinite(value) || value > 320 || (value < 0 && value !== -1)) {
           errors.push(`${fighterId}/${bank}[${index}]: ${value}`);
+        }
+      });
+    }
+    // v4.0: the ext row is eight entries, not sixteen, and only the fighters
+    // who HAVE an ext sheet carry one. Its airborne cells (jump-ascent and
+    // jump-descend) are routed, so an unmeasured row would put the B2 body-drop
+    // straight back into the middle of those fighters' jumps.
+    const extCentres = table[UNIFIED_EXT_BANK];
+    if (extCentres) {
+      if (extCentres.length !== UNIFIED_EXT_CELL_COUNT) {
+        errors.push(`${fighterId}/${UNIFIED_EXT_BANK}: ${extCentres.length} entries`);
+      }
+      extCentres.forEach((value, index) => {
+        if (!Number.isFinite(value) || value > 320 || (value < 0 && value !== -1)) {
+          errors.push(`${fighterId}/${UNIFIED_EXT_BANK}[${index}]: ${value}`);
         }
       });
     }
@@ -2864,6 +2980,294 @@ export function unifiedFighterIds(masks) {
   return Object.keys(masks || {}).filter((id) => masks[id]?.whole).sort();
 }
 
+// ---------------------------------------------------------------------------
+// v4.0 — THE EXT SHEET (assets/unified/<id>-ext.webp), the second half of one
+// generation.
+//
+// A 4.0 sheet is TWENTY-FOUR cells drawn in a SINGLE generation, not sixteen.
+// Sixteen of them keep the 3.0 grammar and stay in <id>.webp so the shipping
+// runtime contract is untouched; the other eight ride <id>-ext.webp, a 1280x640
+// 4x2 grid of the same 320px cells at the same global scale, same floor row,
+// same registration. Physically it is just a shorter sheet, which is why
+// drawAtlasFrame's `frame % 4` / `floor(frame / 4)` addresses it with no change.
+//
+// TWO NUMBERINGS, and keeping them straight is the whole trick.
+//   GRAMMAR cell   16..23 — what the manifest, MOTION-ATLAS and this file's
+//                  documentation call the cell. `UNIFIED_EXT_BASE` is 16.
+//   SHEET frame    0..7   — where it actually sits on the ext sheet, and what
+//                  a descriptor carries. frame = cell - 16.
+// A descriptor NEVER carries a grammar number: the renderer would address row 4
+// of a two-row sheet. `xkey`/`unifiedExtPose` take SHEET frames, and
+// `unifiedExtCell` converts when a caller only has the grammar number.
+//
+// THE GATE IS THE SAME SHAPE AS THE MAIN SHEET'S, AND IT IS STRICTER BY ONE
+// CLAUSE. All eight or none, per fighter — because the ext cells are drawn to
+// sit BETWEEN the main sheet's cells (two walk in-betweens, an ascent, a
+// descent), so half an ext sheet is a cycle that changes drawing-count halfway
+// round. The extra clause: a fighter must ALSO be whole on the main sheet. The
+// two sheets are one generation and the beats interleave them cell by cell
+// (walk 1 -> 17 -> 2 -> 3 -> 18 -> 4), so an ext sheet riding a rejected main
+// sheet is exactly the cross-generation strobe the unified bank exists to kill.
+//
+// A fighter with no ext sheet — the five 3.0 holdouts (deathblow, post, donald,
+// ali, devil) — has NO extCells block in the manifest, so the mask is
+// not-whole, no Image is ever requested (no 404), and every beat below returns
+// its pre-4.0 array unchanged. That is a hard requirement, not a nicety: those
+// five keep their 3.0 sheets byte-identically and must keep their 3.0 motion.
+// ---------------------------------------------------------------------------
+
+export const UNIFIED_EXT_BANK = "unified-ext";
+
+export const UNIFIED_EXT_CELL_COUNT = 8;
+
+/** Grammar cell number of ext SHEET frame 0. Grammar cell = frame + this. */
+export const UNIFIED_EXT_BASE = 16;
+
+/**
+ * The ext grammar, BY SHEET FRAME (0..7). The comment on each line is the
+ * grammar cell number the manifest and MOTION-ATLAS use for it.
+ */
+export const UNIFIED_EXT_CELLS = Object.freeze({
+  idleBreathe: 0,   // 16 — the idle one breath later
+  walkDownA: 1,     // 17 — weight sinking between contact A and passing A
+  walkDownB: 2,     // 18 — the leg exchange of 17
+  jumpAscent: 3,    // 19 — airborne and still rising
+  jumpDescend: 4,   // 20 — falling, legs reaching down
+  punchWindup: 5,   // 21 — fist chambered at the ribs
+  kickWindup: 6,    // 22 — knee up, foot cocked
+  midReaction: 7,   // 23 — the flinch between light-hit and big-hit
+});
+
+/** The eight beats an ext sheet carries, in sheet-frame order. */
+export const UNIFIED_EXT_BEATS = Object.freeze([
+  "idle-breathe", "walk-down-a", "walk-down-b", "jump-ascent",
+  "jump-descend", "punch-windup", "kick-windup", "mid-reaction",
+]);
+
+/**
+ * RULE 2 for the ext sheet: the frames that are ROUTED, and the one that is not.
+ *
+ * Six of the eight are spent on the beat they were drawn for. `jumpDescend` is
+ * RETIRED FROM ROUTING — not because of where it sits in a chain, which is why
+ * 3.0 retired four main cells, but because THE DRAWING IS NOT THE BEAT. On all
+ * five sheets cell 20 came back as a hit reaction (head thrown back, spine
+ * arched backward, arms flung limp) rather than the "torso upright, legs
+ * reaching down" fall the prompt asked for; at 1:1 it is a sibling of that
+ * fighter's own cells 12 and 13. Routed, every jump would flinch on the way
+ * down. It stays on the sheet and inside the 8/8 accept gate — it is a
+ * competent, correctly-costumed, correctly-registered drawing — and wave 15
+ * closes this by redrawing ONE panel.
+ *
+ * `jumpAscent` is routed and its neighbour `jumpDescend` is not, which is why
+ * the jump arc owns the ascent only; see jumpArcKeys.
+ */
+export const UNIFIED_EXT_ROUTED_CELLS = Object.freeze([
+  0, 1, 2, 3, 5, 6, 7,
+]);
+
+export const UNIFIED_EXT_RETIRED_CELLS = Object.freeze([4]);
+
+/** Grammar cell (16..23) -> sheet frame (0..7). Returns -1 for a main cell. */
+export function unifiedExtFrame(cell) {
+  const frame = cell - UNIFIED_EXT_BASE;
+  return frame >= 0 && frame < UNIFIED_EXT_CELL_COUNT ? frame : -1;
+}
+
+/** Sheet frame (0..7) -> grammar cell (16..23). */
+export function unifiedExtCell(frame) {
+  return frame + UNIFIED_EXT_BASE;
+}
+
+/** True when a GRAMMAR cell number names an ext cell rather than a main one. */
+export function isUnifiedExtCell(cell) {
+  return Number.isInteger(cell) && cell >= UNIFIED_EXT_BASE
+    && cell < UNIFIED_EXT_BASE + UNIFIED_EXT_CELL_COUNT;
+}
+
+/**
+ * Is this resolved cell part of the bank's IDLE<->WALK CYCLE?
+ *
+ * The crossfade ghost has an exemption for adjacent keys of one cycle: those
+ * get a crisp cross-dissolve and everything else gets the softened big-delta
+ * ghost. 3.0 gave the exemption to unified cells 0-4 — one idle and the four
+ * keys of one stride, authored together — because without it every walk-key
+ * handoff took the softened ghost, which is a quality step down on the
+ * most-seen transition in the game.
+ *
+ * v4.0 SPANS TWO BANKS, and it has to. The cycle is now
+ * `0 <-> 16` on the idle and `1 -> 17 -> 2 -> 3 -> 18 -> 4` on the walk, so
+ * FOUR of the six handoffs per stride and EVERY breath cross from `unified` to
+ * `unified-ext`. A bank-equality test would have quietly sent all of them back
+ * to the softened ghost — the 3.0 regression, reintroduced by the wave that
+ * added the drawings. The cells are one generation and one cycle; which of the
+ * two files they happen to sit in is not a visual fact.
+ *
+ * Deliberately in the engine rather than in a renderer: both renderers and the
+ * contract test must answer this identically.
+ */
+export function isUnifiedCycleCell(bank, frame) {
+  if (bank === UNIFIED_BANK) return frame <= UNIFIED_CELLS.walkPassingB;
+  if (bank === UNIFIED_EXT_BANK) return frame <= UNIFIED_EXT_CELLS.walkDownB;
+  return false;
+}
+
+/**
+ * An ext descriptor. `cell` is a SHEET FRAME. Same contract as unifiedPose:
+ * `fallback` is the entire pre-4.0 chain for that beat, so a fighter with no
+ * ext sheet renders exactly what 3.5 rendered.
+ */
+export function unifiedExtPose(cell, fallback) {
+  return { bank: UNIFIED_EXT_BANK, frame: cell, fallback };
+}
+
+/** Chain-constructor sibling of ukey/m1key/m2key/m3key. Takes a SHEET FRAME. */
+export const xkey = (cell) => Object.freeze({ bank: UNIFIED_EXT_BANK, cell });
+
+/**
+ * A key-chain link for a ladder rung expressed in GRAMMAR numbering, which is
+ * how the reaction ladder names its cells (0..23 in one list). Dispatches to
+ * the right bank so a ladder can mix main and ext rungs in one array.
+ */
+export function urung(cell) {
+  const frame = unifiedExtFrame(cell);
+  return frame >= 0 ? xkey(frame) : ukey(cell);
+}
+
+/** Pose-descriptor sibling of `urung`, for the callers that need a fallback. */
+export function unifiedRungPose(cell, fallback) {
+  const frame = unifiedExtFrame(cell);
+  return frame >= 0 ? unifiedExtPose(frame, fallback) : unifiedPose(cell, fallback);
+}
+
+/**
+ * THE EXT ALL-OR-NOTHING GATE. Indexed by SHEET FRAME, built from the
+ * manifest's `extCells` array, whose `frame` fields are GRAMMAR numbers.
+ *
+ * `unifiedMasks` is the already-built main-sheet mask table: a fighter who is
+ * not whole there cannot be whole here, however good his ext block looks.
+ */
+export function buildUnifiedExtAcceptMasks(manifest, unifiedMasks = null) {
+  const masks = {};
+  for (const [fighterId, entry] of Object.entries(manifest?.fighters || {})) {
+    const accept = new Array(UNIFIED_EXT_CELL_COUNT).fill(false);
+    for (const cell of entry?.extCells || []) {
+      const frame = unifiedExtFrame(cell?.frame);
+      if (frame >= 0) accept[frame] = cell.accept === true;
+    }
+    const mainWhole = unifiedMasks ? Boolean(unifiedMasks[fighterId]?.whole) : true;
+    // THE GATE COUNTS THE ROUTED CELLS, and that is a deliberate difference from
+    // the main sheet's, which counts all sixteen including its four retired
+    // ones. The difference is WHY each cell is retired. The main sheet's four
+    // are waiting on a ROUTING decision — the drawings are right and a future
+    // wave can switch them on with no new art — so counting them keeps a
+    // quality bar over the whole generation. Cell 20 is waiting on a REDRAW:
+    // it came back as a hit reaction rather than a fall, on all five sheets,
+    // and the art wave itself marked it accept:false on alan and benny for that
+    // reason. Gating on it would cost those two their entire ext sheet — walk
+    // in-betweens, chambers, breathing idle, mid-reaction — over one cell no
+    // beat can reach, which is the dead-weight failure the 3.0 round removed,
+    // inverted. "Whole" here means every cell that CAN draw is accepted.
+    //
+    // The retired frame is additionally forced false in the mask, so a stray
+    // descriptor naming it draws nothing rather than a flinch in mid-air. The
+    // routing refusal and the gate say the same thing in two places on purpose.
+    const routedOk = UNIFIED_EXT_ROUTED_CELLS.every((frame) => accept[frame]);
+    const whole = Boolean(entry?.extSheet) && mainWhole && routedOk;
+    const gated = accept.map((ok, frame) => ok && UNIFIED_EXT_ROUTED_CELLS.includes(frame));
+    masks[fighterId] = Object.freeze({
+      whole,
+      accept: Object.freeze(whole ? gated : new Array(UNIFIED_EXT_CELL_COUNT).fill(false)),
+      sheet: entry?.extSheet || null,
+    });
+  }
+  return masks;
+}
+
+/** The fighter ids carrying a whole ext sheet, from a built mask table. */
+export function unifiedExtFighterIds(masks) {
+  return Object.keys(masks || {}).filter((id) => masks[id]?.whole).sort();
+}
+
+// ---------------------------------------------------------------------------
+// v4.0 — THE SIX-KEY ALTERNATING WALK, and the end of the single-phase stride.
+//
+// Everything the block above says about the four-key cycle was true of a 3.0
+// sheet and is no longer true of a 4.0 one. The 3.0 walk was SINGLE-PHASE by
+// decision: cells 1 and 3 carried the same lead leg, because five attempts at
+// prompting a phase inversion had failed and splitting the walk into its own
+// generation would have put a cross-generation seam back at idle->walk.
+//
+// The 4.0 sheets invert. The prompt technique that finally worked declares the
+// NEAR leg to be one FIXED PHYSICAL LIMB, drawn on top and lit in all six
+// panels, whose only change is WHICH WAY IT POINTS — forward in panels 1-3,
+// backward in 4-6, swapping exactly once. Verified at 1:1 by a named costume
+// object that swaps ends between the contacts (benny's thigh cargo pocket, the
+// commissioner's coat lining and pale cane tip, alan's faded-denim highlight).
+// So on a 4.0 fighter the two contact keys genuinely lead with OPPOSITE legs —
+// the defect MOTION-ATLAS has recorded since the walk bank was authored.
+//
+// THE CYCLE IS 1 -> 17 -> 2 -> 3 -> 18 -> 4, six drawings where there were
+// four. 17 and 18 are the WEIGHT-SINKING beats: the body at its lowest, just
+// after each contact, which is the in-between a four-key cycle skips and the
+// reason the old stride read as a glide even when the legs were right.
+//
+// CADENCE IS PRESERVED EXACTLY, and this is the part that is easy to get
+// wrong. The four keys ran at `walkTime * 10`, so one full gait cycle took
+// 0.4s. Six keys at the same 10 keys/s would take 0.6s — the legs would cycle
+// 33% slower than the body travels and the fighter would SKATE, which is the
+// very fault the 3.5 stride clock was written to remove. The six-key cycle
+// therefore runs at `walkTime * 15`: six keys at 15/s is 0.4s, the identical
+// gait frequency and the identical ground-distance per stride. More drawings,
+// same walk.
+//
+// The stride clock is untouched. `strideClockAdvance` still signs the phase by
+// `vx * facing`, and `walkCycleFrameExt` normalises a negative phase into the
+// grammar exactly as `walkCycleFrame` does, so a RETREAT plays these six keys
+// in reverse — 4 -> 18 -> 3 -> 2 -> 17 -> 1 — and the legs un-step through the
+// new in-betweens too.
+// ---------------------------------------------------------------------------
+
+/** Keys per gait cycle on a 4.0 (ext) sheet. */
+export const UNIFIED_EXT_WALK_KEY_COUNT = 6;
+
+/**
+ * Keys per second for the six-key cycle. `WALK_CELL_COUNT / 0.1` is the 10/s
+ * the four-key cycle has always used; this is the rate that keeps the GAIT
+ * PERIOD identical while stepping through six drawings instead of four.
+ */
+export const UNIFIED_EXT_WALK_RATE = 15;
+
+/**
+ * The six-key cycle, as `{ cell, ext }` links in stride order. `ext: true`
+ * means the cell is a SHEET FRAME on the ext sheet; `ext: false` means it is a
+ * main-sheet cell.
+ *
+ * `under` is the four-key index this key falls back to when the ext sheet is
+ * missing or still decoding — the drawing the pre-4.0 cycle would have been on
+ * at that point in the stride, so the degraded read is a real walk and not a
+ * hole.
+ */
+export const UNIFIED_EXT_WALK_KEYS = Object.freeze([
+  Object.freeze({ cell: UNIFIED_CELLS.walkContactA, ext: false, under: 0 }),
+  Object.freeze({ cell: UNIFIED_EXT_CELLS.walkDownA, ext: true, under: 0 }),
+  Object.freeze({ cell: UNIFIED_CELLS.walkPassingA, ext: false, under: 1 }),
+  Object.freeze({ cell: UNIFIED_CELLS.walkContactB, ext: false, under: 2 }),
+  Object.freeze({ cell: UNIFIED_EXT_CELLS.walkDownB, ext: true, under: 2 }),
+  Object.freeze({ cell: UNIFIED_CELLS.walkPassingB, ext: false, under: 3 }),
+]);
+
+/**
+ * Which of the SIX keys this stride phase is on. Same shape and the same
+ * negative-phase normalisation as `walkCycleFrame`, at the rate that holds the
+ * gait period at the four-key cycle's 0.4s.
+ */
+export function walkCycleFrameExt(walkTime) {
+  const time = Number.isFinite(walkTime) ? walkTime : 0;
+  const phase = Math.floor(time * UNIFIED_EXT_WALK_RATE);
+  const n = UNIFIED_EXT_WALK_KEY_COUNT;
+  return ((phase % n) + n) % n;
+}
+
 /**
  * THE UNIFIED REACTION LADDER — one cell per REACTION_BANDS band, and the only
  * place a unified fighter's reaction reads from.
@@ -2922,8 +3326,50 @@ export function unifiedFighterIds(masks) {
  * a uniform design decision, like which beats it owns. The rungs are packed
  * into bands 0-3, the four that a real reaction actually plays.
  */
-export function unifiedReactionLadder(heavy) {
+/*
+ * v4.0 — THE MID-REACTION RUNG.
+ *
+ * The ext sheet's cell 23 is drawn as "a heavier flinch, halfway to being
+ * floored: doubled forward over the waist, both arms dropping open and loose,
+ * head down, knees buckling" — the in-between between the light recoil (12) and
+ * the blasted arch (13), which is exactly what the manifest's integration order
+ * asks for with "12 -> 23 -> 13 in the reaction ladder".
+ *
+ * It goes in WITHOUT changing the band grid, and that constraint is what picks
+ * the shape. Two 3.0 decisions are load-bearing here and neither moves:
+ *   - band 4 hands to the breathing idle on EVERY fighter (the m1 finding: a
+ *     2-3 tick rung is a blip, not a beat), so a rung cannot be appended;
+ *   - band 3 is the GUARD on both tracks, whose drawn height is within 3% of
+ *     the idle, which is what makes the last transition of every reaction
+ *     height-flat.
+ * So 23 has to displace a rung inside bands 0-2, and the honest one to displace
+ * is different per track:
+ *   HEAVY  13 -> 12 -> 14 -> 7   becomes   13 -> 23 -> 14 -> 7
+ *          The light-hit rung goes. A heavy reaction passing through the LIGHT
+ *          hit drawing was always the weakest rung on the ladder; 23 is drawn
+ *          for this exact position and is a heavier fold, so the recovery reads
+ *          blasted back -> doubled over -> stumbling -> braced.
+ *   LIGHT  12 -> 14 -> 6 -> 7    becomes   12 -> 14 -> 23 -> 7
+ *          The crouch-TRANSITION rung goes. 3.0 borrowed it because no drawing
+ *          existed for the beat and it is a compressed stance with the fists
+ *          up; 23 is a drawing of being hurt, made for it. Swapping a re-used
+ *          neutral cell for a purpose-drawn reaction cell is the whole point of
+ *          the wave.
+ *
+ * The M5 distinctness contract is kept and strengthened: the openings still
+ * differ (13 against 12), and now bands 1 AND 2 differ too (23/14 against
+ * 14/23) where 3.0 had them differ at 12/14 and 14/6. The two tracks still
+ * converge only on the shared guard tail, and neither ladder returns to a cell
+ * it has left.
+ */
+export function unifiedReactionLadder(heavy, { extended = false } = {}) {
   const C = UNIFIED_CELLS;
+  const mid = unifiedExtCell(UNIFIED_EXT_CELLS.midReaction);
+  if (extended) {
+    return heavy
+      ? Object.freeze([C.bigHit, mid, C.stagger, C.guard, C.idle, C.idle])
+      : Object.freeze([C.lightHit, C.stagger, mid, C.guard, C.idle, C.idle]);
+  }
   return heavy
     ? Object.freeze([C.bigHit, C.lightHit, C.stagger, C.guard, C.idle, C.idle])
     : Object.freeze([C.lightHit, C.stagger, C.crouchTrans, C.guard, C.idle, C.idle]);
@@ -2934,8 +3380,8 @@ export function unifiedReactionLadder(heavy) {
  * band index, and both must read the same table or they drift out of step —
  * which is the bug M1 is.
  */
-export function unifiedReactionCellAt(at, heavy) {
-  const ladder = unifiedReactionLadder(heavy);
+export function unifiedReactionCellAt(at, heavy, options = undefined) {
+  const ladder = unifiedReactionLadder(heavy, options);
   let index = 0;
   for (let band = 0; band < REACTION_BANDS.length; band += 1) {
     if ((at ?? 0) >= REACTION_BANDS[band]) index = band;
@@ -2993,10 +3439,20 @@ export function beatPoseAt(keys, progress, fallback) {
  * resolution the hold-budget audit uses, because "two neighbouring motion3
  * slots that both degrade to the same authored cell" is one hold, not two.
  */
-export function defaultBeatKeyResolve(key, { motion3 = false, unified = false, fallback = null } = {}) {
+export function defaultBeatKeyResolve(key, {
+  motion3 = false, unified = false, ext = false, fallback = null,
+} = {}) {
   for (const link of key?.chain || []) {
     if (link.bank === MOTION3_BANK) {
       if (motion3) return `motion3:${link.key}`;
+      continue;
+    }
+    // v4.0: an ext link is skipped exactly like a motion3 slot or a unified one
+    // unless the caller is auditing a fighter who HAS an ext sheet. Five
+    // fighters have none, so the pre-4.0 audit (`ext: false`) still measures
+    // the 3.5 read and every budget assertion keeps its original meaning.
+    if (link.bank === UNIFIED_EXT_BANK) {
+      if (ext) return `unified-ext:${link.cell}`;
       continue;
     }
     // v3.0: a unified link is skipped exactly like a motion3 slot unless the
@@ -3139,7 +3595,7 @@ export function wakeupKeys(totalFrames = 16, roles = DEFAULT_BASE_ROLES) {
  * ascent cell is his golf swing, so his opens almost immediately — kept
  * exactly as 2.7 shipped it).
  */
-export function jumpArcKeys(bandStart = 0.17) {
+export function jumpArcKeys(bandStart = 0.17, { extended = false } = {}) {
   // donald's band used to open at 0.06 because his BASE ascent cell is the
   // golf swing and a plain jump wore it for ~10 ticks. That workaround is
   // superseded: since 2.9 the ascent wears the authored jump-rise key, so his
@@ -3177,6 +3633,62 @@ export function jumpArcKeys(bandStart = 0.17) {
   // The LANDING GATHER stays unified: it is the crouch-transition beat in its
   // own connected neighbourhood (gather -> plant -> stand -> idle), not an
   // airborne one.
+  //
+  // v4.0 — THE ASCENT IS OWNED. THE DESCENT IS NOT, AND THAT IS A MEASUREMENT.
+  //
+  // routingNote kept unified:8 and :9 on the sheet "waiting for a future wave
+  // that can own a WHOLE airborne or attack chain", and the ext sheet was drawn
+  // to be that wave: cell 19 "jump ascent, higher" and cell 20 "jump descent,
+  // falling" are exactly the two drawings the 3.0 arc was missing, and they are
+  // the same generation as 8 and 9. The integration order asks for the whole
+  // chain, 8 -> 19 -> 9 -> 20.
+  //
+  // HALF OF THAT SHIPPED CORRECTLY AND HALF DID NOT, so only half is routed.
+  //
+  // Cell 19 is right: on all five sheets it is a genuinely airborne figure,
+  // stretched upward, arms up, legs trailing loose below — a taller, later
+  // reading of cell 8, which is what an ascent is.
+  //
+  // CELL 20 IS A HIT REACTION. Read at 1:1 against each fighter's own cells 12
+  // and 13 it is their sibling, not an airborne pose: head thrown back, spine
+  // arched BACKWARD, arms flung open and limp. The prompt asked for "torso
+  // upright, legs unfolding and REACHING DOWN, arms out for balance" and every
+  // one of the five came back arched over backwards — benny's is nearly
+  // horizontal and alan's is all but indistinguishable from his own big-hit.
+  // The generator ran the row as reactions and swept the panel in with them.
+  // This is a GENERATION defect across the whole ext wave, not one bad fighter.
+  // Routed into the descent it would play a flinch on the way down out of every
+  // single jump, which is a worse fault than the hold it would have broken.
+  //
+  // So the bank owns the ASCENT — a real connected sub-region, idle -> rise ->
+  // ascent, three consecutive drawings from one generation ending at the tuck —
+  // and hands the apex, the fall, the air-recovery and the landing back to the
+  // motion family exactly as 3.0 shipped them. Crossing count is UNCHANGED at
+  // one: 3.0 crossed at takeoff (unified:0 -> motion2:7), this crosses one band
+  // later at ascent -> tuck. What is bought is the 10-12 tick rise splitting
+  // into two drawings, both the fighter's own.
+  //
+  // unified:9 stays retired with 20: with no usable descent after it the tuck
+  // would hand straight to a motion cell in mid-air, which is the precise
+  // 7.56-dE-held-15-ticks configuration the 3.0 critic round measured and
+  // removed. One cell cannot own a chain — that is RULE 2, and it still binds.
+  //
+  // A fighter WITHOUT an ext sheet takes the 3.0 array below unchanged, retired
+  // cells and all.
+  if (extended) {
+    return [
+      // TAKEOFF, on the fighter's own rise instead of motion2:7.
+      { at: 0, chain: [ukey(UNIFIED_CELLS.jumpRise), m2key(MOTION2_CELLS.jumpRise)] },
+      // ASCENT — the new drawing, splitting the arc's longest hold.
+      { at: open * 0.5, chain: [xkey(UNIFIED_EXT_CELLS.jumpAscent), m2key(MOTION2_CELLS.jumpRise)] },
+      // From here down, byte-for-byte the 3.0 arc.
+      { at: open, chain: [m1key(MOTION_CELLS.tuck)] },
+      { at: open + span * 0.30, chain: [m3key(MOTION3_KEYS.jumpApex), m1key(MOTION_CELLS.tuck)] },
+      { at: open + span * 0.50, chain: [m3key(MOTION3_KEYS.jumpDescent), m1key(MOTION_CELLS.airrec)] },
+      { at: open + span * 0.66, chain: [m1key(MOTION_CELLS.airrec)] },
+      { at: 0.72, chain: [m1key(MOTION_CELLS.land)] },
+    ];
+  }
   return [
     { at: 0, chain: [m2key(MOTION2_CELLS.jumpRise)] },
     { at: open, chain: [m1key(MOTION_CELLS.tuck)] },
@@ -3234,9 +3746,31 @@ export function airNormalKeys(startupPhase, recoverPhase) {
  * crouch-trans is an all-fours prowl and is accept:false for him, so his chain
  * degrades to the cocked cell exactly as before.
  */
-export function heavyWindupKeys(limb) {
+export function heavyWindupKeys(limb, { extended = false } = {}) {
   const kick = limb === "kick";
   const cocked = kick ? MOTION2_CELLS.windupKick : MOTION2_CELLS.windupPunch;
+  // v4.0 — THE CHAMBER IS THE FIGHTER'S OWN DRAWING NOW.
+  //
+  // The ext sheet's 21 (fist chambered at the ribs, shoulder rotated back, hips
+  // coiled) and 22 (knee snapped up, foot cocked underneath) are drawn as this
+  // beat's opening, and the manifest's integration order asks for them as the
+  // ramps into the extensions. Only the CHAMBER is routed, not the extension:
+  // unified:10/11 stay retired, because the 3.0 round measured what routing
+  // them costs — the extension sits between the motion smear and the motion
+  // follow-through, which are one generation, so a cell dropped in the middle
+  // took the swing from 2 crossings to 5 and pushed the follow-through boundary
+  // to 6.95 dE with no flash over it. Nothing about that has changed; the ext
+  // sheet supplies no smear and no follow-through, so the bank still cannot own
+  // the whole swing the way it can now own the whole airborne middle.
+  //
+  // The chamber is different, and it is a strict improvement rather than a
+  // trade: the drawing BEFORE it is the unified idle or guard, so today's
+  // unified:0 -> motion2:0 crossing at the beat's entry disappears, and the one
+  // this adds (chamber -> the motion2 load) is 3-4 ticks later with the smear
+  // flash immediately behind it. Crossing count is unchanged and the fighter
+  // chambers on art of himself.
+  const chamber = kick ? UNIFIED_EXT_CELLS.kickWindup : UNIFIED_EXT_CELLS.punchWindup;
+  const cock = extended ? [xkey(chamber), m2key(cocked)] : [m2key(cocked)];
   // The motion3 mid-key is LIMB-SPECIFIC, exactly like the chamber it sits
   // between, so a kick windup never borrows the punch's coil.
   const mid = kick ? MOTION3_KEYS.windupKickB : MOTION3_KEYS.windupPunchB;
@@ -3266,7 +3800,7 @@ export function heavyWindupKeys(limb) {
     // 260 load -> 258 compress -> 249 smear. Monotonic; the bob is gone.
     //
     // 1. COCK — the limb chambers first, at very nearly the standing height.
-    { at: 0, chain: [m2key(cocked)] },
+    { at: 0, chain: cock },
     // 2. LOAD — the weight shifts onto the planted foot. The authored motion3
     //    coil when the bank is there; motion2:6 dash-brake underneath it,
     //    which is a one-foot-planted weight-shifted body with the arms
@@ -3471,8 +4005,8 @@ export function blockRecoverTransform(phase, exitAt = BLOCK_EXIT_AT) {
  * reads byte-for-byte what 2.9 read. Bands whose ladder rung is the idle carry
  * no key at all: the caller hands those to the breathing idle cycle.
  */
-export function reactionTrackKeys(heavy) {
-  const ladder = unifiedReactionLadder(heavy);
+export function reactionTrackKeys(heavy, options = undefined) {
+  const ladder = unifiedReactionLadder(heavy, options);
   // The 2.9 chains, band by band, unchanged. `null` is an empty chain.
   const base29 = heavy
     ? [
@@ -3499,9 +4033,11 @@ export function reactionTrackKeys(heavy) {
     // The idle rung is NOT keyed: the tail hands back to the caller's
     // breathing idle cycle, which advances on its own, rather than pinning one
     // drawing. Every other rung leads its band's 2.9 chain.
+    // v4.0: `urung` dispatches on the GRAMMAR number, so a ladder may mix main
+    // and ext rungs in one array and the chain link lands on the right bank.
     chain: ladder[band] === UNIFIED_CELLS.idle
       ? base29[band]
-      : [ukey(ladder[band]), ...base29[band]],
+      : [urung(ladder[band]), ...base29[band]],
   }));
 }
 
@@ -3637,15 +4173,15 @@ export const WAKEUP_SETTLE_FRAMES = 8;
 // crouch joins `cells` because the gather rung's fallback now resolves there.
 export const WAKEUP_RISE_HEIGHT = Object.freeze({
   deathblow: Object.freeze({ stand: 306, standUnified: 272, cells: Object.freeze({ "motion2:15": 270, "base:12": 304, "unified:5": 180 }) }),
-  jez: Object.freeze({ stand: 306, standUnified: 271, cells: Object.freeze({ "motion2:15": 219, "base:12": 305, "unified:5": 161 }) }),
-  alan: Object.freeze({ stand: 305, standUnified: 274, cells: Object.freeze({ "motion2:15": 246, "base:12": 299, "unified:5": 199 }) }),
+  jez: Object.freeze({ stand: 306, standUnified: 277, cells: Object.freeze({ "motion2:15": 219, "base:12": 305, "unified:5": 218 }) }),
+  alan: Object.freeze({ stand: 305, standUnified: 274, cells: Object.freeze({ "motion2:15": 246, "base:12": 299, "unified:5": 210 }) }),
   post: Object.freeze({ stand: 306, standUnified: 279, cells: Object.freeze({ "motion2:15": 266, "base:12": 304, "unified:5": 177 }) }),
   donald: Object.freeze({ stand: 306, standUnified: 261, cells: Object.freeze({ "motion2:15": 231, "base:12": 304, "unified:5": 193 }) }),
   devil: Object.freeze({ stand: 301, standUnified: 283, cells: Object.freeze({ "motion2:15": 287, "base:12": 234, "unified:5": 191 }) }),
   ali: Object.freeze({ stand: 306, standUnified: 271, cells: Object.freeze({ "motion2:15": 224, "base:12": 304, "unified:5": 199 }) }),
-  benny: Object.freeze({ stand: 306, standUnified: 279, cells: Object.freeze({ "motion2:15": 244, "base:12": 304, "unified:5": 184 }) }),
-  commissioner: Object.freeze({ stand: 316, standUnified: 278, cells: Object.freeze({ "motion2:15": 237, "base:12": 288, "unified:5": 158 }) }),
-  cyraxx: Object.freeze({ stand: 302, cells: Object.freeze({ "motion2:15": 284, "base:12": 241 }) }),
+  benny: Object.freeze({ stand: 306, standUnified: 279, cells: Object.freeze({ "motion2:15": 244, "base:12": 304, "unified:5": 195 }) }),
+  commissioner: Object.freeze({ stand: 316, standUnified: 287, cells: Object.freeze({ "motion2:15": 237, "base:12": 288, "unified:5": 196 }) }),
+  cyraxx: Object.freeze({ stand: 302, standUnified: 296, cells: Object.freeze({ "motion2:15": 284, "base:12": 241, "unified:5": 207 }) }),
 });
 
 /** The standing height the rise is aiming at, per bank the idle draws from. */
@@ -3774,9 +4310,23 @@ export function walkCycleFrame(walkTime) {
  * cell that same phase already used. `roles.walk` is [4,5,6,7] for all ten
  * fighters, so the fallback is byte-for-byte the pre-2.10 read.
  */
-export function walkCyclePose(walkTime, roles = DEFAULT_BASE_ROLES) {
+export function walkCyclePose(walkTime, roles = DEFAULT_BASE_ROLES, { extended = false } = {}) {
+  const walkKeys = roles.walk || DEFAULT_BASE_ROLES.walk;
+  // v4.0: a fighter with a whole ext sheet walks the SIX-key alternating cycle
+  // at the rate that holds the gait period. Everything below this branch is the
+  // 3.5 four-key path, reached byte-for-byte by every fighter without one — the
+  // five holdouts today — so their locomotion is unchanged.
+  if (extended) {
+    const step = UNIFIED_EXT_WALK_KEYS[walkCycleFrameExt(walkTime)];
+    // The degraded chain, innermost first: the four-key cycle's drawing at this
+    // point in the stride, then the 2.10 walk-bank cell, then the base cell.
+    const under = walkPose(step.under, "base", walkKeys[step.under % walkKeys.length]);
+    const main = unifiedPose(UNIFIED_WALK_KEYS[step.under % UNIFIED_WALK_KEYS.length], under);
+    // A main-sheet key needs no ext link at all; only 17 and 18 do.
+    return step.ext ? unifiedExtPose(step.cell, main) : unifiedPose(step.cell, under);
+  }
   const key = walkCycleFrame(walkTime);
-  const walk = roles.walk || DEFAULT_BASE_ROLES.walk;
+  const walk = walkKeys;
   // v3.0: locomotion is the beat this whole programme exists for — the
   // costume strobe the 2.9 round rejected happened on the tick a fighter
   // started walking. A unified fighter cycles the four keys of his own sheet
@@ -3919,7 +4469,14 @@ export function buildMotionAcceptMasks(manifest, cellCount = MOTION_CELL_COUNT) 
  * first three, so it rides exactly the same sheet + accept-mask gate and the
  * 3D renderer picks it up from this list with no bank-specific code.
  */
-export const AUTHORED_BANKS = Object.freeze(["motion", "motion2", "walk", UNIFIED_BANK]);
+// v4.0 appends "unified-ext" for the same reason: it is index-addressed against
+// a fixed grammar on a 320px-cell sheet, so it rides the identical sheet +
+// accept-mask gate. It is deliberately LAST — the order is the order the banks
+// were added, and the 3D renderer walks this list to decide which pose banks it
+// must build a texture for.
+export const AUTHORED_BANKS = Object.freeze([
+  "motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK,
+]);
 
 /** True for a bank that must clear the sheet + accept-mask gate before it draws. */
 export function isAuthoredBank(bank) {
@@ -3973,7 +4530,7 @@ export function resolveMotionPose(pose, drawable, fighterId = null, options = {}
  * and the transform riding it always agree. Pure function of the snapshotted
  * attack instance + attackFrame.
  */
-export function attackMotionBeat(attack, attackFrame) {
+export function attackMotionBeat(attack, attackFrame, options = undefined) {
   if (!attack) return null;
   const start = attack.activeStartFrame;
   const end = attack.activeEndFrame;
@@ -4085,7 +4642,7 @@ export function attackMotionBeat(attack, attackFrame) {
         return {
           beat: "windup", bank: "motion2",
           cell: attack.limb === "kick" ? MOTION2_CELLS.windupKick : MOTION2_CELLS.windupPunch,
-          keys: heavyWindupKeys(attack.limb),
+          keys: heavyWindupKeys(attack.limb, options),
           phase: Math.min(0.999, Math.max(0, attackFrame / windupEnd)),
         };
       }

@@ -60,14 +60,20 @@ import {
   MOTION3_KEYS,
   UNIFIED_BANK,
   UNIFIED_CELLS,
+  UNIFIED_EXT_BANK,
+  UNIFIED_EXT_CELLS,
   WALK_CELL_COUNT,
   WALK_POSE_MIN_SPEED,
   buildUnifiedAcceptMasks,
+  buildUnifiedExtAcceptMasks,
   groundedStanceBeat,
   strideClockAdvance,
+  unifiedExtPose,
   unifiedPose,
   unifiedReactionCellAt,
+  unifiedRungPose,
   isAuthoredBank,
+  isUnifiedCycleCell,
   walkCyclePose,
   attackAnimationPose,
   attackMotionBeat,
@@ -1212,15 +1218,25 @@ function motion3KeyDrawable(fighterId, key) {
 // engine/fighter-kits.mjs and the routing list in fighterAnimationPose.
 // ---------------------------------------------------------------------------
 const fighterUnifiedAtlases = {};
-const unifiedBankState = { masks: null, requested: false, ready: null };
+const unifiedBankState = { masks: null, extMasks: null, requested: false, ready: null };
+
+/** Every unified sheet, main or ext, is this square once padded. */
+const UNIFIED_SHEET_PX = 1280;
 
 function ensureUnifiedManifest() {
   if (unifiedBankState.requested) return unifiedBankState.ready;
   unifiedBankState.requested = true;
   unifiedBankState.ready = fetch("assets/unified/MANIFEST.json")
     .then((response) => (response.ok ? response.json() : null))
-    .then((manifest) => { unifiedBankState.masks = manifest ? buildUnifiedAcceptMasks(manifest) : {}; })
-    .catch(() => { unifiedBankState.masks = {}; });
+    .then((manifest) => {
+      // v4.0: ONE fetch still, two masks. The ext gate is built FROM the main
+      // gate — a fighter who is not 16/16 cannot be 8/8 — so the two can never
+      // disagree about whether he is on the bank.
+      unifiedBankState.masks = manifest ? buildUnifiedAcceptMasks(manifest) : {};
+      unifiedBankState.extMasks = manifest
+        ? buildUnifiedExtAcceptMasks(manifest, unifiedBankState.masks) : {};
+    })
+    .catch(() => { unifiedBankState.masks = {}; unifiedBankState.extMasks = {}; });
   return unifiedBankState.ready;
 }
 
@@ -1259,9 +1275,91 @@ function unifiedFighterReady(fighterId) {
   return unifiedCellDrawable(fighterId, UNIFIED_CELLS.idle);
 }
 
-/** Bank-routed drawable gate for resolveMotionPose (all five authored banks). */
+// ---------------------------------------------------------------------------
+// v4.0 — THE EXT SHEET, the other eight cells of the same generation.
+//
+// Same lazy-sheet, manifest-gated, all-or-nothing machinery as the main sheet,
+// with the extra clause that a fighter must be whole on BOTH: the beats
+// interleave the two sheets cell by cell (the walk runs 1 -> 17 -> 2 -> 3 -> 18
+// -> 4), so half a sheet is a cycle that changes drawing-count halfway round.
+//
+// THE PADDING, AND WHY IT IS NOT OPTIONAL.
+//
+// The ext sheets ship 1280x640 — a 4x2 grid of the same 320px cells. The
+// manifest reasons that this needs no code because drawAtlasFrame's `frame % 4`
+// / `floor(frame / 4)` addresses a 4x2 sheet correctly, and for the 2D canvas
+// that is exactly right. It is NOT right for the other renderer: CINEMA 3D's
+// applyAtlasFrame builds its UVs from a hardcoded ATLAS_ROWS = 4, so a
+// half-height sheet would sample a quarter-height slice of every cell and the
+// two renderers would disagree about what a frame IS.
+//
+// So the decoded sheet is padded once, lazily, into the 1280x1280 canvas every
+// other bank in this game already ships (the walk sheets carry art on row 0
+// only and motion3 on 8 of 16 cells — full-height sheets with dead rows are the
+// convention, and 1280x640 is the outlier). The canvas is shimmed with
+// Image-like fields exactly as ensureAltAtlas does, so the palette remap, the
+// silhouette cache, the crossfade ghost, the damage compositor and the 3D bank
+// builder all take it unchanged, and "physically identical to every other bank"
+// becomes true rather than nearly true.
+// ---------------------------------------------------------------------------
+const fighterUnifiedExtSources = {};
+const fighterUnifiedExtAtlases = {};
+
+/** True once the manifest has confirmed this fighter's ext sheet is 8/8. */
+function unifiedFighterExtWhole(fighterId) {
+  return Boolean(unifiedBankState.extMasks?.[fighterId]?.whole);
+}
+
+/**
+ * The 1280x1280 padded ext atlas, or null while the source is still loading.
+ * Built once per fighter per session; zero per-frame cost after that.
+ */
+function ensureUnifiedExtAtlas(fighterId) {
+  const built = fighterUnifiedExtAtlases[fighterId];
+  if (built) return built;
+  let source = fighterUnifiedExtSources[fighterId];
+  if (!source) {
+    source = new Image();
+    source.src = `assets/unified/${fighterId}-ext.webp`;
+    fighterUnifiedExtSources[fighterId] = source;
+  }
+  if (!source.complete || !source.naturalWidth) return null;
+  const padded = document.createElement("canvas");
+  padded.width = UNIFIED_SHEET_PX;
+  padded.height = UNIFIED_SHEET_PX;
+  padded.getContext("2d").drawImage(source, 0, 0);
+  padded.src = `unified-ext:${fighterId}`;
+  padded.complete = true;
+  padded.naturalWidth = padded.width;
+  padded.naturalHeight = padded.height;
+  fighterUnifiedExtAtlases[fighterId] = padded;
+  return padded;
+}
+
+/** `cell` is a SHEET FRAME (0-7), never a grammar cell number. */
+function unifiedExtCellDrawable(fighterId, cell) {
+  ensureUnifiedManifest();
+  const mask = unifiedBankState.extMasks?.[fighterId];
+  if (!mask?.whole || !mask.accept[cell]) return false;
+  return Boolean(ensureUnifiedExtAtlas(fighterId));
+}
+
+/**
+ * Is this fighter animating off the EXT sheet right now? The beats that gain a
+ * drawing from it — the six-key walk, the airborne middle of the jump, the
+ * attack chamber, the reaction ladder, the breathing idle — each pick a
+ * DIFFERENT KEY ARRAY on the answer, so it must be one gate that every caller
+ * reads, and it must be the same gate the cells themselves pass. Deliberately
+ * the idle-breathe cell, sheet included, mirroring unifiedFighterReady.
+ */
+function unifiedFighterExtReady(fighterId) {
+  return unifiedExtCellDrawable(fighterId, UNIFIED_EXT_CELLS.idleBreathe);
+}
+
+/** Bank-routed drawable gate for resolveMotionPose (all six authored banks). */
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
+  if (bank === UNIFIED_EXT_BANK) return unifiedExtCellDrawable(fighterId, cell);
   if (bank === UNIFIED_BANK) return unifiedCellDrawable(fighterId, cell);
   if (bank === "walk") return walkCellDrawable(fighterId, cell);
   return bank === "motion2"
@@ -1323,6 +1421,28 @@ function preloadAuthoredBanks(fighterIds) {
       if (atlas && !atlas.complete && typeof atlas.decode === "function") {
         atlas.decode().catch(() => {});
       }
+      // v4.0: the ext sheet is warmed through this SAME choke point and behind
+      // the SAME manifest gate, so a fighter with no ext block (the five 3.0
+      // holdouts) never requests one and never 404s — the manifest-BEFORE-sheet
+      // order that keeps cyraxx quiet is what keeps them quiet too.
+      //
+      // Warming it matters for the same reason the main sheet's does, one step
+      // further on. This gate does not flip a fighter's vocabulary, it flips
+      // his CADENCE: the walk goes from a four-key cycle at 10 keys/s to a
+      // six-key cycle at 15, and the jump swaps key arrays. A sheet that lands
+      // mid-stride would change both on one tick. Decoding it before FIGHT!
+      // keeps that off the screen, and padding it here rather than on the first
+      // draw keeps the canvas build out of a frame budget.
+      if (!unifiedFighterExtWhole(id)) continue;
+      // The first call starts the request and returns null; the decode then
+      // calls back to build the padded canvas. Both paths end at the same
+      // builder, so a sheet already in cache is simply padded now.
+      if (!ensureUnifiedExtAtlas(id)) {
+        const source = fighterUnifiedExtSources[id];
+        if (source && typeof source.decode === "function") {
+          source.decode().then(() => ensureUnifiedExtAtlas(id)).catch(() => {});
+        }
+      }
     }
   });
 }
@@ -1366,6 +1486,11 @@ function altAtlasSource(fighterId, bank) {
   // the crossfade ghost, the damage compositor and the 3D bank builder all
   // read it with no change at all.
   if (bank === UNIFIED_BANK) return { image: fighterUnifiedAtlases[fighterId], key: `${fighterId}:unified` };
+  // v4.0: the ext atlas is already a canvas, and remapImageBytes reads it the
+  // same way it reads an Image — the padding put it on the standard grid.
+  if (bank === UNIFIED_EXT_BANK) {
+    return { image: fighterUnifiedExtAtlases[fighterId], key: `${fighterId}:unified-ext` };
+  }
   const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
   // The boss shares one sheet across banks — collapse to one cache entry.
   if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
@@ -1411,7 +1536,9 @@ function paletteAtlas(fighterId, side, bank = "base") {
             ? fighterWalkAtlases[fighterId] || fighterAtlases[fighterId]
             : bank === UNIFIED_BANK
               ? fighterUnifiedAtlases[fighterId] || fighterAtlases[fighterId]
-              : fighterAtlases[fighterId];
+              : bank === UNIFIED_EXT_BANK
+                ? fighterUnifiedExtAtlases[fighterId] || fighterAtlases[fighterId]
+                : fighterAtlases[fighterId];
   if (matchPalettes[side] !== 1) return base;
   return ensureAltAtlas(fighterId, bank) || base;
 }
@@ -17270,6 +17397,15 @@ function showcasePoseDescriptor(fighter) {
   return { bank: victory.bank, frame: victory.frame };
 }
 
+// v4.0: the one options object every ext-aware beat track is handed, frozen so
+// a track cannot mutate the caller's capability answer.
+const EXTENDED = Object.freeze({ extended: true });
+// Idle breaths per second on a fighter with an ext sheet. Two drawings at 7.5/s
+// is 8 ticks each at 60fps — exactly MOTION_HOLD_BUDGET, so the most-seen beat
+// in the game sits precisely at the limit the budget sets rather than holding
+// one drawing for as long as the player stands still.
+const IDLE_BREATH_RATE = 7.5;
+
 function fighterPoseDescriptor(fighter) {
   const base = (frame) => ({ bank: "base", frame });
   // v3.0 UNIFIED: `uni(cell, pose)` puts the unified drawing ON TOP of the
@@ -17296,6 +17432,33 @@ function fighterPoseDescriptor(fighter) {
   // it; see UNIFIED_RETIRED_CELLS in engine/fighter-kits.mjs for the measured
   // boundaries. The art stays on the sheet and inside the 16/16 accept gate.
   const uni = (cell, pose) => unifiedPose(cell, pose);
+  // v4.0 — THE EXT SHEET. `ext` is this fighter's ONE capability answer, read
+  // once per pose so every beat below agrees about which key arrays to use.
+  // Five fighters have no ext sheet and take `false` through every branch,
+  // which is the byte-identical 3.5 read.
+  const ext = unifiedFighterExtReady(fighter.def.id);
+  const extOpt = ext ? EXTENDED : undefined;
+  // The BREATHING IDLE, and the only place a unified fighter's idle comes from.
+  // 3.0 collapsed the idle to ONE drawing on purpose — the base bank's
+  // four-cell breathing cycle is 9.5-22.5 dE of costume away from the unified
+  // walk keys, so cycling base cells under a unified walk IS the strobe — and
+  // recorded the cost as real and accepted. The ext sheet's cell 16 is that
+  // cost being paid back: the same stance one breath later, from the same
+  // generation, so the idle breathes on TWO drawings with no costume delta at
+  // all. It alternates every 8 ticks, which is exactly MOTION_HOLD_BUDGET.
+  // `fallback` is the caller's own pre-4.0 base read, passed in rather than
+  // rebuilt here: the neutral idle and the three tails that hand back to it do
+  // NOT share one base fallback (the neutral read cycles raw cells 0-3, the
+  // tails cycle the semantic map's `roles.idle`), and collapsing them would
+  // change what an unsheeted fighter draws.
+  const breathingIdle = (fallback) => {
+    const held = uni(UNIFIED_CELLS.idle, fallback);
+    if (!ext) return held;
+    return Math.floor(fighter.animTime * IDLE_BREATH_RATE) % 2 === 1
+      ? unifiedExtPose(UNIFIED_EXT_CELLS.idleBreathe, held)
+      : held;
+  };
+  const rolesIdle = () => base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]);
   // v2.9 critic round: every beat below that used to hand off to a hardcoded
   // base index now resolves through the per-fighter semantic map — base(12)
   // is a deep squat and base(13) an attack pose (or, on deathblow, a whole
@@ -17552,16 +17715,22 @@ function fighterPoseDescriptor(fighter) {
       // The BASE read below is untouched 2.9: snap / fold / settle-or-idle /
       // idle over the same band groups, so a non-unified fighter is
       // byte-identical.
-      return beatPoseAt(reactionTrackKeys(heavyTrack), sinceHit / 44, (key) => {
+      return beatPoseAt(reactionTrackKeys(heavyTrack, extOpt), sinceHit / 44, (key) => {
         const at = key ? key.at : 0;
-        const idle = () => base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]);
-        const rung = unifiedReactionCellAt(at, heavyTrack);
-        if (at < REACTION_BANDS[2]) return uni(rung, base(tail.snap));
-        if (at < REACTION_BANDS[4]) return uni(rung, base(tail.fold));
+        const idle = () => rolesIdle();
+        const rung = unifiedReactionCellAt(at, heavyTrack, extOpt);
+        // v4.0: a rung is a GRAMMAR cell now (0-23), so `unifiedRungPose`
+        // dispatches it to the main or the ext bank. `unifiedReactionCellAt`
+        // and `reactionTrackKeys` are handed the same `extOpt`, so the track
+        // and this fallback still read one table and cannot drift a band apart
+        // — which is the M1 bug, and the reason the rung comes from a table at
+        // all rather than being written out twice.
+        if (at < REACTION_BANDS[2]) return unifiedRungPose(rung, base(tail.snap));
+        if (at < REACTION_BANDS[4]) return unifiedRungPose(rung, base(tail.fold));
         if (at < REACTION_BANDS[5]) {
-          return uni(rung, tail.settle !== null ? base(tail.settle) : idle());
+          return unifiedRungPose(rung, tail.settle !== null ? base(tail.settle) : idle());
         }
-        return uni(rung, idle());
+        return unifiedRungPose(rung, idle());
       });
     }
     return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
@@ -17689,8 +17858,7 @@ function fighterPoseDescriptor(fighter) {
         (key) => (!key || key.at < 0.26
           ? { bank: kitPose.bank, frame: kitPose.frame }
           : key.at < 0.78 ? uni(UNIFIED_CELLS.guard, base(roles.guard))
-            : uni(UNIFIED_CELLS.idle,
-              base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]))));
+            : breathingIdle(rolesIdle())));
     }
     if (kitPose) {
       // BODY-FIRST (spec 10): the Commissioner's storm is ONE full cane-swing
@@ -17719,7 +17887,7 @@ function fighterPoseDescriptor(fighter) {
     // v2.7 FRAMES: authored smear / full-extension / follow-through keys ride
     // the kit-less normals timeline, each falling back to the exact base cell
     // this path showed before.
-    const beat = attackMotionBeat(attack, fighter.attackFrame);
+    const beat = attackMotionBeat(attack, fighter.attackFrame, extOpt);
     // v2.9 FLOW: the authored anticipation key re-skins the late startup
     // ticks (windup → smear → extension → follow reads as one swing), and
     // air normals wear the authored jumping-strike key through their active
@@ -17759,8 +17927,7 @@ function fighterPoseDescriptor(fighter) {
       return beatPoseAt(beat.keys, beat.phase, (key) => {
         if (!key || key.at < 0.46) return base(frames[3]);
         if (key.at < 0.66) return uni(UNIFIED_CELLS.guard, base(roles.guard));
-        return uni(UNIFIED_CELLS.idle,
-          base(roles.idle[Math.floor(fighter.animTime * 5) % roles.idle.length]));
+        return breathingIdle(rolesIdle());
       });
     }
     if (beat?.beat === "smear") return motionPose(beat.cell, "base", frames[1]);
@@ -17822,7 +17989,7 @@ function fighterPoseDescriptor(fighter) {
         ? 0.5 * (1 - clamp(fighter.vy / launch, 0, 1))
         : 0.5 + 0.5 * clamp(1 - height / Math.max(1, apex), 0, 1);
       const bandStart = fighter.def.id === "donald" ? 0.06 : 0.22;
-      return beatPoseAt(jumpArcKeys(bandStart), progress, (key) => (
+      return beatPoseAt(jumpArcKeys(bandStart, extOpt), progress, (key) => (
         // The ascent fell back to base 13, the descent to the deep gather 12.
         !key || key.at < 0.76 ? base(13) : base(12)
       ));
@@ -17934,7 +18101,7 @@ function fighterPoseDescriptor(fighter) {
     // walking backwards looks like — at the cadence `backWalkSpeed` earns,
     // so a slow retreat takes fewer, shorter-looking steps instead of the
     // same ten a second the forward walk takes over more ground.
-    return walkCyclePose(fighter.strideTime, roles);
+    return walkCyclePose(fighter.strideTime, roles, { extended: ext });
   }
   // v3.0: the neutral idle. A unified fighter has exactly ONE idle drawing
   // where the base bank has a four-cell breathing cycle, and that is a real
@@ -17944,7 +18111,7 @@ function fighterPoseDescriptor(fighter) {
   // cell is 9.5-22.5 dE of costume away from the unified walk keys, so
   // cycling base cells under a unified walk IS the strobe. The procedural
   // breathing scaleY and the idle bob in drawFighter still run underneath.
-  return uni(UNIFIED_CELLS.idle, base(Math.floor(fighter.animTime * 5) % 4));
+  return breathingIdle(base(Math.floor(fighter.animTime * 5) % 4));
 }
 
 function drawAtlasFrame(atlas, frame, size) {
@@ -19603,6 +19770,14 @@ function bankSheetAdjust(fighterId, bank) {
   }
   if (bank === "walk") return WALK_SHEET_ADJUST[fighterId] || 1;
   if (bank === UNIFIED_BANK) return UNIFIED_SHEET_ADJUST[fighterId] || 1;
+  // v4.0: UNIFIED_EXT_BANK deliberately has NO branch here, and adding one is a
+  // bug. The ext sheet does need the Commissioner's +3.3% — it is the same
+  // generation at the same global scale — but CINEMA 3D's own sheet-adjust
+  // chain tests `bankName === UNIFIED_BANK` and has no ext branch, so a
+  // correction applied here would land on the 2D canvas only and the two
+  // renderers would draw him at different sizes. It is folded into
+  // UNIFIED_EXT_CELL_ADJUST instead, which both renderers read through
+  // cellDrawAdjust. Adding it here as well would multiply the two.
   return 1;
 }
 
@@ -20227,9 +20402,15 @@ function drawFighter(fighter, time) {
           // test is "adjacent keys of one CYCLE" — which, on this bank, they
           // are. Any other unified pair (guard, crouch, a reaction) still
           // softens.
-          const unifiedCycle = pose.bank === UNIFIED_BANK && fadeObs.fadeBank === UNIFIED_BANK
-            && frame <= UNIFIED_CELLS.walkPassingB
-            && fadeObs.fadeFrame <= UNIFIED_CELLS.walkPassingB;
+          // v4.0: the cycle SPANS TWO BANKS now — the idle alternates 0 <-> 16
+          // and the walk runs 1 -> 17 -> 2 -> 3 -> 18 -> 4, so four of the six
+          // stride handoffs and every breath cross from `unified` to
+          // `unified-ext`. A bank-equality test here would have sent all of
+          // them back to the softened big-delta ghost, undoing the 3.0 fix on
+          // the most-seen transition in the game. isUnifiedCycleCell owns the
+          // membership question so both renderers answer it the same way.
+          const unifiedCycle = isUnifiedCycleCell(pose.bank, frame)
+            && isUnifiedCycleCell(fadeObs.fadeBank, fadeObs.fadeFrame);
           const sameCycle = unifiedCycle
             || (pose.bank === "base" && fadeObs.fadeBank === "base"
               && Math.floor(fadeObs.fadeFrame / 4) === Math.floor(frame / 4)

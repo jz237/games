@@ -28,7 +28,7 @@
   "rosterAcceptNote": "Roster result: 8 of 9 fighters accepted whole = 128 of 144 roster cells accept:true, plus the pilot's 16 (his walk keys were re-accepted on the same single-phase decision -- see acceptNote), for 144 accepted cells across nine fighters. The walk keys are accept:TRUE on the roster sheets, unlike the pilot's, because the 3.0 decision is a SINGLE-PHASE walk at parity with the shipping base bank -- phase is reported and not gated. Rounds used: jez 1, benny 1, donald 1, ali 1, alan 2, post 2, commissioner 2, devil 2, cyraxx 3. Fifteen generations for nine fighters.",
   "acceptNote": "16 of 16 cells accepted on the pilot sheet. The four walk keys were accept:false in the art wave on a phase-inversion reading (cells 1 and 3 carry the same lead leg, cells 2 and 4 are near-duplicate swings). That gate was retired for the roster and then for the pilot: the 3.0 decision is a SINGLE-PHASE walk at parity with the shipping base bank (37 of its 40 cells share one lead foot), and splitting the walk into its own generation to chase phase is exactly what would put a cross-generation seam back at idle->walk. Phase is reported, not gated. All 16 pass U1/U4/U5 and read correctly as their named beats.",
   "routingNote": "THE GRAMMAR IS NOT THE ROUTING TABLE. Every sheet must draw all sixteen and the 16/16 accept gate counts all sixteen -- that is RULE 1 (all-or-nothing, per fighter). Which of the sixteen the engine is ROUTED into is RULE 2 (connected regions, per beat, uniform across the roster), and the v3.0 critic round cut it back by measurement: the bank owns GROUNDED NEUTRAL (0 idle, 1-4 walk, 5 crouch, 6 crouch-trans, 7 guard) and REACTIONS (12 light-hit, 13 big-hit, 14 stagger, 15 knockdown). Cells 8 jump-rise, 9 jump-tuck, 10 punch-extension and 11 kick-extension are RETIRED FROM ROUTING: each sits inside a chain the motion banks already own consistently (motion and motion2 are ONE generation -- deathblow motion:0 vs motion2:6 measures 2.62 dE), so routing them CUT a consistent chain instead of joining one. The art is deliberately kept: it is measured, accepted, inside the gate, and waiting for a future wave that can own a whole airborne or attack chain. See engine/fighter-kits.mjs RULE 2 and MOTION-ATLAS.md.",
-  "extSheet": "<id>-ext.webp, 1280x640 RGBA WebP, 4x2 grid, 320px cells, ext frames 0-7 = atlas cells 16-23. PHYSICALLY IDENTICAL to the main sheet: drawAtlasFrame's hardcoded cell=320 with frame%4 / floor(frame/4) addresses a 4x2 sheet correctly with no code change, so wiring it is a lookup change and nothing else.",
+  "extSheet": "<id>-ext.webp, 1280x640 RGBA WebP, 4x2 grid, 320px cells, ext frames 0-7 = atlas cells 16-23. PHYSICALLY IDENTICAL to the main sheet: drawAtlasFrame's hardcoded cell=320 with frame%4 / floor(frame/4) addresses a 4x2 sheet correctly with no code change, so wiring it is a lookup change and nothing else. WIRING NOTE (4.0): that is true of the 2D canvas and FALSE of CINEMA 3D, whose applyAtlasFrame builds UVs from a hardcoded ATLAS_ROWS = 4 and would sample a quarter-height slice of every cell. game.js therefore pads the decoded sheet once, lazily, into the 1280x1280 canvas every other bank already ships (walk carries art on row 0 only, motion3 on 8 of 16 -- full-height sheets with dead rows are the convention and 1280x640 is the outlier). After padding both renderers agree and 'physically identical to every other bank' is true rather than nearly true.",
   "extPoseIds": [
    "idle-breathe",
    "walk-down-a",
@@ -40,8 +40,8 @@
    "mid-reaction"
   ],
   "extCellCount": 8,
-  "extStatus": "AUTHORED AND MEASURED, NOT WIRED. Nothing reads extCells yet. format.cellCount, format.poseIds and every fighter's 16-entry `cells` array are unchanged BECAUSE tests/unified-bank.test.mjs asserts all three, and this wave is asset-only. The integration wave raises UNIFIED_CELL_COUNT's neighbours, adds the ext sheet to the loader, and routes the six-key walk.",
-  "extIntegrationOrder": "The six-key walk is the highest-value wiring: cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4. Then the jump arc 8 -> 19 -> 9 -> 20. Then the attack ramps 21 -> 10 and 22 -> 11. Then 12 -> 23 -> 13 in the reaction ladder, and 0 <-> 16 on the breathing idle.",
+  "extStatus": "WIRED AND SHIPPING (v4.0). Six of the eight ext cells are routed on the beat they were drawn for: 16 into the breathing idle, 17 and 18 into the six-key walk, 19 into the jump ascent, 21 and 22 into the attack chambers, 23 into both reaction ladders. 20 (jump-descend) is ACCEPTED AND RETIRED FROM ROUTING -- the drawing is a hit reaction on all five sheets, not a fall; see each fighter's extCells[4] note. The ext sheet is gated ALL EIGHT OR NONE and additionally requires the main sheet to be whole, because the beats interleave the two sheets cell by cell.",
+  "extIntegrationOrder": "The six-key walk is the highest-value wiring: cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4. Then the jump arc 8 -> 19 -> 9 -> 20. Then the attack ramps 21 -> 10 and 22 -> 11. Then 12 -> 23 -> 13 in the reaction ladder, and 0 <-> 16 on the breathing idle. -- DONE in 4.0, with one exception: the jump arc owns 8 -> 19 and stops there. 9 and 20 stay retired because cell 20 did not come back as a descent, and one usable airborne in-between cannot own a chain (RULE 2).",
   "generationLayout13": "6 COLUMNS x 4 ROWS = 24 panels on one 1024x1024 generation. square_hd is fal's resolution ceiling for openai-gpt-image-2 (measured: aspect_ratio 2:3 returns 1024x768 and portrait_16_9 returns 608x1088, both FEWER pixels), and the drawn figure fills the cell HEIGHT, so rows -- not columns -- set per-cell fidelity. Four rows keeps the 256px cell height and therefore the ~230-250px drawn figure the shipped sheets already have; six rows would have dropped it to ~165px. Row 1 is the six-key walk filmstrip, which is also why the walk got two extra keys: a 6-column top row IS the filmstrip.",
   "wave13": {
    "built": "2026-09-02",
@@ -52,10 +52,10 @@
    "walkTechniqueLimits": "It did NOT transfer to deathblow, donald, devil, post or ali. Two structural causes, and they are opposites. (1) BARE SYMMETRIC LEGS (deathblow): with both lower legs the same bare skin the model binds 'lit leg' to the POSE -- whichever leg catches the key light, always the forward one -- so a fixed-limb contract has nothing to grip. Four generations produced one compliant panel out of twelve. (2) The named-object cue must be an object that ALREADY DIFFERS BETWEEN THE LEGS. Where one existed the inversion landed: benny's thigh cargo pocket, the commissioner's red coat lining and pale cane tip, alan's faded-denim highlight, cyraxx's pale sneaker. Where the legs are identical (donald's navy trousers, devil's matched shin wraps, post's saturated orange coveralls) it did not. Next wave's lever for the holdouts is a bible change: give the hard fighters one leg-distinguishing detail to track.",
    "propVsWalkTension": "The wave's recurring failure was NOT the walk -- it was PROPS. post, donald and ali each produced a sheet with a genuinely better walk and then dropped their signature prop from 1-4 cells. Because buildUnifiedAcceptMasks collapses any sheet that is not 16/16 to an all-false mask, a single prop-less main cell voids the whole fighter, and for post the missing cell was a WALK KEY, which would have flickered the spray can on every stride. Hardening the prop language in a later generation reliably cost the walk inversion or the head anchor instead. Fixing props and walk phase in the SAME single generation is the open problem for wave 14."
   },
-  "status30": "WIRED AND SHIPPING (v3.0). All ten fighters were generated and measured across the pilot and the roster rollout; NINE are accepted whole and on the bank -- deathblow, jez, alan, post, benny, donald, ali, commissioner, devil. cyraxx alone is off it, accept:false on all sixteen after failing U1 in three generations, and he keeps his existing banks and is byte-identical to 2.9. The TOP-LEVEL `internal` block below is the PILOT'S and describes deathblow only; each roster fighter carries its own `internal` block of the same shape.",
-  "status": "WIRED AND SHIPPING (v3.1). The 16-cell main sheets are unchanged in geometry and still all-or-nothing per fighter, so the nine fighters on the bank at 3.0 are still the nine on it. FOUR of them (jez, alan, benny, commissioner) were REDRAWN in this wave -- 24 cells from one generation, of which 16 replace the main sheet and 8 ride the new <id>-ext.webp -- and their walk contact keys now genuinely lead with OPPOSITE legs, which no sheet in this game had before. deathblow, post, donald, ali and devil kept their 3.0 sheets byte-identical after failing a gate (see each fighter's `wave13` field for the reason). cyraxx now HAS a sheet on disk that passes every gate, held at accept:false -- see format.cyraxxNote31. The ext sheets are authored, measured and NOT ROUTED; see format.extStatus.",
-  "cyraxxNote31": "v3.1 RE-ATTEMPT: HE PASSED, AND HIS ART IS STILL NOT IN THE REPO -- deliberately, and for the same reason cyraxxNote gives. A 24-cell sheet was generated, sliced and gated, and it clears every gate: the walk contact keys invert by the widest margin on the roster (leg luminance +65.6 / -53.4, unambiguous at 1:1 -- the pale sneaker and light trouser leg reach FORWARD in cell 1 and TRAIL BACK in cell 3); measured hair-independently, by FACE AND SHIRT rather than hair outline, ZERO of 24 cells change costume (shirt Lab dE vs the idle <= 2.3 in 14 cells and <= 5.1 in 22, max 6.28 on the knockdown); head width spread 38.0% and palette max dE 8.66 against his OWN BASE ATLAS's 56.9% / 15.54, i.e. 33% and 44% better; ground registration 6px; and the energy speckle his base bank carries at the hands and feet is gone (0.019% high-saturation interior pixels against 0.165%). THE 3.0 REJECTION WAS A DETECTOR ARTEFACT: his long hair and beard swing any head-band metric regardless of costume, and every width outlier on this sheet is a hair or beard event with the shirt, trousers, sneakers and face intact. WHAT WAVE 14 MUST DO, and it is small: ship the two sheet files, flip his 24 accept flags to true, and update the WHOLE/PARTIAL roster lists in tests/unified-bank.test.mjs U-B plus this note and the assertion at unified-bank.test.mjs:782. That assertion -- that cyraxx has NO SHEET IN THE REPO -- is why the art was NOT committed here: wave 13 is asset-only and may not touch tests, and committing a sheet that cannot draw a single pixel is the exact dead weight 3.0 removed. Regenerating him is NOT required if the raw is preserved: scratchpad sprites40/raw-cyraxx-g3.png with prompt p-cyraxx-g3.txt, sliced by build.py at 6x4, scale 1.4712.",
-  "cyraxxNote": "cyraxx has NO SHEET IN THE REPO, on purpose. assets/unified/cyraxx.webp shipped for one wave at 293KB while accept:false on all sixteen -- not one pixel of it could ever reach the screen, because buildUnifiedAcceptMasks collapses a non-16/16 sheet to an all-false mask and unifiedCellDrawable consults the manifest BEFORE it requests an Image. It was removed in the v3.0 critic round. His manifest entry, his U1 measurements and his rejection reason are kept below in full so a future wave knows the sheet was GENERATED AND REJECTED rather than never made: regenerate against the recorded thresholds and the generator settings in his `internal` block, do not assume the sheet is simply missing."
+  "status30": "WIRED AND SHIPPING (v3.0). All ten fighters were generated and measured across the pilot and the roster rollout; NINE are accepted whole and on the bank -- deathblow, jez, alan, post, benny, donald, ali, commissioner, devil. cyraxx alone was off it at 3.0; he is ON the bank as of 4.0 (see cyraxxNote). The TOP-LEVEL `internal` block below is the PILOT'S and describes deathblow only; each roster fighter carries its own `internal` block of the same shape.",
+  "status": "WIRED AND SHIPPING (v4.0). TEN fighters are on the unified bank -- cyraxx joins for the first time, sliced from his archived winning generation. FIVE of them (jez, alan, benny, commissioner, cyraxx) carry a 24-cell sheet whose walk is a SIX-KEY cycle whose two contact keys genuinely lead with opposite legs, played at 15 keys/s so the gait period is the identical 0.4s the four-key cycle ran at. Five fighters (deathblow, post, donald, ali, devil) keep their 3.0 sheets byte-identically and their 3.5 motion byte-identically: they have no ext block, so no ext sheet is ever requested and every re-framed beat returns its pre-4.0 key array unchanged.",
+  "cyraxxNote31": "v3.1 RE-ATTEMPT: HE PASSED, AND HIS ART IS STILL NOT IN THE REPO -- deliberately, and for the same reason cyraxxNote gives. A 24-cell sheet was generated, sliced and gated, and it clears every gate: the walk contact keys invert by the widest margin on the roster (leg luminance +65.6 / -53.4, unambiguous at 1:1 -- the pale sneaker and light trouser leg reach FORWARD in cell 1 and TRAIL BACK in cell 3); measured hair-independently, by FACE AND SHIRT rather than hair outline, ZERO of 24 cells change costume (shirt Lab dE vs the idle <= 2.3 in 14 cells and <= 5.1 in 22, max 6.28 on the knockdown); head width spread 38.0% and palette max dE 8.66 against his OWN BASE ATLAS's 56.9% / 15.54, i.e. 33% and 44% better; ground registration 6px; and the energy speckle his base bank carries at the hands and feet is gone (0.019% high-saturation interior pixels against 0.165%). THE 3.0 REJECTION WAS A DETECTOR ARTEFACT: his long hair and beard swing any head-band metric regardless of costume, and every width outlier on this sheet is a hair or beard event with the shirt, trousers, sneakers and face intact. WHAT WAVE 14 MUST DO, and it is small: ship the two sheet files, flip his 24 accept flags to true, and update the WHOLE/PARTIAL roster lists in tests/unified-bank.test.mjs U-B plus this note and the assertion at unified-bank.test.mjs:782. That assertion -- that cyraxx has NO SHEET IN THE REPO -- is why the art was NOT committed here: wave 13 is asset-only and may not touch tests, and committing a sheet that cannot draw a single pixel is the exact dead weight 3.0 removed. Regenerating him is NOT required if the raw is preserved: scratchpad sprites40/raw-cyraxx-g3.png with prompt p-cyraxx-g3.txt, sliced by build.py at 6x4, scale 1.4712. DONE IN 4.0: the two sheet files are in the repo, the 24 flags are true, and the roster assertions in tests/unified-bank.test.mjs were updated to the probed values.",
+  "cyraxxNote": "SUPERSEDED IN 4.0 -- cyraxx IS NOW ON THE BANK, both sheets, 24 of 24 accepted. Kept for the history: he shipped one wave at 293KB while accept:false on all sixteen with not one pixel able to reach the screen, was removed in the 3.0 critic round, passed every gate in 3.1 while still held off because the art wave could not touch tests, and is switched on here. See fighters.cyraxx.note for the 4.0 measurements."
  },
  "fighters": {
   "deathblow": {
@@ -607,8 +607,8 @@
     {
      "frame": 20,
      "id": "jump-descend",
-     "accept": true,
-     "note": "NEW. Jump descent -- falling, legs reaching down. The apex tuck (9) previously covered apex AND descent for the whole fall."
+     "accept": false,
+     "note": "NEW jump-descend. REJECTED AND RETIRED FROM ROUTING. The drawing came back as a HIT REACTION, not a fall: head thrown back, spine arched BACKWARD, arms flung open and limp, where the prompt asked for a torso upright with the legs reaching down. Read at 1:1 against this fighter's own cells 12 and 13 it is their sibling. This is a GENERATION defect on ALL FIVE ext sheets -- the 4.0 art wave already marked alan's and benny's accept:false for exactly this, and called the commissioner's 'the weakest cell on the sheet'; the 4.0 integration wave read all five and reached the same verdict on jez's too. Routed, every jump would flinch on the way down. The ext gate counts the ROUTED cells, so this flag costs no fighter his sheet; see UNIFIED_EXT_ROUTED_CELLS. Wave 15 closes this by redrawing one panel."
     },
     {
      "frame": 21,
@@ -1073,7 +1073,7 @@
      "frame": 20,
      "id": "jump-descend",
      "accept": false,
-     "note": "NEW jump-descend. REJECTED: reads as a backward stumble or hit reaction rather than a fall -- head thrown back, one boot near the ground. accept:false so integration keeps the existing descent read."
+     "note": "NEW jump-descend. REJECTED AND RETIRED FROM ROUTING. The drawing came back as a HIT REACTION, not a fall: head thrown back, spine arched BACKWARD, arms flung open and limp, where the prompt asked for a torso upright with the legs reaching down. Read at 1:1 against this fighter's own cells 12 and 13 it is their sibling. This is a GENERATION defect on ALL FIVE ext sheets -- the 4.0 art wave already marked alan's and benny's accept:false for exactly this, and called the commissioner's 'the weakest cell on the sheet'; the 4.0 integration wave read all five and reached the same verdict on jez's too. Routed, every jump would flinch on the way down. The ext gate counts the ROUTED cells, so this flag costs no fighter his sheet; see UNIFIED_EXT_ROUTED_CELLS. Wave 15 closes this by redrawing one panel."
     },
     {
      "frame": 21,
@@ -1877,7 +1877,7 @@
      "frame": 20,
      "id": "jump-descend",
      "accept": false,
-     "note": "NEW jump-descend. REJECTED: leans back at ~45 degrees and reads as a hit reaction rather than a descent."
+     "note": "NEW jump-descend. REJECTED AND RETIRED FROM ROUTING. The drawing came back as a HIT REACTION, not a fall: head thrown back, spine arched BACKWARD, arms flung open and limp, where the prompt asked for a torso upright with the legs reaching down. Read at 1:1 against this fighter's own cells 12 and 13 it is their sibling. This is a GENERATION defect on ALL FIVE ext sheets -- the 4.0 art wave already marked alan's and benny's accept:false for exactly this, and called the commissioner's 'the weakest cell on the sheet'; the 4.0 integration wave read all five and reached the same verdict on jez's too. Routed, every jump would flinch on the way down. The ext gate counts the ROUTED cells, so this flag costs no fighter his sheet; see UNIFIED_EXT_ROUTED_CELLS. Wave 15 closes this by redrawing one panel."
     },
     {
      "frame": 21,
@@ -2248,106 +2248,106 @@
    "wave13": "WAVE 13: KEPT THE 3.0 SHEET. Five generations, no walk inversion. The failure is precise and worth recording: the model obeys the FIRST half of the proven technique -- one fixed physical leg is drawn on top and lit in all six panels -- and ignores the SECOND half, so that leg points forward in all six and every frame is the same stride phase. A fighter-specific census bound to his gold-rimmed knee guard, the most unmissable object on his lower body, was ignored exactly as the bright-shoe census was. Telling detail: the model DID apply the 'swap once between panel 3 and 4' rule to his GOLF CLUB in both generations -- it will swap a held prop and will not swap his legs. Generation 3 also dropped the club from cell 6 and rendered his armour as brassy gold domes instead of black plates with gold trim; generation 4 fixed the club and the armour but drew cell 6 as a full deep squat indistinguishable from cell 5, and threw the head so far back in cells 12/13/14 that at gameplay size those cells read as a flesh-coloured blob where the shipped sheet keeps a legible profile; generation 5 fixed cell 6 and then dropped the club from cell 10. No generation cleared W1, so there was no headline gain to pay for the regressions."
   },
   "cyraxx": {
-   "scale": 1.3661,
+   "scale": 1.4712,
    "targetH": 306,
    "floorRow": 315,
    "generations": 3,
-   "note": "PASSES EVERY GATE, AND IS DELIBERATELY HELD AT accept:false. This is the first cyraxx sheet ever to clear the bank's gates: the walk inverts by the widest margin on the roster (+65.6 / -53.4, unambiguous at 1:1 -- the pale cream sneaker and light trouser leg reach forward in cell 1 and trail back in cell 3), and on head consistency it BEATS HIS OWN BASE ATLAS by 33% on width spread and 44% on palette max dE, measured with the same detector. The 3.0 rejection reason is gone: read hair-independently, ZERO of 24 cells change his costume -- every width outlier is a hair or beard event, with the shirt, trousers, sneakers and face intact in all of them. His shirt Lab dE against cell 0 is <= 2.3 in 14 of 24 cells and <= 5.1 in 22 of 24. Energy tinting, the other thing he has always been watched for, is effectively absent: 0.019% high-saturation interior pixels against 0.165% on his own base atlas, an 8x reduction -- his BASE bank has visible purple and green sparks at his hands and feet and this sheet has none. HELD AT accept:false FOR ONE REASON ONLY, and it is not an art reason: turning him on changes the roster from nine whole sheets to ten, and tests/unified-bank.test.mjs U-B pins the WHOLE and PARTIAL lists by name. Flipping these 24 flags and that one test assertion is the entire integration change. This wave is asset-only and is not permitted to touch tests, so the art ships and the switch does not.",
+   "note": "SHIPPED IN 4.0, and he is the first cyraxx sheet ever to reach the screen. The walk inverts by the WIDEST MARGIN ON THE ROSTER -- leg luminance +64.86 in cell 1 against -52.60 in cell 3, a clean sign flip, re-measured this wave and reproducing the archived +65.6/-53.4 to within one unit. At 1:1 it is not subtle: the pale cream sneaker with its light sole rim is the FORWARD planted foot in cell 1 and the TRAILING heel-up foot in cell 3, and the lighter highlighted trouser leg swaps with it. The 3.0 rejection was a DETECTOR ARTEFACT -- his long hair and beard swing any head-width metric regardless of costume -- and read hair-independently, by face and shirt, zero of 24 cells change costume. Torso-median Lab dE against his own idle maxes at 15.05, better than three of the four sheets already shipping (jez 37.30, alan 33.03, benny 45.03). Energy speckle 0.025% of interior pixels, the cleanest sheet on the roster. Registration: all 24 cells on floor row 314 and on the torso-band centre column within 1.2px. His six-key walk cycle measures +0.3% to +3.4% of his own idle -- entirely inside the 5% deadband -- so he is the one fighter who needs NO entry in UNIFIED_CELL_ADJUST. Sliced from the archived winning generation (final-blow-art-archive/unified-v31/raw-cyraxx-g3.png, prompt p-cyraxx-g3.txt) at 6x4, scale 1.4712; the tallest standing blob is 208px and 208 x 1.4712 = 306.0 = targetH, which confirms the archived scale rather than assuming it.",
    "cells": [
     {
      "frame": 0,
      "id": "idle",
-     "accept": false,
+     "accept": true,
      "note": "fighting stance, weight settled. The W2 reference cell -- every other cell's costume delta is measured against this one."
     },
     {
      "frame": 1,
      "id": "walk-contact-a",
-     "accept": false,
+     "accept": true,
      "note": "walk CONTACT A. Legs scissored at full stride."
     },
     {
      "frame": 2,
      "id": "walk-passing-a",
-     "accept": false,
+     "accept": true,
      "note": "walk PASSING A. One foot planted, the other swinging through lifted."
     },
     {
      "frame": 3,
      "id": "walk-contact-b",
-     "accept": false,
+     "accept": true,
      "note": "walk CONTACT B. Drawn as cell 1 with the two legs exchanged."
     },
     {
      "frame": 4,
      "id": "walk-passing-b",
-     "accept": false,
+     "accept": true,
      "note": "walk PASSING B. The lifted leg is the far one, behind the support leg."
     },
     {
      "frame": 5,
      "id": "crouch",
-     "accept": false,
+     "accept": true,
      "note": "deep crouch, held."
     },
     {
      "frame": 6,
      "id": "crouch-trans",
-     "accept": false,
+     "accept": true,
      "note": "crouch transition, dropping."
     },
     {
      "frame": 7,
      "id": "guard",
-     "accept": false,
+     "accept": true,
      "note": "guard / block, braced side-on."
     },
     {
      "frame": 8,
      "id": "jump-rise",
-     "accept": false,
+     "accept": true,
      "note": "jump rise, feet just off the ground."
     },
     {
      "frame": 9,
      "id": "jump-tuck",
-     "accept": false,
+     "accept": true,
      "note": "jump tuck at the apex."
     },
     {
      "frame": 10,
      "id": "punch-extension",
-     "accept": false,
+     "accept": true,
      "note": "punch, full extension."
     },
     {
      "frame": 11,
      "id": "kick-extension",
-     "accept": false,
+     "accept": true,
      "note": "kick, full extension."
     },
     {
      "frame": 12,
      "id": "light-hit",
-     "accept": false,
+     "accept": true,
      "note": "light hit reaction."
     },
     {
      "frame": 13,
      "id": "big-hit",
-     "accept": false,
+     "accept": true,
      "note": "big hit reaction."
     },
     {
      "frame": 14,
      "id": "stagger",
-     "accept": false,
+     "accept": true,
      "note": "stagger, stumbling backward off balance."
     },
     {
      "frame": 15,
      "id": "knockdown",
-     "accept": false,
+     "accept": true,
      "note": "knockdown, flat on his back."
     }
    ],
@@ -2649,7 +2649,58 @@
    },
    "sheet": "cyraxx.webp",
    "sheetRemoved": "cyraxx.webp -- removed from the repo in the v3.0 critic round (see format.cyraxxNote). accept:false on all sixteen, so the file was 293KB that could never draw.",
-   "wave13": "PASSED all five gates for the first time -- see format.cyraxxNote31 for the numbers. His art is NOT in the repo and his cells stay accept:false, because switching him on is an integration change (it moves him from PARTIAL to WHOLE, which tests/unified-bank.test.mjs pins by name) and this wave is asset-only. Nothing about his 3.0 entry below has been altered."
+   "wave13": "PASSED all five gates for the first time -- see format.cyraxxNote31 for the numbers. His art is NOT in the repo and his cells stay accept:false, because switching him on is an integration change (it moves him from PARTIAL to WHOLE, which tests/unified-bank.test.mjs pins by name) and this wave is asset-only. Nothing about his 3.0 entry below has been altered.",
+   "extSheet": "cyraxx-ext.webp",
+   "extCells": [
+    {
+     "frame": 16,
+     "id": "idle-breathe",
+     "accept": true,
+     "note": "NEW. Idle one breath later -- a second idle key so the stance breathes on two drawings instead of holding one."
+    },
+    {
+     "frame": 17,
+     "id": "walk-down-a",
+     "accept": true,
+     "note": "NEW. Walk DOWN A -- the weight-sinking beat between contact A (1) and passing A (2); body at its lowest, near leg still forward."
+    },
+    {
+     "frame": 18,
+     "id": "walk-down-b",
+     "accept": true,
+     "note": "NEW. Walk DOWN B -- the leg exchange of 17. With 17 and 18 the walk is a SIX-key cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4 instead of four keys."
+    },
+    {
+     "frame": 19,
+     "id": "jump-ascent",
+     "accept": true,
+     "note": "NEW. Jump ascent -- airborne and still rising, between jump-rise (8) and the apex tuck (9)."
+    },
+    {
+     "frame": 20,
+     "id": "jump-descend",
+     "accept": false,
+     "note": "NEW jump-descend. REJECTED AND RETIRED FROM ROUTING. The drawing came back as a HIT REACTION, not a fall: head thrown back, spine arched BACKWARD, arms flung open and limp, where the prompt asked for a torso upright with the legs reaching down. Read at 1:1 against this fighter's own cells 12 and 13 it is their sibling. This is a GENERATION defect on ALL FIVE ext sheets -- the 4.0 art wave already marked alan's and benny's accept:false for exactly this, and called the commissioner's 'the weakest cell on the sheet'; the 4.0 integration wave read all five and reached the same verdict on jez's too. Routed, every jump would flinch on the way down. The ext gate counts the ROUTED cells, so this flag costs no fighter his sheet; see UNIFIED_EXT_ROUTED_CELLS. Wave 15 closes this by redrawing one panel."
+    },
+    {
+     "frame": 21,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "NEW. Punch wind-up -- fist chambered at the ribs, before the extension (10)."
+    },
+    {
+     "frame": 22,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "NEW. Kick chamber -- knee up, foot cocked, before the extension (11)."
+    },
+    {
+     "frame": 23,
+     "id": "mid-reaction",
+     "accept": true,
+     "note": "NEW. Mid reaction -- the flinch between light-hit (12) and big-hit (13)."
+    }
+   ]
   },
   "ali": {
    "sheet": "ali.webp",
@@ -3436,8 +3487,8 @@
     {
      "frame": 20,
      "id": "jump-descend",
-     "accept": true,
-     "note": "NEW jump-descend. The weakest cell on the sheet -- reads as an off-balance airborne pose more than a clean reach-down descent. Kept accept:true: it is additive and cannot regress anything."
+     "accept": false,
+     "note": "NEW jump-descend. REJECTED AND RETIRED FROM ROUTING. The drawing came back as a HIT REACTION, not a fall: head thrown back, spine arched BACKWARD, arms flung open and limp, where the prompt asked for a torso upright with the legs reaching down. Read at 1:1 against this fighter's own cells 12 and 13 it is their sibling. This is a GENERATION defect on ALL FIVE ext sheets -- the 4.0 art wave already marked alan's and benny's accept:false for exactly this, and called the commissioner's 'the weakest cell on the sheet'; the 4.0 integration wave read all five and reached the same verdict on jez's too. Routed, every jump would flinch on the way down. The ext gate counts the ROUTED cells, so this flag costs no fighter his sheet; see UNIFIED_EXT_ROUTED_CELLS. Wave 15 closes this by redrawing one panel."
     },
     {
      "frame": 21,

@@ -243,7 +243,10 @@ test("the renderer actually routes through the stance map", () => {
     "fighterPoseDescriptor must ask groundedStanceBeat for the stance");
   assert.ok(!/if \(fighter\.block \|\| fighter\.blockstunFrames > 0 \|\| fighter\.crouch\) \{/.test(GAME_SOURCE),
     "the unconditional guard branch that outranked the walk cycle must stay gone");
-  assert.ok(/return walkCyclePose\(fighter\.strideTime, roles\);/.test(GAME_SOURCE),
+  // v4.0: the call gained the ext capability flag, which selects the six-key
+  // cycle. The STRIDE CLOCK argument is what this assertion is about and it is
+  // unchanged — the retreat still reverses through whichever cycle is chosen.
+  assert.ok(/return walkCyclePose\(fighter\.strideTime, roles, \{ extended: ext \}\);/.test(GAME_SOURCE),
     "the locomotion branch must ride the signed, speed-scaled stride clock");
   assert.ok(/fighter\.strideTime \+= strideClockAdvance\(/.test(GAME_SOURCE),
     "the stride clock must be advanced from the sim tick");
