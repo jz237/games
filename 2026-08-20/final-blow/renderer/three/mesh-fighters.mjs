@@ -31,7 +31,7 @@ const CLIP_NAMES = ["idle", "walk_fwd", "walk_back", "running", "jump", "jab", "
 const STRIKE_PEAK = { jab: 0.55, hook: 0.62, uppercut: 0.7, roundhouse: 1.25, high_kick: 0.95, sweep: 0.9 };
 
 // Ink-and-cel look (matches the roster showcase): 2-step ramp, outline hull.
-const LOOK = { outline: 0.014, shadow: 0.75, sat: 1.05, size: 0.86 };
+const LOOK = { outline: 0.015, shadow: 0.62, mid: 0.86, sat: 1.05, sharpen: 0.6, size: 0.86 };
 // Fighting-game facing: near profile toward the opponent, ~20° open to the
 // camera. (At 35° the body mostly faced the camera and every torso twist in
 // a clip read as turning AWAY from the opponent.)
@@ -40,7 +40,7 @@ const LOOK = { outline: 0.014, shadow: 0.75, sat: 1.05, size: 0.86 };
 const YAW_RIGHT = THREE.MathUtils.degToRad(70);
 const YAW_LEFT = THREE.MathUtils.degToRad(-70);
 // Crossfade length between clips, in sim frames (render-only cosmetic).
-const BLEND_FRAMES = 6;
+const BLEND_FRAMES = 4;
 const FPS = 60;
 
 function punchTexture(tex, sat) {
@@ -51,6 +51,21 @@ function punchTexture(tex, sat) {
   const g = c.getContext("2d");
   g.drawImage(img, 0, 0);
   const d = g.getImageData(0, 0, c.width, c.height); const p = d.data;
+  // Unsharp mask (3x3 box blur as the low-pass) — the generated albedos are
+  // soft, and the cel ramp flattens them further; this puts the seam and
+  // fabric detail back at 1:1 on screen.
+  const w = c.width, h = c.height, amount = LOOK.sharpen;
+  if (amount > 0) {
+    const src = new Uint8ClampedArray(p);
+    for (let y = 1; y < h - 1; y += 1) for (let x = 1; x < w - 1; x += 1) {
+      const i = (y * w + x) * 4;
+      for (let k = 0; k < 3; k += 1) {
+        let sum = 0;
+        for (let dy = -1; dy <= 1; dy += 1) for (let dx = -1; dx <= 1; dx += 1) sum += src[i + (dy * w + dx) * 4 + k];
+        p[i + k] = Math.max(0, Math.min(255, src[i + k] + (src[i + k] - sum / 9) * amount));
+      }
+    }
+  }
   for (let i = 0; i < p.length; i += 4) {
     const l = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
     for (let k = 0; k < 3; k += 1) p[i + k] = Math.max(0, Math.min(255, l + (p[i + k] - l) * sat));
@@ -90,9 +105,11 @@ export class MeshFighterLayer {
     }));
     this.assets = new Map(); // id -> { status, rig(gltf), clips: {name: AnimationClip} }
     this.rigs = [null, null];
-    this.grad = new THREE.DataTexture(new Uint8Array([Math.round(255 * LOOK.shadow), Math.round(255 * LOOK.shadow), Math.round(255 * LOOK.shadow), 255, 255, 255, 255, 255]), 2, 1);
+    const g0 = Math.round(255 * LOOK.shadow), g1 = Math.round(255 * LOOK.mid);
+    this.grad = new THREE.DataTexture(new Uint8Array([g0, g0, g0, 255, g1, g1, g1, 255, 255, 255, 255, 255]), 3, 1);
     this.grad.minFilter = this.grad.magFilter = THREE.NearestFilter; this.grad.needsUpdate = true;
     this.enabled = true;
+    this.superDim = 0; // set by main.mjs (eased super-freeze level)
     // QA latch: last resolved { clip, time } per side.
     this.debug = [null, null];
   }
@@ -241,15 +258,24 @@ export class MeshFighterLayer {
     }
     if (f.blockstunFrames > 0 || f.block) return { clip: "block", time: 0.2 + sec(frame) * 0.8, loop: false };
     if (attack) {
+      // attackTime / active[] / duration are SECONDS in the sim (same fields
+      // the sprite poseRig reads).
       const t = f.attackTime || 0;
-      const active0 = Math.max(1, attack.active?.[0] ?? attack.startupFrames ?? 6);
-      const duration = Math.max(active0 + 1, attack.duration ?? (active0 + (attack.activeFrames || 4) + (attack.recoveryFrames || 8)));
+      const active0 = Math.max(1e-3, attack.active?.[0] ?? (attack.startupFrames ?? 6) / FPS);
+      const active1 = Math.max(active0 + 1e-3, attack.active?.[1] ?? active0 + (attack.activeFrames || 4) / FPS);
+      const duration = Math.max(active1 + 1e-3, attack.duration ?? active1 + (attack.recoveryFrames || 8) / FPS);
       const clip = this.strikeClip(attack, f);
       const peak = STRIKE_PEAK[clip] || 0.6;
-      const end = peak + 0.5;
-      // Piecewise warp: startup -> [0, peak]; active+recovery -> [peak, end].
-      const time = t <= active0 ? peak * (t / active0) : peak + (end - peak) * Math.min(1, (t - active0) / Math.max(1, duration - active0));
-      return { clip, time, loop: false };
+      const end = peak + 0.45;
+      // Three-segment warp: startup -> [peak-0.18, peak] (the last windup
+      // beat, so even a 4-frame jab shows a cocked arm); the ACTIVE window
+      // HOLDS the full-extension pose (drifting 0.04 s so it still breathes);
+      // recovery eases from the extension back toward guard.
+      let time;
+      if (t <= active0) time = Math.max(0, peak - 0.18) + 0.18 * (t / active0);
+      else if (t <= active1) time = peak + 0.04 * ((t - active0) / (active1 - active0));
+      else time = peak + 0.04 + (end - peak - 0.04) * Math.min(1, (t - active1) / (duration - active1));
+      return { clip, time, loop: false, attack: true };
     }
     if (f.grabbing) return { clip: "hook", time: 0.3 + sec(frame) * 0.6, loop: false };
     if (f.grabbed) return { clip: "hit_body", time: 0.3, loop: false };
@@ -283,9 +309,10 @@ export class MeshFighterLayer {
     if (level === "air") return "high_kick";
     if (level === "low") return kind === "light" ? "sweep" : "sweep";
     if (level === "overhead") return "hook";
-    if (kind === "special") return hash(id) % 2 ? "high_kick" : "uppercut";
-    if (kind === "heavy") return hash(id) % 2 ? "roundhouse" : "hook";
-    return id.includes("kick") || id.includes("knee") ? "high_kick" : "jab";
+    const kick = attack.limb === "kick" || /kick|knee|sweep|slide|boot|stomp|leg/.test(id);
+    if (kind === "special") return kick ? "high_kick" : (hash(id) % 2 ? "uppercut" : "hook");
+    if (kind === "heavy") return kick ? "roundhouse" : (hash(id) % 2 ? "hook" : "uppercut");
+    return kick ? "high_kick" : "jab";
   }
 
   poseRig(rig, fighter, state) {
@@ -301,7 +328,8 @@ export class MeshFighterLayer {
       if (rig.previous && rig.previous !== rig.current) { rig.previous.enabled = false; rig.previous.setEffectiveWeight(0); }
       rig.previous = rig.current; rig.previousTime = rig.current.time; rig.blendTick = tick;
     }
-    const blend = rig.previous && rig.previous !== action ? Math.min(1, Math.max(0, (tick - rig.blendTick) / BLEND_FRAMES)) : 1;
+    const blendFrames = pick.attack || pick.clip.startsWith("hit") || pick.clip === "launched" ? 2 : BLEND_FRAMES;
+    const blend = rig.previous && rig.previous !== action ? Math.min(1, Math.max(0, (tick - rig.blendTick) / blendFrames)) : 1;
     if (rig.previous && rig.previous !== action) {
       if (blend >= 1) { rig.previous.enabled = false; rig.previous.setEffectiveWeight(0); rig.previous = null; }
       else { rig.previous.enabled = true; rig.previous.setEffectiveWeight(1 - blend); rig.previous.time = rig.previousTime; rig.previous.paused = false; }
@@ -326,8 +354,14 @@ export class MeshFighterLayer {
     rig.blob.scale.set(0.9 * spread, 0.5 * spread, 1);
     rig.blob.material.opacity = 0.35 / spread;
     // Hit flash: brief white-out on the toon materials, same cue as the sprite.
-    const flash = THREE.MathUtils.clamp(fighter.hitFlash / 0.14, 0, 1);
-    rig.model.traverse((o) => { if (o.isSkinnedMesh && o.material.isMeshToonMaterial) o.material.emissive?.setScalar?.(flash * flash * 0.18); });
+    // Hit flash: a 3-tick white pop on the tick the sim raises hitFlash (the
+    // sim value itself lasts 0.11-0.22 s, too long to paint the body white).
+    const tickNow = state.simulationTick || 0;
+    if ((fighter.hitFlash || 0) > (rig.lastFlash || 0)) rig.flashTick = tickNow;
+    rig.lastFlash = fighter.hitFlash || 0;
+    const flash = rig.flashTick !== undefined && tickNow - rig.flashTick < 3 ? 1 : 0;
+    const lift = flash * 0.5 + (this.superDim || 0) * 0.32;
+    rig.model.traverse((o) => { if (o.isSkinnedMesh && o.material.isMeshToonMaterial) o.material.emissive?.setScalar?.(lift); });
   }
 }
 

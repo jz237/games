@@ -253,6 +253,8 @@ export function createRenderer(host) {
     aberrPulse = Math.max(0, aberrPulse - stepSec * 8);
     const fightersLayer = layers.get("fighters");
     if (fightersLayer) fightersLayer.superDim = superDim;
+    const meshLayer = layers.get("meshFighters");
+    if (meshLayer) meshLayer.superDim = superDim;
     stage.setDim?.(superDim);
     // Impact screen answer: a ~2-frame radial-blur + chromatic pulse rings
     // the lens on meaningful hits (the VFX layer decays it fast).
