@@ -2847,3 +2847,159 @@ touched.
 
 Everything — the three shipped sheets, the compositor, the gates and the
 before/after crops — is archived in `unified-v43/`.
+
+## v4.4 — THE TENTH FIGHTER: MOVE THE HARDWARE, NOT THE LEG. THE ROSTER IS COMPLETE
+
+4.3 shipped nine of ten and left donald with a precise diagnosis: he is the only
+fighter whose limbs differ by **hard asymmetric hardware** rather than by
+shading, so an in-place tonal role exchange leaves the marker behind, and the
+mirror that *does* move the marker flips its internal lighting and cannot be
+applied to a passing key at all. Its closing line was the right one: *"he needs
+a hand matte, not a better heuristic."*
+
+**donald now leads with opposite limbs on his two contact keys. Zero new
+generations. Cells 0, 1, 2 and 5–15 are byte-identical to the 3.0 sheet.**
+
+### The finding that made it tractable: the asymmetry is a DRAWING CONVENTION
+
+donald wears a gold-rimmed knee shield on **both** knees. It is plainly there on
+the idle, the punch, the kick and the guard. What the walk keys do is draw the
+**near** limb's shield in full and reduce the **far** limb's to its mounting
+strap and brass buckle.
+
+So "a gold knee plate on one leg and a thigh strap on the other" is not a
+costume fact — it is how this artist renders the far knee. Which changes the
+whole shape of the problem. The composite does **not** have to swap two
+different objects between two legs. It has to move **one** object, the shield,
+and let the convention follow the limb:
+
+| | near limb | far limb |
+| --- | --- | --- |
+| 3.0 cells 1 and 3 | forward leg: full shield | rear leg: band + buckle |
+| v4.4 cell 3 | **rear** leg: full shield | forward leg: band + buckle |
+
+The band and buckle are **common hardware on both legs** and are never touched:
+on both knees they stay as original paint, correctly lit and correctly wrapped.
+That is why the forward knee does not end up bare — it ends up wearing exactly
+the marker the rear knee wore in the source.
+
+### What actually moves, and what does not
+
+**One object moves.** The shield is hand-matted and translated intact —
+**unmirrored and unrotated** — from the forward knee to the rear knee, dimmed to
+the far limb's exposure (gain 0.86). Because it is not reflected, its gold rim
+highlight and its teal specular still face the light, which is precisely the
+11x failure that disqualified Method B in v4.3.
+
+**The trousers do not move at all.** Their near/far roles are exchanged in place
+by the v4.3 routine, so no silhouette, no foot, no shoe, no floor contact and no
+hip join is disturbed and there is no geometric seam anywhere to detect. The
+knee the shield vacated is healed with trouser cloned from **within the same
+cell**, and the outline the shield used to form is redrawn from a hand
+polyline.
+
+**The passing key needs nothing moved.** After the inversion the swing limb is
+the shield limb, and a swing knee is drawn behind the planted leg — so the
+shield is simply not visible, exactly as the strap limb's buckle is all but
+invisible on the phase-A passing key. Cell 4 is therefore the shield *lifted*,
+the knee healed, and the band and buckle left in place so the planted leg reads
+as the strap limb. Nothing is relocated, and the v4.3 objection — that
+reflecting a passing key puts the lifted leg in front — never arises.
+
+### The mattes
+
+Four hand-drawn polygons per key, in cell pixel coordinates, saved as
+`unified-v44/donald-mattes.json` so a later wave can reopen or refine them
+rather than re-derive them:
+
+* `shield` — the gold-rimmed plate alone, WITHOUT its mounting band.
+* `band` — the leather band and brass buckle, PROTECTED from the lift.
+* `split` — the boundary between the two trouser legs. This is the one that had
+  to be hand-drawn: donald's legs are a **single raster run** above the crotch
+  notch (row 228 on cell 3, row 268 on cell 4), so run-chaining segmentation
+  returns one limb, exactly as v4.3 recorded.
+* `fwd_edge` / `rear_edge` / `edge` — the knee's own trouser outline where the
+  shield used to stand proud of it.
+
+The polygon is the **extent**, decided by eye off 12–18x gridded renders; a
+colour predicate (`b − r < 10`, warm hardware against navy twill) resolves the
+exact **edge**. Hand where judgement is needed, paint where measurement is
+better.
+
+### Four things this cost, all worth writing down
+
+* **A HARD CUT ROW LEAVES A HORIZONTAL SEAM.** The v4.3 exchange runs below a
+  single cut row. On donald that row has to sit at the crotch notch, which is
+  mid-fabric, and a hard cut there put a **6.9-luminance step straight across
+  the forward thigh** — measured row by row on the pixels that are navy in both
+  sheets. Ramping the exchange in from row 200 (just under the jacket hem, where
+  the amount is zero) to row 226 removes it: the largest row-to-row jump falls
+  to 1.7, inside the fabric's own variation. devil needed a 6-row feather for
+  the same reason; donald needed 26.
+* **LAPLACE DIFFUSION PULLS FROM EVERY NEIGHBOUR, NOT JUST THE ONES YOU SEED
+  FROM.** The first healed knee came out with a maroon bruise across it. The
+  cause was not the seed — it was the transparent pixels just past the
+  silhouette, whose leftover RGB is a dark purple, and the shield's dark-red rim
+  antialiasing, both sitting on the hole's boundary and diffusing inward. The
+  fix is a **masked** solve: renormalise by the count of *legal* (trouser)
+  neighbours so nothing else can enter. Seeding correctly is not enough.
+* **THE PROP MUST BE EXCLUDED FROM TONAL WORK, NOT JUST FROM GEOMETRY.** The
+  club shaft crosses the trousers on both walk keys and its antialiased edge is
+  navy enough to pass the trouser material test. Without an explicit prop mask
+  the ramp nudged 18 and 41 shaft pixels by one luminance unit — invisible, and
+  still the prop. With it, changed club pixels are **0 and 0**.
+* **WEBP LOSSLESS IS NOT LOSSLESS UNDER ALPHA=0.** Pillow's encoder zeroes the
+  RGB of fully transparent pixels unless `exact=True` is passed, which is why
+  v4.3 could only claim byte-identity *everywhere alpha>0*. With `exact=True`
+  the untouched cells are byte-identical outright.
+
+### The detector, and the three traps it is built around
+
+W1 is measured on the shield: the largest **warm** (b − r ≤ −12) hardware blob
+inside the leg band. Two guards, both earned:
+
+* **The brass club head is warm too.** It is excluded by requiring a blob to be
+  bedded in navy twill — worn hardware scores 119–178 trouser pixels in its
+  ring, the club head scores 0–3. v4.3 recorded a bogus "the club never moved"
+  reading from a detector with no such guard.
+* **The band and buckle are on BOTH legs**, so blob position alone cannot decide
+  which limb wears the shield — the same trap 4.2 found on devil's wraps and 4.3
+  found on post's cuff. Shield presence is confirmed instead by the plate's dark
+  green-teal **face** area: shield blobs 61–97px, band-only blobs 0–14px.
+* And the first version of this detector picked donald's **front shoe** as the
+  shield, 464px of it, because black patent leather carries big neutral
+  speculars and a "green-ish" test adopts them wholesale. Rendering the mask and
+  looking at it is what caught it — as it has every wave.
+
+### The numbers
+
+W1 sign: **+ = the shield is on the FORWARD limb, − = the REAR one.**
+
+| | cells 1 2 3 4 | contact keys |
+| --- | --- | --- |
+| 3.0 on disk | +0.350 +0.000 +0.332 +0.052 | +0.350 vs +0.332 — SAME |
+| v4.4 | +0.350 +0.000 **−0.218** **absent** | +0.350 vs **−0.218** — OPPOSITE |
+
+Which physical leg wears the shield, per key: **1 FORWARD, 2 FORWARD (planted),
+3 REAR, 4 not visible (swing limb, knee occluded).** It is the same physical leg
+throughout and it travels front → support → rear → swing → front. There is no
+frame in which it appears on the other leg, so there is no mid-cycle marker
+flicker — the failure wave 13 recorded as animating worse than a consistent
+non-inversion.
+
+W2 headW spread 173.98% → 173.98% and costume dEmax 12.270 → 12.270; W3 idle
+torso and head dE **0.0000**; W3-PROP club pixels changed **0**; W4 floor rows
+identical on all sixteen cells, max |d| **0px**, torso column max |d| **0.000**.
+Fourteen cells are byte-identical. Alpha changes only where the shield used to
+stand proud of the trouser outline — 187px on cell 3, 213px on cell 4.
+
+### W6, by eye at 8–11x
+
+PASS. There is no hip seam because nothing crosses the hip; no doubled or
+missing foot because no foot was touched; no depth-order error because the
+forward slot is still drawn on top and only which *limb* occupies it has
+changed; no lighting contradiction because the shield was translated, never
+reflected. The healed knee is marginally smoother than the fabric around it at
+11x and is invisible at 1:1. Crops: `unified-v44/w6-donald-*.png`.
+
+**Ten of ten fighters now walk with alternating legs.**

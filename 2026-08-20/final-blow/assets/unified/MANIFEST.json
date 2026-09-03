@@ -2000,13 +2000,15 @@
      "frame": 3,
      "id": "walk-contact-b",
      "accept": true,
-     "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note."
+     "note": "walk contact key B: both feet planted, full stride separation. SINGLE-PHASE with cell 1 by design -- see the sheet note.",
+     "wave17": "REBUILT BY COMPOSITING (v4.4), zero new generations. This key now leads with the opposite LIMB from cell 1. His limb identity is carried by HARD HARDWARE, not by shading, so the gold-rimmed knee SHIELD was hand-matted and moved intact, unmirrored and unrotated, from the forward knee to the rear knee -- it keeps its own painted gold rim highlight and teal specular, which is exactly what disqualified the v4.3 mirror. The leather band and brass buckle that MOUNT the shield are common to both legs and were left as untouched original paint on both, so the forward knee still wears a strap. The trousers themselves do not move at all: their near/far tonal roles are exchanged in place, ramped in from row 200 so there is no step at the crotch notch. Feet, shoes, floor contact, hips, torso, arms, head and the golf club are the 3.0 pixels, bit-exact. The 'SINGLE-PHASE by design' reading of this cell is SUPERSEDED."
     },
     {
      "frame": 4,
      "id": "walk-passing-b",
      "accept": true,
-     "note": "walk passing key B: one foot planted, the other swung through and lifted clear"
+     "note": "walk passing key B: one foot planted, the other swung through and lifted clear",
+     "wave17": "REBUILT BY COMPOSITING (v4.4), zero new generations. On this passing key the swing limb is now the SHIELD limb, and a swing limb's knee is drawn behind the planted leg -- so the shield is simply not visible, exactly as the strap limb's buckle is all but invisible on the phase-A passing key (cell 2). Nothing was moved: the shield was lifted off the planted knee and the knee healed with trouser cloned from within this same cell, and the leather band and brass buckle stay put, so the planted leg reads as the STRAP limb. Its trouser also takes the far tonality, learned from cell 1 rather than from this cell (the swing limb offers only 255px of deep-shadow cuff and standardising on that flattens the planted leg). The 'SINGLE-PHASE by design' reading of this cell is SUPERSEDED."
     },
     {
      "frame": 5,
@@ -2333,6 +2335,22 @@
     "W1limbSign3_0": "1=+0.619 2=+0.401 3=+0.482 4=+0.447 on the gold-keyed marker row (v4.2 numbers, re-measured identical). All four walk keys lead with the plated leg forward. STILL FAILS W1.",
     "floorRowMeasured": "rows 315-319 across the 16 cells, a 4px spread, measured this wave, not taken from this file. Passes the 6px gate.",
     "torsoColMeasured": "torso-band centroid spans 151.9-169.0, sd 3.57."
+   },
+   "wave17": "WAVE 17 / v4.4 -- SHIPS. donald was the last fighter on the roster still walking in a single phase, and the reason wave 16 recorded is correct: he is the only one whose legs differ by HARD ASYMMETRIC HARDWARE rather than by shading, so a tonal role exchange leaves the marker behind and a mirror flips the marker's internal lighting. v4.4 answers it by HAND-MATTING the hardware and moving the SHIELD ALONE, intact, unmirrored and unrotated, to the other knee -- the same knee wears it all the way round, it simply passes from front to back, which is what a real walk cycle does. THE FINDING THAT MADE IT TRACTABLE: donald wears a gold-rimmed knee shield on BOTH knees (see the idle, punch and kick cells), and in the walk keys the artist draws the NEAR limb's shield in full and reduces the FAR limb's to its mounting strap and buckle. So the 'asymmetry' wave 16 described is a DRAWING CONVENTION, not a costume fact, and the correct composite is not to swap two different objects but to move the shield and let the convention follow the limb. Only the shield moves; the band and buckle are common hardware and were left as untouched original paint on both legs. The trousers never move -- their near/far tonal roles are exchanged in place, ramped in from row 200 to the crotch notch at row 226, because a hard cut there left a 6.9-luminance step straight across the forward thigh. Cells 0, 1, 2 and 5-15 are BYTE-IDENTICAL to the 3.0 sheet; the alpha channel is identical on 14 of 16 and changes only where the shield used to stand proud of the trouser outline (187px on cell 3, 213px on cell 4). Floor rows, torso columns, headW spread and costume dE are unchanged to the digit. Zero fal calls. The mattes are saved as polygons in unified-v44/donald-mattes.json so a later wave can reopen or refine them.",
+   "wave17Measured": {
+    "sheetChanged": "cells 3 and 4 only",
+    "generationsUsed": 0,
+    "W1shieldSide": "3.0 on disk 1=+0.350 2=+0.000 3=+0.332 4=+0.052 -- all four walk keys wear the shield on the FORWARD/planted limb, which is the defect. v4.4 1=+0.350 2=+0.000 3=-0.218 4=shield ABSENT. The two contact keys 1 and 3 now lead with OPPOSITE limbs: +0.350 against -0.218.",
+    "W1shieldLeg": "cell 1 FORWARD, cell 2 FORWARD (planted), cell 3 REAR, cell 4 not visible (swing limb, knee occluded). The shield is on the SAME PHYSICAL LEG throughout and travels front -> support -> rear -> swing -> front. There is no frame in which it appears on the other leg, so there is no mid-cycle marker flicker.",
+    "W1detector": "largest WARM (b-r <= -12) hardware blob in the leg band, with two guards learned from earlier waves: a blob must be bedded in navy twill (the brass CLUB HEAD touches no trouser and scores 0-3 against worn hardware's 119-178, which is what keeps the prop out of the answer), and shield presence is confirmed by the plate's dark green-teal FACE area (shield blobs 61-97px, band-only blobs 0-14px) because the band and buckle are on BOTH legs and position alone cannot decide it.",
+    "W2": "headW spread all16 173.98% -> 173.98%, upright 94.34% -> 94.34%; costume dEmax 12.270 -> 12.270. Unchanged to the digit.",
+    "W3": "idle torso dE 0.0000, idle head dE 0.0000; cells 3 and 4 torso and head dE 0.0000 (both bands lie above the edited region).",
+    "W3prop": "club pixels 1857 (cell 3) and 1908 (cell 4); changed club pixels 0 and 0. The prop is excluded from every tonal operation by an explicit mask -- without it the ramp nudged 18 and 41 shaft-antialias pixels by one luminance unit.",
+    "W4": "floor rows [315,318,315,319,315,315,315,315,318,316,316,316,316,317,317,319] on both sheets, IDENTICAL, max|d| 0px. Torso column max|d| 0.000. Every operation is horizontal or tonal. Measured, not read from floorRow:315, which remains a MINIMUM.",
+    "W5": "unchanged: no geometry moved, so each cell still reads as its own beat.",
+    "W6": "PASS by eye at 8-11x. Crops in unified-v44/W6-*.png.",
+    "byteIdenticalCells": "0,1,2,5,6,7,8,9,10,11,12,13,14,15",
+    "note": "the sheet is saved WEBP lossless with exact=True; without exact the encoder zeroes the RGB under alpha=0 and the untouched cells stop being byte-identical."
    }
   },
   "cyraxx": {
