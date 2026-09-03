@@ -31,7 +31,7 @@ const CLIP_NAMES = ["idle", "walk_fwd", "walk_back", "running", "jump", "jab", "
 const STRIKE_PEAK = { jab: 0.55, hook: 0.62, uppercut: 0.7, roundhouse: 1.25, high_kick: 0.95, sweep: 0.9 };
 
 // Ink-and-cel look (matches the roster showcase): 2-step ramp, outline hull.
-const LOOK = { outline: 0.015, shadow: 0.62, mid: 0.86, sat: 1.05, sharpen: 0.6, size: 0.86 };
+const LOOK = { outline: 0.015, shadow: 0.62, mid: 0.86, sat: 1.05, sharpen: 0.6, size: 0.86, fill: 0.22 };
 // Fighting-game facing: near profile toward the opponent, ~20° open to the
 // camera. (At 35° the body mostly faced the camera and every torso twist in
 // a clip read as turning AWAY from the opponent.)
@@ -151,7 +151,10 @@ export class MeshFighterLayer {
       o.layers.enable(FIGHTER_MASK_LAYER);
       const src = o.material;
       const map = src.map ? punchTexture(src.map, LOOK.sat) : null;
-      o.material = new THREE.MeshToonMaterial({ map, color: 0xffffff, gradientMap: this.grad });
+      // emissiveMap = albedo at a low constant: the fighters keep reading on
+      // the darker stage rigs (the Vet lot, the pool deck) the way the sprite
+      // shader's baked grade does, without flattening the cel shading.
+      o.material = new THREE.MeshToonMaterial({ map, color: 0xffffff, gradientMap: this.grad, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: LOOK.fill });
       const hull = new THREE.SkinnedMesh(o.geometry, new THREE.MeshBasicMaterial({ color: 0x0a0806, side: THREE.BackSide }));
       hull.bind(o.skeleton, o.bindMatrix); hull.frustumCulled = false; hull.castShadow = false;
       hull.layers.enable(FIGHTER_MASK_LAYER);
@@ -366,7 +369,7 @@ export class MeshFighterLayer {
     // silhouette; the mesh follows by darkening its albedo (any emissive lift
     // here turns the body into a flat blob under the freeze's two-tone grade).
     const dim = 1 - (this.superDim || 0) * 0.55;
-    rig.model.traverse((o) => { if (o.isSkinnedMesh && o.material.isMeshToonMaterial) { o.material.emissive?.setScalar?.(flash * 0.38); o.material.color.setScalar(dim); } });
+    rig.model.traverse((o) => { if (o.isSkinnedMesh && o.material.isMeshToonMaterial) { o.material.emissiveIntensity = LOOK.fill * dim + flash * 0.9; o.material.color.setScalar(dim); } });
   }
 }
 

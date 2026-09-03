@@ -74,6 +74,18 @@ export function createRenderer(host) {
   let lastPeakVar = -1;
   const scratchPop = new THREE.Vector3();
 
+  // The 3D canvas is laid out at the game's CSS size, not the 1280x720 sim
+  // size: on a 2000px-wide window with DPR 1 a 1x backing store is stretched
+  // ~1.6x and everything goes soft. Scale the backing store to the displayed
+  // pixels (CSS width / SIM_W x DPR), capped at 2.5x on the high tier.
+  function resolvePixelRatio() {
+    if (quality !== "high") return 1;
+    const cssWidth = host.gameCanvas?.getBoundingClientRect?.().width || SIM_W;
+    const ratio = (cssWidth / SIM_W) * (window.devicePixelRatio || 1);
+    return Math.min(2.5, Math.max(1, ratio));
+  }
+  let lastPixelRatio = 0;
+
   function resolveQuality() {
     if (manualQuality) return manualQuality;
     const profile = host.getPerformanceProfile();
@@ -119,8 +131,7 @@ export function createRenderer(host) {
       quality = resolveQuality();
       // DPR cap 2 (was 1.5) on the high tier: on hi-dpi displays the sprite
       // texels stop beating against the CSS scanline pitch (critic fix 7).
-      const pixelRatio = quality === "high" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
-      renderer.setPixelRatio(pixelRatio);
+      renderer.setPixelRatio(resolvePixelRatio());
       renderer.setSize(SIM_W, SIM_H, false);
 
       scene = new THREE.Scene();
@@ -210,9 +221,11 @@ export function createRenderer(host) {
   renderer3d.renderFrame = (timeMs, dtMs) => {
     if (!renderer3d.ready) return;
     const requested = resolveQuality();
-    if (requested !== quality) {
+    const wantedRatio = Math.round(resolvePixelRatio() * 20) / 20;
+    if (requested !== quality || wantedRatio !== lastPixelRatio) {
       quality = requested;
-      renderer.setPixelRatio(quality === "high" ? Math.min(window.devicePixelRatio || 1, 2) : 1);
+      lastPixelRatio = wantedRatio;
+      renderer.setPixelRatio(wantedRatio);
       renderer.setSize(SIM_W, SIM_H, false);
       rebuildPost();
       // Stage shadow-map budgets differ per tier; rebuild lazily.
