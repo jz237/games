@@ -32,9 +32,15 @@ const STRIKE_PEAK = { jab: 0.55, hook: 0.62, uppercut: 0.7, roundhouse: 1.25, hi
 
 // Ink-and-cel look (matches the roster showcase): 2-step ramp, outline hull.
 const LOOK = { outline: 0.014, shadow: 0.75, sat: 1.05, size: 0.86 };
-// Fighting-game facing: 3/4 toward camera, front toward the opponent.
-const YAW_RIGHT = THREE.MathUtils.degToRad(-35);
-const YAW_LEFT = THREE.MathUtils.degToRad(35);
+// Fighting-game facing: near profile toward the opponent, ~20° open to the
+// camera. (At 35° the body mostly faced the camera and every torso twist in
+// a clip read as turning AWAY from the opponent.)
+// The rigs' forward axis is +Z (measured); a POSITIVE Y rotation turns +Z
+// toward +X, i.e. screen-right.
+const YAW_RIGHT = THREE.MathUtils.degToRad(70);
+const YAW_LEFT = THREE.MathUtils.degToRad(-70);
+// Crossfade length between clips, in sim frames (render-only cosmetic).
+const BLEND_FRAMES = 6;
 const FPS = 60;
 
 function punchTexture(tex, sat) {
@@ -51,7 +57,7 @@ function punchTexture(tex, sat) {
   }
   g.putImageData(d, 0, 0);
   const t = new THREE.CanvasTexture(c);
-  t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
   return t;
 }
 
@@ -78,7 +84,7 @@ export class MeshFighterLayer {
         const el = await new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = reject; im.src = url; });
         URL.revokeObjectURL(url);
         const tex = new THREE.Texture(el);
-        tex.flipY = false; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.needsUpdate = true;
+        tex.flipY = false; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 8; tex.needsUpdate = true;
         return tex;
       },
     }));
@@ -287,8 +293,20 @@ export class MeshFighterLayer {
     const action = rig.actions[pick.clip] || rig.actions.guard || rig.actions.idle;
     if (!action) return;
     const clip = action.getClip();
-    if (rig.current && rig.current !== action) { rig.current.enabled = false; rig.current.setEffectiveWeight(0); }
-    action.enabled = true; action.setEffectiveWeight(1);
+    const tick = state.simulationTick || 0;
+    // Clip change: keep the outgoing action frozen at its last pose and fade
+    // it out over BLEND_FRAMES sim ticks, so transitions never snap. The
+    // blend counter rides the sim tick, so it re-derives under rollback.
+    if (rig.current && rig.current !== action) {
+      if (rig.previous && rig.previous !== rig.current) { rig.previous.enabled = false; rig.previous.setEffectiveWeight(0); }
+      rig.previous = rig.current; rig.previousTime = rig.current.time; rig.blendTick = tick;
+    }
+    const blend = rig.previous && rig.previous !== action ? Math.min(1, Math.max(0, (tick - rig.blendTick) / BLEND_FRAMES)) : 1;
+    if (rig.previous && rig.previous !== action) {
+      if (blend >= 1) { rig.previous.enabled = false; rig.previous.setEffectiveWeight(0); rig.previous = null; }
+      else { rig.previous.enabled = true; rig.previous.setEffectiveWeight(1 - blend); rig.previous.time = rig.previousTime; rig.previous.paused = false; }
+    }
+    action.enabled = true; action.setEffectiveWeight(blend);
     action.setLoop(pick.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
     action.clampWhenFinished = true;
     action.time = pick.loop ? ((pick.time % clip.duration) + clip.duration) % clip.duration : Math.min(pick.time, clip.duration - 1e-4);

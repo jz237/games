@@ -51,10 +51,15 @@ high_kick).
 
 Ink-and-cel: 2-step toon ramp (shadow 0.75), albedo saturation ×1.05, an
 inverted-hull outline (0.014 world units, back faces, ink black), no tone
-mapping of its own (the CINEMA 3D stack's ACES still applies). Facing is a
-3/4 turn toward camera: yaw −35° facing right, +35° facing left. Height is
-`fighterRenderSize(id) × PX × 0.86` so the mesh matches the sprite's stance
-height. Hit flash: brief emissive lift on the toon material.
+mapping of its own (the CINEMA 3D stack's ACES still applies). The rigs'
+forward axis is +Z, so facing is yaw +70° for screen-right and −70° for
+screen-left: a near profile toward the opponent, ~20° open to the camera
+(measured — an earlier −35° had the body mostly facing the camera and every
+torso twist read as turning away from the opponent). Height is
+`fighterRenderSize(id) × PX × 0.86`. Clip changes crossfade over 6 sim ticks
+(the outgoing action freezes at its last pose). Hit flash: brief emissive lift.
+Rigs ship at 65% of full polygon count with 2048px textures (5–11 MB each;
+only the two fighters in the match load).
 
 ## Switches and QA
 
