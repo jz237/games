@@ -13,7 +13,7 @@ is presentation only (`renderer/three/mesh-fighters.mjs`).
 
 | file | what |
 | --- | --- |
-| `rig.glb` | skinned mesh, ~45k tris, 1024px albedo, Meshy humanoid skeleton (24 joints, Mixamo names), faces +Z |
+| `rig.glb` | skinned mesh, full geometry (≈100k–300k tris), 4096px albedo, Meshy humanoid skeleton (24 joints, Mixamo names), faces +Z |
 | `anim-<clip>.glb` | armature-only clip (30 fps); tracks bind onto the rig by bone name |
 
 Clips (20 per fighter + `running`): `idle walk_fwd walk_back running jump jab
@@ -69,8 +69,9 @@ only the two fighters in the match load).
   takes over instantly while a mesh is loading, missing, or switched off.
 - The 4.3 shell clears the persisted CINEMA 3D flag once on first boot so the
   sprite renderer is everyone's default again.
-- Jez ships at FULL geometry (294k tris, 4096px texture, 12.6 MB); the rest
-  at 65% (Pages caps files at 25 MiB).
+- Every fighter ships at FULL geometry with a 4096px JPEG texture (1.8–15.3 MB
+  each, all under the 25 MiB Pages file cap); only the two fighters in a match
+  load.
 - `window.__fbMesh3d` (render-only latch): per-side asset `status`
   (`loading` / `ready` / `missing`), the last `{clip, time}` pick per side;
   set `window.__fbMeshProbe = true` for rig bounds + skin sanity.
