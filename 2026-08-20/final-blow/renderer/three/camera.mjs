@@ -40,6 +40,12 @@ export class FramingCamera {
     const ease = 1 - Math.exp(-dtSec * 5);
 
     // --- Tournament framing solve -------------------------------------------
+    // 4.3 DEMO FRAMING: the attract demo is watched from the couch, so it
+    // never punches in on the pair — full stage width plus a wider margin, and
+    // a slight pull-back beyond it, so both fighters and their moves stay in
+    // frame even when the AIs close the gap.
+    const demo = state.mode === "demo";
+    const margin = demo ? 0.78 : FRAME_MARGIN;
     let mid = 0;
     let halfNeed = this.halfWidthAtPlane;
     if (fighters.length === 2) {
@@ -48,17 +54,18 @@ export class FramingCamera {
       mid = THREE.MathUtils.clamp((p0 + p1) * 0.5, -0.9, 0.9);
       this.smoothedMid += (mid - this.smoothedMid) * ease;
       const camX = this.smoothedMid * PARALLAX_FOLLOW;
-      halfNeed = Math.max(Math.abs(p0 - camX), Math.abs(p1 - camX)) + FRAME_MARGIN;
+      halfNeed = Math.max(Math.abs(p0 - camX), Math.abs(p1 - camX)) + margin;
     } else {
       this.smoothedMid += (0 - this.smoothedMid) * ease;
     }
     const camX = this.smoothedMid * PARALLAX_FOLLOW;
-    const fillFloor = fighters.length === 2 ? MIN_FILL : 1;
+    const fillFloor = fighters.length === 2 ? (demo ? 1.1 : MIN_FILL) : 1;
     const distance = this.baseDistance * Math.max(fillFloor, halfNeed / (this.halfWidthAtPlane * 0.985));
     this.smoothedDistance += (distance - this.smoothedDistance) * ease;
 
     // --- Cinematic presentation moves (KO punch-in, recoil, dutch tilt) ----
-    const zoom = Math.max(1, cinematic?.zoom ?? 1);
+    // Demo: cinematic punch-ins stay, but capped so the pair never leaves frame.
+    const zoom = Math.min(demo ? 1.12 : Infinity, Math.max(1, cinematic?.zoom ?? 1));
     const punch = 1 - 1 / zoom;
     const focusX = worldX(cinematic?.focusX ?? SIM_W * 0.5);
     const focusY = worldY(cinematic?.focusY ?? SIM_H * 0.5);
