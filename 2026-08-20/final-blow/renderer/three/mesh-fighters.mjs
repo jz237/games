@@ -365,7 +365,7 @@ export class MeshFighterLayer {
     // Super freeze: the stage goes black and the sprites drop to a rim-lit
     // silhouette; the mesh follows by darkening its albedo (any emissive lift
     // here turns the body into a flat blob under the freeze's two-tone grade).
-    const dim = 1 - (this.superDim || 0) * 0.78;
+    const dim = 1 - (this.superDim || 0) * 0.55;
     rig.model.traverse((o) => { if (o.isSkinnedMesh && o.material.isMeshToonMaterial) { o.material.emissive?.setScalar?.(flash * 0.38); o.material.color.setScalar(dim); } });
   }
 }
