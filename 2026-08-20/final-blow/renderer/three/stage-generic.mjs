@@ -53,9 +53,11 @@ export function buildGenericStage(host, { quality, stageId }) {
       map: maps.albedo,
       roughnessMap: maps.roughness,
       metalnessMap: maps.metalness,
-      roughness: 1,
-      metalness: 1,
-      envMapIntensity: 0.9,
+      // 4.3: metalness 1 made the lot a black mirror of the night env map;
+      // a mostly-dielectric asphalt reads its own albedo under the rig.
+      roughness: 0.92,
+      metalness: 0.2,
+      envMapIntensity: 0.6,
     }),
   );
   ground.rotation.x = -Math.PI / 2;
@@ -65,7 +67,9 @@ export function buildGenericStage(host, { quality, stageId }) {
 
   const backdrop = new THREE.Mesh(
     new THREE.PlaneGeometry(30, 16.9, 32, 6),
-    new THREE.MeshBasicMaterial({ map: gradedBackdrop(host.stageImages[stageId]) }),
+    // color > 1 (4.3): the baked night grade + vignette left these backdrops
+    // near-black on real monitors; lift them ~45% before tone mapping.
+    new THREE.MeshBasicMaterial({ map: gradedBackdrop(host.stageImages[stageId]), color: new THREE.Color(1.45, 1.45, 1.45) }),
   );
   const positions = backdrop.geometry.attributes.position;
   for (let i = 0; i < positions.count; i += 1) {
@@ -75,7 +79,7 @@ export function buildGenericStage(host, { quality, stageId }) {
   backdrop.position.set(0, 4.6, -13.5);
   group.add(backdrop);
 
-  const key = new THREE.DirectionalLight(mood.key, 2.6);
+  const key = new THREE.DirectionalLight(mood.key, 3.1);
   key.position.set(-5, 8, 6);
   key.castShadow = true;
   key.shadow.mapSize.set(shadowSize, shadowSize);
@@ -91,7 +95,9 @@ export function buildGenericStage(host, { quality, stageId }) {
   const rimRight = new THREE.PointLight(mood.key, 15, 10, 2);
   rimRight.position.set(6.2, 2, 1.1);
   group.add(rimRight);
-  group.add(new THREE.HemisphereLight(0x2a3a58, 0x0d0b08, 0.55));
+  // 0.55 -> 1.05 (4.3): lifts the fight plane out of the murk on the generic
+  // night rigs without touching the practicals.
+  group.add(new THREE.HemisphereLight(0x2f4160, 0x14100a, 1.05));
 
   return {
     group,

@@ -125,7 +125,8 @@ export function createRenderer(host) {
       });
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.24;
+      // 1.24 -> 1.5 (4.3): the night rigs read too dark on real monitors.
+      renderer.toneMappingExposure = 1.5;
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       quality = resolveQuality();

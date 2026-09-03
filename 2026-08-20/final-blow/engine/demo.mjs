@@ -2,7 +2,22 @@ import { DeterministicRng, hashSeed } from "./foundation.mjs";
 
 export const DEMO_IDLE_DELAY_MS = 45_000;
 export const DEMO_RESULT_HOLD_MS = 5_000;
-export const DEMO_AI_DIFFICULTY = "pro";
+import { registerAiDifficulty, resolveAiSettings } from "./ai.mjs";
+
+// 4.3 DEMO SPACING: the attract-mode CPUs fight on a PRO brain with every kit
+// range widened 1.6x and the mid-band pokes thinned, so the two never sit in
+// a permanent clinch and each move can be read from the couch.
+export const DEMO_AI_DIFFICULTY = "demo";
+registerAiDifficulty(DEMO_AI_DIFFICULTY, {
+  ...resolveAiSettings("pro"),
+  label: "DEMO",
+  spacing: 1.6,
+  patience: 0.55,
+  decisionFrames: 12,
+  comboChance: 0.3,
+  throwChance: 0.08,
+  grabPressureChance: 0.1,
+});
 
 function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value)).filter(Boolean))];

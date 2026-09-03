@@ -31,7 +31,7 @@ const CLIP_NAMES = ["idle", "walk_fwd", "walk_back", "running", "jump", "jab", "
 const STRIKE_PEAK = { jab: 0.55, hook: 0.62, uppercut: 0.7, roundhouse: 1.25, high_kick: 0.95, sweep: 0.9 };
 
 // Ink-and-cel look (matches the roster showcase): 2-step ramp, outline hull.
-const LOOK = { outline: 0.015, shadow: 0.62, mid: 0.86, sat: 1.05, sharpen: 0.6, size: 0.86, fill: 0.22 };
+const LOOK = { outline: 0.015, shadow: 0.62, mid: 0.86, sat: 1.05, sharpen: 0.6, size: 0.86, fill: 0.28 };
 // Fighting-game facing: near profile toward the opponent, ~20° open to the
 // camera. (At 35° the body mostly faced the camera and every torso twist in
 // a clip read as turning AWAY from the opponent.)

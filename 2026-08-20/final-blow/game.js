@@ -1852,8 +1852,8 @@ const state = {
   musicChoice: localStorage.getItem("final-blow-music-choice") || "auto",
   // 4.3: defaults dropped from 1.0 — full scale was far too loud on first
   // launch (Jez). A saved slider value still wins.
-  musicVolume: clamp(Number(localStorage.getItem("final-blow-music-volume") ?? "0.55"), 0, 1),
-  sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "0.65"), 0, 1),
+  musicVolume: clamp(Number(localStorage.getItem("final-blow-music-volume") ?? "0.35"), 0, 1),
+  sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "0.35"), 0, 1),
   aiDifficulty: normalizeAiDifficulty(localStorage.getItem("final-blow-ai-difficulty") || DEFAULT_AI_DIFFICULTY),
   arcadeRun: null,
   // Release 1.8 GRIND: survival ladder + 3v3 team battle bookkeeping (offline

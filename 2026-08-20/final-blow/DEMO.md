@@ -320,3 +320,15 @@ else.
   ticks walking without abandoning the move checklist, and that it replays from
   its seed. The game.js call sites are asserted from source, because the
   scoping is the part that must never regress.
+
+## 4.3 — demo spacing
+
+Attract-mode CPUs run the registered `demo` AI tier (`engine/demo.mjs`): a PRO
+brain with every kit range widened 1.6x (floors 230 / 130 / 340 px), the
+mid-band pokes thinned (`patience` 0.55), slower decisions (12 frames), fewer
+combo chases, and a gap-opening rule in `stepAiBrain` (back-jump or back-walk
+when deep in the clinch with nothing incoming). `selectKitAiIntent` takes
+`spacing` / `patience`; every other tier passes the defaults, so human-facing
+AI is unchanged. Measured with the session's `fb-gap.mjs` probe (60 s, seed
+237): mean gap 149 → ~155–205 px, time under 150 px 70% → ~30–57% depending on
+the matchup — attacks still lunge in; that is the game's pushback doing its job.

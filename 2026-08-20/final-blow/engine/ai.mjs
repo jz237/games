@@ -341,10 +341,21 @@ export function decideAiIntent(brain, {
     return { movement: "hold", action: null, guard: true, down: mixRoll(roll, 9) < 0.36, reason: "wakeup-block" };
   }
 
-  if (distance < 96 && mixRoll(roll, 10) < settings.throwChance) {
+  if (distance < 96 * (settings.spacing || 1) && mixRoll(roll, 10) < settings.throwChance) {
     // Corner-carry with a back throw sometimes, forward throw otherwise.
     const back = mixRoll(roll, 18) < (settings.grabPressureChance || 0) * 0.5;
     return { movement: "hold", action: "throw", throwBack: back, reason: back ? "back-throw" : "throw" };
+  }
+
+  // 4.3 DEMO SPACING: when a patient (attract-mode) brain finds itself deep
+  // inside the clinch with nothing incoming, it opens the gap first — a
+  // back-jump a third of the time, a back-walk otherwise — so the next
+  // exchange is readable from a distance.
+  if ((settings.patience || 0) > 0 && !observation.attacking && self.grounded
+    && distance < 150 && mixRoll(roll, 30) < settings.patience) {
+    return mixRoll(roll, 31) < 0.34
+      ? { movement: "retreat", action: null, jump: true, reason: "demo-space-jump" }
+      : { movement: "retreat", action: null, reason: "demo-space" };
   }
 
   let intent = selectKitAiIntent(fighterId, {
@@ -353,6 +364,8 @@ export function decideAiIntent(brain, {
     opponentAttacking: observation.attacking,
     meter: self.meter,
     roll: mixRoll(roll, 11),
+    spacing: settings.spacing || 1,
+    patience: settings.patience || 0,
   }) || { movement: "hold", action: null };
 
   if (self.meter >= GRIT_RULES.superCost
@@ -378,7 +391,9 @@ export function decideAiIntent(brain, {
   // …and an empty-handed approach sometimes walks in behind an advancing kick
   // — which is exactly the forward command normals, reached through the same
   // forward-held + kick-limb inputs a human uses.
-  if (intent.movement === "advance" && !intent.action && mixRoll(roll, 28) < 0.35) {
+  // (Demo spacing: a patient brain walks in empty-handed instead of kicking
+  // its way into the clinch.)
+  if (intent.movement === "advance" && !intent.action && mixRoll(roll, 28) < 0.35 * (1 - (settings.patience || 0))) {
     intent = {
       ...intent,
       action: mixRoll(roll, 29) < 0.5 ? "light" : "heavy",
