@@ -61,6 +61,27 @@ export class MeshFighterLayer {
     this.group = new THREE.Group();
     this.group.name = "mesh-fighters";
     this.loader = new GLTFLoader();
+    // Textures come in through <img> elements fed by blob: URLs. The default
+    // ImageBitmapLoader path fetch()es a blob: URL, which the site CSP's
+    // connect-src forbids (img-src allows blob:), leaving every fighter a
+    // white silhouette on jez237.com while working fine on localhost.
+    this.loader.register((parser) => ({
+      name: "fb-img-textures",
+      loadTexture: async (textureIndex) => {
+        const json = parser.json;
+        const def = json.textures[textureIndex];
+        const image = json.images?.[def.source];
+        if (!image || image.bufferView === undefined) return null; // fall back to the default path
+        const bufferView = await parser.getDependency("bufferView", image.bufferView);
+        const blob = new Blob([bufferView], { type: image.mimeType || "image/jpeg" });
+        const url = URL.createObjectURL(blob);
+        const el = await new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = reject; im.src = url; });
+        URL.revokeObjectURL(url);
+        const tex = new THREE.Texture(el);
+        tex.flipY = false; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.needsUpdate = true;
+        return tex;
+      },
+    }));
     this.assets = new Map(); // id -> { status, rig(gltf), clips: {name: AnimationClip} }
     this.rigs = [null, null];
     this.grad = new THREE.DataTexture(new Uint8Array([Math.round(255 * LOOK.shadow), Math.round(255 * LOOK.shadow), Math.round(255 * LOOK.shadow), 255, 255, 255, 255, 255]), 2, 1);
