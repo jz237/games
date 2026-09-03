@@ -1790,6 +1790,15 @@ const simulationClock = new FixedStepClock();
 const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0e-demo-edition");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
+// 4.3: one-time return to the sprite renderer as the default. The CINEMA 3D
+// flag persisted from 4.2 sessions is cleared once; re-enabling it persists
+// again as before.
+try {
+  if (localStorage.getItem("final-blow-shell-reset") !== "4.3") {
+    localStorage.removeItem("final-blow-cinema-3d");
+    localStorage.setItem("final-blow-shell-reset", "4.3");
+  }
+} catch { /* storage may be denied */ }
 const state = {
   screen: "title",
   mode: "arcade",
@@ -1876,6 +1885,11 @@ const state = {
   // persisting. Battery profile refuses activation (see cinema3dAllowed).
   cinema3d: new URLSearchParams(location.search).get("renderer") === "3d"
     || localStorage.getItem("final-blow-cinema-3d") === "1",
+  // 4.3 MESH FIGHTERS: rigged 3D characters inside CINEMA 3D. Off by default
+  // (the sprite billboards stay the CINEMA 3D default too); ?fighters=3d
+  // forces it on for the session without persisting.
+  meshFighters: new URLSearchParams(location.search).get("fighters") === "3d"
+    || localStorage.getItem("final-blow-mesh-fighters") === "1",
   performance: null,
   // Captions label every sound event over the fight — invaluable when you
   // need them, permanent UI noise when you don't. Opt-in as of the
@@ -25031,6 +25045,7 @@ function applyPerformanceSettings() {
   $("#crtModeToggle").checked = Boolean(state.crtMode);
   if ($("#cabinetModeToggle")) $("#cabinetModeToggle").checked = Boolean(state.cabinetMode);
   $("#cinema3dToggle").checked = Boolean(state.cinema3d);
+  if ($("#meshFightersToggle")) $("#meshFightersToggle").checked = Boolean(state.meshFighters);
   // Profile switches can grant/revoke CINEMA 3D eligibility (battery refuses).
   ensureCinema3d();
   $("#pausePerformance").textContent = `${state.visualQuality.toUpperCase()} VISUALS · ${state.performance.id.toUpperCase()} PROFILE · ${state.performance.particleBudget} FX BUDGET`;
@@ -27605,6 +27620,19 @@ $("#cinema3dToggle").addEventListener("change", (event) => {
   // hides the 3D canvas and resumes the 2D world draw next frame.
   ensureCinema3d();
 });
+$("#meshFightersToggle")?.addEventListener("change", (event) => {
+  state.meshFighters = event.target.checked;
+  localStorage.setItem("final-blow-mesh-fighters", state.meshFighters ? "1" : "0");
+  // The rigs only draw inside CINEMA 3D; flipping this on turns CINEMA 3D on
+  // too so the switch never looks dead.
+  if (state.meshFighters && !state.cinema3d) {
+    state.cinema3d = true;
+    localStorage.setItem("final-blow-cinema-3d", "1");
+    $("#cinema3dToggle").checked = true;
+    progressionCinemaActivated();
+  }
+  ensureCinema3d();
+});
 $("#soundCaptionsToggle").addEventListener("change", (event) => {
   state.soundCaptions = event.target.checked;
   localStorage.setItem("final-blow-sound-captions", event.target.checked ? "1" : "0");
@@ -29936,6 +29964,8 @@ function ensureCinema3d() {
       gritSuperCost: GRIT_RULES.superCost,
       gameCanvas: canvas,
       isRollbackResimulating: () => rollbackResimulating,
+      // 4.3 MESH FIGHTERS switch (options panel / ?fighters=3d), read per frame.
+      meshFightersEnabled: () => Boolean(state.meshFighters),
       getPerformanceProfile: () => state.performance,
       isWorldActive: () => cinema3dWorldActive(),
     });

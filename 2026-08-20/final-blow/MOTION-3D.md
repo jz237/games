@@ -63,9 +63,14 @@ only the two fighters in the match load).
 
 ## Switches and QA
 
-- Mesh fighters are ON whenever CINEMA 3D is on. `?fighters=sprite` keeps
-  the billboards (the sprite rig is always built and takes over instantly
-  while a mesh is loading or missing).
+- Mesh fighters are OFF by default. Options → “3D FIGHTERS · EXPERIMENTAL”
+  (persisted as `final-blow-mesh-fighters`; turning it on also turns CINEMA 3D
+  on) or `?fighters=3d` for one session. The sprite rig is always built and
+  takes over instantly while a mesh is loading, missing, or switched off.
+- The 4.3 shell clears the persisted CINEMA 3D flag once on first boot so the
+  sprite renderer is everyone's default again.
+- Jez ships at FULL geometry (294k tris, 4096px texture, 12.6 MB); the rest
+  at 65% (Pages caps files at 25 MiB).
 - `window.__fbMesh3d` (render-only latch): per-side asset `status`
   (`loading` / `ready` / `missing`), the last `{clip, time}` pick per side;
   set `window.__fbMeshProbe = true` for rig bounds + skin sanity.

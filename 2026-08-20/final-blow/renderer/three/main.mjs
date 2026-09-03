@@ -154,7 +154,7 @@ export function createRenderer(host) {
       // missing or still-loading rig falls straight back to the sprite.
       // ?fighters=sprite (or window.__fbMesh = "off") keeps the billboards.
       const meshFighters = new MeshFighterLayer(host);
-      meshFighters.enabled = new URLSearchParams(location.search).get("fighters") !== "sprite";
+      meshFighters.enabled = host.meshFightersEnabled ? host.meshFightersEnabled() : false;
       scene.add(meshFighters.group);
       layers.set("meshFighters", meshFighters);
       fighters.meshActive = (side) => meshFighters.active(side);
@@ -267,7 +267,10 @@ export function createRenderer(host) {
     const fightersLayer = layers.get("fighters");
     if (fightersLayer) fightersLayer.superDim = superDim;
     const meshLayer = layers.get("meshFighters");
-    if (meshLayer) meshLayer.superDim = superDim;
+    if (meshLayer) {
+      meshLayer.superDim = superDim;
+      meshLayer.enabled = host.meshFightersEnabled ? host.meshFightersEnabled() : false;
+    }
     stage.setDim?.(superDim);
     // Impact screen answer: a ~2-frame radial-blur + chromatic pulse rings
     // the lens on meaningful hits (the VFX layer decays it fast).
