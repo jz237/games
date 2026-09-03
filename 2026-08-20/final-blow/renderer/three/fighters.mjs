@@ -687,6 +687,12 @@ export class FighterLayer {
         this.rigs[side] = rig;
         if (!rig) continue;
       }
+      // v4.3: a side drawn as a rigged mesh hides its billboard (and the
+      // billboard's mirror + contact shadows) for that frame only.
+      if (this.meshActive?.(side)) {
+        rig.root.visible = rig.reflRoot.visible = rig.shadow.visible = false;
+        continue;
+      }
       rig.root.visible = rig.reflRoot.visible = rig.shadow.visible = true;
       this.poseRig(rig, fighter, state, timeSec, dtSec);
     }

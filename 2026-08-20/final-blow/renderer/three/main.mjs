@@ -19,6 +19,7 @@ import { buildNightEnvScene } from "./textures.mjs";
 import { FramingCamera } from "./camera.mjs";
 import { buildPostStack } from "./post.mjs";
 import { FighterLayer } from "./fighters.mjs";
+import { MeshFighterLayer } from "./mesh-fighters.mjs";
 import { ImpactVfxLayer } from "./vfx.mjs";
 import { buildSomersetStage } from "./stage-somerset.mjs";
 import { buildGenericStage } from "./stage-generic.mjs";
@@ -136,6 +137,17 @@ export function createRenderer(host) {
       const fighters = new FighterLayer(host);
       scene.add(fighters.group);
       layers.set("fighters", fighters);
+      // v4.3 MESH FIGHTERS: rigged 3D characters stand in for the sprite
+      // billboards per side whenever renderer/rigs/<id>/ is present. The
+      // sprite rig hides only while its side's mesh is actually drawn, so a
+      // missing or still-loading rig falls straight back to the sprite.
+      // ?fighters=sprite (or window.__fbMesh = "off") keeps the billboards.
+      const meshFighters = new MeshFighterLayer(host);
+      meshFighters.enabled = new URLSearchParams(location.search).get("fighters") !== "sprite";
+      scene.add(meshFighters.group);
+      layers.set("meshFighters", meshFighters);
+      fighters.meshActive = (side) => meshFighters.active(side);
+      renderer3d.meshFighters = meshFighters;
       const vfx = new ImpactVfxLayer(host);
       scene.add(vfx.group);
       layers.set("vfx", vfx);
