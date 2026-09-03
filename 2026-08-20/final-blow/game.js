@@ -24551,6 +24551,19 @@ function draw(time) {
   const shakeY = state.shake > 0 ? Math.cos((state.simulationTick + 1) * 7.233) * state.shake * 6 * shakeScale : 0;
   // Recoil/handheld offsets ride beside the existing noise shake translate.
   ctx.translate(shakeX + cinematicCamera.x, shakeY + cinematicCamera.y);
+  // 4.3 DEMO PULL-BACK (2D path): the attract demo is watched from the
+  // couch, so the whole world draws at DEMO_PULLBACK_ZOOM about the floor
+  // centre — feet stay on the floor line, both fighters and their moves sit
+  // well inside the frame. The unscaled stage is painted first so the
+  // revealed margins continue the backdrop instead of showing black.
+  // Presentation-only: nothing here touches the sim.
+  const demoPullback = state.mode === "demo" && state.screen === "fight" && !state.finisher && !cinema3dWorld;
+  if (demoPullback) {
+    drawStage(time);
+    ctx.translate(W * .5, FLOOR);
+    ctx.scale(DEMO_PULLBACK_ZOOM, DEMO_PULLBACK_ZOOM);
+    ctx.translate(-W * .5, -FLOOR);
+  }
   if (state.finisher) {
     const camera = finisherCameraTarget();
     ctx.translate(W * .5, H * .53);
@@ -29836,6 +29849,7 @@ renderMoveList();
 // world-draw handoff happens per-frame in draw() via cinema3dWorldActive().
 // Battery performance profile refuses activation entirely.
 // ---------------------------------------------------------------------------
+const DEMO_PULLBACK_ZOOM = 0.86;
 const cinema3dBridge = { renderer: null, loading: false, onHit: null, onDust: null };
 
 function cinema3dAllowed() {
