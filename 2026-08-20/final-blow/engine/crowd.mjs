@@ -196,6 +196,14 @@ export const STAGE_CROWD_VARIANT = Object.freeze({
  * events: cannonballs, splashing, arguing over a lounger, cutting the bar line,
  * spilling a frozen drink and a staff member squeezing through the crowd.
  */
+// v4.7 BYSTANDERS: painted sprite banks (assets/crowd/<variant>-N.webp, built by
+// tools/build_crowd_sheets.py) — painted characters per variant, each with a
+// stand / weight-shift / cheer / stride cell. Somerset's people are baked into
+// the plate and the vacant lot is cats only, so neither has a bank; the
+// vector figures stay as the fallback until a sheet arrives.
+export const CROWD_SPRITE_BANKS = Object.freeze({ tailgate: 8, boardwalk: 8, buffet: 8, poolside: 8 });
+export const CROWD_SPRITE_COLUMNS = Object.freeze({ stand: 0, shift: 1, cheer: 2, stride: 3 });
+
 export const POOL_INCIDENT_KINDS = Object.freeze([
   Object.freeze({ id: "cannonball", period: 240, members: 1, reach: 30 }),
   Object.freeze({ id: "splash", period: 160, members: 2, reach: 26 }),
@@ -291,6 +299,7 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
         hasHood: rng.nextFloat() < 0.42,
         hasHat: rng.nextFloat() < 0.22,
         bagSide: rng.nextFloat() < 0.5 ? -1 : 1,
+        sprite: null,
       });
     }
   }
@@ -316,6 +325,35 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
     : variantId === "poolside"
       ? createScuffles(rng, minX, span, POOL_INCIDENT_KINDS, variant.incidents || 6)
       : [];
+  // v4.7 BYSTANDERS: painted-character assignment rides its OWN seeded stream
+  // so the people above (postures, routes, palettes) stay byte-identical to
+  // the pre-sprite crowd. Neighbours never share a painting.
+  const characters = CROWD_SPRITE_BANKS[variantId] || 0;
+  if (characters) {
+    const spriteRng = new DeterministicRng(hashSeed(seed, "crowd-sprites", stageId));
+    let previous = -1;
+    for (const person of people) {
+      let character = Math.floor(spriteRng.nextFloat() * characters);
+      if (character === previous) character = (character + 1) % characters;
+      previous = character;
+      person.sprite = {
+        character,
+        shiftPeriod: 200 + Math.floor(spriteRng.nextFloat() * 340),
+        shiftLength: 45 + Math.floor(spriteRng.nextFloat() * 70),
+        shiftOffset: Math.floor(spriteRng.nextFloat() * 500),
+        reactThreshold: 0.3 + spriteRng.nextFloat() * 0.5,
+      };
+    }
+    // Scuffle and incident groups get three distinct painted members each.
+    for (const group of scuffles) {
+      const deck = [];
+      while (deck.length < 3) {
+        const character = Math.floor(spriteRng.nextFloat() * characters);
+        if (!deck.includes(character)) deck.push(character);
+      }
+      group.characters = deck;
+    }
+  }
   return {
     stageId,
     variant: variantId,
@@ -431,5 +469,7 @@ export function crowdSnapshot(crowd, frame, { viewLeft = 0, viewRight = 1280 } =
     kegs: crowd.kegs || 0,
     scuffles: (crowd.scuffles || []).length,
     scuffleKinds: [...new Set((crowd.scuffles || []).map((group) => group.kind))],
+    spriteBank: CROWD_SPRITE_BANKS[crowd.variant] || 0,
+    spriteCharacters: new Set(crowd.people.map((person) => person.sprite?.character).filter((c) => c !== undefined && c !== null)).size,
   };
 }

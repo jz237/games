@@ -16677,6 +16677,7 @@ function drawStage(time) {
   ctx.fillRect(0, 0, W, H);
 
   drawCrowd(time);
+  drawStageAmbient(state.simulationTick, center, state.crowdReaction);
   if (state.stage === "vet") drawVetAtmosphere(time);
   drawStageWeather(state.simulationTick, center);
 
@@ -16714,6 +16715,7 @@ const POSTURE_BY_ID = Object.fromEntries(
 
 function resetCrowd() {
   state.crowd = createCrowd(state.stage, { seed: hashSeed(state.matchSeed, state.round) });
+  if (state.crowd.people.some((person) => person.sprite)) ensureCrowdMedia();
   state.crowdReaction = 0;
 }
 
@@ -16725,7 +16727,85 @@ function stirCrowd(amount = 1) {
   if (amount >= 0.5) latchCrowdSwell(amount);
 }
 
+// v4.7 BYSTANDERS: painted crowd sheets (assets/crowd/, built by
+// tools/build_crowd_sheets.py). Lazy like the element media — never in the
+// install shell — and the vector figure below keeps drawing until they land.
+const crowdSheets = { manifest: null, images: new Map(), requested: false };
+
+function ensureCrowdMedia() {
+  if (crowdSheets.requested) return;
+  crowdSheets.requested = true;
+  fetch("assets/crowd/MANIFEST.json")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((manifest) => {
+      if (!manifest?.variants) return;
+      crowdSheets.manifest = manifest;
+      for (const entry of Object.values(manifest.variants)) {
+        for (const name of entry.sheets || []) {
+          if (crowdSheets.images.has(name)) continue;
+          const image = new Image();
+          image.src = `assets/crowd/${name}`;
+          crowdSheets.images.set(name, image);
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function crowdSpriteCharacter(person) {
+  const variant = crowdSheets.manifest?.variants?.[state.crowd?.variant];
+  const character = variant?.characters?.[person.sprite?.character];
+  if (!character) return null;
+  const image = crowdSheets.images.get(variant.sheets[character.sheet]);
+  if (!image?.complete || !image.naturalWidth) return null;
+  return { character, image };
+}
+
+// A painted bystander stands where the vector figure would: feet on the
+// person's y, mirrored by direction, the same contact shadow, layer alpha and
+// fatality-hold dim. Columns: stand / weight-shift / cheer / stride. Walkers
+// alternate stride and stand on the gait clock (the classic two-frame crowd
+// step); idlers shift their weight on a personal timer; a stirred crowd
+// throws its arms up person by person past each one's own threshold.
+function drawCrowdSprite(person, layer, x, gait, paused, reaction) {
+  if (!person.sprite) return false;
+  const resolved = crowdSpriteCharacter(person);
+  if (!resolved) return false;
+  const { character, image } = resolved;
+  const reducedMotion = state.accessibility.reducedMotion;
+  const frame = state.simulationTick;
+  let column = 0;
+  if (reaction > person.sprite.reactThreshold) column = 2;
+  else if (!paused && !reducedMotion) column = Math.sin(gait) > 0 ? 3 : 0;
+  else if (!reducedMotion && ((frame + person.sprite.shiftOffset) % person.sprite.shiftPeriod) < person.sprite.shiftLength) column = 1;
+  const cell = character.cells[column] || character.cells[0];
+  const posture = POSTURE_BY_ID[person.posture] || POSTURES[0];
+  const bob = paused || reducedMotion ? 0 : Math.abs(Math.sin(gait)) * posture.bob * 2.4;
+  const scale = layer.scale * person.height;
+  // The vector figure stands ~134px tall at scale 1; match it so the crowd's
+  // depth bands and the 25/35-visible framing tests keep their meaning.
+  const drawScale = (134 * scale) / Math.max(1, cell.h);
+  const holdDim = 1 - fatalitySpotLevel * 0.62;
+  ctx.save();
+  ctx.globalAlpha = layer.alpha * 0.45 * holdDim;
+  ctx.fillStyle = "rgba(0,0,0,.8)";
+  ctx.beginPath();
+  ctx.ellipse(x, person.y + 2, 20 * layer.scale * person.width, 5 * layer.scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(x, person.y - bob);
+  ctx.scale(person.direction, 1);
+  ctx.globalAlpha = layer.alpha * holdDim;
+  ctx.drawImage(image, cell.x, cell.y, cell.w, cell.h,
+    -(cell.cx - cell.x) * drawScale, -(cell.baseline - cell.y) * drawScale,
+    cell.w * drawScale, cell.h * drawScale);
+  ctx.restore();
+  return true;
+}
+
 function drawPedestrian(person, layer, x, gait, paused, reaction) {
+  if (drawCrowdSprite(person, layer, x, gait, paused, reaction)) return;
   const posture = POSTURE_BY_ID[person.posture] || POSTURES[0];
   const scale = layer.scale * person.height;
   const step = paused ? 0 : Math.sin(gait) * posture.stride;
@@ -16947,7 +17027,31 @@ function drawScuffle(group, frame, centre, reaction) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
+  // v4.7 BYSTANDERS: with the painted bank in, each participant is one of the
+  // stage's painted characters — lunging on the stride cell while reaching,
+  // standing between beats, arms up for the peacemaker and the celebrants —
+  // facing the way the arm reaches, leaning about the feet. The vector
+  // brawler stays as the fallback until the sheets land.
+  const painted = group.characters && crowdSheets.manifest ? group.characters.map((character) => crowdSpriteCharacter({ sprite: { character } })) : null;
+  let member = -1;
   const brawler = (offsetX, lean, armReach, shirt, tilt = 0) => {
+    member += 1;
+    const resolved = painted?.[member % painted.length];
+    if (resolved) {
+      const reaching = Math.abs(armReach) > group.reach * 0.55;
+      const column = group.kind === "celebrate" || (group.kind === "separate" && member === 2) || clash > 0.5 && group.kind !== "wrestle"
+        ? (reaching ? 3 : 2) : reaching ? 3 : 0;
+      const cell = resolved.character.cells[column] || resolved.character.cells[0];
+      const drawScale = 112 / Math.max(1, cell.h);
+      ctx.save();
+      ctx.translate(offsetX, 0);
+      ctx.rotate(tilt + lean * 0.35);
+      ctx.scale(armReach < 0 ? -1 : 1, 1);
+      ctx.drawImage(resolved.image, cell.x, cell.y, cell.w, cell.h,
+        -(cell.cx - cell.x) * drawScale, -(cell.baseline - cell.y) * drawScale, cell.w * drawScale, cell.h * drawScale);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.translate(offsetX, 0);
     ctx.rotate(tilt);
@@ -17131,6 +17235,232 @@ function drawTailgateProps(frame, centre) {
 }
 
 // Gulls, a moving ride car and neon haze over the boardwalk.
+// v4.7 AMBIENT: per-stage background life on top of the plates. Everything
+// here is a pure function of the simulation tick (replay/rollback-exact) and
+// pinned to plate landmarks measured in canvas space; sky elements ride a
+// small negative parallax like the gulls. Frozen under reduced motion, skipped
+// on the battery profile like the weather field.
+function ambientGlow(x, y, radius, rgb, alpha) {
+  if (alpha <= 0.002) return;
+  const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+  gradient.addColorStop(0, `rgba(${rgb},${alpha})`);
+  gradient.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+}
+
+function ambientGull(x, y, flap, size, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = "rgba(236,240,246,.9)";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(x - size, y + flap * 0.5);
+  ctx.quadraticCurveTo(x - size * 0.5, y - flap, x, y);
+  ctx.quadraticCurveTo(x + size * 0.5, y - flap, x + size, y + flap * 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function ambientFirework(frame, period, salt, minX, maxX, minY, maxY) {
+  const cycle = Math.floor(frame / period);
+  const age = frame % period;
+  if (age > 84) return;
+  const x = minX + presentationHash01(cycle, salt, 1) * (maxX - minX);
+  const y = minY + presentationHash01(cycle, salt, 2) * (maxY - minY);
+  const hue = Math.floor(presentationHash01(cycle, salt, 3) * 360);
+  const fade = 1 - age / 84;
+  ctx.save();
+  ctx.globalAlpha = fade * 0.85;
+  ctx.fillStyle = `hsl(${hue} 90% 70%)`;
+  for (let spark = 0; spark < 16; spark += 1) {
+    const angle = (spark / 16) * Math.PI * 2 + presentationHash01(cycle, salt, spark) * 0.3;
+    const speed = 1.4 + presentationHash01(cycle, salt, spark + 40) * 0.9;
+    const sx = x + Math.cos(angle) * speed * age;
+    const sy = y + Math.sin(angle) * speed * age + age * age * 0.012;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 1.6 + fade * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  if (age < 12) ambientGlow(x, y, 70, "255,230,190", (12 - age) / 12 * 0.35);
+}
+
+function drawStageAmbient(frame, centre, reaction) {
+  if (state.performance.trailScale === 0) return;
+  const reduced = state.accessibility.reducedMotion;
+  const f = reduced ? 0 : frame;
+  const skyX = (centre - W * 0.5) * -0.06;
+  const stage = state.stage;
+  ctx.save();
+  if (stage === "vet") {
+    // Floodlights breathe, a blimp crawls the sky, fireworks pop over the bowl.
+    for (const [lx, ly] of [[125, 88], [1230, 232]]) {
+      ambientGlow(lx + skyX * 0.5, ly, 90, "255,236,190", 0.09 + Math.sin(f * 0.03 + lx) * 0.035);
+    }
+    if (!reduced) {
+      const blimpX = ((f * 0.32 + 700) % (W + 760)) - 380 + skyX;
+      const blimpY = 66 + Math.sin(f * 0.008) * 5;
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = "#8d96a3";
+      ctx.beginPath();
+      ctx.ellipse(blimpX, blimpY, 62, 17, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#5c6470";
+      ctx.fillRect(blimpX - 12, blimpY + 15, 24, 7);
+      ctx.beginPath();
+      ctx.moveTo(blimpX - 58, blimpY - 4); ctx.lineTo(blimpX - 74, blimpY - 14); ctx.lineTo(blimpX - 70, blimpY + 6);
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+      if (f % 70 < 9) ambientGlow(blimpX + 48, blimpY - 8, 9, "255,70,60", 0.9);
+      ambientFirework(f, 560, 11, 380, 900, 70, 180);
+      ambientFirework(f + 233, 740, 29, 300, 980, 60, 170);
+    }
+  } else if (stage === "wildwood") {
+    // The wheel's rim lights turn, the sign chases, a plane crosses, a ship
+    // sits on the horizon.
+    const cx = 222 + skyX, cy = 240, radius = 83;
+    for (let bulb = 0; bulb < 18; bulb += 1) {
+      const angle = (bulb / 18) * Math.PI * 2 + f * 0.007;
+      const hue = (bulb * 40 + f * 0.6) % 360;
+      ctx.fillStyle = `hsla(${hue}, 95%, 72%, .75)`;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let bulb = 0; bulb < 28; bulb += 1) {
+      const lit = ((bulb - Math.floor(f * 0.18)) % 7 + 7) % 7 === 0;
+      if (!lit) continue;
+      ambientGlow(368 + bulb * 24 + skyX * 0.3, 234, 7, "255,228,200", 0.55);
+    }
+    if (!reduced) {
+      const planeX = W + 200 - ((f * 0.85) % (W + 460)) + skyX;
+      const planeY = 52 + Math.sin(f * 0.004) * 4;
+      ctx.fillStyle = "rgba(210,216,226,.55)";
+      ctx.fillRect(planeX - 7, planeY, 14, 2);
+      if (f % 50 < 6) ambientGlow(planeX - 8, planeY + 1, 7, "255,80,70", 0.9);
+      if ((f + 25) % 50 < 4) ambientGlow(planeX + 8, planeY + 1, 7, "230,240,255", 0.9);
+    }
+    const shipX = 1040 - ((f * 0.04) % 820) + skyX * 0.4;
+    for (let light = 0; light < 5; light += 1) {
+      ambientGlow(shipX + light * 7, 365 + (light % 2), 4, "255,214,150", 0.55);
+    }
+  } else if (stage === "buffet") {
+    // Kitchen staff cross the pass-through, a wok flares, pendants breathe.
+    const crossing = (period, salt, direction, speed, y, height) => {
+      const age = (f + salt) % period;
+      const duration = 840 / speed;
+      if (age > duration) return;
+      const progress = age / duration;
+      const x = direction > 0 ? 250 + progress * 840 : 1090 - progress * 840;
+      const bob = Math.abs(Math.sin(age * 0.35)) * 2;
+      ctx.fillStyle = "rgba(24,20,18,.58)";
+      ctx.beginPath();
+      ctx.ellipse(x, y + 12 - bob, 9, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(x - 12, y + 22 - bob, 24, height);
+      ctx.fillStyle = "rgba(235,235,235,.5)";
+      ctx.fillRect(x - 7, y - bob, 14, 9);
+    };
+    if (!reduced) {
+      crossing(700, 0, 1, 4.2, 132, 36);
+      crossing(1130, 410, -1, 3.3, 136, 34);
+    }
+    const flare = (f + 170) % 330;
+    if (flare < 14) ambientGlow(1040, 158, 60, "255,170,70", (14 - flare) / 14 * 0.6);
+    for (const px of [40, 330, 640, 940, 1240]) {
+      ambientGlow(px, 74, 46, "255,196,120", 0.08 + Math.sin(f * 0.05 + px) * 0.03);
+    }
+  } else if (stage === "cruise") {
+    // Funnel smoke, gulls over the water, a ship on the horizon.
+    if (!reduced) {
+      for (let puff = 0; puff < 7; puff += 1) {
+        const age = (f + puff * 41) % 290;
+        const t = age / 290;
+        ctx.globalAlpha = (1 - t) * 0.32;
+        ctx.fillStyle = "#d9dde3";
+        ctx.beginPath();
+        ctx.arc(740 + skyX + t * 150 + Math.sin(age * 0.05 + puff) * 6, 18 - t * 70, 7 + t * 22, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      for (let gull = 0; gull < 5; gull += 1) {
+        const lane = gull % 2 === 0 ? -1 : 1;
+        const gx = ((f * (0.35 + gull * 0.07) + gull * 260) % (W + 260)) - 130;
+        const gy = 90 + gull * 34 + Math.sin(f * 0.012 + gull) * 16;
+        if (gx > 330 && gx < 960) continue;
+        ambientGull(gx + skyX * (1 + lane * 0.2), gy, Math.sin(f * 0.28 + gull * 1.7) * 4, 8 + (gull % 3) * 2, 0.75);
+      }
+    }
+    const shipX = 40 + ((f * 0.03) % 260) + skyX * 0.3;
+    ctx.fillStyle = "rgba(226,232,240,.6)";
+    ctx.fillRect(shipX, 296, 26, 5);
+    ctx.fillRect(shipX + 6, 291, 12, 5);
+  } else if (stage === "janney") {
+    // Moths orbit the sodium lamp, TVs flicker in the rowhouses, a car's
+    // lights sweep the far street, a plane blinks over the roofs.
+    if (!reduced) {
+      for (let moth = 0; moth < 6; moth += 1) {
+        const a = f * (0.09 + moth * 0.013) + moth * 1.3;
+        const r = 9 + Math.sin(f * 0.031 + moth * 2.1) * 8 + moth * 2;
+        ctx.fillStyle = "rgba(255,236,190,.85)";
+        ctx.beginPath();
+        ctx.arc(533 + skyX * 0.4 + Math.cos(a) * r, 140 + Math.sin(a * 1.4) * r * 0.55, 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    for (const [wx, wy, ww, wh, salt] of [[62, 38, 22, 20, 1], [137, 38, 22, 20, 2], [196, 182, 22, 24, 3], [1050, 188, 22, 26, 4]]) {
+      const flicker = presentationHash01(Math.floor(f / 5), salt);
+      if (flicker > 0.45) ambientGlow(wx + ww * 0.5 + skyX * 0.4, wy + wh * 0.5, 26, "150,190,255", 0.12 + flicker * 0.2);
+    }
+    if (!reduced) {
+      const pass = f % 760;
+      if (pass < 160) {
+        const x = 330 + (pass / 160) * 380 + skyX * 0.5;
+        ambientGlow(x, 196, 90, "255,225,170", 0.16);
+        ambientGlow(x + 14, 200, 8, "255,250,230", 0.9);
+        ambientGlow(x + 30, 200, 8, "255,250,230", 0.9);
+      }
+      const planeX = ((f * 0.55) % (W + 300)) - 150 + skyX;
+      if (f % 46 < 5) ambientGlow(planeX, 44, 6, "255,90,80", 0.85);
+      if ((f + 23) % 46 < 3) ambientGlow(planeX + 10, 44, 6, "220,235,255", 0.85);
+    }
+  } else if (stage === "somerset") {
+    // The corner signal cycles, headlights come up the side street, pigeons
+    // peck the wet sidewalk and scatter now and then.
+    const cycle = f % 720;
+    const signal = cycle < 380 ? "255,64,50" : cycle < 440 ? "255,190,60" : "80,230,120";
+    ambientGlow(1193 + skyX * 0.3, 67, 9, signal, 0.85);
+    if (!reduced) {
+      const pass = f % 820;
+      if (pass < 170) {
+        const t = pass / 170;
+        const x = 385 + t * 175 + skyX * 0.5;
+        const size = 4 + t * 10;
+        ambientGlow(x, 286, 40 + t * 60, "255,236,200", 0.14 + t * 0.12);
+        ambientGlow(x - size, 288, size, "255,250,235", 0.9);
+        ambientGlow(x + size, 288, size, "255,250,235", 0.9);
+      }
+      for (let bird = 0; bird < 3; bird += 1) {
+        const scatter = (f + bird * 90) % 900;
+        const fly = scatter < 60 ? scatter / 60 : 0;
+        const bx = 150 + bird * 26 + skyX * 0.2 + fly * (60 + bird * 20) + (scatter >= 60 ? 0 : 0);
+        const by = 332 + (bird % 2) * 4 - fly * (90 + bird * 15) + (fly ? 0 : Math.abs(Math.sin(f * 0.11 + bird)) * -2);
+        ctx.fillStyle = "rgba(120,124,132,.9)";
+        ctx.beginPath();
+        ctx.ellipse(bx, by, 5, 3.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(bx + 4, by - 2, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        if (fly) ambientGull(bx, by - 3, Math.sin(f * 0.5 + bird) * 4, 6, 0.7);
+      }
+    }
+    if (reaction > 0.6) ambientGlow(640, 250, 260, "255,220,180", (reaction - 0.6) * 0.08);
+  }
+  ctx.restore();
+}
+
 function drawBoardwalkAtmosphere(frame, centre) {
   ctx.save();
   // Seagulls drifting over the ocean.
@@ -26881,7 +27211,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.6");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.7");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -28181,7 +28511,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "4.6-flatout",
+  version: "4.7-crowdwork",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -28369,6 +28699,10 @@ window.__finalBlowEngine = {
         enhanced: trap.enhanced,
       })),
       crowd: crowdSnapshot(state.crowd, state.simulationTick, { viewLeft: 0, viewRight: W }),
+      crowdSprites: {
+        manifest: Boolean(crowdSheets.manifest),
+        ready: Boolean(state.crowd?.people?.some((person) => person.sprite && crowdSpriteCharacter(person))),
+      },
       crowdReaction: Number(state.crowdReaction.toFixed(3)),
       violence: {
         bloodParticles: state.particles.filter((particle) => particle.kind === "blood").length,

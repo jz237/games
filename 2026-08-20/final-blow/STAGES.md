@@ -175,3 +175,29 @@ The stage shares the same floor line and bounds as the rest of the roster.
 Stage weapon: the **souvenir cup** — the backlog left this one TBD, and a giant
 frozen-drink cup is the most on-theme object on a budget pool deck: slow, wobbly,
 a big soft hitbox and a slushy burst that briefly slows whoever wears it.
+
+## 4.7 — Painted bystanders and ambient life
+
+The canvas pedestrians on the Vet, Wildwood, the buffet and the pool deck are
+now **painted characters** instead of vector figures: eight per stage variant,
+generated as one 4x4 sheet per four characters (`assets/crowd/<variant>-N.webp`,
+built by `tools/build_crowd_sheets.py` from the archived raw generations), each
+with a stand / weight-shift / cheer / stride cell. The crowd engine is unchanged
+— routes, pauses, postures and palettes still come off the seeded crowd stream —
+and a separate seeded stream deals each person a character (neighbours never
+share one) and each scuffle or pool incident three distinct members. Walkers
+alternate stride and stand on the gait clock, idlers shift their weight on a
+personal timer, and a stirred crowd throws its arms up person by person past
+each one's own threshold. Sheets load lazily; the vector figures remain the
+fallback until they arrive. Somerset keeps its plate-baked people and Janney
+its cats.
+
+`drawStageAmbient` adds frame-driven background life pinned to plate landmarks:
+Vet — breathing floodlights, a blimp, fireworks over the bowl; Wildwood —
+turning wheel lights, a chasing sign, a passing plane, a ship on the horizon;
+buffet — kitchen staff crossing the pass-through, a wok flare, breathing
+pendants; cruise — funnel smoke, gulls, a horizon ship; Janney — moths at the
+sodium lamp, TV flicker in the rowhouses, headlights sweeping the far street, a
+plane; Somerset — a cycling corner signal, a car coming up the side street,
+pigeons that scatter. Everything is a pure function of the simulation tick,
+frozen under reduced motion and skipped on the battery profile.
