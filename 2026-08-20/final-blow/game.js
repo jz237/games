@@ -8,6 +8,7 @@ import {
   SIMULATION_HZ,
   SIMULATION_STEP_SECONDS,
   createAttackInstance,
+  whiffRecoveryFrames,
   hashSeed,
   transitionFighterState,
 } from "./engine/foundation.mjs";
@@ -67,6 +68,7 @@ import {
   buildUnifiedAcceptMasks,
   buildUnifiedExtAcceptMasks,
   groundedStanceBeat,
+  STRIDE_CADENCE,
   strideClockAdvance,
   unifiedExtPose,
   unifiedPose,
@@ -14364,7 +14366,7 @@ function updateFighter(fighter, opponent, input, dt) {
           // steps at the rate the ground goes past, and winds the four-key
           // cycle BACKWARDS. Full-speed forward walk returns exactly `dt`.
           fighter.strideTime += strideClockAdvance(fighter.vx, fighter.facing,
-            fighter.movement.forwardWalkSpeed, dt);
+            fighter.movement.forwardWalkSpeed / STRIDE_CADENCE, dt);
         }
 
         // Down + HP over a grounded weapon picks it up; outside pickup range the
@@ -14434,6 +14436,13 @@ function updateFighter(fighter, opponent, input, dt) {
     else if (attack.advanceSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = fighter.facing * attack.advanceSpeed;
     else fighter.vx *= fighter.grounded ? 0.82 : 0.985;
     fighter.crouch = attack.profileId.startsWith("crouch-");
+    // v4.4 TEMPO: the active window closed on nothing — extend this instance's
+    // recovery. The instance is per-swing and rollback-cloned, so the stretch
+    // is deterministic and the follow-through pose simply holds longer.
+    if (!attack.whiffTaxed && fighter.attackFrame >= attack.activeEndFrame && !fighter.attackConnected) {
+      attack.whiffTaxed = true;
+      attack.totalFrames += whiffRecoveryFrames(attack);
+    }
     const cancelled = tryStartupChordOverride(fighter, input) || tryAttackCancel(fighter, input);
     if (!cancelled && fighter.attackFrame >= attack.totalFrames) {
       fighter.linkWindow = fighter.attackConnected ? {
@@ -15878,11 +15887,11 @@ function updateComboState() {
 // easier to follow without loosening a single link.
 const VIOLENCE_TIERS = Object.freeze({
   light: Object.freeze({ particles: 10, speed: 250, life: 0.72, size: 4.2, shake: 0.16, hitstop: 0.1, crowd: 0.12, decal: false }),
-  heavy: Object.freeze({ particles: 22, speed: 430, life: 1.08, size: 6.2, shake: 0.31, hitstop: 0.133, crowd: 0.34, decal: true }),
-  special: Object.freeze({ particles: 30, speed: 520, life: 1.24, size: 7.2, shake: 0.43, hitstop: 0.167, crowd: 0.56, decal: true }),
-  throw: Object.freeze({ particles: 26, speed: 470, life: 1.18, size: 7, shake: 0.46, hitstop: 0.167, crowd: 0.62, decal: true }),
-  weapon: Object.freeze({ particles: 28, speed: 540, life: 1.28, size: 7.6, shake: 0.5, hitstop: 0.183, crowd: 0.68, decal: true }),
-  super: Object.freeze({ particles: 44, speed: 700, life: 1.58, size: 9, shake: 0.76, hitstop: 0.217, crowd: 1.05, decal: true }),
+  heavy: Object.freeze({ particles: 22, speed: 430, life: 1.08, size: 6.2, shake: 0.31, hitstop: 0.167, crowd: 0.34, decal: true }),
+  special: Object.freeze({ particles: 30, speed: 520, life: 1.24, size: 7.2, shake: 0.43, hitstop: 0.2, crowd: 0.56, decal: true }),
+  throw: Object.freeze({ particles: 26, speed: 470, life: 1.18, size: 7, shake: 0.46, hitstop: 0.2, crowd: 0.62, decal: true }),
+  weapon: Object.freeze({ particles: 28, speed: 540, life: 1.28, size: 7.6, shake: 0.5, hitstop: 0.217, crowd: 0.68, decal: true }),
+  super: Object.freeze({ particles: 44, speed: 700, life: 1.58, size: 9, shake: 0.76, hitstop: 0.25, crowd: 1.05, decal: true }),
 });
 
 function violenceTier(kind = "light") {
@@ -26812,7 +26821,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.3");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.4");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -28112,7 +28121,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "4.3-meshfighters",
+  version: "4.4-tempo",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);

@@ -4533,6 +4533,14 @@ export function groundedStanceBeat({
  * At a full-speed forward walk the ratio is 1 and this returns `dt` unchanged,
  * so a fighter walking forwards keeps the shipped cadence byte-for-byte.
  */
+// v4.4 TEMPO: the drawn contact keys plant the feet ~0.66 of a body height
+// apart, so one six-key cycle (two steps) covers far more ground than the
+// 153px a full-speed walk made in the 0.4s cycle — the legs were cycling
+// faster than the floor went past. The caller divides the reference speed by
+// this, so a full-speed walk now winds the cycle at 0.62x (≈0.65s per cycle)
+// and the planted foot stays put on the floor.
+export const STRIDE_CADENCE = 0.62;
+
 export function strideClockAdvance(vx, facing, forwardWalkSpeed, dt) {
   const speed = Number.isFinite(vx) ? vx : 0;
   if (Math.abs(speed) <= WALK_POSE_MIN_SPEED) return 0;

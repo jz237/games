@@ -265,6 +265,28 @@ export const ARCADE_TUNING = deepFreeze({
   launchVelocity: 2180 / 1850,
 });
 
+// v4.4 TEMPO: a swing that touches nothing pays extra recovery, scaled by the
+// move's own recovery so a whiffed jab costs a few frames and a whiffed special
+// costs a real punish window. Confirmed hits and blocked hits pay nothing, so
+// reads and pressure keep their exact frame data; only mashing gets slower.
+// Moves that launch a projectile, deploy a trap or hurl an object connect
+// later through what they spawned, so they are exempt.
+export const WHIFF_RECOVERY_TAX = deepFreeze({
+  light: 0.5,
+  heavy: 0.35,
+  special: 0.3,
+  throw: 0.25,
+});
+export const WHIFF_RECOVERY_MINIMUM_FRAMES = 2;
+
+export function whiffRecoveryFrames(attack) {
+  if (!attack || attack.projectile || attack.trap || attack.throwableId) return 0;
+  const kind = WHIFF_RECOVERY_TAX[attack.baseKind] !== undefined ? attack.baseKind : attack.kind;
+  const scale = WHIFF_RECOVERY_TAX[kind];
+  if (!scale) return 0;
+  return Math.max(WHIFF_RECOVERY_MINIMUM_FRAMES, Math.round((attack.recoveryFrames || 0) * scale));
+}
+
 function tuned(table, kind, value, { round = false, minimum = 0 } = {}) {
   const scale = table[kind] ?? 1;
   const scaled = value * scale;
