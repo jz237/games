@@ -252,6 +252,30 @@ function maskBlocked(px, py) {
 
 // painterly assets (graceful fallback to placeholder shapes until loaded)
 const IMGS = {};
+// it138: PRE-RENDERED EFFECT SPRITES. The reel-driven effects pass first shipped
+// as per-entity createRadialGradient calls — tracer heads, fireball blobs — and
+// qa-perf paid for it immediately: median 45 -> 35.4fps with a tight 9.8 spread
+// (signal, not container noise). A gradient is built once here, at load, into an
+// offscreen canvas; the hot loop only ever drawImages it. Alpha rides
+// globalAlpha, size rides the destination rect.
+const FXS = {};
+function fxSprite(key, px, paint) {
+  let c = FXS[key];
+  if (!c) {
+    c = document.createElement('canvas'); c.width = px; c.height = px;
+    paint(c.getContext('2d'), px);
+    FXS[key] = c;
+  }
+  return c;
+}
+function radialSprite(key, stops) {
+  return fxSprite(key, 64, (g2d, px) => {
+    const gr = g2d.createRadialGradient(px / 2, px / 2, 0, px / 2, px / 2, px / 2);
+    for (const [o, col] of stops) gr.addColorStop(o, col);
+    g2d.fillStyle = gr;
+    g2d.fillRect(0, 0, px, px);
+  });
+}
 let groundSlices = null; // [{y0}, canvas] pair-list: full-res bake, sliced to stay under mobile canvas limits
 const BAKE_S = S;        // bake at output resolution — 1:1 blit, zero scaling smudge
 const SLICES = 2;
@@ -2851,7 +2875,7 @@ function tick() {
   }
 
   // --- fx + visual particles ---
-  for (let i = G.fx.length - 1; i >= 0; i--) if (++G.fx[i].t > (G.fx[i].kind === 'bigboom' ? 30 : G.fx[i].kind === 'muzzle' ? 4 : G.fx[i].kind === 'impact' ? 5 : 24)) G.fx.splice(i, 1);
+  for (let i = G.fx.length - 1; i >= 0; i--) if (++G.fx[i].t > ((G.fx[i].kind === 'bigboom' || G.fx[i].kind === 'boom') ? 30 : G.fx[i].kind === 'muzzle' ? 4 : G.fx[i].kind === 'impact' ? 5 : 24)) G.fx.splice(i, 1);
   updateParticles();
 
   // --- bridge ambush: the trap springs mid-crossing --------------------------
@@ -3171,11 +3195,30 @@ function render(alpha) {
 
   // player grenades (olive, arcing)
   for (const n of G.nades) {
+    // it138: the reel showed the signature weapon flying as a FLAT GREEN PEA.
+    // A grenade in flight is a tumbling stick: an elongated body rotating with
+    // distance travelled, a moving highlight, and a ground shadow that
+    // SHRINKS as it climbs — the shadow is what sells the arc from overhead.
     const nx = IX(n), ny = IY(n);
-    const z = Math.sin(Math.PI * (IT(n) / n.ttl)) * 8;
-    drawShadow(nx, ny - cy, 2);
-    ctx.fillStyle = '#4d6030';
-    ctx.beginPath(); ctx.arc(nx * S, (ny - cy - z) * S, 2.4 * S, 0, 7); ctx.fill();
+    const ph = IT(n) / n.ttl;
+    const z = Math.sin(Math.PI * ph) * 8;
+    drawShadow(nx, ny - cy, Math.max(1, 2.6 - z * 0.18));
+    const px2 = nx * S, py2 = (ny - cy - z) * S;
+    const rot = ph * 12.6 + (n.px || 0) * 0.3;   // ~2 tumbles across the flight
+    ctx.save();
+    ctx.translate(px2, py2);
+    ctx.rotate(rot);
+    const sc3 = 1 + z * 0.05;                    // a touch bigger at apex (closer)
+    // dark body
+    ctx.fillStyle = '#39492a';
+    ctx.beginPath(); ctx.ellipse(0, 0, 3.1 * sc3 * S, 1.7 * sc3 * S, 0, 0, 7); ctx.fill();
+    // stick handle
+    ctx.fillStyle = '#6b5638';
+    ctx.fillRect(1.4 * sc3 * S, -0.7 * sc3 * S, 2.2 * sc3 * S, 1.4 * sc3 * S);
+    // rim light along the top edge
+    ctx.strokeStyle = 'rgba(220,225,190,0.55)'; ctx.lineWidth = 0.6 * S;
+    ctx.beginPath(); ctx.ellipse(0, -0.4 * sc3 * S, 2.6 * sc3 * S, 1.1 * sc3 * S, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+    ctx.restore();
   }
   // enemy tracers: hotter red so incoming fire reads instantly against Joe's
   ctx.save();
@@ -3189,12 +3232,15 @@ function render(alpha) {
     const bx = IX(b), by = IY(b);
     const hx = bx * S, hy = (by - cy) * S;
     const tx = (bx - ux * len) * S, ty = (by - cy - uy * len) * S;
-    // COLD palette: enemy fire must be readable as theirs at a glance
+    // COLD palette: enemy fire must be readable as theirs at a glance.
+    // it138: dark rim first — same contrast fix as the player tracer.
+    ctx.strokeStyle = 'rgba(10,30,22,0.5)'; ctx.lineWidth = (b.heavy ? 3.6 : 2.4) * S;
+    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
     const g = ctx.createLinearGradient(tx, ty, hx, hy);
     g.addColorStop(0, 'rgba(120,255,180,0)');
-    g.addColorStop(0.55, 'rgba(150,255,200,0.45)');
-    g.addColorStop(1, 'rgba(225,255,240,0.95)');
-    ctx.strokeStyle = g; ctx.lineWidth = (b.heavy ? 2.6 : 1.4) * S;
+    g.addColorStop(0.5, 'rgba(160,255,210,0.8)');
+    g.addColorStop(1, 'rgba(230,255,244,1)');
+    ctx.strokeStyle = g; ctx.lineWidth = (b.heavy ? 2.6 : 1.6) * S;
     ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
     if (b.heavy) { // a shell you can see coming
       ctx.fillStyle = 'rgba(255,235,200,0.9)';
@@ -3217,18 +3263,27 @@ function render(alpha) {
   for (const b of G.bullets) {
     const sp = Math.hypot(b.vx, b.vy) || 1;
     const ux = b.vx / sp, uy = b.vy / sp;
-    const len = Math.min(9, 2.5 + sp * 1.15);        // faster round, longer streak
+    const len = Math.min(12, 4 + sp * 1.3);          // faster round, longer streak
     const bx = IX(b), by = IY(b);
     const hx = bx * S, hy = (by - cy) * S;
     const tx = (bx - ux * len) * S, ty = (by - cy - uy * len) * S;
+    // it138: the critique reel showed player fire as a near-invisible speck —
+    // a warm streak at half-alpha over sunlit sand is CAMOUFLAGE, not a tracer.
+    // Contrast, not just brightness: a dark rim behind the streak separates it
+    // from any ground, then the hot core and an additive head bead ride on top.
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(45,28,10,0.55)'; ctx.lineWidth = 2.6 * S;
+    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.restore();
     const g = ctx.createLinearGradient(tx, ty, hx, hy);
     g.addColorStop(0, 'rgba(255,140,40,0)');          // tail dissolves into air
-    g.addColorStop(0.55, 'rgba(255,190,90,0.5)');
-    g.addColorStop(1, 'rgba(255,240,200,0.95)');      // hot head
-    ctx.strokeStyle = g; ctx.lineWidth = 1.5 * S;
+    g.addColorStop(0.5, 'rgba(255,200,100,0.85)');
+    g.addColorStop(1, 'rgba(255,244,210,1)');         // hot head
+    ctx.strokeStyle = g; ctx.lineWidth = 1.8 * S;
     ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,250,230,1)';
-    ctx.beginPath(); ctx.arc(hx, hy, 0.9 * S, 0, 7); ctx.fill();
+    const bead = radialSprite('tracer-head', [[0, 'rgba(255,250,235,0.95)'], [0.4, 'rgba(255,200,110,0.5)'], [1, 'rgba(255,150,50,0)']]);
+    ctx.drawImage(bead, hx - 3 * S, hy - 3 * S, 6 * S, 6 * S);
   }
   ctx.restore();
   ctx.restore();
@@ -3660,41 +3715,50 @@ function render(alpha) {
       ctx.beginPath(); ctx.arc(f.x * S, (f.y - cy) * S, (4 + f.t * 0.9) * S, 0, 7); ctx.stroke();
       continue;
     }
-    if (f.kind === 'bigboom') {
+    if (f.kind === 'bigboom' || f.kind === 'boom') {
       // staged: white-hot core -> shockwave ring -> rolling multi-blob fireball
       // -> smoke. Blob jitter is seeded from position + coarse time, so replays
       // and QA screenshots stay deterministic while the fire still roils.
+      // it138: the plain 'boom' — grenades, dumps, mortar hits, tank shells,
+      // cook-offs, i.e. MOST of the game's detonations — used to be a flat
+      // orange disc growing for 24 ticks (the critique reel showed a pale ring
+      // and a few dots as the game's signature effect). It now rides this
+      // renderer at 0.8 scale; one explosion language everywhere.
+      const sc2 = f.kind === 'boom' ? 0.8 : 1;
       const T2 = f.t, a = 1 - T2 / 30;
       const fl = 0.5 + 0.5 * Settings.flash;
       const ex2 = f.x * S, ey2 = (f.y - cy) * S;
       ctx.fillStyle = `rgba(70,58,44,${a * 0.5})`;
-      ctx.beginPath(); ctx.arc(ex2, ey2, (5 + T2 * 1.6) * S, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex2, ey2, (5 + T2 * 1.6) * sc2 * S, 0, 7); ctx.fill();
       if (T2 < 14) {
         ctx.strokeStyle = `rgba(255,225,175,${(1 - T2 / 14) * 0.5 * fl})`;
         ctx.lineWidth = Math.max(1, 2.6 - T2 * 0.16) * S;
-        ctx.beginPath(); ctx.arc(ex2, ey2, (3 + T2 * 2.5) * S, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(ex2, ey2, (3 + T2 * 2.5) * sc2 * S, 0, 7); ctx.stroke();
       }
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       if (T2 < 4) {
         ctx.fillStyle = `rgba(255,252,235,${(1 - T2 / 4) * fl})`;
-        ctx.beginPath(); ctx.arc(ex2, ey2, (5 + T2 * 3) * S, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex2, ey2, (5 + T2 * 3) * sc2 * S, 0, 7); ctx.fill();
       }
       let hh = ((f.x * 73856093) ^ (f.y * 19349663) ^ ((T2 >> 1) * 83492791)) >>> 0;
       const jr = () => { hh = (hh * 1103515245 + 12345) >>> 0; return ((hh >>> 9) / 8388608) - 1; };
       for (let bi = 0; bi < 4; bi++) {
-        const ox2 = jr() * (2 + T2 * 0.28) * S;
-        const oy2 = jr() * (2 + T2 * 0.22) * S - T2 * 0.22 * S; // fire climbs
-        const r = (2.2 + T2 * 0.55) * (0.72 + 0.28 * (((bi * 37 + T2) % 5) / 4)) * S;
-        const g2 = ctx.createRadialGradient(ex2 + ox2, ey2 + oy2, 0, ex2 + ox2, ey2 + oy2, r);
-        g2.addColorStop(0, `rgba(255,${215 - T2 * 5},95,${a * fl * 0.85})`);
-        g2.addColorStop(0.6, `rgba(235,${115 - T2 * 2},45,${a * 0.5})`);
-        g2.addColorStop(1, 'rgba(120,40,20,0)');
-        ctx.fillStyle = g2;
-        ctx.beginPath(); ctx.arc(ex2 + ox2, ey2 + oy2, r, 0, 7); ctx.fill();
+        const ox2 = jr() * (2 + T2 * 0.28) * sc2 * S;
+        const oy2 = (jr() * (2 + T2 * 0.22) - T2 * 0.22) * sc2 * S; // fire climbs
+        const r = (2.2 + T2 * 0.55) * (0.72 + 0.28 * (((bi * 37 + T2) % 5) / 4)) * sc2 * S;
+        const bkt = T2 < 10 ? 0 : T2 < 20 ? 1 : 2;
+        const blob = radialSprite('fireball-' + bkt, [
+          [0, `rgba(255,${215 - bkt * 50},95,0.9)`],
+          [0.6, `rgba(235,${115 - bkt * 20},45,0.55)`],
+          [1, 'rgba(120,40,20,0)']]);
+        const pa = ctx.globalAlpha;
+        ctx.globalAlpha = pa * Math.min(1, a * fl);
+        ctx.drawImage(blob, ex2 + ox2 - r, ey2 + oy2 - r, r * 2, r * 2);
+        ctx.globalAlpha = pa;
       }
       ctx.restore();
     } else {
-      ctx.fillStyle = f.kind === 'boom' ? `rgba(255,${180 - f.t * 6},60,${1 - f.t / 24})` : `rgba(255,255,255,${1 - f.t / 24})`;
+      ctx.fillStyle = `rgba(255,255,255,${1 - f.t / 24})`;
       ctx.beginPath(); ctx.arc(f.x * S, (f.y - cy) * S, (2 + f.t * 0.6) * S, 0, 7); ctx.fill();
     }
   }
@@ -3865,7 +3929,15 @@ function render(alpha) {
       lc.fillStyle = g2;
       lc.beginPath(); lc.arc(x, y, rs, 0, 7); lc.fill();
     };
-    if (amb.mode === 'night' && G.joe.alive) punch(IX(G.joe), IY(G.joe) - 5, 34, 0.78);
+    if (amb.mode === 'night') {
+      // it138: the reel showed area 3 as a uniform navy multiply — "brightness
+      // turned down", not night. A broad, very soft sheen down the middle of
+      // the view (read it as moonlight on the open path) gives the darkness
+      // depth without lifting the jungle edges, and the player's halo grows so
+      // Joe can never be lost against it.
+      punch(VIEW_W / 2, cy + VIEW_H * 0.5, VIEW_H * 0.62, 0.22);
+      if (G.joe.alive) punch(IX(G.joe), IY(G.joe) - 5, 42, 0.82);
+    }
     for (const f of G.fx) {
       if (f.kind === 'muzzle') punch(f.x, f.y, 22, 0.9);
       else if (f.kind === 'bigboom') punch(f.x, f.y, 48 * Math.min(1, f.t / 6 + 0.4), 0.95);
@@ -3901,19 +3973,42 @@ function render(alpha) {
     ctx.fillStyle = 'rgba(90,110,150,0.05)';
     ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
     ctx.save();
-    ctx.strokeStyle = 'rgba(205,225,248,0.21)';
-    ctx.lineWidth = 0.5 * S; ctx.lineCap = 'round';
+    // it138: the reel showed a handful of static ticks, not a dusk downpour.
+    // Two depth layers now — a dense faint FAR sheet and a sparser bright NEAR
+    // layer with longer, faster streaks — and both ride interpolated frame
+    // time, so the fall is smooth at 60fps instead of stepping with the 50Hz
+    // logic clock. Drop count scales with the view, so a tall phone gets a
+    // full screen of weather rather than the desktop card's ration.
+    const rt = G.frame + LERP;
+    const dens = Math.max(1, VIEW_H / 224);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(195,215,240,0.13)';
+    ctx.lineWidth = 0.45 * S;
     ctx.beginPath();
-    for (let i = 0; i < (perfLow ? 44 : 84); i++) {
-      const rx = ((i * 97.3 + G.wt * 2.7 + (i * i) * 0.71) % (VIEW_W + 30)) - 15;
-      const ry = ((i * 53.7 + G.wt * (5.4 + (i % 5) * 0.35)) % (VIEW_H + 24)) - 12;
+    const nFar = Math.round((perfLow ? 60 : 120) * dens);
+    for (let i = 0; i < nFar; i++) {
+      const fall = 4.6 + (i % 7) * 0.22;
+      const rx = ((i * 97.3 + rt * 1.9 + (i * i) * 0.71) % (VIEW_W + 30)) - 15;
+      const ry = ((i * 53.7 + rt * fall) % (VIEW_H + 24)) - 12;
       ctx.moveTo(rx * S, ry * S);
-      ctx.lineTo((rx - 1.4) * S, (ry + 6.4) * S);
+      ctx.lineTo((rx - 1.1) * S, (ry + 5) * S);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(215,232,252,0.32)';
+    ctx.lineWidth = 0.7 * S;
+    ctx.beginPath();
+    const nNear = Math.round((perfLow ? 26 : 52) * dens);
+    for (let i = 0; i < nNear; i++) {
+      const fall = 8.2 + (i % 5) * 0.5;
+      const rx = ((i * 61.7 + rt * 3.1 + i * i * 1.13) % (VIEW_W + 40)) - 20;
+      const ry = ((i * 91.3 + rt * fall) % (VIEW_H + 30)) - 15;
+      ctx.moveTo(rx * S, ry * S);
+      ctx.lineTo((rx - 2.4) * S, (ry + 11) * S);
     }
     ctx.stroke();
     // splash ticks where drops land
     ctx.fillStyle = 'rgba(210,230,250,0.20)';
-    for (let i = 0; i < (perfLow ? 6 : 12); i++) {
+    for (let i = 0; i < Math.round((perfLow ? 8 : 18) * dens); i++) {
       const ph = (G.wt + i * 31) % 22;
       if (ph > 3) continue;
       const sx2 = (i * 71.9 + Math.floor(G.wt / 22) * 137.3) % VIEW_W;
@@ -4439,7 +4534,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.70.1-quiet', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.71.0-spectacle', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
