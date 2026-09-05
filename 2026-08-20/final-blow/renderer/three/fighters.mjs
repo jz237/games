@@ -820,8 +820,12 @@ export class FighterLayer {
 
     // Down pose: the 2D rotates the sprite flat; canvas rotation is
     // y-down/clockwise, so the three z-rotation flips sign.
+    // v4.6 PRONE parity: the host measures how far this drawing still has
+    // to tilt to lie down (0 for a cell authored flat), same as the 2D path.
+    const downTilt = fighter.down
+      ? (host.downTiltFor ? host.downTiltFor(fighter.def.id, bankName, pose.frame) : 1.35) : 0;
     let rootRotation = 0;
-    if (fighter.down) rootRotation = facing * 1.35;
+    if (downTilt > 0) rootRotation = facing * downTilt;
     if (fighter.cinematicRotation) rootRotation += -fighter.cinematicRotation;
     if (fighter.airTechFlipFrames > 0) {
       const flip = 1 - fighter.airTechFlipFrames / 14;
@@ -838,7 +842,7 @@ export class FighterLayer {
       if (motion.flipRotation) rootRotation += -motion.flipRotation;
     }
     rig.root.rotation.z = rootRotation;
-    if (fighter.down) rig.root.position.x += -facing * 45 * PX;
+    if (downTilt > 0) rig.root.position.x += -facing * 45 * (downTilt / 1.35) * PX;
     // v2.6 BODY-FIRST parity: the shared world-space body offset (attack
     // extension / victim stagger step). Sim x maps straight to world x; sim
     // y is down-positive so it flips for world y.

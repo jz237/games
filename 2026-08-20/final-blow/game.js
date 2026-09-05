@@ -19810,6 +19810,59 @@ const WALK_SHEET_ADJUST = Object.freeze({});
 // this one.
 const UNIFIED_SHEET_ADJUST = Object.freeze({ commissioner: 1.033 });
 
+// v4.6 PRONE: how far a downed fighter's DRAWING still has to be tilted to
+// lie on the street. The old fixed 1.35rad lay-down assumed an upright hit
+// pose; the unified knockdown cell is authored flat on every sheet, and four
+// base cells (donald, cyraxx, ali, devil) are drawn already falling back, so
+// the fixed tilt stood those bodies on their heads with the feet in the air.
+// Measured once per (fighter, bank, frame) from the cell's alpha: the
+// principal axis of the opaque pixels gives the body's recline from vertical
+// and the tilt supplies only the remainder. Render-only; never touches the sim.
+const DOWN_TILT_RADIANS = 1.35;
+const downTiltCache = new Map();
+function downTiltFor(fighterId, bank, frame) {
+  const key = `${fighterId}:${bank}:${frame}`;
+  const cached = downTiltCache.get(key);
+  if (cached !== undefined) return cached;
+  const atlas = paletteAtlas(fighterId, 0, bank);
+  const width = atlas?.naturalWidth || atlas?.width || 0;
+  if (!width || (atlas instanceof HTMLImageElement && !atlas.complete)) return DOWN_TILT_RADIANS;
+  const cell = Math.floor(width / 4);
+  const sample = 64;
+  let data;
+  try {
+    const scratch = document.createElement("canvas");
+    scratch.width = sample;
+    scratch.height = sample;
+    const sctx = scratch.getContext("2d", { willReadFrequently: true });
+    sctx.drawImage(atlas, (frame % 4) * cell, Math.floor(frame / 4) * cell, cell, cell, 0, 0, sample, sample);
+    data = sctx.getImageData(0, 0, sample, sample).data;
+  } catch {
+    downTiltCache.set(key, DOWN_TILT_RADIANS);
+    return DOWN_TILT_RADIANS;
+  }
+  let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (let y = 0; y < sample; y += 1) {
+    for (let x = 0; x < sample; x += 1) {
+      if (data[(y * sample + x) * 4 + 3] <= 64) continue;
+      n += 1; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+    }
+  }
+  let tilt = DOWN_TILT_RADIANS;
+  if (n >= 16) {
+    const mx = sx / n, my = sy / n;
+    const cxx = sxx / n - mx * mx, cyy = syy / n - my * my, cxy = sxy / n - mx * my;
+    const spread = Math.hypot(cxx - cyy, 2 * cxy);
+    const anisotropy = spread / Math.max(1e-6, cxx + cyy);
+    const major = 0.5 * Math.atan2(2 * cxy, cxx - cyy);
+    const recline = Math.abs(Math.PI / 2 - Math.abs(major));
+    // A compact, roundish drawing (a crumpled body) has no axis to lay down.
+    tilt = anisotropy < 0.2 ? 0 : clamp(DOWN_TILT_RADIANS - recline, 0, DOWN_TILT_RADIANS);
+  }
+  downTiltCache.set(key, tilt);
+  return tilt;
+}
+
 function bankSheetAdjust(fighterId, bank) {
   if (bank === "specials") return MOVE_SHEET_ADJUST[fighterId] || 1;
   // v2.9 FLOW: the motion2 sheets share the motion bank's build
@@ -20009,9 +20062,12 @@ function drawFighter(fighter, time) {
   if (finisherHoldWinner) ctx.rotate(Math.sin(time * 0.0012 + 0.8) * 0.011);
   if (fighter.cinematicScale !== 1) ctx.scale(fighter.cinematicScale, fighter.cinematicScale);
 
-  if (fighter.down) {
-    ctx.rotate(-fighter.facing * 1.35);
-    ctx.translate(-fighter.facing * 45, 17);
+  // v4.6 PRONE: tilt the drawing only as far as it still needs to lie down.
+  const downTilt = fighter.down ? downTiltFor(fighter.def.id, pose.bank, frame) : 0;
+  if (downTilt > 0) {
+    const share = downTilt / DOWN_TILT_RADIANS;
+    ctx.rotate(-fighter.facing * downTilt);
+    ctx.translate(-fighter.facing * 45 * share, 17 * share);
   }
 
   // Release 1.7: air-recovery back-flip — one backward rotation across the
@@ -26825,7 +26881,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.5");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.6");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -28125,7 +28181,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "4.5-rearm",
+  version: "4.6-flatout",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -29982,6 +30038,7 @@ function ensureCinema3d() {
       // and the CINEMA 3D rig will disagree about the guard-flinch height.
       unifiedSheetAdjust: UNIFIED_SHEET_ADJUST,
       isUnifiedFighter: unifiedFighterReady,
+      downTiltFor,
       // v2.9 critic round: the per-cell corrections travel the same bridge so
       // CINEMA 3D plants and scales identically to the 2D path (M3 oversized
       // crouch cells, M5 the Commissioner's base-bank floor registration).
