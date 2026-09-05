@@ -209,7 +209,31 @@ function loadPlates(area) {
   for (const p of PLATES) {
     const im = new Image();
     im.src = p.src;
-    im.onload = () => { p.img = im; };
+    im.onload = () => {
+      // it139: FEATHER EVERY PLATE'S BOTTOM OVER ITS OVERLAP WITH THE PLATE BELOW.
+      // Plates carry baked alpha ramps on their TOP edges, but the ramp is longer
+      // than the overlap between neighbours (a3-swamp ends at 534, a3-camp starts
+      // at 503 — 31px), so where the upper plate stops the lower is still
+      // semi-transparent: a hole onto the darker tile bake, read as a hard
+      // full-width tonal step. Measured on the mobile night capture: luminance
+      // ramps 37 -> 51 then snaps to 35 at the boundary row. Feathering the
+      // upper plate's bottom over exactly the overlap band makes the pair
+      // crossfade symmetrically. The lowest plate feathers onto the bake too.
+      const below = PLATES.filter((q) => q !== p && q.y0 > p.y0 && q.y0 < p.y1).sort((a, b) => a.y0 - b.y0)[0];
+      const lowest = PLATES.every((q) => q.y1 <= p.y1);
+      const overlapPx = below ? (p.y1 - below.y0) : (lowest ? 26 : 0);
+      if (overlapPx > 0 && im.width && im.height) {
+        const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+        const g2d = c.getContext('2d');
+        g2d.drawImage(im, 0, 0);
+        const fe = Math.min(im.height, Math.round(im.height * (overlapPx / Math.max(1, p.y1 - p.y0))));
+        const gr = g2d.createLinearGradient(0, im.height - fe, 0, im.height);
+        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
+        g2d.globalCompositeOperation = 'destination-out';
+        g2d.fillStyle = gr; g2d.fillRect(0, im.height - fe, im.width, fe);
+        p.img = c;
+      } else p.img = im;
+    };
     const m = M[p.name];
     if (!m) continue;
     const grid = new Uint8Array(m.w * m.h);
@@ -1392,8 +1416,17 @@ function autopilotTick() {
 
   // FINALE: hold a firing line south of the gate while the garrison pours,
   // then surge through the open exit — wandering mid-finale loses the war
-  if (G.finale && G.state === 'play' && !breakthrough) {
-    const ex2 = A.exit || { y: 58, x0: 112, x1: 162 };
+  // it139: the hold-line logic below has NO pathfinding — it is "align to the
+  // gate lane, press up". The finale arms with Joe already north of the river,
+  // but it persists across deaths (arcade-faithful) and a respawn puts him
+  // back south of it: aligned to x~137 and pushing up, he drove into the west
+  // river's bank for 6,000 ticks while the bridge sat at x 180-208 (mobile
+  // battery: finale armed, garrison dead, enemies=0, Joe pinned at (139,297)).
+  // So the hold line only takes over NEAR the gate; anywhere else the normal
+  // pathfinder — which knows the bridge — brings him back.
+  const exF = A.exit || { y: 58, x0: 112, x1: 162 };
+  if (G.finale && G.state === 'play' && !breakthrough && J.y < exF.y + 150) {
+    const ex2 = exF;
     const lane2 = (ex2.x0 + ex2.x1) / 2;
     if (G.finale.phase === 'done') {
       const want2 = { up: true };
@@ -1674,6 +1707,14 @@ function rectsAt(x, y, w, h) {
   // are the it113 measurement; they outrank whatever the paint reads as.
   if (A.water) for (const wr of A.water) {
     if (x < wr.x1 && x + w > wr.x0 && y < wr.y1 && y + h > wr.y0) return wr;
+  }
+  // it139: A.solid — forced-solid rects for painted geometry the mask reads as
+  // open. Area 2's trench wall has two decorative alcoves on its south face
+  // (x 36-48 and 68-92) that the mask left WALKABLE: blind pockets you can walk
+  // into and not through. They wedged the demo bot for hours (it135-136) and
+  // will wedge a human just the same. Sealing them is a map fix, not a bot fix.
+  if (A.solid) for (const sr of A.solid) {
+    if (x < sr.x1 && x + w > sr.x0 && y < sr.y1 && y + h > sr.y0) return sr;
   }
   for (const o of A.obstacles) {
     if (maskRange(o.y + o.h / 2)) continue; // plate regions collide via their mask
@@ -2784,6 +2825,33 @@ function tick() {
     if (e.coverCd > 0) e.coverCd--;
     e.x = Math.max(6, Math.min(A.width - 6, e.x));
   }
+  // it139: SOFT SEPARATION. The motion clips showed pairs of riflemen walking
+  // literally on top of each other — spawned on one point and advancing on the
+  // same line, they never diverge. Infantry that overlap get a gentle sideways
+  // push apart; vehicles and emplacements are left alone (a truck unloading a
+  // squad is supposed to have them at its tailgate).
+  for (let i = 0; i < G.enemies.length; i++) {
+    const a = G.enemies[i];
+    if (a.gone || a.dieT !== undefined || a.type === 'truck' || a.type === 'tank' || a.type === 'moto' || a.type === 'mortar') continue;
+    if (a.mode === 'engage' || a.fireT > 0) continue;   // a firing line holds its own spacing
+    for (let j = i + 1; j < G.enemies.length; j++) {
+      const b = G.enemies[j];
+      if (b.gone || b.dieT !== undefined || b.type === 'truck' || b.type === 'tank' || b.type === 'moto' || b.type === 'mortar') continue;
+      // walkers only: an ENGAGED soldier strafes and sidesteps on his own, and
+      // nudging him off Joe's column made every incoming round "miss anyway" —
+      // qa-combat's dodge check never saw a threatening bullet (60 for 60)
+      if (b.mode === 'engage' || b.fireT > 0) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      // body width, not centre distance: a rifleman is ~10px wide, so pairs at
+      // 8-12px apart still overlap on screen (the mobile reel caught two walking
+      // shoulder-inside-shoulder at exactly that spacing)
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 10) {
+        const push = dx === 0 ? ((i + j) & 1 ? 0.5 : -0.5) : Math.sign(dx) * 0.5;
+        if (!rectsAt(a.x - push - 5, a.y - 6, 10, 10)) a.x -= push;
+        if (!rectsAt(b.x + push - 5, b.y - 6, 10, 10)) b.x += push;
+      }
+    }
+  }
   // cull: off the sides for traversers, far from the camera for everyone;
   // a fleeing officer who makes the edge got away — the bounty is forfeit
   G.enemies = G.enemies.filter(e => {
@@ -3737,8 +3805,15 @@ function render(alpha) {
       }
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       if (T2 < 4) {
-        ctx.fillStyle = `rgba(255,252,235,${(1 - T2 / 4) * fl})`;
-        ctx.beginPath(); ctx.arc(ex2, ey2, (5 + T2 * 3) * sc2 * S, 0, 7); ctx.fill();
+        // it139: the motion clip showed the core as a flat white saucer for its
+        // first frames — a hard-edged disc reads as an object, a gradient reads
+        // as light. Pre-rendered once, like the fireball blobs.
+        const core = radialSprite('boom-core', [[0, 'rgba(255,255,248,1)'], [0.45, 'rgba(255,236,190,0.75)'], [1, 'rgba(255,200,120,0)']]);
+        const cr = (6 + T2 * 3.4) * sc2 * S;
+        const pa = ctx.globalAlpha;
+        ctx.globalAlpha = pa * Math.min(1, (1 - T2 / 4) * fl);
+        ctx.drawImage(core, ex2 - cr, ey2 - cr, cr * 2, cr * 2);
+        ctx.globalAlpha = pa;
       }
       let hh = ((f.x * 73856093) ^ (f.y * 19349663) ^ ((T2 >> 1) * 83492791)) >>> 0;
       const jr = () => { hh = (hh * 1103515245 + 12345) >>> 0; return ((hh >>> 9) / 8388608) - 1; };
@@ -4534,7 +4609,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.71.0-spectacle', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.72.0-reel', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -4740,6 +4815,11 @@ if (qa) {
     }),
     titlePick: (i) => { G.titleSel = i; },
     setSetting: (k, v) => { Settings[k] = v; applySettings(); return Settings[k]; },
+    // it139 seam forensics: which plate images got the bottom feather, and a
+    // switch for the area's lighting so a seam can be attributed to plates vs
+    // the darkness layer with one capture each
+    plates: () => JSON.stringify(PLATES.map(p => ({ name: p.name, y0: p.y0, y1: p.y1, img: p.img ? p.img.tagName : null }))),
+    setAmbience: (mode) => { if (A.ambience) A.ambience.mode = mode; else A.ambience = { mode }; return A.ambience.mode; },
     // jump straight to the high-score entry ceremony with a qualifying score
     qaEntry: (score) => { G.score = score | 0; G.entry = { name: '', ci: 0 }; setState('entry', 1500); return G.state; },
     entryState: () => JSON.stringify({ state: G.state, name: G.entry ? G.entry.name : null,

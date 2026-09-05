@@ -61,4 +61,7 @@ window.AREA2.route = [{ y0: 500, y1: 9999, lane: 182 }, { y0: 0, y1: 500, lane: 
 // stays in the ledger; the art is the contract with the player.
 window.AREA2.water = [{ x0: 0, y0: 205, x1: 164, y1: 289 }, { x0: 212, y0: 205, x1: 274, y1: 289 }];
 window.AREA2.carve = [{ x0: 174, y0: 200, x1: 208, y1: 294 }];
+// it139: the trench wall's two decorative alcoves (x 36-48, 68-92 on the south
+// face) read as walkable blind pockets in the mask — sealed; the real gap is 128-160
+window.AREA2.solid = [{ x0: 16, y0: 486, x1: 124, y1: 493 }]; // y1 493 = the mask's own face; 499 also sealed Joe's walkway at y 501-505 (12px probe reaches up)
 window.AREA2.ambushZone = { x0: 174, x1: 208, y0: 220, y1: 280, farY: 200, nearY: 300 }; // the killing zone covers the real deck
