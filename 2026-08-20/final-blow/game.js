@@ -360,6 +360,7 @@ import {
   createDemoSpeed,
   demoSpeedAllowed,
   parseDemoSpeed,
+  DEFAULT_DEMO_SPEED,
 } from "./engine/demo-speed.mjs";
 import {
   auditGraphicFatalities,
@@ -2006,7 +2007,7 @@ const demoSession = {
 // this scales the TICK CADENCE and never dt. `?speed=` seeds it at boot; the
 // keys, the qa hooks and the on-screen chip all drive this one object.
 const demoSpeed = createDemoSpeed({
-  rate: parseDemoSpeed(new URLSearchParams(location.search).get("speed")) ?? 1,
+  rate: parseDemoSpeed(new URLSearchParams(location.search).get("speed")) ?? DEFAULT_DEMO_SPEED,
 });
 // How long the key legend stays up after arming or after any transport key.
 const DEMO_SPEED_HINT_MS = 9000;

@@ -250,9 +250,10 @@ test("game.js gates every transport call site on the scoping helper", async () =
 // ---------------------------------------------------------------------------
 
 test("the rate ladder covers the requested rates and steps in both directions", () => {
-  assert.deepEqual([...DEMO_SPEED_RATES], [1, 0.5, 0.25, 0.1]);
-  assert.equal(DEFAULT_DEMO_SPEED, 1);
-  assert.equal(nextDemoSpeed(1, -1), 0.5);
+  assert.deepEqual([...DEMO_SPEED_RATES], [1, 0.75, 0.5, 0.25, 0.1]);
+  assert.equal(DEFAULT_DEMO_SPEED, 0.75);
+  assert.equal(nextDemoSpeed(1, -1), 0.75);
+  assert.equal(nextDemoSpeed(0.75, -1), 0.5);
   assert.equal(nextDemoSpeed(0.5, -1), 0.25);
   assert.equal(nextDemoSpeed(0.25, -1), 0.1);
   assert.equal(nextDemoSpeed(0.1, -1), 0.1, "the ladder must clamp at its slow end");
@@ -264,9 +265,9 @@ test("?speed= parses, snaps to the ladder and rejects nonsense", () => {
   assert.equal(parseDemoSpeed("0.25"), 0.25);
   assert.equal(parseDemoSpeed("1"), 1);
   assert.equal(parseDemoSpeed(".1"), 0.1);
-  // Snapped in log space, so 0.3 is nearer 0.25 than 0.5.
+  // Snapped in log space, so 0.3 is nearer 0.25 than 0.5 (and 0.7 snaps to 0.75).
   assert.equal(parseDemoSpeed("0.3"), 0.25);
-  assert.equal(parseDemoSpeed("0.7"), 0.5);
+  assert.equal(parseDemoSpeed("0.7"), 0.75);
   assert.equal(parseDemoSpeed("4"), 1, "the transport never runs the sim FASTER than real time");
   assert.equal(parseDemoSpeed(null), null);
   assert.equal(parseDemoSpeed(""), null);

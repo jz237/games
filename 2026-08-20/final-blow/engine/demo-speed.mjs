@@ -34,8 +34,10 @@
 // ===========================================================================
 
 /** Selectable rates, fastest first. `[` / `]` walk this list. */
-export const DEMO_SPEED_RATES = Object.freeze([1, 0.5, 0.25, 0.1]);
-export const DEFAULT_DEMO_SPEED = 1;
+// 4.3: 0.75 added and made the default — the attract demo at full speed was
+// too quick to read from the couch (Jez).
+export const DEMO_SPEED_RATES = Object.freeze([1, 0.75, 0.5, 0.25, 0.1]);
+export const DEFAULT_DEMO_SPEED = 0.75;
 
 /**
  * How many queued frame-steps a single rendered frame may drain. A held `.`

@@ -42,6 +42,10 @@ const YAW_LEFT = THREE.MathUtils.degToRad(-70);
 // Crossfade length between clips, in sim frames (render-only cosmetic).
 const BLEND_FRAMES = 4;
 const FPS = 60;
+// Ground covered by one loop of the walk / run clips, in sim pixels, measured
+// on the Meshy presets at fighter scale (≈1.05 m walk stride pair, ≈1.9 m run).
+const WALK_STRIDE_PX = 210;
+const RUN_STRIDE_PX = 380;
 
 function punchTexture(tex, sat) {
   const img = tex.image;
@@ -288,14 +292,20 @@ export class MeshFighterLayer {
       const time = vy < -200 ? 0.35 : vy < 0 ? 0.55 : vy < 250 ? 0.75 : 1.0;
       return { clip: "jump", time, loop: false };
     }
-    if (f.dashFrames > 0) return { clip: "running", time: sec(state.simulationTick) * 1.6, loop: true };
+    // Locomotion cadence is driven by GROUND SPEED so the feet plant instead
+    // of sliding: one clip cycle covers STRIDE_PX of ground at the model's
+    // scale, so cycles-per-second = |vx| / STRIDE_PX. Phase accumulates on
+    // the sim tick, so it is exact under rollback.
+    if (f.dashFrames > 0) {
+      const dashSpeed = Math.max(300, Math.abs(f.vx || 0));
+      return { clip: "running", time: sec(state.simulationTick) * (dashSpeed / RUN_STRIDE_PX), loop: true, cycles: true };
+    }
     if (f.crouch) return { clip: "block", time: 0.05, loop: false, crouch: true };
     const facing = f.facing >= 0 ? 1 : -1;
     const vx = f.vx || 0;
     if (Math.abs(vx) > 22) {
       const forward = Math.sign(vx) === facing;
-      const speed = Math.abs(vx) / 300;
-      return { clip: forward ? "walk_fwd" : "walk_back", time: sec(state.simulationTick) * speed * 1.1, loop: true };
+      return { clip: forward ? "walk_fwd" : "walk_back", time: sec(state.simulationTick) * (Math.abs(vx) / WALK_STRIDE_PX), loop: true, cycles: true };
     }
     if (f.tauntFrames > 0) return { clip: "taunt", time: sec(frame), loop: false };
     // Neutral: the guard loop, ping-ponged slowly, phase-offset per side.
@@ -340,7 +350,8 @@ export class MeshFighterLayer {
     action.enabled = true; action.setEffectiveWeight(blend);
     action.setLoop(pick.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
     action.clampWhenFinished = true;
-    action.time = pick.loop ? ((pick.time % clip.duration) + clip.duration) % clip.duration : Math.min(pick.time, clip.duration - 1e-4);
+    const t = pick.cycles ? pick.time * clip.duration : pick.time;
+    action.time = pick.loop ? ((t % clip.duration) + clip.duration) % clip.duration : Math.min(t, clip.duration - 1e-4);
     action.paused = false;
     rig.current = action;
     rig.mixer.update(0);
