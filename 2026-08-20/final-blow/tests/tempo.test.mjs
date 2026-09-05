@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  ATTACK_REARM_FRAMES,
+  INPUT_BUFFER_RULES,
   WHIFF_RECOVERY_MINIMUM_FRAMES,
   WHIFF_RECOVERY_TAX,
   createAttackInstance,
@@ -58,6 +60,17 @@ function testWalkTempoAndStrideCadence() {
   assert.ok(strideClockAdvance(-MOVEMENT_RULES.backWalkSpeed, 1, speed / STRIDE_CADENCE, dt) < 0);
 }
 
+function testRearmGap() {
+  // A whiffed swing re-arms over a short, fixed beat — long enough to stop a
+  // buffered mash from firing the instant recovery ends, shorter than the
+  // input buffer so a deliberate press made during the beat still comes out.
+  assert.ok(Number.isInteger(ATTACK_REARM_FRAMES) && ATTACK_REARM_FRAMES >= 2);
+  assert.ok(ATTACK_REARM_FRAMES < INPUT_BUFFER_RULES.defaultFrames);
+  // It never rivals a move's own recovery: a whiffed jab is still a jab.
+  assert.ok(ATTACK_REARM_FRAMES < createAttackInstance("light").recoveryFrames);
+}
+
+testRearmGap();
 testWhiffTaxScalesWithRecovery();
 testWhiffTaxExemptions();
 testKitMovesAreTaxedByBaseKind();

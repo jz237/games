@@ -278,6 +278,11 @@ export const WHIFF_RECOVERY_TAX = deepFreeze({
   throw: 0.25,
 });
 export const WHIFF_RECOVERY_MINIMUM_FRAMES = 2;
+// After a whiffed swing runs its course the fighter must RE-ARM: for this many
+// frames he can walk, dash and block but cannot start another attack. A swing
+// that made contact (hit or block) re-arms instantly so links and pressure
+// keep their exact timing.
+export const ATTACK_REARM_FRAMES = 4;
 
 export function whiffRecoveryFrames(attack) {
   if (!attack || attack.projectile || attack.trap || attack.throwableId) return 0;

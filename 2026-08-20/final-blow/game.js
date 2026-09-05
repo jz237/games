@@ -9,6 +9,7 @@ import {
   SIMULATION_STEP_SECONDS,
   createAttackInstance,
   whiffRecoveryFrames,
+  ATTACK_REARM_FRAMES,
   hashSeed,
   transitionFighterState,
 } from "./engine/foundation.mjs";
@@ -6368,6 +6369,7 @@ function makeFighter(index, side, overrideDef = null) {
     landingRecoveryFrames: 0,
     dashFrames: 0,
     dashCooldownFrames: 0,
+    attackRearmFrames: 0,
     dashDirection: 0,
     queuedDashDirection: 0,
     directionTapTracker: new DirectionTapTracker(),
@@ -13125,7 +13127,7 @@ const advancedActions = new Set([
 ]);
 
 function beginAttack(fighter, action, input = {}, { reversal = false, force = false, cancelledFrom = "", limb = "", backThrow = null } = {}) {
-  if (!force && (fighter.attacking || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0)) return false;
+  if (!force && (fighter.attacking || fighter.attackRearmFrames > 0 || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0)) return false;
   const actionGroup = fighterActionGroup(action);
   if (actionGroup === "throw" && !fighter.grounded) return false;
   if (advancedActions.has(action) && !fighter.grounded) return false;
@@ -13708,6 +13710,7 @@ function advanceFighterTimers(fighter) {
   fighter.invulnerableFrames = Math.max(0, fighter.invulnerableFrames - 1);
   fighter.throwInvulnerableFrames = Math.max(0, fighter.throwInvulnerableFrames - 1);
   fighter.dashCooldownFrames = Math.max(0, fighter.dashCooldownFrames - 1);
+  fighter.attackRearmFrames = Math.max(0, fighter.attackRearmFrames - 1);
   fighter.reversalWindowFrames = Math.max(0, fighter.reversalWindowFrames - 1);
   fighter.throwTechFlashFrames = Math.max(0, fighter.throwTechFlashFrames - 1);
   fighter.confirmWindowFrames = Math.max(0, fighter.confirmWindowFrames - 1);
@@ -14450,6 +14453,7 @@ function updateFighter(fighter, opponent, input, dt) {
         connected: fighter.attackConnected,
         expiresFrame: state.simulationTick + DEFAULT_INPUT_BUFFER_FRAMES,
       } : null;
+      fighter.attackRearmFrames = fighter.attackConnected ? 0 : ATTACK_REARM_FRAMES;
       fighter.attacking = null;
       fighter.attackTime = 0;
       fighter.attackFrame = 0;
@@ -26821,7 +26825,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.4");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.5");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -28121,7 +28125,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "4.4-tempo",
+  version: "4.5-rearm",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
