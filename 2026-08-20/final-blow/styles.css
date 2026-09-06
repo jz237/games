@@ -1130,8 +1130,8 @@ body.reduced-motion.demo-active.demo-idle .hud { animation: none; }
 /* 5.4 integration: the three chips (LOADING, COPY LINK, TAP FOR SOUND) share
    one row under the bug; the row collapses when every chip is hidden. The
    panel itself stays pointer-events: none — only the two buttons take a press. */
-.demo-hud-actions { grid-area: actions; display: flex; align-items: center; gap: 6px; }
-.demo-hud-actions:not(:has(> :not([hidden]))) { display: none; }
+.demo-hud .demo-hud-actions { grid-area: actions; display: flex; align-items: center; gap: 6px; font-size: 1em; }
+.demo-hud .demo-hud-actions:not(:has(> :not([hidden]))) { display: none; }
 /* 5.4 FIGHT NIGHT (prewarm): the demo honours the intro art hold like a played
    match, but wears a chip on its own HUD instead of the LOADING FIGHTERS
    curtain — a curtain over the attract loop reads as a broken cabinet. */
