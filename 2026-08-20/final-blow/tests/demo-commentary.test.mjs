@@ -324,7 +324,7 @@ test("index.html carries the two rows on the bug and styles.css gives them the g
   assert.match(bug, /<span id="demoHudMatchup">/);
   assert.match(bug, /<em id="demoHudCycle">/);
   const css = await readFile(join(gameRoot, "styles.css"), "utf8");
-  assert.match(css, /grid-template-areas: "show speed" "matchup matchup" "line line" "room room" "cycle prompt" "actions actions";/);
+  assert.match(css, /grid-template-areas: "show speed" "matchup matchup" "story story" "line line" "room room" "cycle prompt" "actions actions";/);
   assert.match(css, /\.demo-hud \.demo-hud-line \{[^}]*grid-area: line;/);
   assert.match(css, /\.demo-hud \.demo-hud-line \{[^}]*font-size: 1\.95em;/, "the loudest type in the bug: ~22 px at 1440x900");
   assert.match(css, /\.demo-hud \.demo-hud-room \{[^}]*grid-area: room;/);

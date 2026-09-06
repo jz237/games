@@ -396,7 +396,7 @@ test("game.js reaches the session layer only through the demo: a played match is
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /<strong id="demoHudStory" class="demo-hud-story" hidden>/);
   const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
-  assert.match(css, /grid-template-areas: "show speed" "matchup matchup" "story story" "cycle prompt" "actions actions";/);
+  assert.match(css, /grid-template-areas: "show speed" "matchup matchup" "story story" "line line" "room room" "cycle prompt" "actions actions";/);
   // The standings band never covers the winner: bottom-anchored, demo-scoped.
   assert.match(css, /body\.demo-active \.attract-scores\.demo-standings \{\s*inset: auto 0 0 0;/);
 });
