@@ -16,7 +16,7 @@ const swing = join(root, "tools", "swing");
 function testOneCopy() {
   assert.ok(!existsSync(join(root, "tools", "inbetweens")), "tools/inbetweens is gone; its grammar is tools/swing/grammar-ext2.txt");
   for (const file of ["color_match.py", "measure_de.py", "fal_edit.py", "gen_all.py", "build_sheet.py", "skin_match.py", "repo_root.py",
-    "grammar-ext2.txt", "grammar-ext3.txt", "grammar-ext4.txt"]) {
+    "grammar-ext2.txt", "grammar-ext3.txt", "grammar-ext4.txt", "grammar-ext5.txt"]) {
     assert.ok(existsSync(join(swing, file)), `tools/swing/${file}`);
   }
   // build_sheet owns every bank; there is no build_ext2.py twin.
@@ -24,6 +24,7 @@ function testOneCopy() {
   assert.match(buildSheet, /"ext2": \(\[/);
   assert.match(buildSheet, /"ext3": \(\[/);
   assert.match(buildSheet, /"ext4": \(\[/);
+  assert.match(buildSheet, /"ext5": \(\[/);
   assert.match(buildSheet, /ap\.add_argument\("--bank", default="ext2"\)/);
   assert.ok(!buildSheet.includes("build_ext2.py"), "the docstring names build_sheet, not its 4.9 ancestor");
   assert.ok(!existsSync(join(swing, "build_ext2.py")));

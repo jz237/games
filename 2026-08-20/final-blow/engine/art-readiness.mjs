@@ -34,6 +34,9 @@ export const PRELOAD_PLAN = Object.freeze([
   Object.freeze({ bank: "ext2", gate: "ext2", priority: "high" }),
   Object.freeze({ bank: "ext3", gate: "ext3", priority: "auto" }),
   Object.freeze({ bank: "ext4", gate: "ext4", priority: "auto" }),
+  // v5.2: the locomotion sheet joins the family — the dash is the first thing
+  // a player does, so it must not pop in bank by bank after FIGHT!.
+  Object.freeze({ bank: "ext5", gate: "ext5", priority: "auto" }),
   Object.freeze({ bank: "motion", gate: null, priority: "auto" }),
   Object.freeze({ bank: "motion2", gate: null, priority: "auto" }),
   Object.freeze({ bank: "motion3", gate: "motion3", priority: "low" }),
@@ -41,7 +44,7 @@ export const PRELOAD_PLAN = Object.freeze([
 ]);
 
 /** The banks whose decode the intro waits for: the unified family only. */
-export const READINESS_BANKS = Object.freeze(PRELOAD_PLAN.slice(0, 5).map((entry) => entry.bank));
+export const READINESS_BANKS = Object.freeze(PRELOAD_PLAN.slice(0, 6).map((entry) => entry.bank));
 
 /**
  * The sheets one fighter needs before the first fight tick, from his manifest

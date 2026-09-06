@@ -72,6 +72,7 @@ import {
   buildUnifiedExt2AcceptMasks,
   UNIFIED_EXT3_BANK,
   UNIFIED_EXT4_BANK,
+  UNIFIED_EXT5_BANK,
   buildSwingAcceptMasks,
   WALK_CELL_COUNT,
   WALK_POSE_MIN_SPEED,
@@ -1357,7 +1358,7 @@ function motion3KeyDrawable(fighterId, key) {
 // engine/fighter-kits.mjs and the routing list in fighterAnimationPose.
 // ---------------------------------------------------------------------------
 const fighterUnifiedAtlases = {};
-const unifiedBankState = { masks: null, extMasks: null, ext2Masks: null, ext3Masks: null, ext4Masks: null, requested: false, ready: null };
+const unifiedBankState = { masks: null, extMasks: null, ext2Masks: null, ext3Masks: null, ext4Masks: null, ext5Masks: null, requested: false, ready: null };
 
 /** Every unified sheet, main or ext, is this square once padded. */
 const UNIFIED_SHEET_PX = 1280;
@@ -1380,8 +1381,10 @@ function ensureUnifiedManifest() {
       // v5.0: the swing and reaction sheets gate per cell off the same main gate.
       unifiedBankState.ext3Masks = manifest ? buildSwingAcceptMasks(manifest, UNIFIED_EXT3_BANK, unifiedBankState.masks) : {};
       unifiedBankState.ext4Masks = manifest ? buildSwingAcceptMasks(manifest, UNIFIED_EXT4_BANK, unifiedBankState.masks) : {};
+      // v5.2: the locomotion sheet, the same per-cell gate off the main gate.
+      unifiedBankState.ext5Masks = manifest ? buildSwingAcceptMasks(manifest, UNIFIED_EXT5_BANK, unifiedBankState.masks) : {};
     })
-    .catch(() => { unifiedBankState.masks = {}; unifiedBankState.extMasks = {}; unifiedBankState.ext2Masks = {}; unifiedBankState.ext3Masks = {}; unifiedBankState.ext4Masks = {}; });
+    .catch(() => { unifiedBankState.masks = {}; unifiedBankState.extMasks = {}; unifiedBankState.ext2Masks = {}; unifiedBankState.ext3Masks = {}; unifiedBankState.ext4Masks = {}; unifiedBankState.ext5Masks = {}; });
   return unifiedBankState.ready;
 }
 
@@ -1538,10 +1541,14 @@ function unifiedFighterExt2Ready(fighterId) {
 // ---------------------------------------------------------------------------
 // v5.0 FULL SWING — the ext3 (strikes) and ext4 (reactions) sheets. Loaded
 // like ext2; gated per cell; consumed by swingSubstitute at pose resolution.
+// v5.2 LOCOMOTION — the ext5 sheet (dash, turnaround, air, presentation)
+// rides the same loader, gate and atlas table. Registered here; routed by the
+// locomotion pass (no track or substitution names an ext5 cell yet).
 // ---------------------------------------------------------------------------
-const fighterSwingAtlases = { [UNIFIED_EXT3_BANK]: {}, [UNIFIED_EXT4_BANK]: {} };
-const swingMaskKey = { [UNIFIED_EXT3_BANK]: "ext3Masks", [UNIFIED_EXT4_BANK]: "ext4Masks" };
-const swingSuffix = { [UNIFIED_EXT3_BANK]: "ext3", [UNIFIED_EXT4_BANK]: "ext4" };
+const swingBankList = Object.freeze([UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK]);
+const fighterSwingAtlases = { [UNIFIED_EXT3_BANK]: {}, [UNIFIED_EXT4_BANK]: {}, [UNIFIED_EXT5_BANK]: {} };
+const swingMaskKey = { [UNIFIED_EXT3_BANK]: "ext3Masks", [UNIFIED_EXT4_BANK]: "ext4Masks", [UNIFIED_EXT5_BANK]: "ext5Masks" };
+const swingSuffix = { [UNIFIED_EXT3_BANK]: "ext3", [UNIFIED_EXT4_BANK]: "ext4", [UNIFIED_EXT5_BANK]: "ext5" };
 
 function swingFighterWhole(fighterId, bank) {
   return Boolean(unifiedBankState[swingMaskKey[bank]]?.[fighterId]?.whole);
@@ -1588,7 +1595,7 @@ function unifiedFighterExtDescendReady(fighterId) {
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
   if (bank === UNIFIED_EXT2_BANK) return unifiedExt2CellDrawable(fighterId, cell);
-  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK) return swingCellDrawable(fighterId, cell, bank);
+  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK) return swingCellDrawable(fighterId, cell, bank);
   if (bank === UNIFIED_EXT_BANK) return unifiedExtCellDrawable(fighterId, cell);
   if (bank === UNIFIED_BANK) return unifiedCellDrawable(fighterId, cell);
   if (bank === "walk") return walkCellDrawable(fighterId, cell);
@@ -1670,8 +1677,8 @@ function preloadAuthoredBanks(fighterIds) {
       }
       // v4.9: the in-between sheet — its first use is the first jab.
       if (unifiedFighterExt2Whole(id)) decodeTracked(`${id}:ext2`, ensureUnifiedExt2Atlas(id));
-      // v5.0: strikes and reactions.
-      for (const swingBank of [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]) {
+      // v5.0: strikes and reactions. v5.2: and the locomotion sheet.
+      for (const swingBank of swingBankList) {
         if (!swingFighterWhole(id, swingBank)) continue;
         decodeTracked(`${id}:${swingSuffix[swingBank]}`, ensureSwingAtlas(id, swingBank));
       }
@@ -1748,6 +1755,7 @@ function unifiedGatesFor(fighterId) {
     ext2: unifiedFighterExt2Whole(fighterId),
     ext3: swingFighterWhole(fighterId, UNIFIED_EXT3_BANK),
     ext4: swingFighterWhole(fighterId, UNIFIED_EXT4_BANK),
+    ext5: swingFighterWhole(fighterId, UNIFIED_EXT5_BANK),
   };
 }
 
@@ -1759,6 +1767,7 @@ function sheetDrawableNow(fighterId, bank) {
     case "ext2": return live(fighterUnifiedExt2Atlases[fighterId]);
     case "ext3": return live(fighterSwingAtlases[UNIFIED_EXT3_BANK][fighterId]);
     case "ext4": return live(fighterSwingAtlases[UNIFIED_EXT4_BANK][fighterId]);
+    case "ext5": return live(fighterSwingAtlases[UNIFIED_EXT5_BANK][fighterId]);
     case "motion": return live(fighterMotionAtlases[fighterId]);
     case "motion2": return live(fighterMotion2Atlases[fighterId]);
     case "motion3": return live(fighterMotion3Atlases[fighterId]);
@@ -1966,7 +1975,7 @@ function altAtlasSource(fighterId, bank) {
   if (bank === UNIFIED_EXT2_BANK) {
     return { image: fighterUnifiedExt2Atlases[fighterId], key: `${fighterId}:unified-ext2` };
   }
-  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK) {
+  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK) {
     return { image: fighterSwingAtlases[bank][fighterId], key: `${fighterId}:${bank}` };
   }
   const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
@@ -2018,7 +2027,7 @@ function paletteAtlas(fighterId, side, bank = "base") {
                 ? fighterUnifiedExtAtlases[fighterId] || fighterAtlases[fighterId]
                 : bank === UNIFIED_EXT2_BANK
                   ? fighterUnifiedExt2Atlases[fighterId] || fighterAtlases[fighterId]
-                  : bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK
+                  : bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK
                     ? fighterSwingAtlases[bank][fighterId] || fighterAtlases[fighterId]
                     : fighterAtlases[fighterId];
   if (matchPalettes[side] !== 1) return base;
@@ -31088,7 +31097,7 @@ window.__finalBlowEngine = {
       })),
       crowd: crowdSnapshot(state.crowd, state.simulationTick, { viewLeft: 0, viewRight: W }),
       inbetweens: state.fighters.map((fighter) => unifiedFighterExt2Ready(fighter.def.id)),
-      swing: state.fighters.map((fighter) => [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK].map((bank) => swingCellDrawable(fighter.def.id, 0, bank))),
+      swing: state.fighters.map((fighter) => swingBankList.map((bank) => swingCellDrawable(fighter.def.id, 0, bank))),
       crowdSprites: {
         manifest: Boolean(crowdSheets.manifest),
         ready: Boolean(state.crowd?.people?.some((person) => person.sprite && crowdSpriteCharacter(person))),

@@ -126,6 +126,26 @@
    "thrown",
    "ko"
   ],
+  "ext5Sheet": "<id>-ext5.webp, 1280x1280 RGBA WebP, 4x4, ext5 frames 0-15 = grammar cells 72-87: the LOCOMOTION and presentation cells -- dash launch, dash stretch, dash brake, turnaround, apex tuck, descent, air recover, an upright air hit, power charge, entrance A and B, victory, taunt, crouch guard flinch, throw grab, dizzy sway. Same pipeline as ext3/ext4 (gpt-image-2 edit with the fighter's own unified sheet as the image-to-image reference, per-cluster LAB match, un-premultiplied despill, magenta inpaint, purple impact strokes purged on cells 7 and 13, built AT THE UNIFIED SCALE; ali at his own 1.3661 because a 6x4 main sheet draws its figure smaller). Feet on row 314 in all 160 cells; a wide cell (every dash stretch is a horizontal lunge, 134-213 px tall) is fit-scaled about its torso column and the engine draws it back up through UNIFIED_EXT5_CELL_ADJUST. Shipped LOSSLESS (the 5.1 encode gate has not been run on this bank yet); masters in the swing-v50/lossless-51 archive, slicer sidecars ext5-<id>.json beside them.",
+  "ext5PoseIds": [
+   "dash-launch",
+   "dash-stretch",
+   "dash-brake",
+   "turnaround",
+   "apex-tuck",
+   "descent",
+   "air-recover",
+   "air-hit-upright",
+   "power-charge",
+   "entrance-a",
+   "entrance-b",
+   "victory",
+   "taunt",
+   "crouch-guard-flinch",
+   "throw-grab",
+   "dizzy-sway"
+  ],
+  "ext5Status": "REGISTERED 5.2 -- routed by the locomotion pass. The sheets ship, the per-cell gate, the measured tables (heights, body centres, fit-restore adjusts) and both renderers' loaders know the bank, and NO track or substitution names an ext5 cell yet: tests/unified-swing.test.mjs pins all sixteen unreachable until the routing item shrinks that list. 159 of 160 cells accept. The one hold is ali's crouch-guard-flinch (85): a yellow impact burst is painted into the cell at his hands and the purge keys purple only, so it stays accept:false until it is keyed out (a crouched block keeps his ext3 crouch guard). The air-hit-upright cell (79) came back as a doubled-over fold on nine sheets and an arched launch on the devil's -- head and feet both down on every one, so unlike the inverted ext4:7 it is accepted and the routing pass decides what, if anything, it stands in for.",
   "swingStatus": "WIRED AND SHIPPING (v5.0). Consumed by swingSubstitute at pose resolution: a resolved motion/motion2 cell with a same-family equivalent on the fighter's ext3/ext4 sheet draws the equivalent instead, gated per cell. Tracks and hold budgets are untouched.",
   "despill": "v5.1: every generated ext bank (ext2/ext3/ext4) rebuilt from its archived raw with tools/swing/build_sheet.py inpaint_magenta \u2014 the model paints a magenta rim on figures against the magenta key and the key solve kept it (2-4% of each sheet's opaque pixels were magenta, zero on the main sheets). Registration is byte-identical (heights, body centres and draw adjusts unchanged); weighted dE to each fighter's unified sheet now 0.75-1.97 (devil 1.8-2.0, previously 3.7-4.2).",
   "encoding": {
@@ -996,6 +1016,106 @@
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
     }
+   ],
+   "ext5Sheet": "deathblow-ext5.webp",
+   "ext5Scale": 1.2697,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0593 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.1155 restores its size."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    }
    ]
   },
   "jez": {
@@ -1756,6 +1876,106 @@
      "id": "ko",
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0164 restores its size."
+    }
+   ],
+   "ext5Sheet": "jez-ext5.webp",
+   "ext5Scale": 1.4037,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.1832 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.26 restores its size."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
    ]
   },
@@ -2522,6 +2742,106 @@
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
     }
+   ],
+   "ext5Sheet": "alan-ext5.webp",
+   "ext5Scale": 1.3304,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.1676 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0815 restores its size."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    }
    ]
   },
   "post": {
@@ -3199,6 +3519,106 @@
      "id": "ko",
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0551 restores its size."
+    }
+   ],
+   "ext5Sheet": "post-ext5.webp",
+   "ext5Scale": 1.36,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.2842 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.03 restores its size."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
    ]
   },
@@ -3956,6 +4376,106 @@
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0924 restores its size."
     }
+   ],
+   "ext5Sheet": "benny-ext5.webp",
+   "ext5Scale": 1.4037,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0589 restores its size."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.2909 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    }
    ]
   },
   "donald": {
@@ -4638,6 +5158,106 @@
      "id": "ko",
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    }
+   ],
+   "ext5Sheet": "donald-ext5.webp",
+   "ext5Scale": 1.2389,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0128 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
    ]
   },
@@ -5393,6 +6013,106 @@
      "id": "ko",
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0911 restores its size."
+    }
+   ],
+   "ext5Sheet": "cyraxx-ext5.webp",
+   "ext5Scale": 1.4712,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.271 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.1833 restores its size."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0012 restores its size."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0304 restores its size."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0012 restores its size."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0294 restores its size."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
    ]
   },
@@ -6295,6 +7015,106 @@
      "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.0326."
     }
    ],
+   "ext5Sheet": "ali-ext5.webp",
+   "ext5Scale": 1.3661,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). Fit-scaled; drawAdjust 1.2633 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). Fit-scaled; drawAdjust 1.1463 restores its size."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": false,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). HELD: a yellow impact burst is painted into the cell at the hands (the ext5 purge keys purple only). accept:false until it is keyed out; a crouched block keeps the ext3 crouch guard."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+    }
+   ],
    "ext4Sheet": "ali-ext4.webp"
   },
   "commissioner": {
@@ -7055,6 +7875,106 @@
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1286 restores its size."
     }
+   ],
+   "ext5Sheet": "commissioner-ext5.webp",
+   "ext5Scale": 1.4854,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0618 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.1185 restores its size."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0329 restores its size. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0355 restores its size."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0448 restores its size."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    }
    ]
   },
   "devil": {
@@ -7732,6 +8652,106 @@
      "id": "ko",
      "accept": true,
      "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0148 restores its size."
+    }
+   ],
+   "ext5Sheet": "devil-ext5.webp",
+   "ext5Scale": 1.3722,
+   "ext5Cells": [
+    {
+     "frame": 72,
+     "id": "dash-launch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.1078 restores its size."
+    },
+    {
+     "frame": 73,
+     "id": "dash-stretch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.2516 restores its size."
+    },
+    {
+     "frame": 74,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 75,
+     "id": "turnaround",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 76,
+     "id": "apex-tuck",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 77,
+     "id": "descent",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 78,
+     "id": "air-recover",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 79,
+     "id": "air-hit-upright",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as an arched launch (head up, feet trailing), not an upright recoil."
+    },
+    {
+     "frame": 80,
+     "id": "power-charge",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 81,
+     "id": "entrance-a",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 82,
+     "id": "entrance-b",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 83,
+     "id": "victory",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 84,
+     "id": "taunt",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 85,
+     "id": "crouch-guard-flinch",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 86,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+    },
+    {
+     "frame": 87,
+     "id": "dizzy-sway",
+     "accept": true,
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
    ]
   }

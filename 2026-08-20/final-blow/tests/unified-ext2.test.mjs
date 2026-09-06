@@ -222,7 +222,7 @@ function testMeasuredTables() {
 }
 
 function testRegistryAndWiring() {
-  assert.deepEqual(AUTHORED_BANKS.slice(-4), [UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, "unified-ext3", "unified-ext4"], "the sheets are registered in the order they were added");
+  assert.deepEqual(AUTHORED_BANKS.slice(-5), [UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, "unified-ext3", "unified-ext4", "unified-ext5"], "the sheets are registered in the order they were added");
   assert.ok(isAuthoredBank(UNIFIED_EXT2_BANK));
   assert.match(gameSource, /if \(bank === UNIFIED_EXT2_BANK\) return unifiedExt2CellDrawable\(fighterId, cell\);/);
   assert.match(gameSource, /const ext2 = unifiedFighterExt2Ready\(fighter\.def\.id\);/);

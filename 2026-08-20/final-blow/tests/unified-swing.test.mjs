@@ -16,6 +16,10 @@ import {
   UNIFIED_EXT4_BEATS,
   UNIFIED_EXT4_CELLS,
   UNIFIED_EXT4_CELL_HEIGHT,
+  UNIFIED_EXT5_BANK,
+  UNIFIED_EXT5_BEATS,
+  UNIFIED_EXT5_CELLS,
+  UNIFIED_EXT5_CELL_HEIGHT,
   BLOCK_EXIT_AT,
   SWING_STAND_IN_CLAMP,
   SWING_STAND_IN_DEADBAND,
@@ -38,6 +42,17 @@ import {
   swingStandInAdjust,
   swingSubstitute,
   unifiedScreenHeight,
+  airNormalKeys,
+  auditBodyCentres,
+  baseCellDrawAdjust,
+  dashKeys,
+  jumpArcKeys,
+  lightWindupKeys,
+  reactionTrackKeys,
+  throwClinchKeys,
+  throwRecoveryKeys,
+  wakeupKeys,
+  x5key,
 } from "../engine/fighter-kits.mjs";
 
 // v5.0 FULL SWING — the strike and reaction sheets, consumed by substitution
@@ -52,6 +67,7 @@ const mainMasks = buildUnifiedAcceptMasks(manifest);
 const ext3 = buildSwingAcceptMasks(manifest, UNIFIED_EXT3_BANK, mainMasks);
 const ext4 = buildSwingAcceptMasks(manifest, UNIFIED_EXT4_BANK, mainMasks);
 const SWING = swingFighterIds(ext3).filter((id) => swingFighterIds(ext4).includes(id));
+const ext5 = buildSwingAcceptMasks(manifest, UNIFIED_EXT5_BANK, mainMasks);
 
 function testManifestShape() {
   assert.deepEqual(manifest.format.ext3PoseIds, UNIFIED_EXT3_BEATS);
@@ -218,19 +234,19 @@ function testMeasuredTables() {
 }
 
 function testRegistryAndWiring() {
-  assert.deepEqual(AUTHORED_BANKS.slice(-2), [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]);
-  assert.ok(isAuthoredBank(UNIFIED_EXT3_BANK) && isAuthoredBank(UNIFIED_EXT4_BANK));
+  assert.deepEqual(AUTHORED_BANKS.slice(-3), [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK]);
+  assert.ok(isAuthoredBank(UNIFIED_EXT3_BANK) && isAuthoredBank(UNIFIED_EXT4_BANK) && isAuthoredBank(UNIFIED_EXT5_BANK));
   // Engineering pass: the resolver moved to engine/swing-resolve.mjs (tested
   // in tests/swing-resolve.test.mjs); game.js applies it at the single
   // resolution choke point with the bank-routed gate. The pin follows.
   assert.match(gameSource, /const pose = swingResolve\(resolvedPose, swingContext\(fighter, \{ roundDecided: [^}]+\}\), \(cell, bank\) => motionBankCellDrawable\(fighter\.def\.id, cell, bank\)\);/);
   assert.match(gameSource, /import \{ swingContext, swingResolve \} from "\.\/engine\/swing-resolve\.mjs";/);
   assert.ok(!/^function swingResolve\(/m.test(gameSource), "no second resolver in game.js");
-  assert.match(gameSource, /if \(bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK\) return swingCellDrawable\(fighterId, cell, bank\);/);
+  assert.match(gameSource, /if \(bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK \|\| bank === UNIFIED_EXT5_BANK\) return swingCellDrawable\(fighterId, cell, bank\);/);
   assert.match(gameSource, /\$\{fighterId\}:\$\{bank\}/);
   const adjustBody = gameSource.slice(gameSource.indexOf("function bankSheetAdjust("), gameSource.indexOf("function bankSheetAdjust(") + 1600);
-  assert.ok(!adjustBody.includes("UNIFIED_EXT3_BANK") && !adjustBody.includes("UNIFIED_EXT4_BANK"));
-  assert.ok(!/hdSheetPath\([^)]*ext[34]/.test(gameSource));
+  assert.ok(!adjustBody.includes("UNIFIED_EXT3_BANK") && !adjustBody.includes("UNIFIED_EXT4_BANK") && !adjustBody.includes("UNIFIED_EXT5_BANK"));
+  assert.ok(!/hdSheetPath\([^)]*ext[345]/.test(gameSource));
   // v5.1: the three reaction reads swingResolve hands the table, and the
   // sim field the body blow keys on — snapshotted as presentation data.
   // (5.1 integration: the resolver lives in engine/swing-resolve.mjs — the
@@ -305,6 +321,174 @@ function testCrouchBlockstunTrack() {
   assert.equal(defaultBeatKeyResolve(keys[0], { fallback: "crouch" }), "crouch", "a fighter without the sheet reads the crouch on every tick");
 }
 
+
+// ---------------------------------------------------------------------------
+// v5.2 LOCOMOTION, item one — THE SIXTH SHEET IS REGISTERED AND NOTHING
+// DRAWS DIFFERENTLY. The ext5 sheet (dash launch/stretch/brake, turnaround,
+// apex tuck, descent, air recover, upright air hit, power charge, the two
+// entrances, victory, taunt, crouch guard flinch, throw grab, dizzy sway)
+// ships for all ten fighters with its gate, its measured tables and both
+// loaders wired, and NO track or substitution names a cell yet. The routing
+// item builds on this commit; until it lands every ext5 cell is pinned
+// unreachable below, in a list that item is expected to shrink.
+// ---------------------------------------------------------------------------
+const E5 = UNIFIED_EXT5_CELLS;
+/** ROUTING ITEM: remove each cell from this list as it is routed. */
+const EXT5_UNROUTED_FOR_NOW = Object.freeze(Object.keys(E5).map((name) => `${UNIFIED_EXT5_BANK}:${E5[name]}`));
+
+function testExt5Manifest() {
+  const spec = SWING_BANKS[UNIFIED_EXT5_BANK];
+  assert.deepEqual(spec, { base: 72, count: 16, sheetKey: "ext5Sheet", cellsKey: "ext5Cells" });
+  assert.deepEqual(manifest.format.ext5PoseIds, UNIFIED_EXT5_BEATS);
+  assert.match(manifest.format.ext5Status, /^REGISTERED 5\.2/);
+  assert.match(manifest.format.ext5Sheet, /grammar cells 72-87/);
+  assert.deepEqual(Object.keys(E5), [
+    "dashLaunch", "dashStretch", "dashBrake", "turnaround", "apexTuck", "descent", "airRecover", "airHitUpright",
+    "powerCharge", "entranceA", "entranceB", "victory", "taunt", "crouchGuardFlinch", "throwGrab", "dizzySway",
+  ]);
+  assert.equal(swingFrame(UNIFIED_EXT5_BANK, 72), 0);
+  assert.equal(swingFrame(UNIFIED_EXT5_BANK, 87), 15);
+  assert.equal(swingFrame(UNIFIED_EXT5_BANK, 88), -1);
+  assert.equal(swingFrame(UNIFIED_EXT4_BANK, 72), -1, "72 is an ext5 frame, never an ext4 one");
+  for (const id of ROSTER) {
+    const entry = manifest.fighters[id];
+    assert.equal(entry.ext5Sheet, `${id}-ext5.webp`);
+    assert.ok(statSync(join(assetDir, entry.ext5Sheet)).size > 700000, `${id} ext5 ships (lossless)`);
+    assert.equal(entry.ext5Cells.length, 16);
+    entry.ext5Cells.forEach((cell, index) => {
+      assert.equal(cell.frame, 72 + index);
+      assert.equal(cell.id, UNIFIED_EXT5_BEATS[index]);
+      assert.equal(typeof cell.note, "string");
+    });
+    // Built at the fighter's unified scale — except ali, whose 6x4 main sheet
+    // draws its figure smaller, so his ext5 carries its own scale (1.3661).
+    if (entry.generationGrid === "6x4") assert.equal(entry.ext5Scale, 1.3661, `${id} own scale`);
+    else assert.equal(entry.ext5Scale, entry.scale, `${id} ext5 is built at the unified scale`);
+    // The gate: every fighter whole; every cell accepted but ali's held
+    // crouch guard flinch (a yellow impact burst painted into the cell).
+    assert.equal(ext5[id].whole, true, `${id} on the ext5 bank`);
+    const held = id === "ali" ? [E5.crouchGuardFlinch] : [];
+    for (let frame = 0; frame < 16; frame += 1) {
+      assert.equal(ext5[id].accept[frame], !held.includes(frame), `${id} ext5:${frame} accept`);
+    }
+  }
+  assert.equal(manifest.fighters.ali.ext5Cells[E5.crouchGuardFlinch].accept, false);
+  assert.match(manifest.fighters.ali.ext5Cells[E5.crouchGuardFlinch].note, /HELD/);
+  assert.deepEqual(swingFighterIds(ext5), [...ROSTER].sort());
+}
+
+function testExt5MeasuredTables() {
+  assert.deepEqual(auditBodyCentres().errors, []);
+  for (const id of ROSTER) {
+    const heights = UNIFIED_EXT5_CELL_HEIGHT[id];
+    assert.equal(heights.length, 16, `${id} heights`);
+    assert.equal(CELL_BODY_CENTRE[id][UNIFIED_EXT5_BANK].length, 16, `${id} body centres`);
+    assert.ok(heights.every((h) => h >= 134 && h <= 313), `${id} heights in range`);
+    // The dash stretch is a horizontal lunge on every sheet: the shortest
+    // dash cell, and the tuck sits well under the descent.
+    assert.ok(heights[E5.dashStretch] < heights[E5.dashLaunch], `${id} the stretch is lower than the launch`);
+    assert.ok(heights[E5.apexTuck] < heights[E5.descent], `${id} the tuck is lower than the descent`);
+    // Fit-restore adjusts: drawAdjust > 1 only, the commissioner's 1.033
+    // sheet factor folded into every one of his cells (bankSheetAdjust has
+    // no ext branch, on purpose — see game.js).
+    for (let frame = 0; frame < 16; frame += 1) {
+      const adjust = baseCellDrawAdjust(id, UNIFIED_EXT5_BANK, frame);
+      assert.ok(adjust >= 1 && adjust <= 1.3, `${id} ext5:${frame} adjust ${adjust}`);
+      if (id === "commissioner") assert.ok(adjust >= 1.033, `commissioner ext5:${frame} carries the sheet fold`);
+      // Nothing is a routed stand-in, so the reconciliation is 1 everywhere
+      // and cellDrawAdjust is the fit-restore alone.
+      assert.equal(swingStandInAdjust(id, UNIFIED_EXT5_BANK, frame), 1);
+      assert.equal(cellDrawAdjust(id, UNIFIED_EXT5_BANK, frame, { unified: true }), adjust);
+      assert.equal(swingDrawnHeight(id, UNIFIED_EXT5_BANK, frame), heights[frame] * adjust);
+    }
+  }
+  // Spot pins off the slicer sidecars (ext5-<id>.json in the swing-v50 archive).
+  assert.equal(baseCellDrawAdjust("jez", UNIFIED_EXT5_BANK, E5.dashBrake), 1.26);
+  assert.equal(baseCellDrawAdjust("post", UNIFIED_EXT5_BANK, E5.dashStretch), 1.2842);
+  assert.equal(baseCellDrawAdjust("commissioner", UNIFIED_EXT5_BANK, E5.dashStretch), 1.0968, "1.0618 x 1.033");
+  assert.equal(baseCellDrawAdjust("commissioner", UNIFIED_EXT5_BANK, E5.victory), 1.033);
+  assert.equal(baseCellDrawAdjust("donald", UNIFIED_EXT5_BANK, E5.dashBrake), 1);
+  assert.deepEqual([...UNIFIED_EXT5_CELL_HEIGHT.jez], [251, 184, 186, 291, 202, 285, 292, 236, 279, 292, 289, 292, 298, 233, 288, 292]);
+  assert.deepEqual([...CELL_BODY_CENTRE.jez[UNIFIED_EXT5_BANK]], [189, 222, 222, 169, 214, 172, 168, 196, 175, 168, 170, 168, 166, 198, 170, 168]);
+}
+
+function testExt5NothingRoutedYet() {
+  // 1. The substitution table never produces an ext5 cell, for any resolved
+  //    bank x cell x context.
+  const ctxs = [];
+  for (const limb of ["punch", "kick"]) for (const heavy of [false, true]) for (const crouching of [false, true])
+    for (const attacking of [false, true]) for (const airborne of [false, true]) for (const victimAirborne of [false, true])
+      for (const falling of [false, true]) for (const bodyBlow of [false, true]) for (const reeling of [false, true]) for (const ko of [false, true])
+        for (const blocking of [false, true]) ctxs.push({ limb, heavy, crouching, attacking, airborne, victimAirborne, falling, bodyBlow, reeling, ko, blocking });
+  const reached = new Set();
+  for (const bank of ["base", "motion", "motion2", "motion3", "walk", UNIFIED_BANK, "unified-ext", "unified-ext2", UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK]) {
+    for (let frame = 0; frame < 24; frame += 1) for (const ctx of ctxs) {
+      const out = swingSubstitute(bank, frame, ctx);
+      if (out?.bank === UNIFIED_EXT5_BANK) reached.add(`${out.bank}:${out.frame}`);
+      if (out?.alt?.bank === UNIFIED_EXT5_BANK) reached.add(`${out.alt.bank}:${out.alt.frame}`);
+    }
+  }
+  for (const key of EXT5_UNROUTED_FOR_NOW) assert.ok(!reached.has(key), `${key} is not routed by this item`);
+  for (let frame = 0; frame < 16; frame += 1) {
+    const key = `${UNIFIED_EXT5_BANK}:${frame}`;
+    if (!EXT5_UNROUTED_FOR_NOW.includes(key)) assert.ok(reached.has(key), `${key} was routed: it must be reachable`);
+  }
+  // 2. No key track carries an ext5 link (a new same-generation cell replaces
+  //    a drawing, it never changes timing — and this item changes neither).
+  const tracks = {
+    dash: dashKeys(),
+    jump: jumpArcKeys(0.22, { extended: true, descend: true }),
+    jumpPlain: jumpArcKeys(0.22, {}),
+    lightPunch: lightWindupKeys("punch", { inbetween: true }),
+    heavyKick: heavyWindupKeys("kick", { extended: true, inbetween: true }),
+    recovery: attackRecoveryKeys({ inbetween: true }, { limb: "kick", heavy: true }),
+    air: airNormalKeys(0.3, 0.7),
+    block: blockstunKeys(),
+    crouchBlock: crouchBlockstunKeys(),
+    reactionLight: reactionTrackKeys(false),
+    reactionHeavy: reactionTrackKeys(true),
+    clinch: throwClinchKeys({ inbetween: true }),
+    throwRecover: throwRecoveryKeys({ inbetween: true }),
+    wakeup: wakeupKeys(),
+  };
+  for (const [name, keys] of Object.entries(tracks)) {
+    for (const key of keys) for (const link of key.chain) assert.notEqual(link.bank, UNIFIED_EXT5_BANK, `${name} track names no ext5 cell`);
+  }
+  // 3. The resolver module and the substitution source do not know the bank.
+  const resolverSource = readFileSync(join(testDir, "..", "engine", "swing-resolve.mjs"), "utf8");
+  assert.ok(!resolverSource.includes("EXT5"), "swing-resolve.mjs does not name ext5");
+  const kits = readFileSync(join(testDir, "..", "engine", "fighter-kits.mjs"), "utf8");
+  const subBody = kits.slice(kits.indexOf("export function swingSubstitute("), kits.indexOf("\nexport function", kits.indexOf("export function swingSubstitute(") + 10));
+  assert.ok(!subBody.includes("EXT5") && !subBody.includes("E5"), "swingSubstitute names no ext5 cell");
+  assert.ok(!kits.includes("x5key(") || kits.indexOf("x5key(") === kits.lastIndexOf("x5key("), "no chain constructor uses x5key yet");
+  // 4. The engine's chain resolver does know the bank, so the routing item can
+  //    audit its budgets with the same `swing` answer ext3/ext4 use.
+  const key = { at: 0, chain: [x5key(E5.dashLaunch)] };
+  assert.equal(defaultBeatKeyResolve(key, { swing: true }), `${UNIFIED_EXT5_BANK}:${E5.dashLaunch}`);
+  assert.equal(defaultBeatKeyResolve(key, { fallback: "base:5" }), "base:5", "skipped like any swing link without the sheet");
+}
+
+function testExt5Wiring() {
+  // game.js: the mask, the loader suffix, the gate, the readiness gate, the
+  // drawable-now switch, the palette source and the snapshot all know the bank.
+  assert.match(gameSource, /ext4Masks: null, ext5Masks: null,/);
+  assert.match(gameSource, /unifiedBankState\.ext5Masks = manifest \? buildSwingAcceptMasks\(manifest, UNIFIED_EXT5_BANK, unifiedBankState\.masks\) : \{\};/);
+  assert.match(gameSource, /const swingBankList = Object\.freeze\(\[UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK\]\);/);
+  assert.match(gameSource, /\[UNIFIED_EXT5_BANK\]: "ext5Masks"/);
+  assert.match(gameSource, /\[UNIFIED_EXT5_BANK\]: "ext5"/);
+  assert.match(gameSource, /ext5: swingFighterWhole\(fighterId, UNIFIED_EXT5_BANK\),/);
+  assert.match(gameSource, /case "ext5": return live\(fighterSwingAtlases\[UNIFIED_EXT5_BANK\]\[fighterId\]\);/);
+  assert.match(gameSource, /for \(const swingBank of swingBankList\) \{/);
+  assert.match(gameSource, /swing: state\.fighters\.map\(\(fighter\) => swingBankList\.map\(/);
+  assert.match(gameSource, /bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK \|\| bank === UNIFIED_EXT5_BANK\n\s*\? fighterSwingAtlases\[bank\]\[fighterId\]/);
+  // The preload plan carries the sheet with the family (art-readiness), and
+  // the 3D layer enumerates AUTHORED_BANKS, so it needs no bank-specific code.
+  const plan = readFileSync(join(testDir, "..", "engine", "art-readiness.mjs"), "utf8");
+  assert.match(plan, /bank: "ext5", gate: "ext5", priority: "auto"/);
+  const three = readFileSync(join(testDir, "..", "renderer", "three", "fighters.mjs"), "utf8");
+  assert.ok(three.includes("AUTHORED_BANKS.forEach(") && !three.includes("ext5"), "CINEMA 3D walks the shared list");
+}
+
 testManifestShape();
 testPerCellGate();
 testSubstitutionTable();
@@ -313,5 +497,9 @@ testMeasuredTables();
 testRegistryAndWiring();
 testStandInHeights();
 testCrouchBlockstunTrack();
+testExt5Manifest();
+testExt5MeasuredTables();
+testExt5NothingRoutedYet();
+testExt5Wiring();
 
 console.log("Final Blow swing bank tests passed");

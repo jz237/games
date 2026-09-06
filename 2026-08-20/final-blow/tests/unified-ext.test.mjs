@@ -678,7 +678,7 @@ function testAli() {
 // X-H — registration, and the padding both renderers depend on.
 // ---------------------------------------------------------------------------
 function testRegistration() {
-  assert.deepEqual(AUTHORED_BANKS.slice(-4), [UNIFIED_EXT_BANK, "unified-ext2", "unified-ext3", "unified-ext4"]);
+  assert.deepEqual(AUTHORED_BANKS.slice(-5), [UNIFIED_EXT_BANK, "unified-ext2", "unified-ext3", "unified-ext4", "unified-ext5"]);
   for (const id of EXT) {
     // ON-SCREEN height: content x per-cell adjust x sheet adjust, both sides,
     // or the Commissioner's folded sheet correction reads as a pop that isn't

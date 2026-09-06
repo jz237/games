@@ -873,7 +873,7 @@ function testHeightReconciliationsMoved() {
 }
 
 function testBankRegistryAndWiring() {
-  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, "unified-ext3", "unified-ext4"],
+  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, "unified-ext3", "unified-ext4", "unified-ext5"],
     "both renderers and resolveMotionPose route off this one list");
   assert.equal(isAuthoredBank(UNIFIED_BANK), true);
 

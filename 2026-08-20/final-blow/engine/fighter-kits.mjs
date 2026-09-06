@@ -2009,6 +2009,7 @@ export function baseCellDrawAdjust(fighterId, bank, frame) {
   if (bank === UNIFIED_EXT2_BANK) return UNIFIED_EXT2_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT3_BANK) return UNIFIED_EXT3_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT4_BANK) return UNIFIED_EXT4_CELL_ADJUST[fighterId]?.[frame] || 1;
+  if (bank === UNIFIED_EXT5_BANK) return UNIFIED_EXT5_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT_BANK) return UNIFIED_EXT_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_BANK) return UNIFIED_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank !== "base") return 1;
@@ -2289,6 +2290,49 @@ const UNIFIED_EXT4_CELL_ADJUST = Object.freeze({
   ali: Object.freeze({ 3: 1.1219, 5: 1.0052, 8: 1.1274, 11: 1.1899, 14: 1.0434, 15: 1.0326 }),
 });
 
+// v5.2 LOCOMOTION — the sixth sheet (unified-ext5, grammar cells 72-87):
+// the dash in three drawings, the turnaround, the apex tuck and the descent,
+// the air recover, an upright air hit, the power charge, two entrances, the
+// victory, the taunt, a crouched guard flinch, the throw grab and the dizzy
+// sway. Measured on the built sheets exactly as ext3/ext4 (opaque rows at
+// alpha >= 24; feet on row 314 in all 160 cells). Built at the fighter's
+// UNIFIED scale — ali at his own 1.3661, a 6x4 main sheet draws its figure
+// smaller — and a wide cell (the dash stretch is a horizontal lunge on every
+// sheet, 134-213 px tall) is fit-scaled about its torso column and drawn
+// back up through the ADJUST table. The commissioner's rows fold his 1.033
+// sheet factor into every cell, as his ext2/ext3/ext4 rows do, because
+// bankSheetAdjust deliberately has no ext branch (see game.js).
+//
+// REGISTERED, NOT ROUTED: this item ships the sheet, the gate and the tables;
+// no track and no substitution names an ext5 cell yet (the routing pass is
+// the next item, and tests/unified-swing.test.mjs pins every cell unreached
+// until it lands). Registering first is what lets the trace prove the
+// drawing is unchanged with the sheets accepted.
+export const UNIFIED_EXT5_CELL_HEIGHT = Object.freeze({
+  deathblow: Object.freeze([215, 211, 168, 254, 168, 259, 251, 194, 248, 253, 246, 260, 249, 197, 232, 244]),
+  jez: Object.freeze([251, 184, 186, 291, 202, 285, 292, 236, 279, 292, 289, 292, 298, 233, 288, 292]),
+  alan: Object.freeze([241, 186, 209, 279, 188, 263, 245, 196, 275, 279, 261, 290, 278, 212, 265, 286]),
+  post: Object.freeze([249, 134, 206, 271, 173, 258, 267, 209, 256, 257, 258, 261, 256, 193, 256, 256]),
+  benny: Object.freeze([232, 153, 201, 274, 201, 279, 291, 206, 289, 289, 281, 289, 281, 213, 278, 281]),
+  donald: Object.freeze([232, 203, 209, 254, 171, 249, 247, 212, 261, 264, 235, 286, 260, 219, 245, 251]),
+  cyraxx: Object.freeze([265, 183, 237, 313, 193, 302, 284, 244, 310, 313, 310, 313, 305, 272, 303, 310]),
+  ali: Object.freeze([253, 173, 204, 301, 195, 281, 287, 221, 302, 306, 303, 306, 292, 242, 294, 301]),
+  commissioner: Object.freeze([285, 213, 210, 310, 218, 309, 310, 236, 300, 300, 288, 303, 305, 242, 284, 302]),
+  devil: Object.freeze([217, 173, 226, 269, 250, 273, 265, 221, 274, 280, 261, 285, 291, 209, 276, 272]),
+});
+const UNIFIED_EXT5_CELL_ADJUST = Object.freeze({
+  deathblow: Object.freeze({ 1: 1.0593, 2: 1.1155 }),
+  jez: Object.freeze({ 1: 1.1832, 2: 1.26 }),
+  alan: Object.freeze({ 1: 1.1676, 2: 1.0815 }),
+  post: Object.freeze({ 1: 1.2842, 2: 1.03 }),
+  benny: Object.freeze({ 0: 1.0589, 1: 1.2909 }),
+  donald: Object.freeze({ 1: 1.0128 }),
+  cyraxx: Object.freeze({ 1: 1.271, 2: 1.1833, 3: 1.0012, 6: 1.0304, 9: 1.0012, 11: 1.0294 }),
+  ali: Object.freeze({ 1: 1.2633, 2: 1.1463 }),
+  commissioner: Object.freeze({ 0: 1.033, 1: 1.0968, 2: 1.1554, 3: 1.033, 4: 1.033, 5: 1.033, 6: 1.033, 7: 1.067, 8: 1.033, 9: 1.033, 10: 1.0697, 11: 1.033, 12: 1.033, 13: 1.033, 14: 1.0793, 15: 1.033 }),
+  devil: Object.freeze({ 0: 1.1078, 1: 1.2516 }),
+});
+
 // ---------------------------------------------------------------------------
 // v5.1 EXT4 ROUTING — THE STAND-IN HEIGHT RECONCILIATION, and the M4 size pop
 // the 5.0 guard flinch re-opened.
@@ -2354,10 +2398,11 @@ export const SWING_STAND_IN_CLAMP = Object.freeze({ min: 0.80, max: 1.22 });
 // declared beside SWING_BANKS below: it keys on the bank names, which are
 // declared there, and a module-level literal cannot read them earlier.
 
-/** Drawn (fit-restored) content height of an ext3/ext4 cell, by SHEET FRAME. */
+/** Drawn (fit-restored) content height of an ext3/ext4/ext5 cell, by SHEET FRAME. */
 export function swingDrawnHeight(fighterId, bank, frame) {
   const table = bank === UNIFIED_EXT4_BANK ? UNIFIED_EXT4_CELL_HEIGHT
-    : bank === UNIFIED_EXT3_BANK ? UNIFIED_EXT3_CELL_HEIGHT : null;
+    : bank === UNIFIED_EXT3_BANK ? UNIFIED_EXT3_CELL_HEIGHT
+      : bank === UNIFIED_EXT5_BANK ? UNIFIED_EXT5_CELL_HEIGHT : null;
   const raw = table?.[fighterId]?.[frame];
   return Number.isFinite(raw) ? raw * baseCellDrawAdjust(fighterId, bank, frame) : 0;
 }
@@ -2626,6 +2671,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([163, 162, 158, 158, 165, 180, 164, 187, 212, 215, 220, 220, 191, 192, 176, 172]),
     "unified-ext3": Object.freeze([186, 196, 189, 192, 225, 256, 210, 217, 214, 184, 215, 195, 220, 212, 204, 249]),
     "unified-ext4": Object.freeze([183, 176, 203, 184, 192, 190, 199, 234, 189, 230, 223, 217, 223, 212, 234, 262]),
+    "unified-ext5": Object.freeze([207, 209, 230, 188, 230, 185, 189, 218, 190, 188, 192, 184, 190, 217, 198, 192]),
     ref: 162,
   }),
   jez: Object.freeze({
@@ -2638,6 +2684,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([162, 162, 158, 162, 166, 208, 169, 164, 208, 210, 220, 214, 164, 180, 168, 164]),
     "unified-ext3": Object.freeze([166, 175, 166, 173, 220, 250, 204, 214, 210, 172, 220, 188, 212, 217, 180, 238]),
     "unified-ext4": Object.freeze([174, 168, 196, 188, 180, 178, 206, 186, 186, 244, 221, 214, 236, 193, 230, 276]),
+    "unified-ext5": Object.freeze([189, 222, 222, 169, 214, 172, 168, 196, 175, 168, 170, 168, 166, 198, 170, 168]),
     ref: 162,
   }),
   alan: Object.freeze({
@@ -2650,6 +2697,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([162, 163, 158, 162, 165, 179, 160, 163, 208, 219, 242, 222, 164, 182, 168, 164]),
     "unified-ext3": Object.freeze([178, 174, 171, 193, 212, 239, 204, 192, 214, 158, 218, 183, 218, 214, 180, 256]),
     "unified-ext4": Object.freeze([170, 169, 192, 180, 196, 186, 190, 176, 186, 226, 228, 210, 214, 195, 224, 260]),
+    "unified-ext5": Object.freeze([194, 222, 210, 175, 220, 183, 192, 216, 177, 175, 184, 170, 176, 208, 182, 172]),
     ref: 162,
   }),
   post: Object.freeze({
@@ -2661,6 +2709,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([162, 163, 161, 163, 178, 176, 162, 162, 214, 220, 218, 226, 189, 186, 176, 173]),
     "unified-ext3": Object.freeze([180, 171, 174, 180, 222, 257, 211, 200, 218, 170, 230, 191, 220, 206, 195, 248]),
     "unified-ext4": Object.freeze([178, 174, 196, 180, 184, 186, 194, 177, 185, 222, 229, 221, 232, 205, 204, 265]),
+    "unified-ext5": Object.freeze([190, 248, 212, 179, 228, 186, 181, 210, 186, 186, 186, 184, 186, 218, 186, 186]),
     ref: 162,
   }),
   donald: Object.freeze({
@@ -2672,6 +2721,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([165, 162, 158, 163, 172, 193, 167, 167, 206, 213, 210, 222, 172, 172, 169, 172]),
     "unified-ext3": Object.freeze([191, 190, 190, 190, 226, 258, 208, 220, 220, 198, 240, 200, 217, 202, 194, 240]),
     "unified-ext4": Object.freeze([192, 184, 200, 190, 195, 187, 228, 202, 200, 231, 223, 224, 226, 205, 241, 264]),
+    "unified-ext5": Object.freeze([198, 213, 210, 188, 229, 190, 191, 208, 184, 182, 197, 172, 184, 205, 192, 189]),
     ref: 162,
   }),
   devil: Object.freeze({
@@ -2683,6 +2733,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([162, 162, 159, 164, 188, 194, 167, 183, 219, 213, 210, 212, 162, 178, 180, 162]),
     "unified-ext3": Object.freeze([191, 180, 178, 206, 225, 250, 194, 216, 202, 170, 218, 208, 207, 216, 180, 228]),
     "unified-ext4": Object.freeze([177, 176, 186, 202, 184, 184, 192, 180, 188, 226, 208, 220, 228, 202, 230, 263]),
+    "unified-ext5": Object.freeze([206, 228, 202, 180, 190, 178, 182, 204, 178, 174, 184, 172, 169, 210, 176, 178]),
     ref: 165,
   }),
   ali: Object.freeze({
@@ -2702,6 +2753,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([162, 166, 164, 164, 176, 178, 163, 170, 218, 222, 234, 223, 172, 184, 186, 172]),
     "unified-ext3": Object.freeze([174, 178, 166, 192, 218, 258, 198, 226, 206, 159, 218, 194, 214, 199, 226, 242]),
     "unified-ext4": Object.freeze([163, 162, 181, 180, 163, 158, 189, 183, 199, 218, 208, 232, 210, 190, 230, 273]),
+    "unified-ext5": Object.freeze([188, 229, 212, 164, 217, 174, 171, 204, 164, 162, 163, 162, 168, 194, 168, 164]),
     ref: 162,
   }),
   benny: Object.freeze({
@@ -2714,6 +2766,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([162, 162, 158, 158, 168, 181, 167, 173, 222, 222, 236, 220, 177, 177, 177, 176]),
     "unified-ext3": Object.freeze([169, 163, 164, 173, 212, 256, 196, 198, 209, 196, 218, 184, 209, 200, 187, 246]),
     "unified-ext4": Object.freeze([160, 158, 192, 177, 192, 175, 178, 181, 188, 227, 228, 214, 220, 186, 244, 270]),
+    "unified-ext5": Object.freeze([198, 238, 214, 178, 214, 175, 169, 212, 170, 170, 174, 170, 174, 208, 176, 174]),
     ref: 162,
   }),
   commissioner: Object.freeze({
@@ -2726,6 +2779,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([163, 162, 163, 161, 178, 186, 166, 166, 220, 224, 235, 222, 184, 182, 183, 181]),
     "unified-ext3": Object.freeze([165, 189, 158, 186, 209, 250, 182, 197, 198, 158, 214, 164, 204, 214, 216, 248]),
     "unified-ext4": Object.freeze([178, 158, 189, 175, 199, 171, 218, 174, 175, 230, 207, 224, 211, 192, 243, 266]),
+    "unified-ext5": Object.freeze([172, 208, 210, 160, 206, 160, 160, 196, 164, 164, 170, 163, 162, 194, 172, 164]),
     ref: 158,
   }),
   cyraxx: Object.freeze({
@@ -2738,6 +2792,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     "unified-ext2": Object.freeze([162, 162, 158, 158, 171, 183, 162, 166, 220, 221, 228, 222, 175, 175, 175, 175]),
     "unified-ext3": Object.freeze([169, 160, 160, 172, 202, 254, 197, 193, 201, 158, 216, 184, 206, 210, 190, 248]),
     "unified-ext4": Object.freeze([158, 158, 174, 170, 176, 162, 169, 164, 168, 222, 233, 226, 208, 192, 213, 264]),
+    "unified-ext5": Object.freeze([182, 223, 196, 158, 218, 164, 172, 192, 160, 158, 160, 158, 162, 178, 163, 160]),
     ref: 165,
   }),
 });
@@ -2800,7 +2855,8 @@ export function auditBodyCentres() {
     // jump-descend) are routed, so an unmeasured row would put the B2 body-drop
     // straight back into the middle of those fighters' jumps.
     // v5.0: the ext3/ext4 rows are sixteen entries on every fighter who has them.
-    for (const swingBank of [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]) {
+    // v5.2: and the ext5 row, on all ten.
+    for (const swingBank of [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK]) {
       const swingCentres = table[swingBank];
       if (!swingCentres) continue;
       if (swingCentres.length !== 16) errors.push(`${fighterId}/${swingBank}: ${swingCentres.length} entries`);
@@ -3646,9 +3702,30 @@ export const UNIFIED_EXT4_BEATS = Object.freeze([
   "wall-splat", "crumple", "falling", "floor-bounce",
   "getup-a", "getup-b", "thrown", "ko",
 ]);
+// v5.2 LOCOMOTION — the sixth sheet. Same pipeline and the same per-cell
+// gate as ext3/ext4 (a SWING_BANKS entry, so buildSwingAcceptMasks,
+// swingFrame and the loaders need no bank-specific code). Registered by the
+// install item and ROUTED by the item after it: nothing below names one of
+// these cells yet, and the tests pin all sixteen unreachable until it does.
+export const UNIFIED_EXT5_BANK = "unified-ext5";
+export const UNIFIED_EXT5_CELL_COUNT = 16;
+export const UNIFIED_EXT5_BASE = 72;
+export const UNIFIED_EXT5_CELLS = Object.freeze({
+  dashLaunch: 0, dashStretch: 1, dashBrake: 2, turnaround: 3,
+  apexTuck: 4, descent: 5, airRecover: 6, airHitUpright: 7,
+  powerCharge: 8, entranceA: 9, entranceB: 10, victory: 11,
+  taunt: 12, crouchGuardFlinch: 13, throwGrab: 14, dizzySway: 15,
+});
+export const UNIFIED_EXT5_BEATS = Object.freeze([
+  "dash-launch", "dash-stretch", "dash-brake", "turnaround",
+  "apex-tuck", "descent", "air-recover", "air-hit-upright",
+  "power-charge", "entrance-a", "entrance-b", "victory",
+  "taunt", "crouch-guard-flinch", "throw-grab", "dizzy-sway",
+]);
 export const SWING_BANKS = Object.freeze({
   [UNIFIED_EXT3_BANK]: Object.freeze({ base: UNIFIED_EXT3_BASE, count: UNIFIED_EXT3_CELL_COUNT, sheetKey: "ext3Sheet", cellsKey: "ext3Cells" }),
   [UNIFIED_EXT4_BANK]: Object.freeze({ base: UNIFIED_EXT4_BASE, count: UNIFIED_EXT4_CELL_COUNT, sheetKey: "ext4Sheet", cellsKey: "ext4Cells" }),
+  [UNIFIED_EXT5_BANK]: Object.freeze({ base: UNIFIED_EXT5_BASE, count: UNIFIED_EXT5_CELL_COUNT, sheetKey: "ext5Sheet", cellsKey: "ext5Cells" }),
 });
 
 /**
@@ -3672,6 +3749,7 @@ export const SWING_STAND_IN_TARGET = Object.freeze({
 /** Chain-constructor siblings of x2key for the swing sheets. SHEET FRAMES. */
 export const x3key = (cell) => Object.freeze({ bank: UNIFIED_EXT3_BANK, cell });
 export const x4key = (cell) => Object.freeze({ bank: UNIFIED_EXT4_BANK, cell });
+export const x5key = (cell) => Object.freeze({ bank: UNIFIED_EXT5_BANK, cell });
 
 export function swingFrame(bank, cell) {
   const spec = SWING_BANKS[bank];
@@ -4109,7 +4187,8 @@ export function defaultBeatKeyResolve(key, {
       continue;
     }
     // v5.1: the same for a swing-sheet link (the crouch blockstun flinch).
-    if (link.bank === UNIFIED_EXT3_BANK || link.bank === UNIFIED_EXT4_BANK) {
+    // v5.2: ext5 rides the same `swing` answer.
+    if (link.bank === UNIFIED_EXT3_BANK || link.bank === UNIFIED_EXT4_BANK || link.bank === UNIFIED_EXT5_BANK) {
       if (swing) return `${link.bank}:${link.cell}`;
       continue;
     }
@@ -5229,8 +5308,9 @@ export function buildMotionAcceptMasks(manifest, cellCount = MOTION_CELL_COUNT) 
 // accept-mask gate. It is deliberately LAST — the order is the order the banks
 // were added, and the 3D renderer walks this list to decide which pose banks it
 // must build a texture for.
+// v5.2 appends "unified-ext5" (the locomotion sheet), last for the same reason.
 export const AUTHORED_BANKS = Object.freeze([
-  "motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK,
+  "motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK,
 ]);
 
 /** True for a bank that must clear the sheet + accept-mask gate before it draws. */

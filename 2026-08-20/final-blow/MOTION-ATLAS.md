@@ -3549,3 +3549,87 @@ generated sheet was also rebuilt with the despill (see the manifest's
 contact or a crouched victim (there is no HIGH level — a MID jab snaps the
 head), a blocked contact keeps its stance through the hit flash, and the
 wake-up rung is measured on the ext4 get-up it draws from.
+## v5.2 — LOCOMOTION, ITEM ONE: THE SIXTH SHEET IS REGISTERED, AND NOTHING DRAWS DIFFERENTLY YET
+
+Every fighter now carries `assets/unified/<id>-ext5.webp` (bank
+`unified-ext5`, grammar cells 72-87): dash launch, dash stretch, dash brake,
+turnaround, apex tuck, descent, air recover, an upright air hit, power charge,
+entrance A and B, victory, taunt, crouch guard flinch, throw grab, dizzy sway.
+The 5.0 air arc and the dash are where the roster still crosses generations
+in the middle of a motion — the jump traced `unified:8 -> ext:3 -> motion:5
+-> motion3:2 -> motion3:3 -> ext3:8 -> ext3:10` and the dash `motion2:6 ->
+motion:7 -> motion3:5 -> motion2:6` on jez, four banks apiece — and this
+sheet is the same-generation answer. Generated the 4.9/5.0 way
+(`tools/swing/grammar-ext5.txt`, `build_sheet.py --bank ext5`: image-to-image
+from the fighter's own unified sheet, per-cluster LAB match, un-premultiplied
+despill, magenta inpaint, the purple impact strokes purged on cells 7 and 13),
+built AT THE UNIFIED SCALE — ali at his own 1.3661, since a 6x4 main sheet
+draws its figure smaller. Shipped LOSSLESS, 800 KB - 1.11 MB each, 9.23 MB
+for the ten; the 5.1 encode gate has not been run on this bank and the family
+on the wire grows by that much per fighter until it is.
+
+THIS ITEM REGISTERS AND DOES NOT ROUTE. The wave splits the two on purpose:
+registering first is what lets a trace prove the drawing is unchanged with
+the sheets ACCEPTED, and it puts the tables in front of the routing item
+instead of beside it. So: the sheets ship; `UNIFIED_EXT5_BANK` / `_BASE` 72 /
+`_CELLS` / `_BEATS` and a `SWING_BANKS` entry (the per-cell gate, `swingFrame`
+and both loaders need no new code); `AUTHORED_BANKS` gains the bank last, so
+CINEMA 3D warms it from the shared list; the manifest carries `ext5Sheet`,
+`ext5Scale` and sixteen `ext5Cells` per fighter and `format.ext5Status`
+reads `REGISTERED 5.2 — routed by the locomotion pass`; game.js mirrors every
+ext3/ext4 site (`ext5Masks`, the swing atlas table, the drawable and
+readiness gates, the palette source, the snapshot's `swing` triple, and the
+preload plan, where ext5 joins the family the intro holds for — the dash is
+the first thing a player does, and a sheet that pops in after FIGHT! is the
+5.1 strobe by network). No track and no substitution names an ext5 cell.
+`tests/unified-swing.test.mjs` pins all sixteen unreachable in
+`EXT5_UNROUTED_FOR_NOW`, sweeps every bank x cell x 2048 contexts through
+`swingSubstitute`, walks fourteen key tracks for an ext5 link, and reads
+`swing-resolve.mjs` and the substitution body for the bank's name. The
+routing item shrinks that list.
+
+THE MEASURED TABLES, from the slicer sidecars (`swing-v50/ext5-<id>.json`),
+re-measured on the shipped masters at alpha >= 24 (160 of 160 cells match,
+feet on row 314 on every one). `UNIFIED_EXT5_CELL_HEIGHT` runs 134-313: the
+dash stretch is a horizontal lunge on every sheet (post 134, benny 153,
+devil and ali 173, cyraxx 183, jez 184, alan 186, donald 203, deathblow 211,
+commissioner 213) and is the shortest dash cell on all ten; the tuck sits
+under the descent on all ten. `UNIFIED_EXT5_CELL_ADJUST` carries the
+fit-restore for the wide cells — the stretch on nine sheets (jez 1.183, alan
+1.168, post 1.284, benny 1.291, cyraxx 1.271, ali 1.263, devil 1.252,
+deathblow 1.059, donald 1.013), the brake on seven (jez 1.26, cyraxx 1.183,
+ali 1.146, deathblow 1.116, alan 1.082, post 1.03), the launch on benny
+(1.059) and the devil (1.108), cyraxx's air recover and victory — and the
+commissioner's row folds his 1.033 sheet factor into all sixteen exactly as
+his ext2/ext3/ext4 rows do (stretch 1.0618 x 1.033 = 1.0968), because
+`bankSheetAdjust` has no ext branch and both renderers must agree.
+`CELL_BODY_CENTRE[id]["unified-ext5"]` is the sidecar's bodyCentre; the
+airborne anchor reads it the day a jump cell is routed. `swingDrawnHeight`
+knows the bank; `swingStandInAdjust` is 1 on every cell because nothing is a
+stand-in yet.
+
+THE REVIEW, at 1:1 on the masters. 159 of 160 accept. ali's crouch guard
+flinch (85) is HELD: a yellow impact burst is painted into the cell at his
+hands, and the purge keys purple only — accept:false until it is keyed out,
+and a crouched block keeps his ext3 crouch guard. The air-hit-upright cell
+(79) did not come back upright: nine sheets drew a doubled-over fold (head
+and feet both down, a body blow taken in the air) and the devil's an arched
+launch. Unlike the inverted ext4:7 the feet are under the head on every
+sheet, so it is accepted with that note in the manifest and the routing pass
+decides what, if anything, it stands in for. post's and jez's victory cells
+(arms raised to the row edge) shed the most bleed-over blobs to the slicer's
+bottom-edge rule (13 and 10), and both read whole.
+
+PROVED UNCHANGED. The engine trace (the swing-resolve harness's kit-less
+strike mirror plus the jump-arc and dash tracks, gate built from the shipped
+manifests) was run before and after registration for jez, deathblow and ali,
+with the ext5 masks whole after. Every track is byte-identical, hold ticks
+included — jez: jab `ext2:0 x4 -> ext3:0 x5 -> ext3:2 x2 -> ext2:1 x2 ->
+unified:7 x2 -> unified:0 x2`, heavy kick `ext:6 x4 -> ext2:6 x3 -> unified:6
+x5 -> ext3:14 x6 -> ext3:11 x8 -> ext2:7 x5 -> unified:7 x5 -> unified:0 x7`,
+jump `unified:8 x5 -> ext:3 x5 -> motion:5 x7 -> motion3:2 x5 -> motion3:3 x3
+-> ext3:8 x4 -> ext3:10 x17`, dash `motion2:6 x3 -> motion:7 x3 -> motion3:5
+x4 -> motion2:6 x4`; the only line that differs is the gate's own header,
+which now lists the bank. Every hold budget in `tests/motion-holds` stands
+untouched (370 tests, all green; the swing script gained four functions). This is the baseline the routing
+item's before/after is measured against.

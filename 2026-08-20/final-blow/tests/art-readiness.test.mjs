@@ -25,9 +25,9 @@ const gameRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 test("preload plan: the unified family goes first, at high priority, the bonus banks last and low", () => {
   const banks = PRELOAD_PLAN.map((entry) => entry.bank);
-  assert.deepEqual(banks.slice(0, 5), ["unified", "ext", "ext2", "ext3", "ext4"]);
-  assert.deepEqual(READINESS_BANKS, ["unified", "ext", "ext2", "ext3", "ext4"]);
-  assert.ok(banks.indexOf("motion") > banks.indexOf("ext4"), "motion banks follow the family");
+  assert.deepEqual(banks.slice(0, 6), ["unified", "ext", "ext2", "ext3", "ext4", "ext5"]);
+  assert.deepEqual(READINESS_BANKS, ["unified", "ext", "ext2", "ext3", "ext4", "ext5"]);
+  assert.ok(banks.indexOf("motion") > banks.indexOf("ext5"), "motion banks follow the family");
   assert.ok(banks.indexOf("motion3") > banks.indexOf("motion2"));
   assert.ok(banks.indexOf("walk") > banks.indexOf("motion2"));
   const priority = Object.fromEntries(PRELOAD_PLAN.map((entry) => [entry.bank, entry.priority]));
@@ -50,6 +50,9 @@ test("unifiedFamilyFor: the family follows the manifest gates, in plan order", (
   );
   // ext missing but ext2+ present (deathblow/devil/donald/post ship this way).
   assert.deepEqual(unifiedFamilyFor({ whole: true, ext: false, ext2: true, ext3: true, ext4: true }), ["unified", "ext2", "ext3", "ext4"]);
+  // v5.2: the locomotion sheet is part of the family the intro waits for.
+  assert.deepEqual(unifiedFamilyFor({ whole: true, ext: true, ext2: true, ext3: true, ext4: true, ext5: true }), ["unified", "ext", "ext2", "ext3", "ext4", "ext5"]);
+  assert.deepEqual(unifiedFamilyFor({ whole: true, ext5: true }), ["unified", "ext5"]);
 });
 
 test("classifySheet: drawable wins, a failed decode is settled, everything else is pending", () => {
@@ -126,7 +129,7 @@ test("game.js wiring: family-first preload, select-screen warm, the hold and the
   for (const bank of ["motion", "motion2", "motion3", "walk", "unified", "ext", "ext2"]) {
     assert.ok(game.includes(`authoredSheetImage("${bank}", `), `${bank} sheet goes through authoredSheetImage`);
   }
-  assert.ok(game.includes("authoredSheetImage(swingSuffix[bank], "), "ext3/ext4 sheets go through authoredSheetImage");
+  assert.ok(game.includes("authoredSheetImage(swingSuffix[bank], "), "ext3/ext4/ext5 sheets go through authoredSheetImage");
   assert.doesNotMatch(game, /new Image\(\);\n\s*atlas\.src = `assets\/(motion|motion2|motion3|walk|unified)\//);
   // The manifest is kicked at boot and the whole preload runs behind it, the
   // unified sheet requested before the motion banks.
