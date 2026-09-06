@@ -61,6 +61,9 @@ export const CINEMA_HOST_OPTIONAL = Object.freeze([
   "crowdSheetImage",       // (sheetName) -> decoded crowd sheet image or null
   "crowdMediaRequest",     // () -> kick the crowd sheet loader
   "meshFightersEnabled",   // () -> bool: the 4.3 rigged-mesh switch, read per frame
+  // 5.1 CINEMA 3D fighter layer (#40, #44).
+  "downTiltRadians",       // DOWN_TILT_RADIANS (1.35) — the prone settle's full-tilt reference (fallback 1.35)
+  "fighterBankSheet",      // (fighterId, bank) -> the bank's OWN sheet (Image/canvas) or null: the warm-up gate
 ]);
 
 export const CINEMA_HOST_MEMBERS = Object.freeze([...CINEMA_HOST_REQUIRED, ...CINEMA_HOST_OPTIONAL]);

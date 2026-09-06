@@ -12,6 +12,7 @@
 import * as THREE from "three";
 import { PX, worldX, mulberry32, hash01 } from "./shared.mjs";
 import { canvasTexture, asphaltMaps, softDotTexture, streakTexture, wetStreakTexture, bokehDiscTexture } from "./textures.mjs";
+import { spriteLightFor } from "./stage-lighting.mjs";
 
 const SODIUM = 0xffa04a;
 const NEON_MAGENTA = 0xff4fd8;
@@ -2327,6 +2328,9 @@ export function buildSomersetStage(host, { quality }) {
     fog,
     background,
     keyLight: key,
+    // 5.1 (#45): the sprite shader's practicals for this stage — the
+    // sodium / K&A neon / station-lamp set that used to be its constants.
+    spriteLight: spriteLightFor("somerset"),
     // Super-freeze rim-lit silhouette: the stage drops toward darkness while
     // the practical rims stay (the fighter layer boosts its rims in step).
     setDim(dim) {

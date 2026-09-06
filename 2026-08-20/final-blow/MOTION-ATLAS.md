@@ -3333,3 +3333,48 @@ the owner's rule), and there is no ground-bounce sim state for it to mean
 anything. Both stay drawn, gated and pinned unreachable. The KO cell lies
 flat with the head on the same side as unified:15 on every sheet, so
 `downTiltFor` measures it at 0 and the down-tilt rule holds.
+
+## v5.1 — CINEMA 3D DRAWS THE SAME FIGHTER: POST'S MIRROR, THE PRONE SETTLE, THE TREMBLE AND THE HUNCH
+
+Three animation reads the 2D path owned never crossed the bridge into the
+3D fighter layer (renderer/three/fighters.mjs). They do now, through
+`renderer/three/sprite-pose.mjs` — a dependency-free module Node pins
+against drawFighter in `tests/cinema-fighters.test.mjs`, which registers a
+stub `three` and DRIVES poseRig with a mock host.
+
+THE MIRROR. drawFighter draws with `facing * atlasFrameFacing(id, bank,
+frame)` (1.9E: Post's base bank is left-authored on 13/16 cells, his
+specials on 12/16). poseRig used the facing alone, so in 3D Post read
+backward on every one of those cells and looked away from his opponent
+through every special — the exact bug Jez reported on the 2D path, still
+live in the renderer he showcases. `spriteMirror()` is now the sign of the
+quad's x scale, of the shader's screen-space edge orientation
+(`uFbFacing`, which the rims and fills key on) and of everything drawFighter
+applies AFTER `ctx.scale(renderMirror, 1)`: the lunge, the attack tilt, the
+new hunch. Everything it applies before (down tilt, air-tech flip, the
+tremble) keeps the sim facing. Pinned on all 64 Post cell x facing
+combinations: `sign(mesh.scale.x) === facing * atlasFrameFacing`.
+
+THE PRONE SETTLE. The 2D down pose is `rotate(-facing*tilt);
+translate(-facing*45*share, 17*share)` — and that translate is in the
+ROTATED frame. Resolved to world axes at full tilt it is +6.7 px toward
+the facing and 47.6 px DOWN THE SCREEN, which on the 2D perspective floor
+reads as "lying nearer the camera". The 3D layer had been applying the raw
+x term as a 45 px world slide BACKWARD and ignoring the rest, and because
+the quad pivots at the feet, a tilted body's back half sat under the
+boards while an authored-flat KO cell floated by its bottom padding (the
+"feet in the air" read Flat Out exists to kill). `proneTransform()` now
+resolves the nudge (only the world-x part is applied — a vertical
+billboard cannot lie "nearer the camera", and 47 px of -y would bury it),
+and `proneSettleLift()` rotates the cell's measured silhouette box (foot
+metrics now record `extent` per cell) and rests its lowest corner 2 px
+under the ground plane: a tilted cell LIFTS by about half the body width,
+a flat cell DROPS its padding. Grounded only; a body still in the air keeps
+its sim height. The 2D drawing did not change.
+
+THE TREMBLE AND THE HUNCH. MOTION FIX 4's 1-2 px hitstun shiver (hashed
+from `simulationTick*2 + side*17` through presentationHash01, the copy in
+sprite-pose pinned verbatim against game.js) and the 0.085 rad exhaustion
+lean under 25% health now run in 3D with the 2D gates (reduced motion off,
+cinematic frames off, super storms on). The tremble moves the body and the
+mirror but not the contact shadows, as in 2D.

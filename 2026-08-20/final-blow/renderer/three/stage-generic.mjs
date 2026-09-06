@@ -4,6 +4,10 @@
 // night rig, so stage switching in 3D mode never breaks or goes black.
 import * as THREE from "three";
 import { canvasTexture, asphaltMaps } from "./textures.mjs";
+// 5.1 (#45): the sprite-light descriptor the fighter shader reads for this
+// stage (rims / crown / floor bounce fitted to the plate) travels with the
+// stage object; STAGE_MOOD below only lights the world, not the sprites.
+import { spriteLightFor } from "./stage-lighting.mjs";
 
 const STAGE_MOOD = {
   vet: { key: 0xffd9a0, rim: 0xffb054, fog: 0x141008 },
@@ -105,6 +109,7 @@ export function buildGenericStage(host, { quality, stageId }) {
     fog: new THREE.Fog(mood.fog, 8.8, 27),
     background: new THREE.Color(0x05070d),
     keyLight: key,
+    spriteLight: spriteLightFor(stageId),
     update() {},
     dispose() {
       group.traverse((node) => {

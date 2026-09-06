@@ -177,7 +177,8 @@ test("the 3D fighter layer carries the super-ready read (rim uniform, aura, embe
   assert.match(fighters, /uniform vec3 uFbReadyColor;/);
   assert.match(fighters, /totalEmissiveRadiance \+= uFbReadyColor \* \(uFbReadyRim \* \(fbEdgeAny \* 1\.35 \+ 0\.05\)\);/);
   // A new uniform means a new program: the cache key must move with it.
-  assert.match(fighters, /customProgramCacheKey = \(\) => "fb-sprite-grade-v11"/);
+  // v12 (5.1, #45): uFbTopTint — the per-stage top-light body multiplier.
+  assert.match(fighters, /customProgramCacheKey = \(\) => "fb-sprite-grade-v12"/);
   assert.match(fighters, /bank\.fb\.readyRim\.value = superReady \? 0\.55 \+ readyPulse \* 0\.45 : 0;/);
   // Same ember formula as the 2D aura, hashed from the sim tick.
   assert.match(fighters, /const cycleFrames = 66 \+ \(ember % 3\) \* 14;/);

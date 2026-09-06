@@ -107,6 +107,64 @@ contest. The reads now exist in both renderers, from ONE set of drawings:
   bridge (every `host.<x>` read in `renderer/three/*.mjs` is declared; every
   declared member is a key of the literal `game.js` passes).
 
+## CINEMA 3D fighter layer (5.1)
+
+Three fixes to how the sprites are lit and built in 3D (items #40, #44,
+#45 of the 5.1 sweep). The pose-parity half (Post's mirror, the prone
+settle, the tremble and the hunch) is in MOTION-ATLAS.md.
+
+- **Per-stage sprite lighting.** The sprite shader's position-driven
+  terms — left/right silhouette rims, the crown strip and top-down body
+  gradient, the two lateral body fills, the floor bounce on the shins, the
+  zone grade and the mirror's hue — were Somerset constants on every stage:
+  K&A magenta rims, station-lamp green crowns and sodium floor bounce on
+  the Vet, the buffet and the cruise deck. `renderer/three/stage-lighting.mjs`
+  is a per-stage table (`spriteLightFor(id)`, `spriteLightFrame(light, fx,
+  hitSmear)`); each stage builder returns `spriteLight` and `main.mjs` hands
+  it to `FighterLayer.setStageLight` on every (re)build. Somerset's entry is
+  the old constant set number for number (pinned to 1e-9 against the
+  pre-5.1 formulas), so the hero stage did not move. The Vet is stadium
+  floodlight (white top with a huge spread, so both crowns read floodlit
+  everywhere, near-white body tint) with sodium lot lamps on BOTH sides and
+  grill-fire amber off the asphalt; the buffet is amber heat lamps
+  overhead (warm body tint), the red sign screen-right, carpet-orange
+  bounce; the cruise deck is sky/moon from above with the lit pool throwing
+  turquoise up the legs; Wildwood pink/cyan neon; Janney sodium/violet.
+  The top-light body multiplier that was baked into the shader
+  (`vec3(0.88, 1.12, 0.99)`, the lamp's green) is the `uFbTopTint` uniform
+  now — program cache key `fb-sprite-grade-v12`.
+  `__finalBlowThree.stats().banks.stageLight` names the descriptor in use.
+- **Idle-time bank builds.** A fighter bank (colour map, normal map,
+  smeared mirror map, foot metrics) was built synchronously on the render
+  thread the first frame a pose landed in it — four full-sheet pixel
+  kernels, a hundreds-of-ms hitch on the first jab / hit / crouch of a 3D
+  fight. `buildBank` now returns a DRAWABLE shell at once (the raw sheet as
+  the colour map — the shader's 1 px-eroded alpha test hides most of the
+  fringe the bleed kills — plus a shared flat 1x1 normal map so the program
+  never recompiles) and queues the chain on an `IdleQueue`
+  (`renderer/three/atlas-pixels.mjs`: requestIdleCallback with a timeout,
+  setTimeout(0) on iOS): foot metrics → bled colour map → smeared mirror →
+  normal map → HD composite, one or more steps per idle slice. The bleed
+  itself walks the silhouette FRONTIER instead of re-scanning the sheet
+  seven times (byte-identical output, pinned against a copy of the old
+  scan), the three consumers share ONE `getImageData`, and the balanced
+  tier builds a half-resolution normal map (never none: the rims are gated
+  by it). `buildRig` warms every authored bank whose OWN sheet is decoded
+  (host `fighterBankSheet` — `paletteAtlas` falls back to the base sheet for
+  a bank a fighter lacks, which the warm-up must not mistake for one),
+  priority-ordered behind base and specials, so a normal fight builds
+  nothing on a gameplay frame; a sheet that decodes late still gets its
+  shell on first use and is counted (`stats().banks.lateFallbacks`).
+  `__finalBlowThree.drainBankQueue()` runs everything now for probes.
+- **Eviction.** `disposeRig` cancels the rig's queued steps, disposes
+  every texture and clears the sheet's pixel read / bled canvas / smear /
+  normal-map texture / HD composite from the module caches in
+  `textures.mjs` unless the other live rig still draws that sheet
+  (`releaseAtlasCaches`). Rigs with no fighters for 3 s (menus, the ladder
+  between pairs) are released too. `stats().banks` reports built / ready /
+  warmed / lateFallbacks / evicted, per-side bank stages and cache sizes —
+  the probe for "no growth across an arcade ladder".
+
 ## Traps
 
 - `ctx.filter` is also used by `drawFighter` for hit flashes; the reflection

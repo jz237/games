@@ -25,6 +25,9 @@ import { CrowdLayer } from "./crowd-layer.mjs";
 import { WorldObjectsLayer } from "./world-objects.mjs";
 import { buildSomersetStage } from "./stage-somerset.mjs";
 import { buildGenericStage } from "./stage-generic.mjs";
+// 5.1 (#45): per-stage sprite lighting — a stage builder may return its own
+// `spriteLight`; otherwise the table answers for the id.
+import { spriteLightFor } from "./stage-lighting.mjs";
 // 5.1: the explicit list of everything this renderer reads off `host`, pinned
 // by tests/cinema-host.test.mjs against the literal game.js passes in.
 import { assertHostContract, CINEMA_HOST_MEMBERS } from "./host-contract.mjs";
@@ -114,6 +117,9 @@ export function createRenderer(host) {
     scene.add(stage.group);
     scene.fog = stage.fog || null;
     scene.background = stage.background || new THREE.Color(0x05070d);
+    // 5.1 (#45): the sprites are lit by THIS stage's practicals (the layer
+    // may not exist yet on the first build — init() hands it over then).
+    layers.get("fighters")?.setStageLight(stage.spriteLight || spriteLightFor(id));
   }
 
   function init() {
@@ -158,6 +164,7 @@ export function createRenderer(host) {
       const fighters = new FighterLayer(host);
       scene.add(fighters.group);
       layers.set("fighters", fighters);
+      fighters.setStageLight(stage.spriteLight || spriteLightFor(stageId));
       // v4.3 MESH FIGHTERS: rigged 3D characters stand in for the sprite
       // billboards per side whenever renderer/rigs/<id>/ is present. The
       // sprite rig hides only while its side's mesh is actually drawn, so a
@@ -401,7 +408,14 @@ export function createRenderer(host) {
     quality,
     stage: stageId,
     programs: renderer?.info.programs?.length ?? 0,
+    // 5.1 (#40/#45): bank readiness per side, build/evict tallies, cache
+    // sizes and which stage's light the sprites wear.
+    banks: layers.get("fighters")?.bankReport?.() ?? null,
   });
+
+  // 5.1 (#40) QA: run every queued bank-build step synchronously (the
+  // browser probe warms, then measures frame times with nothing pending).
+  renderer3d.drainBankQueue = () => layers.get("fighters")?.drainBankQueue?.() ?? 0;
 
   renderer3d.forceTime = (ms) => {
     clockSec = ms / 1000;
@@ -433,6 +447,7 @@ export function createRenderer(host) {
     stats: renderer3d.stats,
     setQuality: renderer3d.setQuality,
     forceTime: renderer3d.forceTime,
+    drainBankQueue: renderer3d.drainBankQueue,
     registerStage,
     registerLayer: renderer3d.registerLayer,
     registerImpactEffect: renderer3d.registerImpactEffect,

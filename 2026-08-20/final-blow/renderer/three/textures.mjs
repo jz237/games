@@ -3,6 +3,7 @@
 // nothing allocates per frame.
 import * as THREE from "three";
 import { mulberry32 } from "./shared.mjs";
+import { bleedPixels, normalPixels, footMetricsFromPixels } from "./atlas-pixels.mjs";
 
 export function canvasTexture(width, height, paint, options = {}) {
   const canvas = document.createElement("canvas");
@@ -19,15 +20,19 @@ export function canvasTexture(width, height, paint, options = {}) {
   return texture;
 }
 
-// Alpha-bleed (RGB dilation): floods the colour of each opaque pixel outward
-// into the transparent region around it. The source atlases store WHITE under
-// their transparent texels, so linear filtering / mipmapping at the sprite
-// edge blended toward white — the single biggest cause of the "sticker halo".
-// After bleeding, edge texels filter toward the character's own colours.
-const bleedCache = new Map();
-export function bleedAtlasCanvas(image, passes = 7) {
-  const key = image.src || image;
-  if (bleedCache.has(key)) return bleedCache.get(key);
+// --- Atlas pixel cache (5.1, #40) -------------------------------------------
+// ONE getImageData per sheet, shared by the bleed, the normal map and the
+// foot metrics (each used to draw the sheet into its own scratch canvas and
+// read it back — three 6.5 MB reads per bank). Released by the fighter
+// layer once a bank's chain has run, and on rig disposal, so no sheet's
+// bytes stay resident behind a fighter who left the match.
+const pixelCache = new Map();
+export function atlasKey(image) {
+  return image.src || image;
+}
+export function atlasPixels(image) {
+  const key = atlasKey(image);
+  if (pixelCache.has(key)) return pixelCache.get(key);
   const w = image.naturalWidth;
   const h = image.naturalHeight;
   const canvas = document.createElement("canvas");
@@ -35,40 +40,73 @@ export function bleedAtlasCanvas(image, passes = 7) {
   canvas.height = h;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.drawImage(image, 0, 0);
-  const img = ctx.getImageData(0, 0, w, h);
-  const data = img.data;
-  const known = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i += 1) known[i] = data[i * 4 + 3] > 12 ? 1 : 0;
-  const next = new Uint8Array(w * h);
-  for (let pass = 0; pass < passes; pass += 1) {
-    next.set(known);
-    let changed = false;
-    for (let y = 0; y < h; y += 1) {
-      const row = y * w;
-      for (let x = 0; x < w; x += 1) {
-        const i = row + x;
-        if (known[i]) continue;
-        let r = 0;
-        let g = 0;
-        let b = 0;
-        let n = 0;
-        // 4-neighbourhood is enough per pass and keeps this loop cheap.
-        if (x > 0 && known[i - 1]) { const p = (i - 1) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
-        if (x < w - 1 && known[i + 1]) { const p = (i + 1) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
-        if (y > 0 && known[i - w]) { const p = (i - w) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
-        if (y < h - 1 && known[i + w]) { const p = (i + w) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
-        if (!n) continue;
-        const p = i * 4;
-        data[p] = r / n;
-        data[p + 1] = g / n;
-        data[p + 2] = b / n;
-        next[i] = 1;
-        changed = true;
-      }
-    }
-    known.set(next);
-    if (!changed) break;
+  const pixels = { data: ctx.getImageData(0, 0, w, h).data, width: w, height: h };
+  pixelCache.set(key, pixels);
+  return pixels;
+}
+export function releaseAtlasPixels(image) {
+  return pixelCache.delete(atlasKey(image));
+}
+
+// Drop everything cached for one sheet: the pixel read, the bled canvas,
+// the smear, the normal-map texture (disposed — it is GPU memory) and any HD
+// composite keyed on it. The fighter layer calls this when the last rig
+// drawing the sheet is disposed (an arcade ladder used to leave ~200 MB of
+// canvases resident per fighter met in 3D).
+export function releaseAtlasCaches(image) {
+  const key = atlasKey(image);
+  let released = 0;
+  if (pixelCache.delete(key)) released += 1;
+  if (bleedCache.delete(key)) released += 1;
+  if (smearCache.delete(`${key}:vsmear`)) released += 1;
+  for (const blurKey of [...blurCache.keys()]) {
+    if (blurKey.startsWith(`${key}:`) && blurCache.delete(blurKey)) released += 1;
   }
+  const normal = normalCache.get(key);
+  if (normal) {
+    normal.dispose();
+    normalCache.delete(key);
+    released += 1;
+  }
+  if (footMetricsCache.delete(key)) released += 1;
+  if (hdComposeCache.delete(key)) released += 1;
+  return released;
+}
+
+/** QA: what the atlas caches currently hold (keys are sheet URLs / canvases). */
+export function atlasCacheStats() {
+  return {
+    pixels: pixelCache.size,
+    bleed: bleedCache.size,
+    smear: smearCache.size,
+    normal: normalCache.size,
+    footMetrics: footMetricsCache.size,
+    hd: hdComposeCache.size,
+  };
+}
+
+// Alpha-bleed (RGB dilation): floods the colour of each opaque pixel outward
+// into the transparent region around it. The source atlases store WHITE under
+// their transparent texels, so linear filtering / mipmapping at the sprite
+// edge blended toward white — the single biggest cause of the "sticker halo".
+// After bleeding, edge texels filter toward the character's own colours.
+// 5.1: the dilation itself is the frontier walk in atlas-pixels.mjs (same
+// output as the old seven whole-sheet passes, a fraction of the pixels
+// visited) and it reads the shared pixel cache instead of its own copy.
+const bleedCache = new Map();
+export function bleedAtlasCanvas(image, passes = 7) {
+  const key = atlasKey(image);
+  if (bleedCache.has(key)) return bleedCache.get(key);
+  const pixels = atlasPixels(image);
+  const w = pixels.width;
+  const h = pixels.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(w, h);
+  img.data.set(pixels.data);
+  bleedPixels(img.data, w, h, passes);
   ctx.putImageData(img, 0, 0);
   bleedCache.set(key, canvas);
   return canvas;
@@ -416,61 +454,15 @@ export function smearArcTexture(size = 256, seed = 0x53a2) {
 //   padBottom[frame] — fraction of the CELL height that is empty below the
 //                      lowest opaque pixel (0 = feet touch the cell edge);
 //   feet[frame]      — array of 1-2 { u } offsets in -0.5..0.5 cell widths
-//                      from the cell centre (sprite-local, pre-facing).
+//                      from the cell centre (sprite-local, pre-facing);
+//   extent[frame]    — the silhouette box (5.1 prone settle), see
+//                      footMetricsFromPixels in atlas-pixels.mjs.
 const footMetricsCache = new Map();
 export function atlasFootMetrics(image, columns = 4, rows = 4) {
-  const key = image.src || image;
+  const key = atlasKey(image);
   if (footMetricsCache.has(key)) return footMetricsCache.get(key);
-  const w = image.naturalWidth;
-  const h = image.naturalHeight;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(image, 0, 0);
-  const data = ctx.getImageData(0, 0, w, h).data;
-  const cellW = Math.floor(w / columns);
-  const cellH = Math.floor(h / rows);
-  const padBottom = new Float32Array(columns * rows);
-  const feet = [];
-  for (let frame = 0; frame < columns * rows; frame += 1) {
-    const cx0 = (frame % columns) * cellW;
-    const cy0 = Math.floor(frame / columns) * cellH;
-    let footRow = -1;
-    for (let y = cellH - 1; y >= 0 && footRow < 0; y -= 1) {
-      const row = (cy0 + y) * w;
-      for (let x = 0; x < cellW; x += 1) {
-        if (data[(row + cx0 + x) * 4 + 3] > 96) { footRow = y; break; }
-      }
-    }
-    if (footRow < 0) { padBottom[frame] = 0; feet.push([]); continue; }
-    padBottom[frame] = (cellH - 1 - footRow) / cellH;
-    // Opaque columns within the sole band (bottom ~5% of the sprite).
-    const band = Math.max(3, Math.round(cellH * 0.045));
-    const hits = [];
-    for (let x = 0; x < cellW; x += 1) {
-      let any = false;
-      for (let y = Math.max(0, footRow - band); y <= footRow && !any; y += 1) {
-        if (data[((cy0 + y) * w + cx0 + x) * 4 + 3] > 96) any = true;
-      }
-      if (any) hits.push(x);
-    }
-    // Cluster by gaps: a break wider than 6% of the cell splits the feet.
-    const clusters = [];
-    let start = hits[0];
-    let prev = hits[0];
-    for (let i = 1; i <= hits.length; i += 1) {
-      const x = hits[i];
-      if (x === undefined || x - prev > cellW * 0.06) {
-        clusters.push({ mid: (start + prev) / 2, size: prev - start + 1 });
-        start = x;
-      }
-      prev = x ?? prev;
-    }
-    clusters.sort((a, b) => b.size - a.size);
-    feet.push(clusters.slice(0, 2).map((c) => ({ u: c.mid / cellW - 0.5 })));
-  }
-  const metrics = { padBottom, feet };
+  const pixels = atlasPixels(image);
+  const metrics = footMetricsFromPixels(pixels.data, pixels.width, pixels.height, columns, rows);
   footMetricsCache.set(key, metrics);
   return metrics;
 }
@@ -568,70 +560,35 @@ export function softDotTexture(size = 64, inner = "rgba(255,255,255,1)", outer =
 // "rim" practicals then catch the character outline exactly like a lit cutout.
 const normalCache = new Map();
 
-export function normalMapForAtlas(image, { strength = 1.6 } = {}) {
-  const key = image.src || image;
+export function normalMapForAtlas(image, { strength = 1.6, step = 1 } = {}) {
+  const key = atlasKey(image);
   if (normalCache.has(key)) return normalCache.get(key);
-  const w = image.naturalWidth;
-  const h = image.naturalHeight;
-  const scratch = document.createElement("canvas");
-  scratch.width = w;
-  scratch.height = h;
-  const sctx = scratch.getContext("2d", { willReadFrequently: true });
-  sctx.drawImage(image, 0, 0);
-  const src = sctx.getImageData(0, 0, w, h).data;
-  // Height field: luminance * alpha, lightly box-blurred to tame dither noise.
-  const height = new Float32Array(w * h);
-  for (let i = 0, p = 0; i < height.length; i += 1, p += 4) {
-    height[i] = ((src[p] * 0.299 + src[p + 1] * 0.587 + src[p + 2] * 0.114) / 255) * (src[p + 3] / 255);
-  }
-  const blurred = new Float32Array(w * h);
-  for (let y = 0; y < h; y += 1) {
-    for (let x = 0; x < w; x += 1) {
-      let sum = 0;
-      let n = 0;
-      for (let dy = -1; dy <= 1; dy += 1) {
-        const yy = y + dy;
-        if (yy < 0 || yy >= h) continue;
-        for (let dx = -1; dx <= 1; dx += 1) {
-          const xx = x + dx;
-          if (xx < 0 || xx >= w) continue;
-          sum += height[yy * w + xx];
-          n += 1;
-        }
-      }
-      blurred[y * w + x] = sum / n;
-    }
-  }
-  const out = sctx.createImageData(w, h);
-  const data = out.data;
-  for (let y = 0; y < h; y += 1) {
-    const y0 = Math.max(0, y - 1) * w;
-    const y1 = Math.min(h - 1, y + 1) * w;
-    const row = y * w;
-    for (let x = 0; x < w; x += 1) {
-      const x0 = Math.max(0, x - 1);
-      const x1 = Math.min(w - 1, x + 1);
-      const dhdx = (blurred[row + x1] - blurred[row + x0]) * strength;
-      const dhdy = (blurred[y1 + x] - blurred[y0 + x]) * strength;
-      // CanvasTexture flipY makes v point up, so +dhdy (image-down) maps to +G.
-      let nx = -dhdx;
-      let ny = dhdy;
-      const nz = 1;
-      const inv = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
-      nx *= inv;
-      ny *= inv;
-      const p = (row + x) * 4;
-      data[p] = Math.round((nx * 0.5 + 0.5) * 255);
-      data[p + 1] = Math.round((ny * 0.5 + 0.5) * 255);
-      data[p + 2] = Math.round((nz * inv * 0.5 + 0.5) * 255);
-      data[p + 3] = 255;
-    }
-  }
-  sctx.putImageData(out, 0, 0);
-  const texture = new THREE.CanvasTexture(scratch);
+  const pixels = atlasPixels(image);
+  const normal = normalPixels(pixels.data, pixels.width, pixels.height, { strength, step });
+  const canvas = document.createElement("canvas");
+  canvas.width = normal.width;
+  canvas.height = normal.height;
+  const ctx = canvas.getContext("2d");
+  const out = ctx.createImageData(normal.width, normal.height);
+  out.data.set(normal.data);
+  ctx.putImageData(out, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 4;
   normalCache.set(key, texture);
   return texture;
+}
+
+// 5.1 (#40): the stand-in normal map a bank draws with until its real one is
+// generated off the frame — a single flat (0,0,1) texel. The material is
+// created WITH a normal map so the program never recompiles when the real
+// texture lands (same defines, different texture object).
+let flatNormal = null;
+export function flatNormalTexture() {
+  if (flatNormal) return flatNormal;
+  const data = new Uint8Array([128, 128, 255, 255]);
+  flatNormal = new THREE.DataTexture(data, 1, 1);
+  flatNormal.needsUpdate = true;
+  return flatNormal;
 }
 
 // Wet-street PBR set: albedo + roughness + metalness + bump sharing one

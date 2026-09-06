@@ -31796,6 +31796,13 @@ function ensureCinema3d() {
       unifiedSheetAdjust: UNIFIED_SHEET_ADJUST,
       isUnifiedFighter: unifiedFighterReady,
       downTiltFor,
+      // 5.1 CINEMA 3D fighter layer: the prone settle's full-tilt reference
+      // (so the 3D `share` cannot drift from the 2D constant), and the
+      // bank's OWN sheet for the idle-time bank warm-up — paletteAtlas falls
+      // back to the base sheet for a bank a fighter does not have, which
+      // the warm-up must never mistake for an authored bank.
+      downTiltRadians: DOWN_TILT_RADIANS,
+      fighterBankSheet: (fighterId, bank) => altAtlasSource(fighterId, bank).image || null,
       crowdBillboards,
       crowdSheetImage: (name) => crowdSheets.images.get(name) || null,
       crowdMediaRequest: ensureCrowdMedia,
