@@ -1644,7 +1644,15 @@ try {
     assert.equal(sample.variant, "somerset");
     assert.equal(sample.embeddedPeople, 9);
     assert.equal(sample.embeddedPose, "deep-slump-head-near-knees");
-    assert.equal(Object.keys(sample.layers).length, 0, "arcade pedestrians must not cover the photoreal people");
+    // v5.3 CROWD DEPTH pin change: Somerset is no longer people-free. The ban
+    // was on ARCADE pedestrians walking the band across the photoreal plate;
+    // the stage now carries eight PAINTED bystanders standing at fixed marks
+    // (engine/crowd.mjs `stations`) on the two sidewalks and at the station
+    // mouth, none of whom walks anywhere and none of whom is a vector figure.
+    // What must still hold is that they are all painted and all stationed.
+    assert.equal(sample.stationed, 8, "Somerset's bystanders stand at fixed marks, never walking the band");
+    assert.equal(sample.sheetVariant, "tailgate", "and are painted from the borrowed bank, not drawn as arcade figures");
+    assert.equal(sample.grade, "night", "re-lit for the street they stand on");
   }
   assert.deepEqual(crowdProbe.rebuilt, crowdProbe.first, "the Somerset presentation metadata must rebuild deterministically");
   assert.equal(crowdProbe.art.asset, "assets/somerset-septa.webp");

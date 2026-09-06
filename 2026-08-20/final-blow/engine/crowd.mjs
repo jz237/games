@@ -152,6 +152,42 @@ export const CROWD_VARIANTS = Object.freeze({
     counts: Object.freeze({ far: 0, mid: 0, near: 0 }),
     embeddedPeople: 9,
     embeddedPose: "deep-slump-head-near-knees",
+    // v5.3 CROWD DEPTH: the plate's folded sitters stay untouched, but the
+    // hero stage is no longer empty of living people. Eight painted locals
+    // stand at fixed places the plate already reads as standable — the two
+    // sidewalks and the station mouth — instead of walking the open band,
+    // because a pedestrian striding across the wet asphalt would walk through
+    // the fight lane and over the plate's reflections. They are painted from
+    // the tailgate bank (see CROWD_SPRITE_BORROW): puffers, beanies, hoods
+    // and Eagles green are what a Kensington platform looks like on a game
+    // night, and the El is how the city gets to and from the stadium.
+    spriteBorrow: "tailgate",
+    // Plate-anchored, so they ride the plate's own parallax factor (-0.035 in
+    // drawStage) rather than the walking bands' 0.09/0.17/0.29 — at the band
+    // factors a bystander slides off his own doorway as the camera tracks.
+    parallax: 0.035,
+    stations: Object.freeze([
+      // Right-hand sidewalk, outside the roll-shuttered storefront where the
+      // plate's own men are sitting: three locals standing over them.
+      Object.freeze({ layer: "near", x: 1004, y: 484, roam: 0, direction: -1, lift: 0 }),
+      Object.freeze({ layer: "near", x: 1096, y: 490, roam: 16, direction: -1, lift: 0 }),
+      Object.freeze({ layer: "mid", x: 1186, y: 468, roam: 0, direction: -1, lift: 0 }),
+      // Left-hand sidewalk under the storefront awnings.
+      Object.freeze({ layer: "near", x: 104, y: 480, roam: 0, direction: 1, lift: 0 }),
+      Object.freeze({ layer: "mid", x: 190, y: 466, roam: 18, direction: 1, lift: 0 }),
+      Object.freeze({ layer: "mid", x: 262, y: 458, roam: 0, direction: -1, lift: 0 }),
+      // The SOMERSET mouth: two waiting on the entrance steps, a step up from
+      // the pavement (the lift the 3D layer raises them by). Held wide of the
+      // doorway's centre line — that is the fight lane, and a far-band figure
+      // standing directly behind the exchange is clutter nobody ever sees.
+      Object.freeze({ layer: "mid", x: 392, y: 424, roam: 0, direction: 1, lift: 6 }),
+      Object.freeze({ layer: "mid", x: 838, y: 422, roam: 12, direction: -1, lift: 6 }),
+    ]),
+    // One street argument by the left-hand awnings — the tailgate's loop
+    // machinery, without the tailgate's celebration and table-flip kinds.
+    scuffles: 1,
+    scuffleKinds: Object.freeze(["argue", "shove", "separate"]),
+    scuffleSpots: Object.freeze([Object.freeze({ x: 360, y: 474 })]),
   }),
   tailgate: Object.freeze({ postures: TAILGATE_POSTURES, coats: FAN_COLOURS, trousers: FAN_TROUSERS, accents: FAN_ACCENTS }),
   boardwalk: Object.freeze({ postures: BOARDWALK_POSTURES, coats: BOARDWALK_COLOURS, trousers: null, accents: null }),
@@ -201,8 +237,25 @@ export const STAGE_CROWD_VARIANT = Object.freeze({
 // stand / weight-shift / cheer / stride cell. Somerset's people are baked into
 // the plate and the vacant lot is cats only, so neither has a bank; the
 // vector figures stay as the fallback until a sheet arrives.
-export const CROWD_SPRITE_BANKS = Object.freeze({ tailgate: 8, boardwalk: 8, buffet: 8, poolside: 8 });
+export const CROWD_SPRITE_BANKS = Object.freeze({ tailgate: 8, boardwalk: 8, buffet: 8, poolside: 8, somerset: 4 });
 export const CROWD_SPRITE_COLUMNS = Object.freeze({ stand: 0, shift: 1, cheer: 2, stride: 3 });
+
+// v5.3 CROWD DEPTH: a variant with no sheet family of its own borrows a
+// subset of another's. Somerset takes the four tailgate characters whose
+// wardrobe reads as a Philadelphia street at night rather than a parking lot
+// — black puffer + beanie, grey sweatshirt, white puffer + phone, hooded
+// track suit — and drops the wing hat, the face paint, the jersey-and-sign
+// and the hot dog. `grade` is the tone the borrowing stage draws them under
+// (both renderers), because the tailgate plate is lit by lot floodlights and
+// Somerset is lit by sodium lamps under the El.
+export const CROWD_SPRITE_BORROW = Object.freeze({
+  somerset: Object.freeze({ from: "tailgate", characters: Object.freeze([2, 3, 5, 7]), grade: "night" }),
+});
+
+/** The sheet-family variant a crowd variant paints from (itself, or its loan). */
+export function crowdSheetVariant(variantId) {
+  return CROWD_SPRITE_BORROW[variantId]?.from || variantId;
+}
 
 export const POOL_INCIDENT_KINDS = Object.freeze([
   Object.freeze({ id: "cannonball", period: 240, members: 1, reach: 30 }),
@@ -266,6 +319,44 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
   const variant = CROWD_VARIANTS[variantId];
   const span = maxX - minX;
   const people = [];
+  // v5.3 CROWD DEPTH: a variant may place its people at fixed stations (a
+  // doorway, a sidewalk, the station steps) instead of spreading them along
+  // the walking band. A station person keeps every other field a band person
+  // has, so the draw, the billboards and the snapshot need no special case;
+  // only `roam` (0 = rooted) changes how crowdPosition moves them.
+  for (const station of variant.stations || []) {
+    const posture = pickPosture(rng, variant.postures);
+    people.push({
+      layer: station.layer,
+      posture: posture.id,
+      originX: station.x,
+      y: station.y,
+      stationed: true,
+      lift: station.lift || 0,
+      roam: station.roam || 0,
+      direction: station.direction,
+      pace: 0.55 + rng.nextFloat() * 0.95,
+      gaitPhase: rng.nextFloat() * Math.PI * 2,
+      pausePeriod: 260 + Math.floor(rng.nextFloat() * 520),
+      pauseLength: 40 + Math.floor(rng.nextFloat() * 150),
+      pauseOffset: Math.floor(rng.nextFloat() * 600),
+      height: 0.84 + rng.nextFloat() * 0.34,
+      width: 0.82 + rng.nextFloat() * 0.42,
+      shoulderSlope: (rng.nextFloat() - 0.35) * 0.4,
+      headTilt: (rng.nextFloat() - 0.5) * 0.34,
+      prop: posture.prop || "",
+      coat: pick(rng, variant.coats || COAT_COLOURS),
+      trousers: pick(rng, variant.trousers || TROUSER_COLOURS),
+      accent: pick(rng, variant.accents || ACCENT_COLOURS),
+      facePaint: false,
+      jerseyNumber: 1 + Math.floor(rng.nextFloat() * 98),
+      hasBag: rng.nextFloat() < 0.34,
+      hasHood: rng.nextFloat() < 0.42,
+      hasHat: rng.nextFloat() < 0.22,
+      bagSide: rng.nextFloat() < 0.5 ? -1 : 1,
+      sprite: null,
+    });
+  }
   for (const layer of CROWD_LAYERS) {
     const count = variant.counts?.[layer.id] ?? layer.count;
     for (let index = 0; index < count; index += 1) {
@@ -277,6 +368,9 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
         posture: posture.id,
         originX: minX + slot * span,
         y: layer.baseY + Math.round((rng.nextFloat() - 0.5) * 16),
+        stationed: false,
+        lift: 0,
+        roam: 0,
         direction: rng.nextFloat() < 0.5 ? -1 : 1,
         // Individual pace, so two neighbours on the same layer still drift apart.
         pace: 0.55 + rng.nextFloat() * 0.95,
@@ -324,7 +418,15 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
     ? createScuffles(rng, minX, span, SCUFFLE_KINDS, 5)
     : variantId === "poolside"
       ? createScuffles(rng, minX, span, POOL_INCIDENT_KINDS, variant.incidents || 6)
-      : [];
+      // v5.3 CROWD DEPTH: any variant may ask for a few loops from a named
+      // subset of the kinds, placed at fixed spots rather than spread.
+      : variant.scuffles
+        ? createScuffles(
+          rng, minX, span,
+          SCUFFLE_KINDS.filter((kind) => variant.scuffleKinds.includes(kind.id)),
+          variant.scuffles, variant.scuffleSpots,
+        )
+        : [];
   // v4.7 BYSTANDERS: painted-character assignment rides its OWN seeded stream
   // so the people above (postures, routes, palettes) stay byte-identical to
   // the pre-sprite crowd. Neighbours never share a painting.
@@ -347,16 +449,55 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
     // Scuffle and incident groups get three distinct painted members each.
     for (const group of scuffles) {
       const deck = [];
-      while (deck.length < 3) {
+      while (deck.length < Math.min(3, characters)) {
         const character = Math.floor(spriteRng.nextFloat() * characters);
         if (!deck.includes(character)) deck.push(character);
       }
       group.characters = deck;
     }
   }
+  // v5.3 CROWD DEPTH: who each painted person is here for. Its OWN seeded
+  // stream again (hashSeed(seed, "crowd-favour", stage)), for the same reason
+  // 4.7's painting did: the people and their paintings stay byte-identical to
+  // what every pre-5.3 pin measured, and a favourite can never move a route.
+  // The house lean is drawn once per round, so one round can be a 5/11 room
+  // and the next a 9/7 room rather than every round splitting exactly in half.
+  let homeLean = 0.5;
+  if (characters) {
+    const favourRng = new DeterministicRng(hashSeed(seed, "crowd-favour", stageId));
+    homeLean = 0.34 + favourRng.nextFloat() * 0.32;
+    // Dealt from an exact deck and shuffled, not flipped per person: eight
+    // independent coins on Somerset's eight bystanders lands on 7/1 often
+    // enough to lose the whole effect (seed 42 did), and the point of the
+    // favourite is that BOTH halves are on screen for every hit.
+    const home = Math.round(people.length * homeLean);
+    const deck = people.map((_, index) => (index < home ? 0 : 1));
+    for (let index = deck.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(favourRng.nextFloat() * (index + 1));
+      const held = deck[index];
+      deck[index] = deck[swap];
+      deck[swap] = held;
+    }
+    people.forEach((person, index) => {
+      person.sprite.favourite = deck[index];
+      // How hard they take it: scales the wince tilt and the flinch duck, so
+      // the crowd is not one animation played at one amplitude.
+      person.sprite.loyalty = 0.55 + favourRng.nextFloat() * 0.45;
+    });
+    for (const group of scuffles) group.favourite = favourRng.nextFloat() < homeLean ? 0 : 1;
+  }
   return {
     stageId,
     variant: variantId,
+    sheetVariant: crowdSheetVariant(variantId),
+    grade: CROWD_SPRITE_BORROW[variantId]?.grade || "",
+    // A variant with no sheet family of its own has no vector look designed
+    // for it either: Somerset's plate is photoreal, and the fallback arcade
+    // figure would sit on it as a cut-out. Until the borrowed sheets land,
+    // these people simply are not drawn.
+    paintedOnly: Boolean(variant.spriteBorrow),
+    parallax: variant.parallax || 0,
+    homeLean,
     seed,
     minX,
     maxX,
@@ -389,18 +530,19 @@ export function catPosition(cat, frame, span, minX, reaction = 0) {
 }
 
 /** Several simultaneous fight loops, each with its own kind, place and phase. */
-function createScuffles(rng, minX, span, kinds = SCUFFLE_KINDS, count = 5) {
+function createScuffles(rng, minX, span, kinds = SCUFFLE_KINDS, count = 5, spots = null) {
   const groups = [];
   for (let index = 0; index < count; index += 1) {
     const kind = kinds[Math.floor(rng.nextFloat() * kinds.length) % kinds.length];
     const slot = (index + 0.15 + rng.nextFloat() * 0.7) / count;
+    const spot = spots?.[index] || null;
     groups.push({
       kind: kind.id,
       period: kind.period,
       members: kind.members,
       reach: kind.reach,
-      x: Math.round(minX + slot * span),
-      y: 470 + Math.floor(rng.nextFloat() * 56),
+      x: spot ? spot.x : Math.round(minX + slot * span),
+      y: spot ? spot.y : 470 + Math.floor(rng.nextFloat() * 56),
       scale: 0.78 + rng.nextFloat() * 0.46,
       // Independent offsets and speeds so no two loops beat together.
       offset: Math.floor(rng.nextFloat() * kind.period),
@@ -422,6 +564,22 @@ export function scufflePhase(group, frame) {
  * Frame-driven rather than wall-clock, so replays reproduce it exactly.
  */
 export function crowdPosition(person, layer, frame, span, minX) {
+  // v5.3 CROWD DEPTH: a stationed person does not walk the band. They stand
+  // where the plate says a person stands and shift a few px either side of it
+  // (roam 0 = rooted), so they never stride across the fight lane or off
+  // their own doorway.
+  if (person.stationed) {
+    const cycle = (frame + person.pauseOffset) % person.pausePeriod;
+    const paused = person.roam === 0 || cycle < person.pauseLength;
+    const sway = person.roam
+      ? Math.sin((frame + person.pauseOffset) * 0.006 * person.pace + person.gaitPhase) * person.roam
+      : 0;
+    return {
+      x: person.originX + sway,
+      paused,
+      gait: paused ? 0 : frame * layer.speed * person.pace * 0.09 + person.gaitPhase,
+    };
+  }
   const cycle = (frame + person.pauseOffset) % person.pausePeriod;
   const paused = cycle < person.pauseLength;
   // Distance walked so far, with paused stretches removed.
@@ -432,6 +590,107 @@ export function crowdPosition(person, layer, frame, span, minX) {
   // Wrap through the band so the street never empties.
   x = ((x - minX) % span + span) % span + minX;
   return { x, paused, gait: paused ? 0 : (frame * layer.speed * person.pace * 0.09 + person.gaitPhase) };
+}
+
+// --- v5.3 CROWD DEPTH: who a hit was for, and what it does to one person --
+//
+// Before 5.3 `state.crowdReaction` was one scalar with no author: a hit by
+// either fighter threw the same arms up on the same people. It now carries
+// the side that landed it, and every painted person carries a per-round
+// favourite, so ONE hit reads as two crowds — the favourite's half up on the
+// cheer cell, the rival's half hunched onto the weight-shift cell and tilted
+// away from the fight. The flinch is the third read: a wall splat or a big
+// hit close to a person shoves them back whoever they are here for.
+//
+// Everything below is pure and frame-driven: the 2D draw, the CINEMA 3D
+// billboards and the node traces all resolve a member through crowdMemberMood
+// so the two renderers can never disagree about who is cheering.
+
+export const CROWD_MOOD_TILT = Object.freeze({
+  // Radians. A winced-at hit leans a billboard away from the fight; a cheer
+  // leans a little INTO it. Small on purpose: these are people in a crowd,
+  // not a wave — 0.16 rad is ~9 degrees, plainly visible at near scale
+  // without reading as a falling sprite.
+  wince: 0.16,
+  cheer: 0.05,
+  flinch: 0.26,
+});
+
+export const CROWD_FLINCH = Object.freeze({
+  // A wall splat / near KO blow that lands within `radius` sim px of a person
+  // rocks them for `ticks`, hardest at the impact and gone by the edge.
+  radius: 300,
+  ticks: 26,
+  duckPx: 6,
+});
+
+/**
+ * How hard the person at `personX` is rocked by an impact at `impactX` that
+ * landed `age` ticks ago. 0 outside the radius or the window.
+ */
+export function crowdFlinchLevel(personX, impactX, age, { radius = CROWD_FLINCH.radius, ticks = CROWD_FLINCH.ticks } = {}) {
+  if (!(age >= 0) || age >= ticks) return 0;
+  const distance = Math.abs(personX - impactX);
+  if (distance >= radius) return 0;
+  const near = 1 - distance / radius;
+  const fresh = 1 - age / ticks;
+  return near * near * fresh;
+}
+
+/**
+ * The reaction one painted member is in on this tick.
+ *
+ * `stirSide` is the side that landed the stir (-1 for an authorless one — a
+ * taunt, a stage beat — which keeps exactly the pre-5.3 behaviour: everyone
+ * past threshold cheers). `holdColumn` is the KO-hold column when the hold
+ * owns the crowd (crowdKoHoldColumn), -1 otherwise. `awaySign` is +1 or -1:
+ * which way "away from the impact" points for this person, so the wince and
+ * the flinch tilt off the fight rather than all one way.
+ *
+ * Returns the painted column, the mood, the signed tilt in radians and the
+ * duck in sim px at scale 1.
+ */
+export function crowdMemberMood(sprite, {
+  reaction = 0,
+  stirSide = -1,
+  holdColumn = -1,
+  flinch = 0,
+  awaySign = 1,
+  reducedMotion = false,
+} = {}) {
+  const idle = { mood: "idle", column: -1, tilt: 0, duck: 0 };
+  if (!sprite) return idle;
+  // The flinch outranks everything: a body just hit the wall next to them.
+  if (flinch > 0.02) {
+    return {
+      mood: "flinch",
+      column: CROWD_SPRITE_COLUMNS.shift,
+      tilt: reducedMotion ? 0 : awaySign * CROWD_MOOD_TILT.flinch * flinch * sprite.loyalty,
+      duck: reducedMotion ? 0 : CROWD_FLINCH.duckPx * flinch * sprite.loyalty,
+    };
+  }
+  const engaged = holdColumn >= 0 || reaction > sprite.reactThreshold;
+  if (!engaged) return idle;
+  // An authorless stir, or a hit by the person's own fighter: arms up. During
+  // the KO hold the hold's own pump column wins, so a held cheer still
+  // breathes; a rival's supporter pumps in the same rhythm but on the shift
+  // cell, hunched, which is what the hold looks like from the losing half.
+  const rival = stirSide >= 0 && sprite.favourite !== stirSide;
+  if (!rival) {
+    return {
+      mood: "cheer",
+      column: holdColumn >= 0 ? holdColumn : CROWD_SPRITE_COLUMNS.cheer,
+      tilt: reducedMotion ? 0 : -awaySign * CROWD_MOOD_TILT.cheer,
+      duck: 0,
+    };
+  }
+  const bite = Math.min(1, (reaction - sprite.reactThreshold) * 2 + 0.35);
+  return {
+    mood: "wince",
+    column: CROWD_SPRITE_COLUMNS.shift,
+    tilt: reducedMotion ? 0 : awaySign * CROWD_MOOD_TILT.wince * bite * sprite.loyalty,
+    duck: 0,
+  };
 }
 
 /** Snapshot for tests and the debug overlay. */
@@ -470,6 +729,14 @@ export function crowdSnapshot(crowd, frame, { viewLeft = 0, viewRight = 1280 } =
     scuffles: (crowd.scuffles || []).length,
     scuffleKinds: [...new Set((crowd.scuffles || []).map((group) => group.kind))],
     spriteBank: CROWD_SPRITE_BANKS[crowd.variant] || 0,
+    sheetVariant: crowd.sheetVariant || crowd.variant,
+    grade: crowd.grade || "",
+    stationed: crowd.people.filter((person) => person.stationed).length,
+    homeLean: crowd.homeLean ?? 0.5,
+    favourites: [
+      crowd.people.filter((person) => person.sprite?.favourite === 0).length,
+      crowd.people.filter((person) => person.sprite?.favourite === 1).length,
+    ],
     spriteCharacters: new Set(crowd.people.map((person) => person.sprite?.character).filter((c) => c !== undefined && c !== null)).size,
   };
 }

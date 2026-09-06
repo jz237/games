@@ -159,11 +159,13 @@ test("through the hold ~85% of a real crowd rides the cheer cell every tick, the
     let holdSamples = 0;
     let stagger = 0;
     let seeds = 0;
+    let smallestCrowd = Infinity;
     for (let seed = 1; seed <= 20; seed += 1) {
       const crowd = createCrowd(stageId, { seed });
       const people = crowd.people.filter((person) => person.sprite);
       if (!people.length) continue;
       seeds += 1;
+      smallestCrowd = Math.min(smallestCrowd, people.length);
       // The pre-5.1 KO: a heavy hit's 0.34 stir, decaying 0.016/tick.
       before += cheerShare(crowd, 0.34);
       // Halfway through the ramp a real share is up and a real share is not.
@@ -182,13 +184,26 @@ test("through the hold ~85% of a real crowd rides the cheer cell every tick, the
     }
     assert.ok(seeds >= 15, `${stageId} must have a painted crowd`);
     const beforeShare = before / seeds;
-    assert.ok(beforeShare < 0.12, `${stageId}: the old heavy-KO put ${(beforeShare * 100).toFixed(1)}% up (the sweep measured 6-10%)`);
+    // v5.3 CROWD DEPTH pin change: the bound is a SHARE, so on a small crowd
+    // it has to allow the granularity of a single person. Somerset's living
+    // crowd is 8 bystanders, and one of them past his own threshold IS 12.5%
+    // — the flat 0.12 was measuring crowd size, not the reaction. The 32- and
+    // 44-person stages still measure 6-10% against the original bound.
+    const beforeBound = Math.max(0.12, 1.05 / smallestCrowd);
+    assert.ok(beforeShare < beforeBound, `${stageId}: the old heavy-KO put ${(beforeShare * 100).toFixed(1)}% up (the sweep measured 6-10%)`);
     // The pump window is half a person's shift window (22-57 ticks) out of
     // their shift period (200-540), so ~11% are pumping on an average tick;
     // a 16-person crowd fluctuates around that, hence the mean plus a floor.
     const holdMean = holdSum / holdSamples;
     assert.ok(holdMean >= 0.8, `${stageId}: mean arms-up share ${(holdMean * 100).toFixed(1)}% during the hold`);
-    assert.ok(holdMin >= 0.6, `${stageId}: arms-up share dipped to ${(holdMin * 100).toFixed(1)}% during the hold`);
+    // v5.3 CROWD DEPTH pin change: same reason as the beforeShare bound. The
+    // pump rate is unchanged (mean 88.4% on Somerset against 88.3-88.6% on the
+    // 32/44-person stages), but on 8 bystanders four people happening to sit
+    // in their own pump window at one sampled tick IS a 50% share. The floor
+    // therefore steps with the sample: 0.6 where there are enough people for
+    // it to mean anything, 0.45 on a small crowd.
+    const holdFloor = smallestCrowd >= 16 ? 0.6 : 0.45;
+    assert.ok(holdMin >= holdFloor, `${stageId}: arms-up share dipped to ${(holdMin * 100).toFixed(1)}% during the hold`);
     // Measured 2026-09-05 over 20 seeds: mean 88.3-88.6%, min 65.6-72.7%,
     // and single ticks at 100% (nobody in their pump window) on every stage.
     assert.ok(holdMax >= 0.95, `${stageId}: the ramp must put nearly everyone up at some tick (${(holdMax * 100).toFixed(1)}%)`);
@@ -201,7 +216,10 @@ test("game.js latches the hold render-side, stirs the KO in the sim and voices t
   // finishRound: the round-winning hit is a 1.4 "ko" stir, sim path, before
   // the finisher / plain-KO fork.
   const finish = gameSource.slice(gameSource.indexOf("function finishRound("), gameSource.indexOf("function performFinisher("));
-  assert.match(finish, /state\.phase = "roundover";[\s\S]*?stirCrowd\(1\.4, "ko"\);[\s\S]*?if \(type >= 0\)/);
+  // v5.3 CROWD DEPTH pin change: the KO stir now names its author (the round
+  // winner) and the splat point (the fighter who went down), so the crowd can
+  // split into his half and the loser's half. Amount and tag are unchanged.
+  assert.match(finish, /state\.phase = "roundover";[\s\S]*?stirCrowd\(1\.4, "ko", \{ side: winner, splatX: state\.fighters\[1 - winner\]\?\.x \?\? null \}\);[\s\S]*?if \(type >= 0\)/);
   // The hold latch is a render-side observer of the phase edge, like the
   // round-win beat, and every crowd consumer reads crowdDrawReaction().
   assert.match(gameSource, /function updateCrowdKoHoldLatch\(\)[\s\S]*?state\.phase === "roundover"[\s\S]*?slowMotionHits/);
@@ -227,7 +245,9 @@ test("game.js latches the hold render-side, stirs the KO in the sim and voices t
   assert.match(voice, /audioFxDebug\.crowdVoicePlays \+= 1;/);
   // The taunt gets its own voiced answer under the swell latch.
   const taunt = gameSource.slice(gameSource.indexOf("function performTaunt("), gameSource.indexOf("function interruptTaunt("));
-  assert.match(taunt, /stirCrowd\(0\.25\);[\s\S]*?playCrowdVoice\("ooh", 0\.25/);
+  // v5.3 CROWD DEPTH pin change: a showboat is a stir BY somebody too, so the
+  // taunting side's half of the room is the half that answers it.
+  assert.match(taunt, /stirCrowd\(0\.25, "", \{ side: fighter\.side \}\);[\s\S]*?playCrowdVoice\("ooh", 0\.25/);
   // Snapshot exposure for the smoke.
   assert.match(gameSource, /crowdVoicePlays: audioFxDebug\.crowdVoicePlays,/);
   assert.match(gameSource, /crowdVoiceRecent: crowdVoiceRecent\.slice\(\),/);

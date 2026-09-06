@@ -19,6 +19,23 @@ SHEETS = {
     "poolside": [("raw-poolside-g1.png", "blue"), ("raw-poolside-g2.png", "blue")],
 }
 COLUMNS = ["stand", "shift", "cheer", "stride"]
+# v5.3 CROWD DEPTH: what each painted character is holding, in row order per
+# variant (sheet 1 rows 0-3, then sheet 2 rows 0-3). Authored, not measured —
+# the slicer can find a body but not tell a phone from a beer. game.js reads
+# `phone` to decide who can pop a flashbulb, and the per-cell `hand` point to
+# put the starburst ON the phone instead of beside a cup.
+PROPS = {
+    "tailgate": ["cup", "cup", "flag", "can", "food", "phone", "sign", "foam"],
+    "boardwalk": ["food", "food", "bag", "plush", "food", "plate", "food", "cup"],
+    "buffet": ["plate", "plate", "plate", "plate", "cup", "plate", "plate", "plate"],
+    "poolside": ["cup", "phone", "towel", "plate", "tray", "cup", "cup", "bag"],
+}
+# Sheet-pixel centre of the phone in each of a phone character's four cells,
+# read off the sheets at 4x with a 32px grid (tools/README.md).
+HANDS = {
+    ("tailgate", 5): [(164, 286), (414, 288), (568, 276), (892, 290)],
+    ("poolside", 1): [(146, 292), (322, 290), (624, 272), (900, 292)],
+}
 CELL = 256
 T0, T1 = 70.0, 150.0  # key distance ramp: fully transparent below T0, opaque above T1
 
@@ -57,7 +74,10 @@ def cell_box(sheet, col, row):
             "baseline": int(y0 + ys.max() + 1), "cx": int(x0 + round(xs.mean()))}
 
 
-manifest = {"version": "4.7", "cell": CELL, "columns": COLUMNS, "variants": {}}
+manifest = {"version": "5.3", "cell": CELL, "columns": COLUMNS,
+            "props": ["cup", "can", "flag", "sign", "food", "foam", "phone",
+                      "bag", "plush", "plate", "tray", "towel"],
+            "variants": {}}
 for variant, raws in SHEETS.items():
     entry = {"sheets": [], "characters": []}
     for index, (raw, keyname) in enumerate(raws):
@@ -70,7 +90,15 @@ for variant, raws in SHEETS.items():
         for row in range(4):
             cells = [cell_box(sheet, col, row) for col in range(4)]
             assert all(cells), (raw, row)
-            entry["characters"].append({"sheet": index, "row": row, "cells": cells})
+            character = len(entry["characters"])
+            prop = PROPS[variant][character]
+            if prop == "phone":
+                for cell, (hx, hy) in zip(cells, HANDS[(variant, character)]):
+                    assert cell["x"] <= hx < cell["x"] + cell["w"], (variant, character, cell["frame"])
+                    assert cell["y"] <= hy < cell["y"] + cell["h"], (variant, character, cell["frame"])
+                    cell["hand"] = {"x": hx, "y": hy}
+            entry["characters"].append({"sheet": index, "row": row, "cells": cells,
+                                        "prop": prop, "phone": prop == "phone"})
     manifest["variants"][variant] = entry
     print(variant, "characters", len(entry["characters"]),
           "heights", [c["cells"][0]["h"] for c in entry["characters"]])

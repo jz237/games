@@ -1,5 +1,5 @@
 {
- "version": "4.7",
+ "version": "5.3",
  "cell": 256,
  "columns": [
   "stand",
@@ -54,7 +54,9 @@
        "baseline": 256,
        "cx": 892
       }
-     ]
+     ],
+     "prop": "cup",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -96,7 +98,9 @@
        "baseline": 503,
        "cx": 884
       }
-     ]
+     ],
+     "prop": "cup",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -138,7 +142,9 @@
        "baseline": 768,
        "cx": 892
       }
-     ]
+     ],
+     "prop": "flag",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -180,7 +186,9 @@
        "baseline": 1011,
        "cx": 892
       }
-     ]
+     ],
+     "prop": "can",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -222,7 +230,9 @@
        "baseline": 256,
        "cx": 877
       }
-     ]
+     ],
+     "prop": "food",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -235,7 +245,11 @@
        "w": 111,
        "h": 253,
        "baseline": 509,
-       "cx": 115
+       "cx": 115,
+       "hand": {
+        "x": 164,
+        "y": 286
+       }
       },
       {
        "frame": 5,
@@ -244,7 +258,11 @@
        "w": 118,
        "h": 253,
        "baseline": 509,
-       "cx": 360
+       "cx": 360,
+       "hand": {
+        "x": 414,
+        "y": 288
+       }
       },
       {
        "frame": 6,
@@ -253,7 +271,11 @@
        "w": 113,
        "h": 254,
        "baseline": 510,
-       "cx": 616
+       "cx": 616,
+       "hand": {
+        "x": 568,
+        "y": 276
+       }
       },
       {
        "frame": 7,
@@ -262,9 +284,15 @@
        "w": 131,
        "h": 256,
        "baseline": 512,
-       "cx": 875
+       "cx": 875,
+       "hand": {
+        "x": 892,
+        "y": 290
+       }
       }
-     ]
+     ],
+     "prop": "phone",
+     "phone": true
     },
     {
      "sheet": 1,
@@ -306,7 +334,9 @@
        "baseline": 762,
        "cx": 883
       }
-     ]
+     ],
+     "prop": "sign",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -348,7 +378,9 @@
        "baseline": 1020,
        "cx": 882
       }
-     ]
+     ],
+     "prop": "foam",
+     "phone": false
     }
    ]
   },
@@ -398,7 +430,9 @@
        "baseline": 256,
        "cx": 878
       }
-     ]
+     ],
+     "prop": "food",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -440,7 +474,9 @@
        "baseline": 506,
        "cx": 880
       }
-     ]
+     ],
+     "prop": "food",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -482,7 +518,9 @@
        "baseline": 768,
        "cx": 866
       }
-     ]
+     ],
+     "prop": "bag",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -524,7 +562,9 @@
        "baseline": 996,
        "cx": 870
       }
-     ]
+     ],
+     "prop": "plush",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -566,7 +606,9 @@
        "baseline": 256,
        "cx": 883
       }
-     ]
+     ],
+     "prop": "food",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -608,7 +650,9 @@
        "baseline": 512,
        "cx": 891
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -650,7 +694,9 @@
        "baseline": 768,
        "cx": 890
       }
-     ]
+     ],
+     "prop": "food",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -692,7 +738,9 @@
        "baseline": 1019,
        "cx": 883
       }
-     ]
+     ],
+     "prop": "cup",
+     "phone": false
     }
    ]
   },
@@ -742,7 +790,9 @@
        "baseline": 255,
        "cx": 889
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -784,7 +834,9 @@
        "baseline": 503,
        "cx": 885
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -826,7 +878,9 @@
        "baseline": 754,
        "cx": 882
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -868,7 +922,9 @@
        "baseline": 1011,
        "cx": 887
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -910,7 +966,9 @@
        "baseline": 254,
        "cx": 894
       }
-     ]
+     ],
+     "prop": "cup",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -952,7 +1010,9 @@
        "baseline": 507,
        "cx": 891
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -994,7 +1054,9 @@
        "baseline": 750,
        "cx": 893
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -1036,7 +1098,9 @@
        "baseline": 1013,
        "cx": 893
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     }
    ]
   },
@@ -1086,7 +1150,9 @@
        "baseline": 245,
        "cx": 895
       }
-     ]
+     ],
+     "prop": "cup",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -1099,7 +1165,11 @@
        "w": 99,
        "h": 234,
        "baseline": 499,
-       "cx": 107
+       "cx": 107,
+       "hand": {
+        "x": 146,
+        "y": 292
+       }
       },
       {
        "frame": 5,
@@ -1108,7 +1178,11 @@
        "w": 97,
        "h": 232,
        "baseline": 499,
-       "cx": 368
+       "cx": 368,
+       "hand": {
+        "x": 322,
+        "y": 290
+       }
       },
       {
        "frame": 6,
@@ -1117,7 +1191,11 @@
        "w": 102,
        "h": 237,
        "baseline": 500,
-       "cx": 629
+       "cx": 629,
+       "hand": {
+        "x": 624,
+        "y": 272
+       }
       },
       {
        "frame": 7,
@@ -1126,9 +1204,15 @@
        "w": 137,
        "h": 230,
        "baseline": 498,
-       "cx": 884
+       "cx": 884,
+       "hand": {
+        "x": 900,
+        "y": 292
+       }
       }
-     ]
+     ],
+     "prop": "phone",
+     "phone": true
     },
     {
      "sheet": 0,
@@ -1170,7 +1254,9 @@
        "baseline": 768,
        "cx": 879
       }
-     ]
+     ],
+     "prop": "towel",
+     "phone": false
     },
     {
      "sheet": 0,
@@ -1212,7 +1298,9 @@
        "baseline": 1008,
        "cx": 879
       }
-     ]
+     ],
+     "prop": "plate",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -1254,7 +1342,9 @@
        "baseline": 246,
        "cx": 882
       }
-     ]
+     ],
+     "prop": "tray",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -1296,7 +1386,9 @@
        "baseline": 498,
        "cx": 881
       }
-     ]
+     ],
+     "prop": "cup",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -1338,7 +1430,9 @@
        "baseline": 752,
        "cx": 871
       }
-     ]
+     ],
+     "prop": "cup",
+     "phone": false
     },
     {
      "sheet": 1,
@@ -1380,9 +1474,25 @@
        "baseline": 1012,
        "cx": 870
       }
-     ]
+     ],
+     "prop": "bag",
+     "phone": false
     }
    ]
   }
- }
+ },
+ "props": [
+  "cup",
+  "can",
+  "flag",
+  "sign",
+  "food",
+  "foam",
+  "phone",
+  "bag",
+  "plush",
+  "plate",
+  "tray",
+  "towel"
+ ]
 }

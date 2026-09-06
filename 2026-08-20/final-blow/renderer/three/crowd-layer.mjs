@@ -7,8 +7,20 @@
 // at its own z behind the fight plane with its x spread scaled by depth, so
 // the crowd fills the frame the way the flat canvas bands do while the
 // camera's parallax and the stage fog do the rest. Stages without a painted
-// bank (Somerset's plate people, Janney's cats) hand over nothing, so the
-// bespoke Somerset silhouettes are never doubled.
+// bank (Janney's cats) hand over nothing.
+//
+// v5.3 CROWD DEPTH: three things now ride the spec.
+//   * `tilt` is real for people, not just scuffle members — a bystander whose
+//     fighter just took the hit hunches onto the weight-shift cell and leans
+//     away, so ONE hit reads as two crowds in 3D exactly as it does in 2D.
+//   * `lift` raises a stationed person off the ground plane: Somerset's pair
+//     wait on the station steps, which are a step up from the pavement.
+//   * `grade` is the tone a BORROWING stage draws a loaned bank under. The 2D
+//     path re-grades the sheet into a cached canvas; here it is a material
+//     colour, which costs nothing and keeps one texture per sheet.
+// Somerset is no longer empty: its eight painted bystanders come over this
+// bridge, and they stand nearer the camera than the bespoke silhouette
+// walkers (z -5.6 / -7.8 in stage-somerset.mjs), so neither doubles the other.
 import * as THREE from "three";
 import { PX, SIM_W, SIM_H } from "./shared.mjs";
 
@@ -20,6 +32,18 @@ const BAND_DEPTH = Object.freeze({ far: -8.6, mid: -7.4, near: -6.2, scuffle: -6
 // A painted adult stands ~1.45 units at the near line — about 40% of a
 // fighter on screen, the 2D proportion — and the bands shade smaller behind.
 const BODY_HEIGHT = Object.freeze({ far: 1.25, mid: 1.35, near: 1.45, scuffle: 1.42 });
+// Sim px of `lift` per world unit, matching the near band's 1.45 units against
+// a ~134px painted adult at scale 1.
+const LIFT_PER_PX = 1.45 / 134;
+// Base tone of a painted billboard (the generic backdrops are lifted ~45% for
+// the night grade and the crowd stands in front of them), and the per-grade
+// multipliers a borrowed bank is re-lit by.
+const BASE_TONE = Object.freeze([1.25, 1.25, 1.25]);
+const GRADE_TONE = Object.freeze({
+  // Sodium-lamp street: cooler and ~26% down, the same recipe as the 2D
+  // CROWD_GRADES.night canvas pass.
+  night: Object.freeze([0.76, 0.86, 1.04]),
+});
 
 export class CrowdLayer {
   constructor(host) {
@@ -64,14 +88,14 @@ export class CrowdLayer {
       side: THREE.DoubleSide,
       // The generic backdrops are lifted ~45% for the night grade; the crowd
       // stands in front of them under the same treatment.
-      color: new THREE.Color(1.25, 1.25, 1.25),
+      color: new THREE.Color(BASE_TONE[0], BASE_TONE[1], BASE_TONE[2]),
       toneMapped: true,
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.frustumCulled = false;
     mesh.renderOrder = 2;
     this.group.add(mesh);
-    entry = { mesh, texture, cellKey: "" };
+    entry = { mesh, texture, cellKey: "", grade: "" };
     this.meshes.set(key, entry);
     return entry;
   }
@@ -113,11 +137,23 @@ export class CrowdLayer {
       // offset the way the 2D blit is.
       const footInset = (spec.cell.y + spec.cell.h - spec.cell.baseline) / spec.cell.h;
       const centreShift = ((spec.cell.x + spec.cell.w * 0.5) - spec.cell.cx) / spec.cell.w;
+      const lift = (spec.lift || 0) * LIFT_PER_PX;
       mesh.position.set(
         (spec.x - SIM_W * 0.5) * PX * depthScale + centreShift * width * spec.direction,
-        height * 0.5 - footInset * height,
+        height * 0.5 - footInset * height + lift,
         z,
       );
+      const grade = spec.grade || "";
+      if (entry.grade !== grade) {
+        entry.grade = grade;
+        const tone = GRADE_TONE[grade] || null;
+        mesh.material.color.setRGB(
+          BASE_TONE[0] * (tone ? tone[0] : 1),
+          BASE_TONE[1] * (tone ? tone[1] : 1),
+          BASE_TONE[2] * (tone ? tone[2] : 1),
+        );
+        mesh.material.needsUpdate = true;
+      }
       mesh.scale.set(width * spec.direction, height, 1);
       mesh.rotation.z = -spec.tilt;
       mesh.material.opacity = spec.alpha;

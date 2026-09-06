@@ -484,11 +484,16 @@ import {
   BUFFET_POSTURES,
   POOLSIDE_POSTURES,
   CROWD_LAYERS,
+  CROWD_FLINCH,
+  CROWD_SPRITE_BORROW,
   POSTURES,
   TAILGATE_POSTURES,
   catPosition,
   createCrowd,
+  crowdFlinchLevel,
+  crowdMemberMood,
   crowdPosition,
+  crowdSheetVariant,
   crowdSnapshot,
   scufflePhase,
 } from "./engine/crowd.mjs";
@@ -2282,6 +2287,14 @@ const state = {
   crowd: null,
   // Brief crowd reaction to a big moment, decaying back to normal routes.
   crowdReaction: 0,
+  // v5.3 CROWD DEPTH: WHO the stir was for, and WHERE it landed. The side
+  // that threw the last stirring hit (-1 = authorless: a taunt, a stage beat),
+  // and the sim x of a wall splat / near-KO blow the nearby crowd flinches
+  // from. Sim-path and deterministic like crowdReaction, and like it never
+  // part of a rollback snapshot — nothing in the fight reads them back.
+  crowdStirSide: -1,
+  crowdSplatX: 0,
+  crowdSplatTick: -1e9,
   offlineReady: false,
   accessibility: {
     reducedMotion: localStorage.getItem("final-blow-reduced-motion") === "1",
@@ -9971,6 +9984,7 @@ function drawForegroundOccluders(centre) {
 // and are hard-capped at ~3/sec regardless of reaction level. Under
 // reducedMotion the strobes become one dim steady glow.
 let crowdFlashCacheCrowd = null;
+let crowdFlashCacheManifest = null;
 let crowdFlashCandidates = [];
 
 // v5.1 KO MOMENT: during the KO hold the phones come out — an 8-tick window
@@ -9979,15 +9993,23 @@ let crowdFlashCandidates = [];
 // Outside the hold this is exactly the single 20-tick pick it always was.
 function crowdFlashPicks(crowd, frame, reaction) {
   if (reaction <= 0.7 || !crowd.people?.length) return [];
-  if (crowdFlashCacheCrowd !== crowd) {
+  // v5.3 CROWD DEPTH: a flashbulb comes off a PAINTING that is holding a
+  // phone, not off a posture that happens to be named "filming". The two
+  // streams were independent (crowd.mjs deals the painting on its own seeded
+  // stream), so before 5.3 a 14%-of-people posture flag lit up a painted
+  // character carrying a beer, a plate or a lollipop. The manifest now
+  // classifies every character's prop, and only `phone: true` can pop.
+  if (crowdFlashCacheCrowd !== crowd || crowdFlashCacheManifest !== crowdSheets.manifest) {
     crowdFlashCacheCrowd = crowd;
+    crowdFlashCacheManifest = crowdSheets.manifest;
+    const entry = crowdVariantEntry(crowd.variant);
     const phones = [];
     crowd.people.forEach((person, index) => {
-      if (person.prop === "phone") phones.push(index);
+      if (entry?.characters?.[person.sprite?.character]?.phone) phones.push(index);
     });
-    // Bias toward the poolside phone holders when the stage has them.
-    crowdFlashCandidates = phones.length >= 3 ? phones : crowd.people.map((_, index) => index);
+    crowdFlashCandidates = phones;
   }
+  if (!crowdFlashCandidates.length) return [];
   const reduced = state.accessibility.reducedMotion;
   const hold = !reduced && crowdKoHoldAge() >= 0;
   const windowTicks = reduced ? 60 : hold ? CROWD_KO_HOLD.flashWindowTicks : 20; // 20 ticks @60Hz → ≤3 pops per second
@@ -12005,7 +12027,7 @@ function finishRound(winner, type = -1) {
   // the voiced crowd roars. Sim path on purpose (deterministic on both
   // rollback peers, like every other stir); the roundover HOLD that keeps the
   // crowd up for the 4.9 s is render-side (updateCrowdKoHoldLatch).
-  stirCrowd(1.4, "ko");
+  stirCrowd(1.4, "ko", { side: winner, splatX: state.fighters[1 - winner]?.x ?? null });
   // v2.9 FLOW: demo coverage — the round-end beat, plus the Final Blow
   // ceremony when one executes (the gore/fatality toggles decide the flavour
   // downstream exactly as before; this is pure observation).
@@ -14505,7 +14527,7 @@ function performTaunt(fighter) {
   // v2.9 FLOW: demo coverage beat (guarded inside).
   demoChoreoBeat(fighter.side, "taunt");
   spawnCombatText(fighter.x, fighter.y - fighter.height - 44, "TAUNT", fighter.def.accent);
-  stirCrowd(0.25);
+  stirCrowd(0.25, "", { side: fighter.side });
   // v5.1 KO MOMENT: the crowd answers the showboat out loud. 0.25 sits under
   // the 0.5 swell latch, so this is its own render-side cue (resim-guarded
   // inside): an "oooh" at taunt level, never the roar.
@@ -14895,7 +14917,10 @@ function spawnKnockdownImpact(fighter, landingVelocity) {
       width: 28 + force * 34, life, max: life, color: "#65060c",
     });
   }
-  applyViolenceResponse(force > 1.08 ? "throw" : "heavy");
+  applyViolenceResponse(force > 1.08 ? "throw" : "heavy", {
+    side: state.fighters[1 - fighter.side] ? 1 - fighter.side : -1,
+    splatX: fighter.x,
+  });
   sound("hit-heavy", state.fighters[state.lastImpactSide] || fighter);
 }
 
@@ -15086,8 +15111,10 @@ function performWallBounce(fighter, wallDirection) {
   // (0.75 clears the crowdFlashPicks flashbulb threshold), combat text, the
   // announcer bank and the shared violence response.
   spawnWallImpact(fighter, wallDirection);
-  stirCrowd(0.75);
-  applyViolenceResponse("heavy");
+  // v5.3 CROWD DEPTH: the wall splat is the flinch beat — the people standing
+  // within CROWD_FLINCH.radius of the corner rock back from it.
+  stirCrowd(0.75, "", { side: attacker ? attacker.side : -1, splatX: fighter.x });
+  applyViolenceResponse("heavy", { side: attacker ? attacker.side : -1 });
   spawnCombatText(
     fighter.x - wallDirection * 46,
     fighter.y - fighter.height - 50,
@@ -15644,7 +15671,7 @@ function triggerPaintTrap(trap, victim) {
   if (!blocked) pushBattleDamageMark(victim, "special");
   spawnHit(trap.x, trap.y - 63, owner.def, "special", blocked, { direction: owner.facing });
   spawnCombatText(trap.x, trap.y - 112, blocked ? "WET BLOCK" : "WET PAINT!", trap.color);
-  applyViolenceResponse("special", { blocked });
+  applyViolenceResponse("special", { blocked, side: owner.side });
   state.lastImpactSide = owner.side;
   sound(blocked ? "block" : "hit-heavy", blocked ? victim : owner);
   updateHud();
@@ -15965,7 +15992,7 @@ function triggerProjectile(projectile, victim) {
   if (projectile.style === "feedback") spawnCombatText(projectile.x, projectile.y - 86, blocked ? "ECHO BLOCK" : "FEEDBACK ECHO!", projectile.color);
   else if (counter) spawnCombatText(projectile.x, projectile.y - 72, "COUNTER", projectile.color);
   else if (!blocked && projectile.level === ATTACK_LEVELS.LOW) spawnCombatText(projectile.x, projectile.y - 61, colorAssistActive() ? "\u25bc LOW SHOT" : "LOW SHOT", assistColor("low", projectile.color));
-  applyViolenceResponse(impactTier, { blocked, counter });
+  applyViolenceResponse(impactTier, { blocked, counter, side: owner.side });
   state.lastImpactSide = owner.side;
   projectile.hit = true;
   // 5.1 FIGHT SCHOOL: thrown objects never went through observeTrainingHit,
@@ -16533,7 +16560,7 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   attacker.combo.reset();
   attacker.meter = clamp(attacker.meter + grab.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + grab.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
-  applyViolenceResponse("throw");
+  applyViolenceResponse("throw", { side: attacker.side, splatX: victim.x });
   state.shake = Math.max(state.shake, style.shake * 1.2);
   state.lastImpactSide = attacker.side;
   const impactX = victim.x;
@@ -16662,7 +16689,7 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
   spawnHit(impact.x, impact.y, counterFighter.def, "special", false, { direction: counterFighter.facing, counter: true });
   state.effects.push({ kind: "counterPunch", x: impact.x, y: impact.y, life: 0.62, max: 0.62, color: counterFighter.def.accent });
   spawnCombatText(impact.x, impact.y - 128, "COUNTER-PUNCH!", counterFighter.def.accent);
-  applyViolenceResponse("special", { counter: true });
+  applyViolenceResponse("special", { counter: true, side: counterFighter.side });
   state.lastImpactSide = counterFighter.side;
   if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.11);
   sound("hit-heavy", counterFighter);
@@ -16952,6 +16979,10 @@ function hit(attacker, victim, attack, collision) {
     counter,
     final: attack.superMove && attacker.attackHits >= (attack.maxHits || 1),
     damage: attack.damage,
+    side: attacker.side,
+    // A super or a weapon landing this close to the crowd is the second
+    // flinch beat; the tiers below it only stir.
+    splatX: impactTier === "super" || impactTier === "weapon" ? victim.x : null,
   });
   const impact = collision?.point || { x: victim.x - attacker.facing * 22, y: victim.y - 105 };
   spawnHit(impact.x, impact.y, attacker.def, impactTier, blocked, { direction: attacker.facing, counter });
@@ -17046,7 +17077,7 @@ function checkKnockout() {
   victim.hitstunFrames = 5940;
   attacker.attacking = null;
   duckMusic(0.34, 1900);
-  stirCrowd(1.4);
+  stirCrowd(1.4, "", { side: winner, splatX: victim.x });
   announce("FINISH THEM", "LP = A  ·  LK = B  ·  ANY DISTANCE", 2.2);
   if (!rollbackResimulating) setTouchPrompt("final");
   updateHud();
@@ -17142,7 +17173,7 @@ function violenceTier(kind = "light") {
   return VIOLENCE_TIERS[kind] || VIOLENCE_TIERS.light;
 }
 
-function applyViolenceResponse(kind, { blocked = false, counter = false, final = false, damage = 0 } = {}) {
+function applyViolenceResponse(kind, { blocked = false, counter = false, final = false, damage = 0, side = -1, splatX = null } = {}) {
   // Wave 15: every screen response has a matching hand response — phone
   // vibration plus pad dual-rumble (toggle, resim guard and rate cap all
   // live inside combatHaptic).
@@ -17157,7 +17188,9 @@ function applyViolenceResponse(kind, { blocked = false, counter = false, final =
   state.shake = Math.max(state.shake, profile.shake * counterScale);
   const hitstop = kind === "super" && !final ? 0.15 : profile.hitstop;
   state.hitstop = Math.max(state.hitstop, hitstop * counterScale);
-  stirCrowd(profile.crowd * counterScale);
+  // v5.3 CROWD DEPTH: the attacker's side rides the stir, so half the crowd
+  // cheers this hit and half winces at it.
+  stirCrowd(profile.crowd * counterScale, "", { side, splatX });
 }
 
 function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = false } = {}) {
@@ -17477,6 +17510,9 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     if (gritHudDirty) updateHud();
   }
   state.crowdReaction = Math.max(0, state.crowdReaction - 0.016);
+  // v5.3: once the room has settled nobody is reacting to anybody, so the
+  // next authorless stir cannot inherit the last hit's author.
+  if (state.crowdReaction <= 0) state.crowdStirSide = -1;
   const superActive = state.fighters.some((fighter) => fighter.attacking?.superMove);
   superDimLevel = clamp(superDimLevel + (superActive ? 0.09 : -0.055), 0, 1);
   // Wave 6 win-pose curtain call, eased beside superDimLevel on the same
@@ -17957,6 +17993,8 @@ function resetCrowd() {
   state.crowd = createCrowd(state.stage, { seed: hashSeed(state.matchSeed, state.round) });
   if (state.crowd.people.some((person) => person.sprite)) ensureCrowdMedia();
   state.crowdReaction = 0;
+  state.crowdStirSide = -1;
+  state.crowdSplatTick = -1e9;
 }
 
 // Big moments ripple through the crowd, then it goes back to its routes.
@@ -18013,8 +18051,17 @@ function ambientBand(x, y, width, height, rgb, alpha) {
   ctx.fillRect(x, y, width, height);
 }
 
-function stirCrowd(amount = 1, kind = "") {
+// v5.3 CROWD DEPTH: `side` is who landed it (0/1, or -1 for an authorless
+// stir — a taunt, a stage beat — which keeps the pre-5.3 read where everyone
+// past threshold cheers). `splatX` marks a wall splat / near-KO blow the
+// people standing near it flinch away from, whoever they are here for.
+function stirCrowd(amount = 1, kind = "", { side = -1, splatX = null } = {}) {
   state.crowdReaction = Math.min(1.4, state.crowdReaction + amount);
+  if (side === 0 || side === 1) state.crowdStirSide = side;
+  if (splatX !== null) {
+    state.crowdSplatX = splatX;
+    state.crowdSplatTick = state.simulationTick;
+  }
   const pulseKind = stirPulseKind(amount);
   if (pulseKind) pulseAmbient(pulseKind, amount);
   // Release 1.6 LOUD: big stirs also latch a one-shot crowd swell/gasp for
@@ -18051,13 +18098,76 @@ function ensureCrowdMedia() {
     .catch(() => {});
 }
 
+// v5.3 CROWD DEPTH: the sheet family a variant paints from. Most variants own
+// theirs; a BORROWING variant (Somerset) gets a view onto a subset of another
+// bank's characters, so `person.sprite.character` still indexes 0..n-1 the way
+// the seeded deal produced it and nothing downstream knows the difference.
+const crowdVariantViews = new Map();
+
+function crowdVariantEntry(variantId = state.crowd?.variant) {
+  const manifest = crowdSheets.manifest;
+  if (!manifest || !variantId) return null;
+  const direct = manifest.variants?.[variantId];
+  if (direct) return direct;
+  const loan = CROWD_SPRITE_BORROW[variantId];
+  const source = loan && manifest.variants?.[crowdSheetVariant(variantId)];
+  if (!source) return null;
+  let view = crowdVariantViews.get(variantId);
+  if (!view || view.source !== source) {
+    view = {
+      source,
+      sheets: source.sheets,
+      characters: loan.characters.map((index) => source.characters[index]),
+    };
+    crowdVariantViews.set(variantId, view);
+  }
+  return view;
+}
+
+// A borrowed bank is lit for the stage it was painted for, so the borrower
+// re-grades it once per sheet into a cached canvas rather than per draw. The
+// tailgate people were shot under lot floodlights; Somerset is sodium lamps
+// under the El, so `night` multiplies them cool and drops them ~26%.
+const CROWD_GRADES = Object.freeze({
+  night: Object.freeze({ multiply: "#8095b8", wash: "rgba(38,66,112,.22)" }),
+});
+const crowdGradedSheets = new Map();
+
+function crowdGradedSheet(name, grade) {
+  const image = crowdSheets.images.get(name);
+  if (!image?.complete || !image.naturalWidth) return null;
+  const recipe = CROWD_GRADES[grade];
+  if (!recipe) return image;
+  const key = `${name}|${grade}`;
+  const cached = crowdGradedSheets.get(key);
+  if (cached && cached.width === image.naturalWidth) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const paint = canvas.getContext("2d");
+  paint.drawImage(image, 0, 0);
+  paint.globalCompositeOperation = "multiply";
+  paint.fillStyle = recipe.multiply;
+  paint.fillRect(0, 0, canvas.width, canvas.height);
+  paint.globalCompositeOperation = "source-atop";
+  paint.fillStyle = recipe.wash;
+  paint.fillRect(0, 0, canvas.width, canvas.height);
+  // multiply/source-atop both leave the keyed transparency alone, but the
+  // multiply pass paints the whole rect, so the alpha is re-cut from the
+  // original sheet.
+  paint.globalCompositeOperation = "destination-in";
+  paint.drawImage(image, 0, 0);
+  crowdGradedSheets.set(key, canvas);
+  return canvas;
+}
+
 function crowdSpriteCharacter(person) {
-  const variant = crowdSheets.manifest?.variants?.[state.crowd?.variant];
+  const variant = crowdVariantEntry();
   const character = variant?.characters?.[person.sprite?.character];
   if (!character) return null;
-  const image = crowdSheets.images.get(variant.sheets[character.sheet]);
-  if (!image?.complete || !image.naturalWidth) return null;
-  return { character, image };
+  const image = crowdGradedSheet(variant.sheets[character.sheet], state.crowd?.grade || "");
+  if (!image) return null;
+  return { character, image, sheet: variant.sheets[character.sheet] };
 }
 
 // A painted bystander stands where the vector figure would: feet on the
@@ -18068,30 +18178,50 @@ function crowdSpriteCharacter(person) {
 // throws its arms up person by person past each one's own threshold.
 // Which painted cell a person wears this tick, and their walk bob — shared by
 // the 2D draw and the CINEMA 3D billboards so both renderers agree.
-function crowdSpriteFrame(person, gait, paused, reaction) {
+// v5.3 CROWD DEPTH: the same tick now resolves to THREE different reads.
+// `x` is where the person is standing this tick (sim space, pre-parallax), so
+// the flinch can measure the distance to a wall splat and both the wince and
+// the flinch can lean AWAY from what happened rather than all one way.
+function crowdSpriteFrame(person, gait, paused, reaction, x = person.originX) {
   const reducedMotion = state.accessibility.reducedMotion;
   const frame = state.simulationTick;
-  let column = 0;
   // v5.1 KO MOMENT: through the hold a person past their threshold pumps
   // between the cheer and weight-shift cells on their own shift timer and
   // bounces on the spot, so a crowd that is up for five seconds never freezes.
   const holdColumn = crowdKoHoldAge() >= 0 && !reducedMotion ? crowdKoHoldColumn(person.sprite, frame, reaction) : -1;
-  if (holdColumn >= 0) column = holdColumn;
-  else if (reaction > person.sprite.reactThreshold) column = 2;
-  else if (!paused && !reducedMotion) column = Math.sin(gait) > 0 ? 3 : 0;
-  else if (!reducedMotion && ((frame + person.sprite.shiftOffset) % person.sprite.shiftPeriod) < person.sprite.shiftLength) column = 1;
+  const flinch = crowdFlinchLevel(x, state.crowdSplatX, frame - state.crowdSplatTick);
+  // Away from the splat while one is fresh; otherwise away from the fight.
+  const awayFrom = flinch > 0 ? state.crowdSplatX : crowdFightCentre();
+  const mood = crowdMemberMood(person.sprite, {
+    reaction,
+    stirSide: state.crowdStirSide,
+    holdColumn,
+    flinch,
+    awaySign: x >= awayFrom ? 1 : -1,
+    reducedMotion,
+  });
+  let column = mood.column;
+  if (column < 0) {
+    if (!paused && !reducedMotion) column = Math.sin(gait) > 0 ? 3 : 0;
+    else if (!reducedMotion && ((frame + person.sprite.shiftOffset) % person.sprite.shiftPeriod) < person.sprite.shiftLength) column = 1;
+    else column = 0;
+  }
   const posture = POSTURE_BY_ID[person.posture] || POSTURES[0];
   let bob = paused || reducedMotion ? 0 : Math.abs(Math.sin(gait)) * posture.bob * 2.4;
-  if (holdColumn === 2) bob = Math.abs(Math.sin(frame * 0.19 + person.sprite.shiftOffset)) * CROWD_KO_HOLD.bobPx;
-  return { column, bob };
+  if (mood.mood === "cheer" && holdColumn === 2) bob = Math.abs(Math.sin(frame * 0.19 + person.sprite.shiftOffset)) * CROWD_KO_HOLD.bobPx;
+  return { column, bob: bob - mood.duck, tilt: mood.tilt, mood: mood.mood };
 }
 
-function drawCrowdSprite(person, layer, x, gait, paused, reaction) {
+function crowdFightCentre() {
+  return state.fighters.length ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5;
+}
+
+function drawCrowdSprite(person, layer, x, gait, paused, reaction, simX = x) {
   if (!person.sprite) return false;
   const resolved = crowdSpriteCharacter(person);
   if (!resolved) return false;
   const { character, image } = resolved;
-  const { column, bob } = crowdSpriteFrame(person, gait, paused, reaction);
+  const { column, bob, tilt } = crowdSpriteFrame(person, gait, paused, reaction, simX);
   const cell = character.cells[column] || character.cells[0];
   const scale = layer.scale * person.height;
   // The vector figure stands ~134px tall at scale 1; match it so the crowd's
@@ -18107,6 +18237,10 @@ function drawCrowdSprite(person, layer, x, gait, paused, reaction) {
   ctx.restore();
   ctx.save();
   ctx.translate(x, person.y - bob);
+  // v5.3 CROWD DEPTH: the wince/flinch lean, about the feet. Applied BEFORE
+  // the mirror so a left-facing person leans the same screen direction as a
+  // right-facing one standing beside them.
+  if (tilt) ctx.rotate(tilt);
   ctx.scale(person.direction, 1);
   ctx.globalAlpha = layer.alpha * holdDim;
   ctx.drawImage(image, cell.x, cell.y, cell.w, cell.h,
@@ -18116,8 +18250,11 @@ function drawCrowdSprite(person, layer, x, gait, paused, reaction) {
   return true;
 }
 
-function drawPedestrian(person, layer, x, gait, paused, reaction) {
-  if (drawCrowdSprite(person, layer, x, gait, paused, reaction)) return;
+function drawPedestrian(person, layer, x, gait, paused, reaction, simX = x) {
+  if (drawCrowdSprite(person, layer, x, gait, paused, reaction, simX)) return;
+  // v5.3 CROWD DEPTH: a painted-only crowd never falls back to the vector
+  // figure — see crowd.mjs `paintedOnly`.
+  if (state.crowd?.paintedOnly) return;
   const posture = POSTURE_BY_ID[person.posture] || POSTURES[0];
   const scale = layer.scale * person.height;
   const step = paused ? 0 : Math.sin(gait) * posture.stride;
@@ -18387,7 +18524,8 @@ function scuffleMembers(group, frame, reaction, celebrate = false) {
 
 function drawScuffle(group, frame, centre, reaction) {
   const { phase, clash, members } = scuffleMembers(group, frame, reaction, crowdKoHoldAge() >= 0);
-  const drawX = group.x + (centre - W * 0.5) * -0.2;
+  // v5.3: a plate-anchored crowd rides the plate's own parallax factor.
+  const drawX = group.x + (centre - W * 0.5) * -(state.crowd?.parallax || 0.2);
   if (drawX < -110 || drawX > W + 110) return;
 
   ctx.save();
@@ -18417,6 +18555,7 @@ function drawScuffle(group, frame, centre, reaction) {
       ctx.restore();
       return;
     }
+    if (state.crowd?.paintedOnly) return;
     ctx.save();
     ctx.translate(offsetX, 0);
     ctx.rotate(tilt);
@@ -18470,8 +18609,12 @@ function drawScuffle(group, frame, centre, reaction) {
   // A puff of dust at the peak of the clash so the scuffle reads as a fight
   // rather than two people standing close together.
   if (clash > 0.72) {
-    ctx.globalAlpha = (clash - 0.72) * 2.2;
-    ctx.fillStyle = "rgba(214,206,190,.55)";
+    // v5.3: a graded crowd gets its dust graded too. The tailgate's cream
+    // puff is lot-floodlight dust; the same four circles on Somerset's dark
+    // wet street read as bright bokeh balls, so night halves and cools them.
+    const night = state.crowd?.grade === "night";
+    ctx.globalAlpha = (clash - 0.72) * (night ? 1.0 : 2.2);
+    ctx.fillStyle = night ? "rgba(150,162,180,.34)" : "rgba(214,206,190,.55)";
     for (let index = 0; index < 4; index += 1) {
       const puffX = (index - 1.5) * 13;
       const puffY = -18 - Math.abs(Math.sin(phase * 9 + index)) * 12;
@@ -18490,8 +18633,12 @@ function drawScuffle(group, frame, centre, reaction) {
 function crowdBillboards() {
   const crowd = state.crowd;
   const out = [];
-  const variant = crowdSheets.manifest?.variants?.[crowd?.variant];
+  const variant = crowdVariantEntry(crowd?.variant);
   if (!crowd || !variant || state.screen !== "fight") return out;
+  // v5.3 CROWD DEPTH: the grade the borrowing stage draws its loaned bank
+  // under, and the step a stationed person is standing on, both ride the spec
+  // so the 3D layer needs no stage table of its own.
+  const grade = crowd.grade || "";
   const frame = state.simulationTick;
   // v5.1 KO MOMENT: the 3D crowd reads the same held reaction as the canvas,
   // so the arms-up cells, the pumps and the celebrate scuffles carry over.
@@ -18506,10 +18653,11 @@ function crowdBillboards() {
     if (x < -70 || x > W + 70) return;
     const character = variant.characters[person.sprite.character];
     if (!character) return;
-    const { column, bob } = crowdSpriteFrame(person, gait, paused, reaction);
+    const { column, bob, tilt, mood } = crowdSpriteFrame(person, gait, paused, reaction, x);
     out.push({
       key: `p${index}`, x, y: person.y - bob, layer: layer.id, height: person.height,
-      direction: person.direction, alpha: layer.alpha * holdDim, tilt: 0,
+      direction: person.direction, alpha: layer.alpha * holdDim, tilt, mood, grade,
+      lift: person.lift || 0,
       sheet: variant.sheets[character.sheet], cell: character.cells[column] || character.cells[0],
     });
   });
@@ -18522,6 +18670,7 @@ function crowdBillboards() {
         key: `s${groupIndex}-${index}`, x: group.x + member.offsetX * group.scale * group.flip, y: group.y,
         layer: "scuffle", height: group.scale * 0.84, direction: (member.armReach < 0 ? -1 : 1) * group.flip,
         alpha: 0.82 * holdDim, tilt: (member.tilt + member.lean * 0.35) * group.flip,
+        mood: "scuffle", grade, lift: 0,
         sheet: variant.sheets[character.sheet], cell: character.cells[member.column] || character.cells[0],
       });
     });
@@ -19189,13 +19338,32 @@ function drawCrowd(time) {
     personIndex += 1;
     const layer = CROWD_LAYERS.find((entry) => entry.id === person.layer);
     const { x, gait, paused } = crowdPosition(person, layer, frame, crowd.span, crowd.minX);
-    const drawX = x + (centre - W * 0.5) * -layer.parallax;
+    // v5.3: a plate-anchored crowd (Somerset's stationed bystanders) rides the
+    // plate's own parallax factor, or it slides off its own doorway.
+    const drawX = x + (centre - W * 0.5) * -(crowd.parallax || layer.parallax);
     if (drawX < -70 || drawX > W + 70) continue;
-    drawPedestrian(person, layer, drawX, gait, paused, reaction);
+    drawPedestrian(person, layer, drawX, gait, paused, reaction, x);
     const flashPick = flashPicks.length ? flashPicks.find((pick) => pick.index === personIndex) : null;
     if (flashPick) {
       const scale = layer.scale * person.height;
-      flashSpots.push([{ x: drawX + person.direction * 8 * scale, y: person.y - 118 * scale, size: 8 + 9 * layer.scale }, flashPick]);
+      // v5.3: the starburst sits ON the phone — the manifest's per-cell hand
+      // point through the same blit maths drawCrowdSprite uses — instead of a
+      // fixed head-height offset that could land beside a souvenir cup.
+      let spot = { x: drawX + person.direction * 8 * scale, y: person.y - 118 * scale, size: 8 + 9 * layer.scale };
+      const resolved = crowdSpriteCharacter(person);
+      if (resolved) {
+        const { column, bob } = crowdSpriteFrame(person, gait, paused, reaction, x);
+        const cell = resolved.character.cells[column] || resolved.character.cells[0];
+        if (cell.hand) {
+          const drawScale = (134 * scale) / Math.max(1, cell.h);
+          spot = {
+            x: drawX + (cell.hand.x - cell.cx) * drawScale * person.direction,
+            y: person.y - bob - (cell.baseline - cell.hand.y) * drawScale,
+            size: 6 + 8 * layer.scale,
+          };
+        }
+      }
+      flashSpots.push([spot, flashPick]);
     }
   }
   ctx.globalAlpha = 1;
@@ -32476,6 +32644,69 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         surge: ambientSurge(level, beat),
         stage: state.stage,
         tick: state.simulationTick,
+      };
+    },
+    // v5.3 CROWD DEPTH: drive a stir straight into the crowd — the same call
+    // applyViolenceResponse makes — so a probe can script "side 0 landed a
+    // heavy here" without having to land one. Same shape as forceStageWeapon.
+    crowdStir(amount = 1, side = -1, splatX = null) {
+      stirCrowd(amount, "", { side, splatX });
+      return this.crowd();
+    },
+    // v5.3 CROWD DEPTH: the reaction state of every painted member at this
+    // tick — who they are here for, which mood the current stir put them in,
+    // which painted cell that resolves to, how far they are leaning and
+    // whether they are one of the phone holders who can pop a flashbulb — so
+    // a probe can ASSERT that one hit produced two crowds instead of
+    // eyeballing a screenshot. Presentation reads only; nothing is snapshotted.
+    crowd() {
+      const crowd = state.crowd;
+      if (!crowd) return { variant: "", members: [], moods: {} };
+      updateCrowdKoHoldLatch();
+      const reaction = crowdDrawReaction();
+      const frame = state.simulationTick;
+      const entry = crowdVariantEntry(crowd.variant);
+      const members = crowd.people.map((person, index) => {
+        const layer = CROWD_LAYERS.find((band) => band.id === person.layer);
+        const { x, gait, paused } = crowdPosition(person, layer, frame, crowd.span, crowd.minX);
+        const resolved = person.sprite ? crowdSpriteFrame(person, gait, paused, reaction, x) : null;
+        return {
+          index,
+          layer: person.layer,
+          x: Math.round(x),
+          y: person.y,
+          stationed: Boolean(person.stationed),
+          lift: person.lift || 0,
+          character: person.sprite?.character ?? -1,
+          favourite: person.sprite?.favourite ?? -1,
+          threshold: person.sprite ? Number(person.sprite.reactThreshold.toFixed(3)) : -1,
+          mood: resolved?.mood || "none",
+          column: resolved?.column ?? -1,
+          tilt: Number((resolved?.tilt || 0).toFixed(4)),
+          phone: Boolean(entry?.characters?.[person.sprite?.character]?.phone),
+        };
+      });
+      const moods = {};
+      for (const member of members) moods[member.mood] = (moods[member.mood] || 0) + 1;
+      return {
+        tick: frame,
+        variant: crowd.variant,
+        sheetVariant: crowd.sheetVariant || crowd.variant,
+        grade: crowd.grade || "",
+        painted: Boolean(entry),
+        reaction: Number(reaction.toFixed(3)),
+        stirSide: state.crowdStirSide,
+        splat: { x: Math.round(state.crowdSplatX), age: frame - state.crowdSplatTick },
+        homeLean: Number((crowd.homeLean ?? 0.5).toFixed(3)),
+        favourites: [
+          members.filter((member) => member.favourite === 0).length,
+          members.filter((member) => member.favourite === 1).length,
+        ],
+        phones: members.filter((member) => member.phone).length,
+        flashes: crowdFlashPicks(crowd, frame, reaction).map((pick) => pick.index),
+        billboards: crowdBillboards().length,
+        moods,
+        members,
       };
     },
     // v5.1 TEMPO TELLS: each side's tell phase at the current tick (the same
