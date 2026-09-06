@@ -483,12 +483,15 @@ import {
 } from "./engine/online-qol.mjs";
 import {
   DEMO_AI_DIFFICULTY,
+  DEMO_CLOCK_AI_DIFFICULTY,
+  DEMO_CLOCK_COVERAGE_BLEND,
   DEMO_IDLE_DELAY_MS,
   DEMO_RESULT_HOLD_MS,
   createDemoDirector,
+  demoCloserPlan,
   demoMatchupKey,
 } from "./engine/demo.mjs";
-import { createDemoChoreographer } from "./engine/demo-choreo.mjs";
+import { DEMO_COVERAGE_BLEND, createDemoChoreographer } from "./engine/demo-choreo.mjs";
 import {
   DEMO_SPEED_RATES,
   createDemoSpeed,
@@ -2512,7 +2515,33 @@ const demoSession = {
   cycle: null,
   matches: 0,
   superSide: 0,
-  superShown: false,
+  // 5.4 FIGHT NIGHT (round-ends): the card's SHOW tag from the director
+  // ({ format, opener }), whether the opener has fired (this used to be
+  // `superShown` — every card opened on the walk-in super), the tick after the
+  // bell it fired on and what it turned out to be, plus the opener's own
+  // scratch (the dash tap, the footsies fuse).
+  show: null,
+  openerShown: false,
+  openerTick: -1,
+  openerAction: "",
+  openerScratch: 0,
+  // The round's CLOSER plan, set by checkKnockout in a demo the tick the KO
+  // lands ({ finisher, variant, reason } from engine/demo demoCloserPlan) and
+  // consumed by aiInput's finish branch. null outside a finish window.
+  closer: null,
+  // Per-session Final Blow ledger, fighterId -> Final Blows taken, the
+  // sibling of coverageCarry that alternates the A/B finisher per fighter; the
+  // bounded log of how every demo round ended (qa.demoCoverage().closers);
+  // and whether THIS card has already put a decision on the board.
+  finisherLedger: {},
+  closerLog: [],
+  decisionShown: false,
+  // The tier the current fighters were built with (demo / demo-clock).
+  fightersTier: "",
+  // QA only (qa.demoNextShow): a show tag forced onto the next card(s) so a
+  // probe can ask for a CLOCK card or a given opener deterministically.
+  // Survives endDemoSession on purpose — it is armed before qa.demo(seed).
+  showOverride: null,
   resultTimer: 0,
   idleTimer: 0,
   // v2.9 FLOW: per-match coverage choreographer + the matchup keys this demo
@@ -2545,7 +2574,32 @@ const DEMO_SPEED_HINT_MS = 9000;
 // and online presentation are byte-for-byte unchanged.
 const DEMO_FINISHER_REACTION = 0.35;
 const DEMO_ROUND_INTRO_SECONDS = 1.15;
-const DEMO_KO_HOLD_SECONDS = 3.1;
+// 5.4 FIGHT NIGHT (round-ends): the plain-KO hold is the FULL curtain call
+// again (it was 3.1 s — a hold no attract round ever reached, because every
+// round took the Final Blow). A plain knockout now has to carry the 5.3
+// collapse and thud, the "<name> WINS" call and the second victory beat,
+// which roundWinShowcaseCell only grants a hold of 3.4 s or more. The time is
+// reclaimed elsewhere: a round the closer plans as a plain KO does not open
+// the 6 s FINISH THEM window at all — the loser is on his feet for
+// DEMO_PLAIN_KO_WINDOW_SECONDS (the KO freeze) and then goes down.
+const DEMO_KO_HOLD_SECONDS = ROUND_WIN_HOLD_SECONDS;
+const DEMO_PLAIN_KO_WINDOW_SECONDS = 0.9;
+// The openers (engine/demo DEMO_OPENERS). The super walk-in commits inside
+// 245 px as it always has; the throw walks all the way into grab reach; the
+// dash-in taps its dash from mid range and lands a heavy off it; footsies
+// holds both men off the buttons for a spacing dance of this many ticks.
+// The CLOCK card's round clock. A clock-tier round cannot honestly last 99 s:
+// the game's own damage numbers floor a bar in five landed heavies (a
+// counter-hit HEAVY HAND is 26.7, a SOUTH STREET SLAM 25 — per-hit trace,
+// seed 1234), and brain-only clock rounds measured 16-104 s, median 36, over
+// eight forced cards even with the kit's swings cut to 0.3. At 30 s, 11 of
+// those 16 rounds reach the buzzer, and the card gets two rounds to put a
+// decision on the board before its fighters return to the standard brain and
+// the 99 s clock. The HUD shows 30 at the bell and the chip says ON THE CLOCK.
+const DEMO_CLOCK_ROUND_SECONDS = 30;
+const DEMO_OPENER_SUPER_RANGE = 245;
+const DEMO_OPENER_DASH_RANGE = 430;
+const DEMO_OPENER_FOOTSIES_TICKS = 96;
 let fightAnnouncementTimer = 0;
 let fightAnnouncementPlan = null;
 
@@ -4264,8 +4318,17 @@ function demoSnapshot() {
     cycle: demoSession.cycle ? { ...demoSession.cycle, picks: [...demoSession.cycle.picks] } : null,
     matches: demoSession.matches,
     superSide: demoSession.superSide,
-    superShown: demoSession.superShown,
-    difficulty: DEMO_AI_DIFFICULTY,
+    // `superShown` is kept as the historical name: it now means "the opener
+    // has fired", whichever of the four openers this card drew.
+    superShown: demoSession.openerShown,
+    show: demoSession.show ? { ...demoSession.show } : null,
+    opener: {
+      shown: demoSession.openerShown,
+      tick: demoSession.openerTick,
+      action: demoSession.openerAction,
+    },
+    closer: demoSession.closer ? { ...demoSession.closer } : null,
+    difficulty: demoSession.fightersTier || DEMO_AI_DIFFICULTY,
     resultScheduled: Boolean(demoSession.resultTimer),
     idleScheduled: Boolean(demoSession.idleTimer),
     director: demoSession.director?.snapshot() || null,
@@ -4323,7 +4386,10 @@ function updateDemoUi() {
   const first = roster.find(({ id }) => id === firstId);
   const second = roster.find(({ id }) => id === secondId);
   $("#demoHudMatchup").textContent = `${first?.name || firstId} VS ${second?.name || secondId}`;
-  $("#demoHudCycle").textContent = `CYCLE ${demoSession.cycle.cycle} · ${stages[demoSession.cycle.stage].name}`;
+  // 5.4: a CLOCK card says so on the chip — the viewer should know the
+  // clock is the story of this one.
+  const onTheClock = demoSession.show?.format === "clock" ? " · ON THE CLOCK" : "";
+  $("#demoHudCycle").textContent = `CYCLE ${demoSession.cycle.cycle} · ${stages[demoSession.cycle.stage].name}${onTheClock}`;
 }
 
 function endDemoSession() {
@@ -4336,7 +4402,16 @@ function endDemoSession() {
   demoSession.cycle = null;
   demoSession.matches = 0;
   demoSession.superSide = 0;
-  demoSession.superShown = false;
+  demoSession.show = null;
+  demoSession.openerShown = false;
+  demoSession.openerTick = -1;
+  demoSession.openerAction = "";
+  demoSession.openerScratch = 0;
+  demoSession.closer = null;
+  demoSession.finisherLedger = {};
+  demoSession.closerLog = [];
+  demoSession.decisionShown = false;
+  demoSession.fightersTier = "";
   demoSession.choreo = null;
   demoSession.pairsSeen = [];
   demoSession.coverageCarry = {};
@@ -4439,7 +4514,17 @@ function startNextDemoMatch() {
   demoSession.cycle = cycle;
   demoSession.matches += 1;
   demoSession.superSide = (cycle.cycle - 1) % 2;
-  demoSession.superShown = false;
+  // 5.4 FIGHT NIGHT (round-ends): the card's show tag has to be in place
+  // BEFORE startMatch builds the fighters — makeFighter reads it to pick the
+  // clock brain on a CLOCK card.
+  demoSession.show = { ...cycle.show, ...(demoSession.showOverride?.show || {}) };
+  if (demoSession.showOverride && !demoSession.showOverride.sticky) demoSession.showOverride = null;
+  demoSession.openerShown = false;
+  demoSession.openerTick = -1;
+  demoSession.openerAction = "";
+  demoSession.openerScratch = 0;
+  demoSession.closer = null;
+  demoSession.decisionShown = false;
   $("#attractScores").hidden = true;
   state.mode = "demo";
   state.arcadeRun = null;
@@ -4452,7 +4537,9 @@ function startNextDemoMatch() {
   state.stage = cycle.stage;
   $("#demoResultStatus").hidden = true;
   startMatch(true);
-  state.fighters[demoSession.superSide].meter = GRIT_RULES.maximum;
+  // The full-Grit showcase side: not on a CLOCK card, where a free super is a
+  // third of the health the round needs to keep to reach the buzzer.
+  if (demoSession.show.format !== "clock") state.fighters[demoSession.superSide].meter = GRIT_RULES.maximum;
   // v2.9 FLOW: a fresh coverage choreographer per exhibition. It works from
   // kit ids (what beginAttack resolves moves through) and knows whether this
   // stage/round actually planned a weapon, so the pickup beat is only chased
@@ -4464,6 +4551,8 @@ function startNextDemoMatch() {
     hasStageWeapon: Boolean(state.stageWeapon),
     seed: hashSeed(demoSession.director.snapshot().seed, "choreo", cycle.cycle),
     priorShown: demoSession.coverageCarry,
+    // 5.4: a CLOCK card hands most windows to the patient brain.
+    blend: demoSession.show.format === "clock" ? DEMO_CLOCK_COVERAGE_BLEND : DEMO_COVERAGE_BLEND,
   });
   const pairKey = demoMatchupKey(...cycle.picks);
   if (!demoSession.pairsSeen.includes(pairKey)) demoSession.pairsSeen.push(pairKey);
@@ -7160,7 +7249,7 @@ function makeFighter(index, side, overrideDef = null) {
     cinematicScale: 1,
     down: false,
     aiClock: 0,
-    aiBrain: createAiBrain(state.mode === "demo" ? DEMO_AI_DIFFICULTY : state.aiDifficulty),
+    aiBrain: createAiBrain(state.mode === "demo" ? demoAiTier() : state.aiDifficulty),
     combatState: FIGHTER_STATES.IDLE,
     previousCombatState: FIGHTER_STATES.IDLE,
     stateFrame: 0,
@@ -11832,7 +11921,7 @@ function startMatch(resetSet = true) {
   state.effects.length = 0;
   state.traps.length = 0;
   state.projectiles.length = 0;
-  state.timer = 99;
+  state.timer = roundClockSeconds();
   state.timerCarry = 0;
   state.phase = "intro";
   state.phaseTime = 2.25;
@@ -12038,7 +12127,7 @@ function resetRound() {
   state.effects.length = 0;
   state.traps.length = 0;
   state.projectiles.length = 0;
-  state.timer = 99;
+  state.timer = roundClockSeconds();
   state.timerCarry = 0;
   state.phase = "intro";
   // v2.9 FLOW round 2: demo-only shorter round card — the exhibition owes the
@@ -12310,6 +12399,9 @@ function finishRound(winner, type = -1) {
   demoChoreoBeat(winner, "roundEnd");
   if (type >= 0) demoChoreoBeat(winner, "finisher");
   const winDef = state.fighters[winner].def;
+  // 5.4 FIGHT NIGHT (round-ends): the closer log, demo only, meta only. Reads
+  // the loser's health and the clock BEFORE the branches below touch either.
+  if (state.mode === "demo" && !rollbackResimulating) demoNoteRoundEnd(winner, type);
   // Wave 15: the KO slams in the hands — for both the knockout hold and the
   // opening of a Final Blow ceremony (all gates inside combatHaptic).
   combatHaptic("ko");
@@ -14222,6 +14314,148 @@ function demoChoreoBeat(side, beat) {
   demoSession.choreo.noteBeat(side, beat);
 }
 
+// ---------------------------------------------------------------------------
+// 5.4 FIGHT NIGHT (round-ends) — the demo's OPENER and CLOSER. Everything in
+// this block is reached only from demo-gated call sites (aiInput's demo
+// branch, checkKnockout's demo branch, makeFighter's demo branch, finishRound's
+// demo note), reads demoSession (meta, never snapshotted) and writes nothing
+// the checksummed sim reads outside a demo. A played match is byte-identical:
+// tests/demo-round-ends.test.mjs pins the gates from source and the parity
+// trace in DEMO.md pins the tick stream.
+// ---------------------------------------------------------------------------
+
+// Which brain a demo fighter is built with. A CLOCK card runs the patient
+// clock tier until it has put a decision on the board (two rounds at most, so
+// a card whose clock round still ended in a knockout never drags three).
+function demoAiTier() {
+  const clock = demoSession.show?.format === "clock" && !demoSession.decisionShown && state.round <= 2;
+  demoSession.fightersTier = clock ? DEMO_CLOCK_AI_DIFFICULTY : DEMO_AI_DIFFICULTY;
+  return demoSession.fightersTier;
+}
+
+// The round clock at the bell: 99 everywhere, and the CLOCK card's own
+// length on a demo round built with the clock brain (makeMatchFighters runs
+// before either timer reset, so the tier is already known).
+function roundClockSeconds() {
+  if (state.mode === "demo" && demoSession.fightersTier === DEMO_CLOCK_AI_DIFFICULTY) return DEMO_CLOCK_ROUND_SECONDS;
+  return 99;
+}
+
+// The closer plan for the round the KO just decided (checkKnockout, demo).
+// Pure on the round state plus the session ledger; the ledger bumps here for
+// a Final Blow so the next one this fighter takes is the other variant.
+function demoPlanCloser(winner) {
+  const attacker = state.fighters[winner];
+  const plan = demoCloserPlan({
+    winner,
+    rounds: state.rounds,
+    roundsToWin: roundsToWinValue(),
+    winnerHealth: attacker.health,
+    fighterId: attacker.def.id,
+    ledger: demoSession.finisherLedger,
+    loserGrounded: Boolean(state.fighters[1 - winner].grounded),
+  });
+  if (plan.finisher) {
+    demoSession.finisherLedger[attacker.def.id] = (demoSession.finisherLedger[attacker.def.id] || 0) + 1;
+  }
+  demoSession.closer = { ...plan, winner, round: state.round };
+  return plan;
+}
+
+// finishRound's demo note: how the round ended, for the closer log and the
+// CLOCK card's "decision shown" latch. Meta only.
+function demoNoteRoundEnd(winner, type) {
+  const loser = state.fighters[1 - winner];
+  const cause = roundEndCause({ finisherType: type, timer: state.timer, loserHealth: loser.health });
+  if (cause === ROUND_END_CAUSES.decision) demoSession.decisionShown = true;
+  demoSession.closerLog.push({
+    cycle: demoSession.cycle?.cycle ?? 0,
+    round: state.round,
+    winner,
+    fighterId: state.fighters[winner].def.id,
+    kind: cause,
+    variant: type >= 0 ? type : -1,
+    fatalityId: type >= 0 ? state.finisher?.fatalityId || null : null,
+    reason: demoSession.closer?.reason || (cause === ROUND_END_CAUSES.decision ? "clock" : "plain"),
+    timer: state.timer,
+    format: demoSession.show?.format || "standard",
+  });
+  while (demoSession.closerLog.length > 64) demoSession.closerLog.shift();
+  demoSession.closer = null;
+}
+
+// The opener's scripted input for one demo fighter, or null once the opener
+// has fired (the choreographer and the brain own the rest of the card). The
+// showcase side is demoSession.superSide as before; which of the four
+// openers it runs is the director's seeded draw (cycle.show.opener).
+function demoOpenerInput(fighter, opponent, input) {
+  const opener = demoSession.show?.opener || "super";
+  const distance = Math.abs(opponent.x - fighter.x);
+  const towardRight = opponent.x > fighter.x;
+  const lead = fighter.side === demoSession.superSide;
+  const walkIn = () => { input.right = towardRight; input.left = !towardRight; };
+  const walkOff = () => { input.right = !towardRight; input.left = towardRight; };
+  const fire = (action) => {
+    demoSession.openerShown = true;
+    demoSession.openerTick = state.simulationTick;
+    demoSession.openerAction = action;
+  };
+  if (opener === "footsies-first") {
+    // Both men off the buttons: close to the mid band, then rock in and out
+    // of it — a feel-out the sweep found the demo never had (first contact
+    // 0.3-1.5 s after every bell). The fuse runs on side 0's ticks.
+    if (fighter.side === 0) demoSession.openerScratch += 1;
+    const step = demoSession.openerScratch;
+    if (step >= DEMO_OPENER_FOOTSIES_TICKS) {
+      if (fighter.side === 0) fire("footsies");
+      return null;
+    }
+    if (distance > 330) walkIn();
+    else if (distance < 230) walkOff();
+    else if (Math.floor(step / 12) % 2 === (lead ? 0 : 1)) walkIn();
+    else walkOff();
+    return input;
+  }
+  if (!lead) {
+    // The partner: the guard for the super and the throw (a throw through a
+    // standing guard is the SF2 read the opener is showing), the live brain
+    // for the dash-in so the heavy has to beat a real reaction.
+    if (opener === "dash-in") return null;
+    if (distance > DEMO_OPENER_SUPER_RANGE) walkIn();
+    else input.guard = true;
+    return input;
+  }
+  if (opener === "throw") {
+    if (distance > PROXIMITY_GRAB_RANGE - 10) { walkIn(); return input; }
+    input.throw = true;
+    fire("throw");
+    return input;
+  }
+  if (opener === "dash-in") {
+    // The dash needs the tap-release-tap the choreographer's dashTap uses,
+    // then the heavy comes out of the dash inside the super band.
+    if (demoSession.openerScratch === 0) {
+      if (distance > DEMO_OPENER_DASH_RANGE) { walkIn(); return input; }
+      demoSession.openerScratch = 1;
+    }
+    const step = demoSession.openerScratch;
+    demoSession.openerScratch += 1;
+    if (step === 2 || (step >= 5 && step <= 8)) { walkIn(); return input; }
+    if (step > 8 && distance <= DEMO_OPENER_SUPER_RANGE) {
+      input.heavy = true;
+      fire("dash-heavy");
+      return input;
+    }
+    if (step > 40) { fire("dash-heavy"); return null; }
+    return input;
+  }
+  // "super": the opener every card used to run.
+  if (distance > DEMO_OPENER_SUPER_RANGE) { walkIn(); return input; }
+  input.super = true;
+  fire("super");
+  return input;
+}
+
 function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
   const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, enhanced: false, throw: false, super: false, final: false };
@@ -14233,24 +14467,29 @@ function aiInput(fighter, opponent, dt) {
     // waiting out the brain's ordinary reaction clock — measured, only 54%
     // of an exhibition was actual fighting. The demo commits to its Final
     // Blow promptly instead. Arcade/tournament/versus pacing is untouched.
-    if (state.mode === "demo") fighter.aiClock = Math.min(fighter.aiClock, DEMO_FINISHER_REACTION);
+    if (state.mode === "demo") {
+      // 5.4 FIGHT NIGHT (round-ends): the CLOSER (set by checkKnockout).
+      // A plain-KO plan withholds `final` — the winner steps off the fallen
+      // man and lets the short window lapse into finishRound's collapse. A
+      // Final Blow plan carries the ledger's A/B variant; resolveInput has
+      // forwarded `finisherVariant` since 1.x, it was just never set here.
+      const plan = demoSession.closer;
+      if (plan && !plan.finisher) {
+        const towardRight = opponent.x > fighter.x;
+        input.left = towardRight;
+        input.right = !towardRight;
+        return input;
+      }
+      fighter.aiClock = Math.min(fighter.aiClock, DEMO_FINISHER_REACTION);
+      input.finisherVariant = plan ? plan.variant : 0;
+    }
     input.final = fighter.aiClock <= 0;
     if (input.final) fighter.aiClock = 2;
     return input;
   }
-  if (state.mode === "demo" && state.phase === "fight" && !demoSession.superShown) {
-    const distance = Math.abs(opponent.x - fighter.x);
-    const towardRight = opponent.x > fighter.x;
-    if (distance > 245) {
-      input.right = towardRight;
-      input.left = !towardRight;
-    } else if (fighter.side === demoSession.superSide) {
-      input.super = true;
-      demoSession.superShown = true;
-    } else {
-      input.guard = true;
-    }
-    return input;
+  if (state.mode === "demo" && state.phase === "fight" && !demoSession.openerShown) {
+    const scripted = demoOpenerInput(fighter, opponent, input);
+    if (scripted) return scripted;
   }
   const brainInput = stepAiBrain(fighter.aiBrain, {
     frame: state.simulationTick,
@@ -17552,10 +17791,21 @@ function checkKnockout() {
   attacker.attacking = null;
   duckMusic(0.34, 1900);
   stirCrowd(1.4, "", { side: winner, splatX: victim.x });
-  announce("FINISH THEM", "LP = A  ·  LK = B  ·  ANY DISTANCE", 2.2);
-  if (!rollbackResimulating) setTouchPrompt("final");
+  // 5.4 FIGHT NIGHT (round-ends), demo only: the CLOSER decides now whether
+  // this round is a Final Blow or a plain knockout. A plain one never opens
+  // the FINISH THEM window: the loser stands through the KO freeze and then
+  // finishRound lays him down (koCollapseOnRoundEnd), so the banner, the
+  // touch prompt and the "FINAL BLOW READY" cue are not promised. Every other
+  // mode keeps the 6 s window and the prompt exactly as before.
+  const plainDemoKo = state.mode === "demo" && !demoPlanCloser(winner).finisher;
+  if (plainDemoKo) {
+    state.phaseTime = DEMO_PLAIN_KO_WINDOW_SECONDS;
+  } else {
+    announce("FINISH THEM", "LP = A  ·  LK = B  ·  ANY DISTANCE", 2.2);
+    if (!rollbackResimulating) setTouchPrompt("final");
+  }
   updateHud();
-  sound("finish");
+  if (!plainDemoKo) sound("finish");
   // Wave 6: KO freeze-frame punch-in on the killing hit (render-only latch,
   // guarded + tick-deduped inside).
   latchKoCameraPunch();
@@ -33285,6 +33535,13 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       // The stage list the attract director shuffles through.
       return Object.keys(stages);
     },
+    // 5.4 FIGHT NIGHT (round-ends): force the show tag ({ format, opener })
+    // of the NEXT card (or of every following card with sticky) — arm it
+    // before qa.demo(seed) to shape the first card. QA only; meta only.
+    demoNextShow(show = null, { sticky = false } = {}) {
+      demoSession.showOverride = show ? { show: { ...show }, sticky: Boolean(sticky) } : null;
+      return demoSession.showOverride;
+    },
     demo(seed = 237) {
       startDemo({ qa: true, seed });
       return window.__finalBlowEngine.snapshot();
@@ -33347,6 +33604,24 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         // attract ledger this session has banked.
         lanes: demoSession.choreo.directives(),
         carry: { ...demoSession.coverageCarry },
+        // 5.4 FIGHT NIGHT (round-ends): the card's show tag and opener
+        // result, the session's Final Blow ledger, the live closer plan and
+        // the bounded log of how every demo round of the session ended.
+        show: {
+          ...(demoSession.show || {}),
+          tier: demoSession.fightersTier,
+          opener: demoSession.show?.opener || "super",
+          openerShown: demoSession.openerShown,
+          openerTick: demoSession.openerTick,
+          openerAction: demoSession.openerAction,
+        },
+        closers: {
+          ledger: { ...demoSession.finisherLedger },
+          plan: demoSession.closer ? { ...demoSession.closer } : null,
+          last: demoSession.closerLog.at(-1) ? { ...demoSession.closerLog.at(-1) } : null,
+          log: demoSession.closerLog.map((entry) => ({ ...entry })),
+          decisionShown: demoSession.decisionShown,
+        },
         hasStageWeapon: demoSession.choreo.hasStageWeapon(),
         cyclePairsSeen: [...demoSession.pairsSeen],
         // v2.9 round 4 — THE HONEST HALF OF THE BEAT LEDGER. `beats` above is
@@ -33425,6 +33700,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
           dizzy: fighter.dizzyFrames,
           grabbed: Boolean(fighter.grabbed),
           dash: fighter.dashFrames,
+          // 5.4 (round-ends): the KO collapse is a `down` fighter whose
+          // knockdown countdown floors at 1 through the decided round.
+          down: Boolean(fighter.down),
+          knockdown: fighter.knockdownFrames,
           vx: Math.round(fighter.vx),
           tick: state.simulationTick,
         };

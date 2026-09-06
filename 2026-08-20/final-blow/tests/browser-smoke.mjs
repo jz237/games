@@ -3737,15 +3737,54 @@ probe('demo-mode', async () => {
     demoThinking = await evaluate(client, `window.__finalBlowQa.step(4.5); window.__finalBlowEngine.snapshot()`);
     assert.ok(demoThinking.fighters[0].ai.decisions > 0, 'CPU 1 should make delayed visual decisions');
     assert.ok(demoThinking.fighters[1].ai.decisions > 0, 'CPU 2 should make delayed visual decisions');
-    assert.equal(demoThinking.demo.superShown, true, 'every exhibition should deliberately showcase a super');
+    // 5.4 FIGHT NIGHT (round-ends): `superShown` now means "the card's
+    // opener has fired" — a standard card draws super / throw / dash-in from
+    // the director's seeded show stream, a clock card opens on footsies.
+    assert.equal(demoThinking.demo.superShown, true, 'every exhibition should deliberately showcase its opener');
+    assert.equal(demoThinking.demo.show.format, 'standard', 'the first card of a session is a standard bout');
+    assert.ok(['super', 'throw', 'dash-in'].includes(demoThinking.demo.show.opener), demoThinking.demo.show.opener);
+    assert.equal(demoThinking.demo.opener.shown, true);
+    assert.ok(demoThinking.demo.opener.tick > 0);
     assert.equal(await evaluate(client, `document.querySelector('#demoHud').hidden`), false);
 
+    // 5.4 CLOSER: a first-round KO with a healthy winner is a PLAIN knockout
+    // — no FINISH THEM window, the loser collapses (5.3 koCollapseOnRoundEnd)
+    // and the full 4.9 s curtain call plays; only match point (or a comeback
+    // / brink round) takes the Final Blow.
+    // (A juggle KO is handed to the ceremony instead — the plain path would
+    // leave an airborne loser hanging — so the synthetic KO waits for a tick
+    // with both men on the ground and off the buttons.)
+    const demoGroundWait = `(() => { for (let tick = 0; tick < 600; tick += 1) { const pose = window.__finalBlowQa.pose(); const snap = window.__finalBlowEngine.snapshot(); if (snap.phase === 'fight' && pose.every((p) => p.grounded && !p.down) && snap.fighters.every((f) => !f.attack && f.hitstunFrames === 0)) return tick; window.__finalBlowQa.step(1/60); } return -1; })()`;
+    assert.ok(await evaluate(client, demoGroundWait) >= 0, 'a grounded, quiet tick for the synthetic KO');
     demoFinishReady = await evaluate(client, `window.__finalBlowQa.demoKnockout(0)`);
     assert.equal(demoFinishReady.phase, 'finish');
     assert.equal(demoFinishReady.fighters[1].health, 0);
-    demoFinalBlow = await evaluate(client, `window.__finalBlowQa.step(0.05); ({ snapshot: window.__finalBlowEngine.snapshot(), status: window.__finalBlowQa.status() })`);
+    assert.deepEqual({ finisher: demoFinishReady.demo.closer.finisher, reason: demoFinishReady.demo.closer.reason }, { finisher: false, reason: 'plain' });
+    const demoPlainKo = await evaluate(client, `window.__finalBlowQa.step(1.25); ({ snapshot: window.__finalBlowEngine.snapshot(), status: window.__finalBlowQa.status(), coverage: window.__finalBlowQa.demoCoverage(), pose: window.__finalBlowQa.pose(), banner: document.querySelector('#announcer strong').getAttribute('aria-label') + '|' + document.querySelector('#announcer span').textContent })`);
+    assert.equal(demoPlainKo.snapshot.phase, 'roundover', 'the 0.9 s plain-KO window lapses into the round end');
+    assert.equal(demoPlainKo.status.fatalityId, null, 'no Final Blow on a plain first-round KO');
+    assert.equal(demoPlainKo.pose[1].down, true, 'the loser goes down (5.3 KO collapse) instead of standing through the hold');
+    assert.ok(demoPlainKo.pose[1].knockdown >= 1, 'the KO lie holds through the curtain call');
+    assert.equal(demoPlainKo.pose[0].down, false);
+    assert.equal(demoPlainKo.coverage.closers.last.kind, 'knockout');
+    assert.match(demoPlainKo.banner, /WINS\|KNOCKOUT/);
+    // Through the curtain call and the ROUND 2 card into the next fight...
+    const demoRoundTwo = await evaluate(client, `window.__finalBlowQa.step(6.2); window.__finalBlowEngine.snapshot()`);
+    assert.equal(demoRoundTwo.phase, 'fight');
+    assert.equal(demoRoundTwo.demo.closer, null);
+    // ...where the same winner's KO is MATCH POINT: the Final Blow, variant A
+    // (the ledger's first take for this fighter), inside 0.35 s.
+    assert.ok(await evaluate(client, demoGroundWait) >= 0, 'a grounded, quiet tick for the match-point KO');
+    const demoMatchPoint = await evaluate(client, `window.__finalBlowQa.demoKnockout(0)`);
+    assert.equal(demoMatchPoint.phase, 'finish');
+    assert.deepEqual({ finisher: demoMatchPoint.demo.closer.finisher, reason: demoMatchPoint.demo.closer.reason, variant: demoMatchPoint.demo.closer.variant }, { finisher: true, reason: 'match-point', variant: 0 });
+    demoFinalBlow = await evaluate(client, `window.__finalBlowQa.step(0.4); ({ snapshot: window.__finalBlowEngine.snapshot(), status: window.__finalBlowQa.status(), coverage: window.__finalBlowQa.demoCoverage() })`);
     assert.equal(demoFinalBlow.snapshot.phase, 'roundover');
-    assert.ok(demoFinalBlow.status.elapsed > 0, 'the winning CPU should trigger its character Final Blow');
+    assert.ok(demoFinalBlow.status.elapsed > 0, 'the winning CPU should trigger its character Final Blow on match point');
+    assert.ok(demoFinalBlow.status.fatalityId, 'the Final Blow carries a fatality id');
+    assert.equal(demoFinalBlow.coverage.closers.last.kind, 'finisher');
+    assert.equal(demoFinalBlow.coverage.closers.last.variant, 0);
+    assert.equal(demoFinalBlow.coverage.closers.ledger[demoFinalBlow.snapshot.fighters[0].id], 1, 'the session ledger banks the take, so this fighter\'s next Final Blow is variant B');
 
     demoResult = await evaluate(client, `window.__finalBlowQa.demoResult(0)`);
     assert.equal(demoResult.screen, 'result');
@@ -3757,6 +3796,33 @@ probe('demo-mode', async () => {
     assert.equal(automaticDemoCycle.demo.cycle.cycle, 2);
     assert.equal(automaticDemoCycle.demo.matches, 2);
     assert.equal(automaticDemoCycle.demo.resultScheduled, false);
+    // 5.4 CLOCK card: forced through the QA show override — both CPUs on the
+    // clock brain, a 30-second clock on the HUD, the chip says so, and the
+    // buzzer ends the round as a DECISION (banner + the round-end log); the
+    // next round is back on the standard brain and the 99 s clock.
+    await evaluate(client, `window.__finalBlowQa.demoNextShow({ format: 'clock' })`);
+    const demoClockCard = await evaluate(client, `window.__finalBlowQa.demoCycles(2); window.__finalBlowQa.step(2.4); ({ snapshot: window.__finalBlowEngine.snapshot(), coverage: window.__finalBlowQa.demoCoverage(), timer: document.querySelector('#timer').textContent, chip: document.querySelector('#demoHudCycle').textContent })`);
+    assert.equal(demoClockCard.snapshot.demo.show.format, 'clock');
+    assert.equal(demoClockCard.snapshot.demo.show.opener, 'footsies-first');
+    assert.equal(demoClockCard.snapshot.fighters[0].ai.difficulty, 'demo-clock');
+    assert.equal(demoClockCard.snapshot.fighters[1].ai.difficulty, 'demo-clock');
+    assert.equal(demoClockCard.snapshot.demo.difficulty, 'demo-clock');
+    assert.equal(demoClockCard.coverage.show.tier, 'demo-clock');
+    assert.ok(Number(demoClockCard.timer) <= 30 && Number(demoClockCard.timer) >= 27, `the clock card's HUD clock starts at 30 (read ${demoClockCard.timer})`);
+    assert.match(demoClockCard.chip, /ON THE CLOCK/);
+    assert.equal(demoClockCard.snapshot.phase, 'fight');
+    const demoDecision = await evaluate(client, `window.__finalBlowQa.setTimer(1); window.__finalBlowQa.step(1.6); ({ snapshot: window.__finalBlowEngine.snapshot(), status: window.__finalBlowQa.status(), coverage: window.__finalBlowQa.demoCoverage(), banner: document.querySelector('#announcer strong').getAttribute('aria-label') + '|' + document.querySelector('#announcer span').textContent })`);
+    assert.equal(demoDecision.snapshot.phase, 'roundover');
+    assert.equal(demoDecision.status.fatalityId, null);
+    assert.equal(demoDecision.coverage.closers.last.kind, 'decision');
+    assert.equal(demoDecision.coverage.closers.decisionShown, true);
+    assert.match(demoDecision.banner, /WINS\|DECISION/);
+    const demoAfterDecision = await evaluate(client, `window.__finalBlowQa.step(6.4); ({ snapshot: window.__finalBlowEngine.snapshot(), timer: document.querySelector('#timer').textContent })`);
+    assert.equal(demoAfterDecision.snapshot.phase, 'fight');
+    assert.equal(demoAfterDecision.snapshot.fighters[0].ai.difficulty, 'demo', 'once the decision is on the board the card returns to the standard brain');
+    assert.ok(Number(demoAfterDecision.timer) >= 96, `...and the 99 s clock (read ${demoAfterDecision.timer})`);
+    await evaluate(client, `window.__finalBlowQa.demoNextShow(null)`);
+
     await evaluate(client, `window.__finalBlowQa.demo(333)`);
     demoMarathon = await evaluate(client, `window.__finalBlowQa.demoCycles(64)`);
     assert.equal(demoMarathon.cycles.length, 64);

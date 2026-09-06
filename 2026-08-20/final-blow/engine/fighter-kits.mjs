@@ -5975,6 +5975,13 @@ export function selectKitAiIntent(fighterId, {
   // a readable gap and each move can be seen instead of a permanent clinch.
   spacing = 1,
   patience = 0,
+  // 5.4 FIGHT NIGHT (round-ends): `swing` (0..1) scales EVERY attack roll in
+  // this table — the counter, the super, the clinch swing, the ranged poke,
+  // the mid-band pokes. Patience only thins the mid band and the clinch band
+  // always swung on the way out, so a patient brain still floored a full
+  // health bar in 10-30 s. At 1 (every tier but the demo CLOCK brain) each
+  // comparison below is the authored one, bit for bit.
+  swing = 1,
 } = {}) {
   const kitAi = getFighterKit(fighterId)?.ai;
   if (!kitAi) return null;
@@ -5990,23 +5997,24 @@ export function selectKitAiIntent(fighterId, {
   if (opponentAttacking
     && ai.counterAction
     && distance < (ai.counterRange || 160)
-    && roll < (ai.counterChance || 0.7)) {
+    && roll < (ai.counterChance || 0.7) * swing) {
     return { movement: "hold", action: ai.counterAction, response: "counter" };
   }
   if (opponentAirborne && distance < 180) return { movement: "hold", action: ai.antiAirAction };
-  if (meter >= GRIT_RULES.superCost && roll < 0.22 && distance < 245) return { movement: "hold", action: "super" };
+  if (meter >= GRIT_RULES.superCost && roll < 0.22 * swing && distance < 245) return { movement: "hold", action: "super" };
   if (distance < ai.retreatRange) {
-    const action = roll < 0.42 ? ai.closeAction : roll < 0.72 ? "light" : "throw";
+    const action = roll < 0.42 * swing ? ai.closeAction : roll < 0.72 * swing ? "light" : roll < swing ? "throw" : null;
     // A patient brain backs out of the clinch, but still swings on the way
     // out: the hit/block pushback is what actually restores the gap.
     return { movement: ai.retreatWhenClose || fighterId === "jez" || patience > 0 ? "retreat" : "hold", action };
   }
   if (distance > ai.approachRange) {
-    return { movement: "advance", action: roll < 0.34 ? ai.rangedAction : null };
+    return { movement: "advance", action: roll < 0.34 * swing ? ai.rangedAction : null };
   }
-  if (distance > ai.preferredRange + 28) return { movement: "advance", action: roll < 0.48 * calm ? ai.pokeAction : null };
-  if (distance < ai.preferredRange - 24) return { movement: ai.retreatWhenClose || fighterId === "jez" || patience > 0 ? "retreat" : "hold", action: roll < 0.52 * calm ? ai.closeAction : roll >= 1 - 0.48 * calm ? "heavy" : null };
-  return { movement: "hold", action: roll < 0.36 * calm ? ai.pokeAction : roll < 0.62 * calm ? "light" : roll < 0.8 * calm ? "heavy" : null };
+  const share = calm * swing;
+  if (distance > ai.preferredRange + 28) return { movement: "advance", action: roll < 0.48 * share ? ai.pokeAction : null };
+  if (distance < ai.preferredRange - 24) return { movement: ai.retreatWhenClose || fighterId === "jez" || patience > 0 ? "retreat" : "hold", action: roll < 0.52 * share ? ai.closeAction : roll >= 1 - 0.48 * share ? "heavy" : null };
+  return { movement: "hold", action: roll < 0.36 * share ? ai.pokeAction : roll < 0.62 * share ? "light" : roll < 0.8 * share ? "heavy" : null };
 }
 
 export function listFighterMoves(fighterId) {

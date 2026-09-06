@@ -56,7 +56,13 @@ const readManifest = (bank) => JSON.parse(readFileSync(join(assetDir, bank, "MAN
 const E5 = UNIFIED_EXT5_CELLS;
 const TICK = 1 / 60;
 const INTRO_SECONDS = 2.25; // startFight: state.phaseTime = 2.25
-const DEMO_KO_HOLD_SECONDS = 3.1; // game.js
+// 5.4 FIGHT NIGHT (round-ends): the demo's plain-KO hold is the full 4.9 s
+// curtain call again (game.js DEMO_KO_HOLD_SECONDS = ROUND_WIN_HOLD_SECONDS).
+// It was 3.1 s — a hold no attract round ever reached, because every round
+// took the Final Blow; now that the closer lets half of them lapse into a
+// plain knockout, the collapse, the WINS call and the second beat all need
+// the full hold. The two pins below moved with it (see the comments there).
+const DEMO_KO_HOLD_SECONDS = 4.9; // game.js
 
 function buildGate(id, { ext5 = true } = {}) {
   const unified = readManifest("unified");
@@ -161,8 +167,11 @@ test("roundWinShowcaseCell: the victory through the WINS call, the taunt as the 
     assert.equal(roundWinShowcaseCell(pick, 2.39), E5.victory);
     assert.equal(roundWinShowcaseCell(pick, 2.4), E5.taunt);
     assert.equal(roundWinShowcaseCell(pick, 4.9), E5.taunt);
-    // The demo's 3.1 s hold leaves the taunt 0.7 s — under a beat: one drawing.
-    assert.equal(roundWinShowcaseCell(pick, 3.0, DEMO_KO_HOLD_SECONDS), E5.victory);
+    // The demo's hold used to be 3.1 s, which left the taunt 0.7 s — under a
+    // beat, one drawing. 5.4 made it the full 4.9 s, so the demo gets the
+    // second beat too (the old 3.1 s answer is kept as a literal below).
+    assert.equal(roundWinShowcaseCell(pick, 3.0, DEMO_KO_HOLD_SECONDS), E5.taunt);
+    assert.equal(roundWinShowcaseCell(pick, 3.0, 3.1), E5.victory, "a 3.1 s hold: one beat");
     assert.equal(roundWinShowcaseCell(pick, 2.5, 3.4), E5.taunt, "a 3.4 s hold leaves exactly one beat");
   }
 });
@@ -177,7 +186,11 @@ test("the round win traced: ext5:11 x144 -> ext5:12 x150 on the two motion picks
   assert.deepEqual(trace(0), ["ext5:11 x294"]);
   assert.deepEqual(trace(1), ["ext5:11 x144", "ext5:12 x150"]);
   assert.deepEqual(trace(2), ["ext5:11 x144", "ext5:12 x150"]);
-  assert.deepEqual(trace(1, DEMO_KO_HOLD_SECONDS), ["ext5:11 x186"], "the demo hold: one beat");
+  // 5.4: the demo's plain-KO hold is the full curtain call, so it traces
+  // exactly like the played hold; the retired 3.1 s hold's one-beat drawing
+  // is pinned as a literal so the boundary itself stays tested.
+  assert.deepEqual(trace(1, DEMO_KO_HOLD_SECONDS), ["ext5:11 x144", "ext5:12 x150"], "the demo hold: both beats");
+  assert.deepEqual(trace(1, 3.1), ["ext5:11 x186"], "a 3.1 s hold: one beat");
   // Held sheet: the rotation's own three drawings, one per pick, as 5.1 drew them.
   const noExt5 = buildGate("jez", { ext5: false });
   assert.deepEqual(trace(0, ROUND_WIN_HOLD_SECONDS, noExt5), ["specials:15 x294"]);

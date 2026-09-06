@@ -479,7 +479,10 @@ export function decideAiIntent(brain, {
   // exchange is readable from a distance.
   if ((settings.patience || 0) > 0 && !observation.attacking && self.grounded
     && distance < 150 && mixRoll(roll, 30) < settings.patience) {
-    return mixRoll(roll, 31) < 0.34
+    // (5.4: the demo CLOCK tier sets spaceJumpShare 0 — a back-jump into
+    // the other brain's anti-air launcher was the juggle that floored a bar
+    // in 15 s on a round meant to reach the buzzer.)
+    return mixRoll(roll, 31) < (settings.spaceJumpShare ?? 0.34)
       ? { movement: "retreat", action: null, jump: true, reason: "demo-space-jump" }
       : { movement: "retreat", action: null, reason: "demo-space" };
   }
@@ -492,6 +495,8 @@ export function decideAiIntent(brain, {
     roll: mixRoll(roll, 11),
     spacing: settings.spacing || 1,
     patience: settings.patience || 0,
+    // 5.4: only the demo CLOCK tier sets `swing`; every other tier is 1.
+    swing: settings.swing ?? 1,
   }) || { movement: "hold", action: null };
 
   if (self.meter >= GRIT_RULES.superCost

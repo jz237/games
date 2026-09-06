@@ -7,7 +7,8 @@ Final Blow 1.0E can run a complete CPU-vs-CPU exhibition from the title screen.
 - `WATCH DEMO · CPU VS CPU` starts immediately.
 - Both sides use the same delayed-observation, archetype-aware `Pro` AI available to normal play.
 - Each exhibition is a normal best-of-three match: the timer, rounds, Grit, enhanced attacks, supers, knockouts, and character-specific Final Blows are unchanged.
-- The director alternates a full-Grit showcase side and briefly brings both CPUs into range, guaranteeing one opening super before normal archetype AI takes over.
+- The director alternates a full-Grit showcase side and opens every card on one of four seeded OPENERS (walk-in super, throw, dash-in heavy, or a footsies feel-out) before the choreographer and the archetype AI take over; one card in four is ON THE CLOCK (see 5.4 below).
+- Rounds end four ways — Final Blow A, Final Blow B, a plain knockout with the collapse and curtain call, or a decision at the buzzer — chosen per round by a seeded closer (5.4).
 - Results remain on screen for five seconds before the next exhibition begins.
 - Keyboard, pointer/touch, or gamepad input exits to the title immediately.
 - `IDLE WATCH DEMO · 45 SECONDS` in Options enables or disables automatic attract mode. It is enabled by default and never tries to bypass browser audio-autoplay rules.
@@ -127,10 +128,12 @@ instead of whatever the archetype tables happen to roll:
 - **Demo-only pacing.** An exhibition measured 54% actual fighting; the rest
   was the round card, the FINISH THEM window the winning CPU spent waiting out
   its ordinary reaction clock, and the ceremony. The attract loop shortens the
-  round card, holds a plain KO a little less and commits to its Final Blow
-  promptly. The Final Blow ceremony itself is the showcase and is deliberately
-  untouched. Every one of those three is gated on `state.mode === "demo"`, so
-  ranked/versus/arcade/tournament/online presentation is unchanged.
+  round card and commits to its Final Blow promptly. The Final Blow ceremony
+  itself is the showcase and is deliberately untouched; since 5.4 it is no
+  longer EVERY round's ending (see "5.4 FIGHT NIGHT" below — the plain-KO
+  hold went back to the full 4.9 s there). Every one of these is gated on
+  `state.mode === "demo"`, so ranked/versus/arcade/tournament/online
+  presentation is unchanged.
 - **Same-page determinism.** Every match seed derives from `state.matchSerial`
   (`seedMatch`), which only ever grows across a page's lifetime, so a second
   `qa.demo(555)` used to replay the same choreography against a different sim
@@ -151,6 +154,119 @@ instead of whatever the archetype tables happen to roll:
   roster only contains him once he is unlocked, exactly as on the select
   screen and the ladder. Attract does not get a private exception to that
   reveal. Once unlocked he joins the rotation and all 45 matchups play.
+
+## 5.4 FIGHT NIGHT — how a round ends, how a card opens
+
+The 5.4 sweep traced the attract loop the way a TV viewer sees it: 6
+exhibitions, 16 rounds, seeds 237 / 1234 / 9001 in headless Chrome (a 5-tick
+sampler over `qa.demo(seed)` → `qa.step` → `qa.status()` at every phase edge).
+Every one of the 16 rounds ended the same way: Final Blow, variant A, ~17 s
+after the bell. The clock never read below 80. No round was ever a plain
+knockout, so the 5.3 KO collapse, the thud and the two-beat curtain call were
+unreachable; no round ever reached 0, so the TIME OVER buzzer, the DECISION
+banner, its stinger and the announcer's timeover bank were unreachable; the
+second authored fatality of every fighter had never once played in attract
+(AFTERSHOCK BURIAL, VINYL WRAP, WEST STAINES MASSIVE, YOU'RE FIRED!, INTERNET
+MELTDOWN, HOOF STOMP…). And every card opened identically: walk-in, full-meter
+super at tick 20-25 after the bell, 6 of 6. The ceremony was 25.5 s of every
+74 s cycle — 34% of the loop was the same nine-second cut-scene.
+
+Two causes, both in `aiInput`'s demo branch: `input.final` was set the moment
+the winner's 0.35 s reaction clock ran out, unconditionally, and the AI input
+never carried `finisherVariant`, so `tryFinish` always resolved type 0
+(`resolveInput` had forwarded the field since 1.x; the demo brain just never
+set it).
+
+**The CLOSER** (`engine/demo.mjs demoCloserPlan`, called from `checkKnockout`'s
+demo branch the tick the KO lands). Pure on the round state plus a session
+ledger, so a seed replays the same show:
+
+- match point (this round closes the match), a comeback (evening a match it
+  was losing, won under half health) or a round won from the brink (winner at
+  30 or less) takes the Final Blow;
+- every other round lapses into a PLAIN KNOCKOUT: the winner steps off the
+  fallen man, no FINISH THEM banner, prompt or "FINAL BLOW READY" cue is
+  promised, the window is the 0.9 s KO freeze instead of 6 s, and `finishRound`
+  lays the loser down (`koCollapseOnRoundEnd`) into the FULL 4.9 s curtain
+  call — `DEMO_KO_HOLD_SECONDS` is `ROUND_WIN_HOLD_SECONDS` again, because
+  the 3.1 s demo hold was a hold no attract round had ever reached and the
+  second victory beat needs 3.4 s or more (`roundWinShowcaseCell`);
+- when it does finish, the variant alternates per fighter through
+  `demoSession.finisherLedger` (a sibling of `coverageCarry`, reset with the
+  session), passed as `finisherVariant` on the AI input;
+- a loser knocked out in the AIR is handed to the ceremony (`reason:
+  "airborne"`): the plain path freezes him where he is for the whole hold
+  (`koCollapseOnRoundEnd` lays down grounded fighters only), which is a
+  feet-in-the-air read. Measured 10 of 63 rounds. Letting an airborne KO fall
+  before the hold is a 5.3 bookends follow-up that would return most of those
+  rounds to the plain path in every mode.
+
+**The CLOCK card.** One card in four (`engine/demo.mjs` show stream: a
+shuffled four-bag, never the first card of a session, never two in a row).
+Both CPUs are built on the registered `demo-clock` tier, the choreographer
+stands down (`DEMO_CLOCK_COVERAGE_BLEND` 0), the card opens on footsies with
+no free Grit, the chip says ON THE CLOCK and the HUD clock starts at 30. The
+number is measured, not chosen: the demo brain with more patience alone
+ended clock rounds in 11-28 s (the coverage scripts were the aggressor — one
+clock-tier round under a 0.3 blend was a perfect in 11 s); brain-only, still
+10-50 s, median 27; an even more patient tier made no difference (median 24),
+because the kit tables always swing inside the clinch whatever `patience`
+says. A per-hit trace showed why 99 s can never be honest: a counter-hit
+HEAVY HAND is 26.7, a SOUTH STREET SLAM 25 — five landed heavies is the bar.
+The new `swing` knob on `selectKitAiIntent` (scales every attack roll in the
+kit table; 1 everywhere but the clock tier, which runs 0.3) plus no
+back-jump into the other brain's anti-air (`spaceJumpShare` 0) stretched
+brain-only rounds to 16-104 s, median 36: 11 of 16 reach a 30 s buzzer. The
+card gets two rounds to put a decision on the board, then its fighters go
+back to the standard brain and the 99 s clock. The decision itself is the
+w51/5.3 path untouched — the buzzer, "WINS · DECISION", the timeover stinger,
+the announcer's timeover bank, no knockout groan.
+
+**The OPENERS.** A standard card draws super / throw / dash-in from a seeded
+three-bag (no two consecutive cards open the same way; the clock card's
+footsies is the fourth). The throw walks all the way into grab reach and
+throws through the partner's standing guard; the dash-in taps its dash from
+430 px and lands a heavy off it against the partner's LIVE brain (so the hit
+has to beat a real reaction); footsies holds both men off the buttons for 96
+ticks of spacing — advance past 330, retreat inside 230, rock in and out of
+the band between — the neutral read the sweep found the demo never had.
+`superShown` in the snapshot now means "the opener has fired".
+
+**Measured, 24 cycles (seeds 237 / 1234 / 9001 × 8), same sampler:**
+
+    round endings   before 16 FB-A / 0 FB-B / 0 KO / 0 decision   (16 rounds)
+                    after  26 FB-A / 18 FB-B / 16 plain KO / 3 decision (63 rounds)
+    closer reasons  match-point 23 · plain 16 · airborne 10 · comeback 7 · brink 4 · clock 3
+    clock cards     6 of 24; 3 put a decision on the board (the other three
+                    ended with 7-11 s on the clock, the countdown already playing)
+    openers         super 6 · throw 6 (the lead threw in 6/6) · dash-in 6 (dashed 6/6) · footsies 6
+    first contact   super 30-40 ticks after the bell · dash-in 30-35 · throw 40-110 · footsies 100-235
+                    (before: 20-25 in 6/6)
+    ceremony        before 25.5 s per cycle = 34.3% of sim ticks
+                    after  22.3 s per cycle = 30.7%; a Final Blow round is 9.2 s,
+                    a plain knockout 5.8 s (0.9 window + 4.9 hold), a decision 4.9 s
+    lowest clock    before 80-86 in every card; after 1 on every decision card
+
+**A played match is byte-identical.** Every new site is reached through
+`state.mode === "demo"` (`checkKnockout`, `aiInput`, `makeFighter`,
+`finishRound`, `roundClockSeconds`) — pinned from source in
+`tests/demo-round-ends.test.mjs` — and a PRO CPU-vs-CPU match
+(`qa.aiFight("deathblow", "jez", "pro")`, 7200 ticks, FNV hash of every
+fighter's x / y / health / meter / action / state per tick) hashes to
+3450718304 before and after. `selectKitAiIntent` at `swing: 1` is asserted
+equal to the authored table across all ten kits × 10 distances × 41 rolls.
+
+`qa.demoCoverage()` now carries `show` (format, opener, tier, the opener's
+tick and what it turned out to be) and `closers` (the session ledger, the
+live plan, the last round end and a bounded log of every round end:
+kind / variant / fatality id / reason / clock / format);
+`qa.demoNextShow({ format, opener })` forces the next card's show tag for a
+probe (`sticky: true` for every following card). `tests/browser-smoke.mjs
+--only=demo-mode` walks a plain first-round KO (no fatality, loser down,
+"WINS · KNOCKOUT"), the match-point Final Blow with the ledger banked, a
+forced clock card (both brains on `demo-clock`, the clock at 30, ON THE
+CLOCK on the chip, the buzzer's DECISION, the standard brain and the 99 s
+clock back for the next round), then the 64-cycle marathon as before.
 
 ## The fourth pass (2.9 round 4)
 
