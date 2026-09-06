@@ -346,3 +346,57 @@ the matchup — attacks still lunge in; that is the game's pushback doing its jo
   Commissioner had no trials to demonstrate. Each now carries eight (two
   authored bronze trials plus the six generated from the kit), and each demo was
   run through the real sim to completion before shipping.
+
+## "What just happened" — the last-fight digest (5.3, sweep #30 / #31)
+
+The records store has always answered *how have I done overall*. Nothing
+answered *what just happened*, which is the only question a player has while the
+WINS card is still on screen — and it is also the question the FIGHT SCHOOL
+lesson graph needs answered before it can recommend anything.
+
+**The digest is the single-match companion to the records store**
+(`engine/progression.mjs`): same shape rules — plain data, tolerant load, no
+clock, no `Math.random`, no sim reads — written at the same fold point
+(`progressionMatchEnd`, once per `matchSerial`, behind the same
+`rollbackResimulating` and CPU-seat guards), and kept in one localStorage slot
+(`final-blow-last-fight`) so the title screen can still coach after a reload.
+
+**Damage is attributed at the damage sites, not at round end.** The health delta
+`progressionRoundEnd` folds cannot know *what* took the health, so
+`progressionNoteDamage` now carries the amount and the attack's own flags and
+`classifyDamageCause` resolves exactly one cause per landed hit, first-true-wins:
+
+    blocked → chip · throw → throw · stage weapon → weapon · throwable → jawn
+    super → super · special → special · air → jumpIn · low → low
+    overhead → overhead · heavy → heavy · else → light
+
+A blocked hit is chip whatever threw it; a stage weapon outranks the jawn
+machinery that carries it. The four call sites are the paint trap, the
+projectile, the throw and the main strike — `tests/onboarding-depth.test.mjs`
+counts them from source and asserts every one passes an `amount`, because a
+site added without one would silently under-report and nothing would fail.
+
+Three signals have no single sim event and are sampled elsewhere: `meterPeak`
+and `weaponOffered` once per frame in `updateHud` (already resim-exempt by its
+first line), and a Perfect Guard books its own block at the guard site, because
+it deals nothing and therefore never reaches the damage path — without that, a
+flawless defensive round would have read as "never blocked".
+
+Measured end-to-end in headless Chrome (jez vs deathblow, seven heavies, three
+sweeps and a throw driven onto a standing P1, then two round wins):
+
+    damageBy  { heavy: 73.2, low: 16.2, throw: 19.7 }
+    hitsBy    { heavy: 4, low: 1, throw: 1 }
+    hitsTaken 6 · blocks 0 · knockdownsTaken 1 · meterPeak 46.8 · damageTaken 109.1
+
+    result line   WHAT JUST HAPPENED · 67% OF THE 109 DAMAGE YOU TOOK
+                  CAME FROM HEAVY NORMALS · 4 OF THEM.
+    coach card    NEXT · LESSON 2 · HIGH & LOW GUARD
+                  YOU BLOCKED NOTHING ALL FIGHT. 109 DAMAGE WALKED STRAIGHT IN.
+
+Ties in `topDamageCause` break on `DAMAGE_CAUSES` order, so two loads of the
+same digest always agree; a fight where nothing landed says so rather than
+dividing by zero, and a flawless one says FLAWLESS. The recap and the coach card
+are suppressed wherever the digest is not the player's own fight — demo, replay,
+tournament, online, and any flow with the CPU in seat 0, the same set the
+records fold already refuses.

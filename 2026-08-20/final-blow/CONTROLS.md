@@ -264,6 +264,93 @@ AUTHORITY CASHOUT) get the same bronze pair as the original eight plus the six
 generated trials — eight each, the signature route included because Wing Flit and
 Binding Clause both land on the standing dummy.
 
+## The first five minutes (5.3, sweep #30 / #31)
+
+5.1 built the pieces — a control card, twelve lessons, a pause move list. What it
+did not build was a *route*: the title still handed a newcomer fifteen equally
+loud buttons, and nothing in the game ever said "here is the thing that just
+beat you".
+
+### PLAY / LEARN / MORE
+
+The title stack is three labelled tiers, and the weight falls off a step at a
+time: PLAY buttons are 38px, LEARN 33px (its two-up row 46px), MORE 26px at 82%
+opacity with 30px for the four entries that carry a status line. The labels are
+coloured by tier — PLAY amber, LEARN cyan, MORE grey — so the grouping reads
+before any word does.
+
+Nothing is hidden or collapsed. Every button keeps its id, its `data-mode` and
+its text, and every one of them still has a real bounding box, because
+`menuFocusables` filters on `rect.width > 0 && rect.height > 0` for the pad walk
+and `tests/browser-smoke.mjs` both clicks `[data-mode="…"]` selectors and
+measures `#demoButton` / `#controlsButton` at 844×390. A collapsed MORE tier
+would have failed all three quietly.
+
+Measured at 1440×900, headless Chrome, first run: the flat 5.2 stack ended at
+**941px** — 41px past the fold. The tiered stack ends at **896px**, and at
+**900px** with the coach card raised — the whole menu now fits the window it was
+overflowing, despite gaining three labels and a card. The height came out of the
+tier's own budget: a shorter `margin-top` on the stack (clamp 6–14px against
+10–22px), a 3px MORE gap, and 30px instead of 46–52px on DAILY JAWN, the two
+ledger buttons, THE PHILLY OPEN and the two demo buttons. THE PHILLY OPEN's
+`<small>` has no block rule anywhere in the sheet, so at that width it ran on as
+`BRACKET4 OR 8 ENTRANTS`; the tier gives it one.
+
+### The coach
+
+`recommendLesson(digest, { completed })` in `engine/training.mjs` is a pure
+function over the last fight and the school's completion map. Eleven rules in a
+fixed priority order, each a predicate over normalized signals:
+
+| # | Rule | Fires when | Lesson |
+| --- | --- | --- | --- |
+| 1 | `never-blocked` | 3+ hits taken, zero blocks | HIGH & LOW GUARD |
+| 2 | `ate-throws` | 2+ throws taken, or 1 worth ≥25% of the damage | THE PROXIMITY GRAB |
+| 3 | `never-spent-grit` | banked ≥25 Grit, spent none | GRIT ECONOMY |
+| 4 | `ate-lows` | ≥35% of the damage came low | HIGH & LOW GUARD |
+| 5 | `ate-jump-ins` | ≥30% came from air attacks | HIGH & LOW GUARD |
+| 6 | `no-special` | 4+ hits landed, no special among them | THE QUARTER CIRCLE |
+| 7 | `never-teched` | 3+ knockdowns, zero techs | OFF THE FLOOR |
+| 8 | `no-perfect-guard` | 8+ blocks, no Perfect Guard | SPLIT SECOND |
+| 9 | `no-jawn` | 4+ hits landed, throwable never used | THE JAWN |
+| 10 | `ignored-the-weapon` | the street put an object down, never picked up | STREET FURNITURE |
+| 11 | `one-button` | 4+ hits landed, all light or all heavy | THE FOUR BUTTONS |
+
+Two passes: an unfinished lesson always outranks a finished one, so the graph
+pushes forward before it asks for revision; a matched rule on a finished lesson
+comes back with `replay: true` and the card reads REPLAY instead of NEXT. No
+fight on the books opens at the top of the book; a clean fight takes the next
+unfinished page; a graduate with a clean fight gets nothing at all. The same
+digest always names the same lesson — the order is data, not a search.
+
+The recommendation is rendered as one card, twice: in the title's LEARN tier
+(where it replaces the NEW HERE ribbon once a match is logged — the two never
+stack) and under the result screen's win quote. Clicking either opens
+`startFightSchool(index)` on that exact lesson. QA:
+`__finalBlowQa.coach()` and `__finalBlowQa.school(lessonIndex)`.
+
+### Command copy: the last three hard-coded strings
+
+The 5.1 audit routed the move list, the school labels, the dialog's
+SPECIALS/ENHANCED/SUPER lines and the touch SUPER prompt through
+`commandLabel`. Three named a button from outside the table and were missed:
+
+- the first-run control card's **GRAB** row said `CLOSE + TOWARD + LP`, which
+  disagreed with the move list's own `CLOSE + TOWARD/AWAY + LP OR LK`;
+- the touch **FINISH HIM** prompt hard-coded `LP = A · LK = B · ANY DISTANCE`;
+- the lab's idle grab hint spelled the command out a third way.
+
+`block` and `finalBlow` join the table (style-free today, but they are the two
+lines a future style would move), and the dialog's THROW/DASH, THROWABLE/STAGE
+WEAPON/TAUNT and FINAL BLOW paragraphs are `data-style-copy` templates in all
+three sections — the P1 and P2 keyboard blocks and the gamepad block. That is
+eight more templates re-rendered on every style change.
+`tests/onboarding-depth.test.mjs` walks every template token, asserts it names a
+real action, and asserts nothing resolves to a raw brace under LEGEND; it also
+asserts the dialog has no `<p>` outside a template carrying a motion glyph or a
+chord.
+
+
 
 
 These were unspecified in the backlog and were resolved with reversible, data-driven
