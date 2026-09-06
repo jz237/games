@@ -530,6 +530,13 @@ import {
   DEFAULT_DEMO_SPEED,
 } from "./engine/demo-speed.mjs";
 import {
+  DEMO_EXCHANGE_LEAN_ZOOM,
+  createDemoCadence,
+  createDemoCameraDirector,
+  shotAlive,
+  shotShape,
+} from "./engine/demo-camera.mjs";
+import {
   DEMO_RESUME_BEAT_MS,
   createDemoHold,
   demoBugText,
@@ -2655,6 +2662,20 @@ const demoSession = {
   // cabinet has NOT shown for it yet. Bounded by the roster (10 fighters x
   // 30 ids), reset with the session, and never read by the sim.
   coverageCarry: {},
+  // 5.4 FIGHT NIGHT (sweep #7/#17): the CAMERA/CADENCE director. `camera`
+  // draws the seeded shot list (engine/demo-camera.mjs), `cadence` is the
+  // tick-keyed tempo policy, `shot` the live presentation envelope ({ kind,
+  // shot, side, age }), `koTick`/`koShot` the round-ending hit and the beat
+  // drawn for it, `cadenceBeat`/`cadenceRate` what the policy answered on the
+  // last rendered frame (applied to the transport by loop()). All render-side:
+  // the sim never reads any of it, and outside a demo all of it is null.
+  camera: null,
+  cadence: null,
+  shot: null,
+  koTick: -1,
+  koShot: null,
+  cadenceBeat: "",
+  cadenceRate: DEFAULT_DEMO_SPEED,
   // 5.4 FIGHT NIGHT (sweep #26/#27): the NEXT pair's warm-up — see
   // demoPrewarmNextPair. `pendingDirector` is the attract loop's director
   // created early in the idle countdown so its first pair can be warmed
@@ -4913,6 +4934,66 @@ function clearIdleDemoTimer() {
 // fighter) carrying the show name, the matchup, the cycle + stage, the rate
 // tag and the one prompt a viewer can act on. It replaced a 9 px chip whose
 // only readable neighbour at TV distance was the operator's 20 px speed chip.
+// The rate tag inside the bug. 5.4 (sweep #17): it follows the cadence
+// director frame by frame (1× · 0.75× · SLOW-MO), so it is written from
+// loop() as well as from updateDemoUi — only when the words change, and only
+// while a demo is running (a played match never reaches the DOM write).
+let demoSpeedTagText = "";
+let demoSpeedTagTone = "";
+function syncDemoSpeedTag(force = false) {
+  if (!demoSession.active) return;
+  const speedTag = $("#demoHudSpeed");
+  if (!speedTag) return;
+  const tag = demoSpeedTag({
+    rate: demoSpeed.rate,
+    paused: demoSpeed.paused,
+    held: demoHold.frozen(),
+    cadence: demoSpeed.cadence,
+    beat: demoSession.cadenceBeat,
+  });
+  if (!force && tag.text === demoSpeedTagText && tag.tone === demoSpeedTagTone) return;
+  demoSpeedTagText = tag.text;
+  demoSpeedTagTone = tag.tone;
+  speedTag.textContent = tag.text;
+  speedTag.dataset.tone = tag.tone;
+}
+
+function demoCameraSnapshot() {
+  const live = demoSession.shot;
+  return {
+    active: demoCameraActive(),
+    beat: demoSession.cadenceBeat,
+    rate: demoSession.cadenceRate,
+    cadence: demoSpeed.cadence,
+    effectiveRate: demoSpeed.effectiveRate(),
+    locked: demoSpeed.cadenceLocked,
+    shot: live ? {
+      kind: live.kind,
+      id: live.shot.id,
+      side: live.side,
+      age: Number(live.age.toFixed(3)),
+      shape: Number(shotShape(live.shot, live.age).toFixed(3)),
+      zoom: live.shot.zoom,
+      slowMoRate: live.shot.slowMoRate ?? null,
+      slowMoTicks: live.shot.slowMoTicks ?? null,
+    } : null,
+    koTick: demoSession.koTick,
+    koShot: demoSession.koShot?.id || null,
+    policy: demoSession.cadence?.snapshot() || null,
+    director: demoSession.camera?.snapshot() || null,
+    tag: demoSpeedTagText,
+    presentation: {
+      zoom: Number(cinematicCamera.zoom.toFixed(4)),
+      rotation: Number(cinematicCamera.rotation.toFixed(5)),
+      letterbox: Number(letterboxLevel.toFixed(3)),
+      demoShot: cinematicCamera.demoShot,
+    },
+    shots: cinemaFxDebug.demoShots,
+    shotFrames: cinemaFxDebug.demoShotFrames,
+    koBars: cinemaFxDebug.demoKoBars,
+  };
+}
+
 function updateDemoUi() {
   const activeFight = demoSession.active && state.mode === "demo" && state.screen === "fight";
   const panel = $("#demoHud");
@@ -4923,12 +5004,7 @@ function updateDemoUi() {
   const chipLabel = attractSoundChip({ attract: demoSession.attract && activeFight, state: attractAudio.snapshot().state });
   if (chipLabel) soundChip.textContent = chipLabel;
   soundChip.hidden = !chipLabel;
-  const speedTag = $("#demoHudSpeed");
-  if (speedTag) {
-    const tag = demoSpeedTag({ rate: demoSpeed.rate, paused: demoSpeed.paused, held: demoHold.frozen() });
-    speedTag.textContent = tag.text;
-    speedTag.dataset.tone = tag.tone;
-  }
+  syncDemoSpeedTag(true);
   panel.classList.toggle("held", demoSession.active && demoHold.phase === "held");
   panel.classList.toggle("resuming", demoSession.active && demoHold.phase === "resuming");
   const resultStatus = $("#demoResultStatus");
@@ -5019,6 +5095,15 @@ function endDemoSession() {
   restoreAttractScoresMarkup();
   demoSession.standings = {};
   resetDemoVersusCard();
+  demoSession.camera = null;
+  demoSession.cadence = null;
+  demoSession.shot = null;
+  demoSession.koTick = -1;
+  demoSession.koShot = null;
+  demoSession.cadenceBeat = "";
+  demoSession.cadenceRate = DEFAULT_DEMO_SPEED;
+  demoSpeed.setCadence(null);
+  cinematicCamera.demoShot = null;
   window.clearTimeout(demoSession.shareNoteTimer);
   demoSession.shareNoteTimer = 0;
   attractAudio.endShow();
@@ -5102,6 +5187,9 @@ function handleDemoSpeedKey(event) {
     case "Digit4": demoSpeed.setRate(0.1); break;
     default: return false;
   }
+  // 5.4 (sweep #17): the operator took the keys — the cadence director
+  // stands down for the session and the rate they chose is what they watch.
+  demoSpeed.lockCadence();
   // 5.4 #10: the legend is hidden by default and a transport key reveals it
   // (nine seconds, then away again). A key is also real presence: it wakes
   // the tucked bug and the pointer clocks.
@@ -5300,6 +5388,9 @@ function startDemo({ attract = false, qa = false, seed = null, cycle = 1, source
     // plays a different take order to the same stream.
     fighterVoiceBags.clear();
     fighterVoiceRecent.length = 0;
+    // 5.4 (sweep #7): the render-side per-tick dedupe latches rewind with
+    // the tick domain too, or a replayed beat on a repeated tick is skipped.
+    resetPresentationTickLatches();
   }
   // 5.4 (sweep #27): an unseeded demo (the attract loop, or the WATCH DEMO
   // button pressed during the countdown) adopts the director the idle
@@ -5330,6 +5421,20 @@ function startDemo({ attract = false, qa = false, seed = null, cycle = 1, source
   // 5.4 SESSION LAYER: tonight's ledger opens on the build-keyed standings
   // board (a reload resumes the standings; a new build opens a clean board).
   demoSession.ledger = restoreDemoStandings(storedJson(demoStandingsStorageKey(GAME_VERSION), null), { build: GAME_VERSION });
+  // 5.4 (sweep #7/#17): the camera/cadence director for this session. Its
+  // shot bags derive from the demo seed alone, so a seed replays the same
+  // shots; the cadence policy is tick-keyed. An operator who asked for a
+  // rate (?speed=, or a transport key already pressed on this page) keeps
+  // it: the cadence only drives while the rate is the couch default.
+  demoSession.camera = createDemoCameraDirector({ seed: demoSeed });
+  demoSession.cadence = createDemoCadence();
+  demoSession.shot = null;
+  demoSession.koTick = -1;
+  demoSession.koShot = null;
+  demoSession.cadenceBeat = "";
+  demoSession.cadenceRate = DEFAULT_DEMO_SPEED;
+  if (demoSpeed.rate === DEFAULT_DEMO_SPEED) demoSpeed.unlockCadence();
+  else demoSpeed.lockCadence();
   document.body.classList.add("demo-active");
   startNextDemoMatch();
   // 5.4 #30: `&cycle=n` opens on card n. The director is advanced through
@@ -10328,13 +10433,16 @@ let selectBothLocked = false;
 // world-space pivot the zoom magnifies around (irrelevant at zoom 1). Zoom is
 // always >= 1 so the world always overdraws the frame; the HUD layer and all
 // screen-space passes draw after the world restore and are never affected.
-const cinematicCamera = { zoom: 1, x: 0, y: 0, rotation: 0, focusX: W * 0.5, focusY: H * 0.5 };
+const cinematicCamera = { zoom: 1, x: 0, y: 0, rotation: 0, focusX: W * 0.5, focusY: H * 0.5, demoShot: null };
 // Monotonic one-shot event totals on the hudFxDebug pattern, exposed via
 // snapshot().violence. handheldFrames counts rendered frames with the fatality
 // handheld wobble active (still monotonic, never reset).
 const cinemaFxDebug = {
   koPunchIns: 0, introDollies: 0, dreadCreeps: 0, counterPunchIns: 0,
   handheldFrames: 0, winSettles: 0, impactRecoils: 0,
+  // 5.4 (sweep #7): demo shots drawn (super + KO) and rendered frames a
+  // demo shot pose owned; the KO-beat letterbox deployments.
+  demoShots: 0, demoShotFrames: 0, demoKoBars: 0,
 };
 // Transient zoom-punch envelope: { age, attack, hold, release, magnitude,
 // focusX, focusY }. Shared by the KO punch-in and the counter/dizzy pops; the
@@ -10351,6 +10459,26 @@ let cameraGuardCrushTick = -1;
 // how long a render frame takes.
 const cameraRecoil = { x: 0, y: 0, ampX: 0, ampY: 0, age: 0 };
 let cameraRecoilTick = -1;
+
+// 5.4 FIGHT NIGHT (sweep #7): the render-side ONE-SHOT-PER-TICK latches. Each
+// is a dedupe against the sim tick ("this beat already fired on this tick"),
+// which is right for a stream that only ever grows — and wrong the moment a
+// seeded demo REWINDS the tick domain (startDemo with a seed sets the tick to
+// 0 so a same-page qa.demo(seed) replays the cold-load stream). Measured: a
+// second qa.demo(237) fired its opener super on tick 663 again, found
+// superCutInTick === 663 from the first run, and skipped the cut-in, the
+// distortion ring and the demo's super shot. Called only from that rewind;
+// presentation state only, nothing snapshotted.
+function resetPresentationTickLatches() {
+  cameraKoTick = -1;
+  cameraCounterTick = -1;
+  cameraDizzyTick = -1;
+  cameraGuardCrushTick = -1;
+  cameraRecoilTick = -1;
+  distortionRingTick = -1;
+  superCutInTick = -1;
+  crowdSwellTick = -1;
+}
 const CAMERA_RECOIL_PX = Object.freeze({ heavy: 2.4, special: 3.2, throw: 3, weapon: 3.4, super: 4 });
 // Eased phase-pose state (intro dolly / dread creep / win settle).
 let cameraPhaseZoom = 1;
@@ -10427,6 +10555,98 @@ function latchKoCameraPunch() {
     focusX: clamp(focusX, 0, W), focusY: clamp(focusY, 0, H),
   };
   cinemaFxDebug.koPunchIns += 1;
+  // 5.4 FIGHT NIGHT (sweep #7/#17), demo only: the round-ending hit draws a
+  // KO shot from the seeded list — a real push-in on the victim (the 0.08
+  // punch above is the played game's; it stays) and the slow-motion beat the
+  // cadence policy plays from this tick. Presentation bookkeeping only.
+  if (demoCameraActive()) {
+    const shot = demoSession.camera.koShot(state.simulationTick);
+    demoSession.koTick = state.simulationTick;
+    demoSession.koShot = shot;
+    demoSession.shot = { kind: "ko", shot, side: 1 - state.finishWinner, age: 0 };
+    cinemaFxDebug.demoShots += 1;
+  }
+}
+
+// 5.4 FIGHT NIGHT (sweep #7/#17): THE gate for every demo camera/cadence
+// call site — the attract show and nothing else. A played match never
+// consults the director, so it stays byte-identical (pinned from a node
+// trace in tests/demo-camera.test.mjs).
+function demoCameraActive() {
+  return state.mode === "demo" && demoSession.active && Boolean(demoSession.camera);
+}
+
+// What the cadence policy is shown each rendered frame: pure reads of
+// snapshotted sim fields. "Engaged" is anyone swinging, stunned, down, in a
+// grab or a projectile in flight, plus hitstop — the exchange; everything
+// else at range is neutral.
+function demoCadenceView() {
+  const [first, second] = state.fighters;
+  const engaged = state.hitstop > 0
+    || state.projectiles.length > 0
+    || state.fighters.some((fighter) => fighter.attacking
+      || fighter.hitstunFrames > 0 || fighter.blockstunFrames > 0 || fighter.dizzyFrames > 0
+      || fighter.down || fighter.pendingKnockdown || fighter.knockdownFrames > 0 || fighter.wakeupFrames > 0
+      || fighter.grabbed || fighter.grabbing);
+  return {
+    phase: state.phase,
+    finisher: Boolean(state.finisher),
+    tick: state.simulationTick,
+    engaged,
+    distance: first && second ? Math.abs(first.x - second.x) : Infinity,
+    koTick: demoSession.koTick,
+    koShot: demoSession.koShot,
+  };
+}
+
+// The demo's pose for this frame, or null when nothing demo-specific owns it:
+// the live super/KO shot envelope (zoom on the attacker's chest / the victim,
+// a degree of dutch), else the exchange lean while the cadence is at exchange
+// tempo. Advances the shot's age (wall dt, like every presentation ease) and
+// runs the cadence policy — the transport applies its answer next loop().
+function demoCameraPose(dt, phase, finisher, reduced = false) {
+  if (!demoCameraActive()) return null;
+  if (phase === "intro" && demoSession.koTick >= 0) {
+    // A new round: the KO beat is spent.
+    demoSession.koTick = -1;
+    demoSession.koShot = null;
+  }
+  const answer = demoSession.cadence.update(demoCadenceView());
+  demoSession.cadenceBeat = answer.beat;
+  demoSession.cadenceRate = answer.rate;
+  // Reduced motion keeps the tempo (it is not motion) but never the moves.
+  if (finisher || phase === "intro" || reduced) {
+    demoSession.shot = null;
+    return null;
+  }
+  const live = demoSession.shot;
+  if (live) {
+    live.age += dt;
+    if (!shotAlive(live.shot, live.age)) {
+      demoSession.shot = null;
+    } else {
+      const shape = shotShape(live.shot, live.age);
+      const subject = state.fighters[live.side] || state.fighters[0];
+      return {
+        zoom: 1 + (live.shot.zoom - 1) * shape,
+        focusX: subject.x,
+        focusY: clamp(subject.y - subject.height * 0.55, H * 0.3, H * 0.72),
+        rotation: (Math.PI / 180) * live.shot.dutchDeg * shape,
+        ease: 1 - Math.exp(-dt * live.shot.ease),
+      };
+    }
+  }
+  if (phase === "fight" && answer.beat === "exchange") {
+    const [first, second] = state.fighters;
+    return {
+      zoom: DEMO_EXCHANGE_LEAN_ZOOM,
+      focusX: (first.x + second.x) * 0.5,
+      focusY: clamp((first.y + second.y) * 0.5 - 128, H * 0.3, H * 0.72),
+      rotation: 0,
+      ease: 1 - Math.exp(-dt * 2.6),
+    };
+  }
+  return null;
 }
 
 function latchCameraPunchEnvelope(magnitude, focusX, focusY, attack, hold, release) {
@@ -10509,6 +10729,8 @@ function resetCinematicCamera() {
   cameraDutch = 0;
   cameraObservedPhase = null;
   letterboxLevel = 0;
+  if (demoSession.shot) demoSession.shot = null;
+  cinematicCamera.demoShot = null;
   cinematicCamera.zoom = 1;
   cinematicCamera.x = 0;
   cinematicCamera.y = 0;
@@ -10639,6 +10861,21 @@ function updateCinematicCamera(dtMs) {
     targetFocusY = clamp(splatVictim.y - 118, H * 0.3, H * 0.72);
     ease = 1 - Math.exp(-dt * 11);
   }
+  // 5.4 FIGHT NIGHT (sweep #7/#17), demo only: the seeded super/KO shot (or
+  // the exchange lean) outranks the FINISH THEM creep, the win settle and
+  // the splat framing while it is alive; the phase branches above keep the
+  // pose for every played match. null outside a demo — the played game's
+  // "identity by default" contract is untouched.
+  const demoPose = demoCameraPose(dt, phase, finisher, reduced);
+  if (demoPose) {
+    targetZoom = demoPose.zoom;
+    targetFocusX = demoPose.focusX;
+    targetFocusY = demoPose.focusY;
+    targetRotation = demoPose.rotation;
+    ease = demoPose.ease;
+    cinemaFxDebug.demoShotFrames += 1;
+  }
+  cinematicCamera.demoShot = demoSession.shot ? demoSession.shot.shot.id : null;
   cameraPhaseZoom += (targetZoom - cameraPhaseZoom) * ease;
   cameraPhaseRotation += (targetRotation - cameraPhaseRotation) * (1 - Math.exp(-dt * 6));
   cameraFocusX += (targetFocusX - cameraFocusX) * ease;
@@ -10728,7 +10965,13 @@ function updateCinematicCamera(dtMs) {
   }
 
   // Intro cinema bars: slide in during the intro, retract as FIGHT! lands.
-  const barTarget = phase === "intro" && !finisher ? 1 : 0;
+  // 5.4 (sweep #7), demo only: the bars also drop on the KO beat — from the
+  // round-ending hit through the FINISH THEM stand-off; a Final Blow's own
+  // overlay bars take over seamlessly (drawIntroLetterbox stands down for a
+  // finisher), a plain KO's retract with the roundover call.
+  const demoKoBars = phase === "finish" && !finisher && demoSession.koTick >= 0 && demoCameraActive();
+  if (demoKoBars && letterboxLevel === 0) cinemaFxDebug.demoKoBars += 1;
+  const barTarget = (phase === "intro" && !finisher) || demoKoBars ? 1 : 0;
   letterboxLevel += (barTarget - letterboxLevel) * (1 - Math.exp(-dt * (barTarget > letterboxLevel ? 9 : 13)));
   if (letterboxLevel < 0.004) letterboxLevel = 0;
 
@@ -28488,8 +28731,9 @@ function drawDistortionRing(dtMs) {
 // predates the window), and nothing leaks out: normal frames simply never
 // blend.
 function updateSlowMoBlur() {
+  // 5.4 (sweep #17): the demo's KO slow-motion beat gets the same smear.
   const active = state.screen === "fight"
-    && (state.finisher?.slowMotionTicks || 0) > 0
+    && ((state.finisher?.slowMotionTicks || 0) > 0 || (demoCameraActive() && demoSession.cadenceBeat === "ko"))
     && state.performance.id !== "battery"
     && !state.accessibility.reducedMotion;
   if (!active) {
@@ -28908,6 +29152,13 @@ function latchSuperPresentation(fighter) {
     t: 0,
   };
   hudFxDebug.superCutIns += 1;
+  // 5.4 FIGHT NIGHT (sweep #7), demo only: the super draws its shot from the
+  // seeded list and the presentation camera pushes in on the attacker for the
+  // cut-in's life (the world behind the banner used to sit still).
+  if (demoCameraActive()) {
+    demoSession.shot = { kind: "super", shot: demoSession.camera.superShot(state.simulationTick), side: fighter.side, age: 0 };
+    cinemaFxDebug.demoShots += 1;
+  }
   latchDistortionRing(fighter.x, fighter.y - fighter.height * 0.6);
   if (state.performance.shadows && !state.accessibility.reducedMotion) {
     aberrationImpulse = Math.max(aberrationImpulse, 0.7);
@@ -29497,6 +29748,12 @@ function loop(now) {
   // tick, at 1/60s, on the rendered frame the viewer asked for it.
   const steppedFrames = speedScaled ? demoSpeed.takeFrameSteps() : 0;
   for (let index = 0; index < steppedFrames; index += 1) simulationClock.stepOnce(runSimulationStep);
+  // 5.4 FIGHT NIGHT (sweep #17): the cadence director's rate for this frame
+  // (what the last rendered frame's policy answered) rides the SAME scaler —
+  // a cadence, never a dt — so the tick stream is identical with or without
+  // it. Released outside a demo; the transport ignores it once a key locks.
+  demoSpeed.setCadence(speedScaled && demoCameraActive() ? demoSession.cadenceRate : null);
+  syncDemoSpeedTag();
   const simSeconds = speedScaled ? demoSpeed.scale(elapsed) : elapsed;
   // v5.1 #35: an intro art hold hands the clock zero seconds — no tick runs,
   // no accumulator builds, the tick stream resumes exactly where it stood.
@@ -33835,6 +34092,8 @@ window.__finalBlowEngine = {
           y: Number(cinematicCamera.y.toFixed(3)),
           rotation: Number(cinematicCamera.rotation.toFixed(5)),
           letterbox: Number(letterboxLevel.toFixed(3)),
+          // 5.4 (sweep #7): the live demo shot id, null in every played match.
+          demoShot: cinematicCamera.demoShot,
         },
       },
       finalBlowArt: {
@@ -34071,6 +34330,9 @@ window.__finalBlowEngine = {
         handheldFrames: cinemaFxDebug.handheldFrames,
         winSettles: cinemaFxDebug.winSettles,
         impactRecoils: cinemaFxDebug.impactRecoils,
+        demoShots: cinemaFxDebug.demoShots,
+        demoShotFrames: cinemaFxDebug.demoShotFrames,
+        demoKoBars: cinemaFxDebug.demoKoBars,
         // Signed live kick amplitude (screen px along the hit direction).
         // Holds the full kick value for the ~0.3s return, so per-frame peak
         // sampling reads the 2-4px magnitude without racing the decay.
@@ -35568,8 +35830,18 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       };
     },
     demoSpeed(rate = null) {
-      if (rate !== null) demoSpeed.setRate(rate);
+      if (rate !== null) {
+        demoSpeed.setRate(rate);
+        demoSpeed.lockCadence();
+      }
       return demoSpeedSnapshot();
+    },
+    // 5.4 (sweep #7/#17): the demo camera/cadence director — the beat and
+    // rate the policy answered, the live shot and its envelope, the KO beat's
+    // tick, the seeded shot director's bags/log, and the applied presentation
+    // camera. Pure reads; null-ish outside a demo.
+    demoCamera() {
+      return demoCameraSnapshot();
     },
     demoPause(paused = null) {
       if (paused !== null) demoSpeed.setPaused(paused);

@@ -1532,3 +1532,123 @@ slam gone); `tests/demo-hud.test.mjs` re-pins the prompt at 2 SECONDS; `node
 tests/browser-smoke.mjs --only=fighter-framing-desktop,demo-mode,demo-seed-url,demo-hud,demo-hold,demo-versus,mobile-landscape`
 (`demo-versus` reads the card, its sizes and the announcer plan order on a
 link boot, then round 2's plain card; `demo-hold` pins the 2.4 s remaining).
+
+## A camera and a cadence for the attract show (5.4 Fight Night, sweep #7 / #17)
+
+The demo had no camera and no tempo. Measured on the 5.4 head (headless
+Chrome, 1920x1080, `?demo=237` on the wall clock, 175 s sampled every 100 ms,
+3 exhibitions): **92.5% of fight-phase frames sat at presentation zoom
+exactly 1.00** (80.8% across the whole fight screen, max 1.113 — a
+counter pop), and every one of the 911 fight-screen samples read the same
+`0.75×`. The only demo-conditional framing in the code made the shot WIDER:
+the 2D `DEMO_PULLBACK_ZOOM = 0.86` and the 3D `FramingCamera`'s demo branch
+(margin 0.78, fill floor 1.1, every punch-in capped at 1.12). The played
+game's camera is deliberately "identity by default" — a 1.08 intro dolly, a
+1.04 FINISH THEM creep, a 1.03 win settle, a 0.08 KO punch — which is right
+for a match you are playing and wrong for one you are watching from a couch:
+the super cut-in's banner is huge but the world behind it does not move, and
+the round-ending hit passes at the same 0.75x as a whiffed jab and then jumps
+straight into the 0.35 s Final Blow reaction. Slow motion existed only inside
+finisher scripts (`sloMoBlurFrames 12` in 175 s, all of them fatalities).
+CINEMA 3D was framed flatter still. Jez's bar is that a graphics pass must be
+visibly obvious; across a room, camera motion and tempo are the two most
+visible things a broadcast adds.
+
+`engine/demo-camera.mjs` is the pure half; game.js wires it, `renderer/three/
+camera.mjs` reads it. Everything is presentation: the shots compose into the
+existing `cinematicCamera` pose (the same zoom-about-a-focus / dutch primitives
+the KO punch-in and the intro dolly use), the slow-motion beat rides the 3.2
+transport's cadence (a tick CADENCE multiplier, never a dt), and every call
+site is gated on the demo session (`demoCameraActive()` = `state.mode ===
+"demo" && demoSession.active`). A played match is byte-identical:
+`aiFight('deathblow','jez','pro')` + 20 s checksums `b7b988e0` at tick
+1500 (fight opened on tick 152) on the 5.4 head and after this pass, and the seeded demo
+(`qa.demo(237)` + 30 s) checksums `e62a3763` at tick 1800 before
+and after — the camera never reads back into the sim, and the cadence never
+changes which ticks run.
+
+**The seeded shot list.** Two shuffle bags (the director's own `refillBag`, so
+no variant ever plays twice in a row), seeded from the demo seed alone
+(`hashSeed("FINAL-BLOW-DEMO-CAMERA", seed)`) and consumed in event order, which
+the tick stream fixes — so `?demo=237` draws the same shot at the same tick on
+every load, and a second `qa.demo(237)` on the same page replays it (pinned by
+the `demo-camera` smoke probe). Three SUPER shots fire from
+`latchSuperPresentation` on the attacker's chest for the cut-in's life:
+`tight` (1.32, snap in, hold), `creep` (1.24, a slow 0.65 s push with 0.9° of
+dutch), `snap` (1.40 in six frames, long release). Three KO shots fire from
+`latchKoCameraPunch` on the victim and each carries its own slow-motion beat:
+`freeze` (1.26, 0.35x for 24 ticks, 1.2° dutch), `creep` (1.20 eased over
+0.9 s, 0.5x for 30 ticks), `smash` (1.32 in three frames, 0.25x for 18 ticks).
+With the 0.86 pull-back a 1.32 pose is a 1.135 net frame — from wide to tight,
+not from flat to slightly less flat. Between the set pieces an EXCHANGE LEAN
+(1.07 on the pair's midpoint, eased at 2.6/s) breathes in while the cadence is
+at exchange tempo and back out in neutral, so the frame follows the fight.
+Reduced motion keeps the tempo and the bars and drops every move.
+
+**The tempo-aware cadence.** `createDemoCadence()` is a tick-keyed state
+machine shown one view per rendered frame (phase, tick, hitstop, whether
+anyone is attacking / stunned / down / grabbing or a projectile is in flight,
+the pair's distance, the KO tick and its shot): **1x** while both fighters are
+free and more than 200 px apart (`DEMO_CONTACT_RANGE`, ~1.9 body widths),
+**0.75x** once anyone swings, is hit, or the pair is inside range — held for a
+24-tick dwell after the last contact so a string with gaps does not flicker —
+the drawn shot's **slow-motion beat** from the KO tick, **0.75x** for the
+ceremony, the intro and the round card. The transport gained `setCadence()` /
+`effectiveRate()`: the cadence scales the SAME wall-clock seconds the rate
+does, so the tick stream is identical either way (`tests/demo-camera.test.mjs`
+runs 900 frames at 1 / 0.75 / 0.35 against the real `FixedStepClock` and
+checks every dt and every tick index). The operator always wins: any transport
+key, or an explicit `qa.demoSpeed(rate)`, LOCKS the cadence off for the
+session, and a demo started on a non-default rate (`?speed=`) starts locked.
+The rate tag in the bug follows the cadence frame by frame — `1×` (live) in
+neutral, `0.75×` in an exchange, **`SLOW-MO`** (amber, pulsing) on the KO beat
+— and never prints `0.35×` at a viewer. The fatality smear (`updateSlowMoBlur`)
+runs through the KO beat too.
+
+**The KO beat's letterbox.** `letterboxLevel`'s target is 1 through the finish
+phase from the KO tick, so the intro bars drop on the round-ending hit and stay
+through the FINISH THEM stand-off; a Final Blow's own overlay bars take over
+seamlessly (`drawIntroLetterbox` already stands down for a finisher) and a
+plain KO's retract with the roundover call.
+
+**CINEMA 3D.** `FramingCamera` keeps its 4.3 demo framing (wide margin, fill
+floor) and its 1.12 punch-in cap — except while `cinematic.demoShot` names a
+live shot, when the cap lifts to `DEMO_3D_SHOT_ZOOM_CAP` (1.45): the fov
+narrows from 26.8° to 22.7° on a 1.32 super pose, the gaze steers to the
+attacker, and the shot frames one fighter on purpose, which is exactly what
+"the pair never leaves frame" is meant to break for a second. A played match
+in 3D is uncapped as before.
+
+Measured after, same harness, same seed, same 175 s: **2D 2.2% of
+fight-phase frames at zoom 1.00** (was 92.5), 6.4% across the
+fight screen (was 80.8), max zoom 1.426 (was 1.113), beats
+intro 64 · neutral 23 · exchange 763 · ko 24 · ceremony 70 samples (the sim gives the show almost no neutral — sweep #5 — so 1x is rare by the fight's own doing), rates 1x 24 · 0.75x 897 · 0.5x 9 · 0.35x 2 · 0.25x 12, 35 KO-beat letterbox samples, slow-mo
+smear frames 28 (was 12). **CINEMA 3D 3.1%** at zoom 1.00 (was
+90.7), max zoom 1.419 (was 1.079). Screenshots of the super
+push-in, the KO slow-mo frame and the KO letterbox in both renderers are in
+the integration notes.
+
+One pre-existing bug this pass had to fix to keep its own promise: every
+render-side one-shot is deduped against the sim tick (`superCutInTick`,
+`cameraKoTick`, the counter/dizzy/guard-crush/recoil latches, the distortion
+ring, the crowd swell), which is right for a stream that only grows and wrong
+the moment a seeded demo rewinds it. Measured: a second `qa.demo(237)` on the
+same page fired its opener super on tick 663 again, found `superCutInTick ===
+663` from the first run and skipped the cut-in, the ring and the shot.
+`resetPresentationTickLatches()` now rewinds them from startDemo's seeded
+rewind (and only there); the `demo-camera` probe's replay half is what caught
+it. The CINEMA 3D numbers above come from the same harness under SwiftShader,
+where the 3D page renders ~7 ticks a second (142 samples in 175 s, one card),
+so the 3D KO frame was captured on the QA clock instead (`qa.demo(237)`, a
+quiet tick past 700, `qa.demoKnockout(0)`: zoom 1.425, letterbox 0.93, beat
+`ko` at 0.25x, shot `smash`, in both renderers).
+
+Verification: `node --test tests/demo-camera.test.mjs` (the shot lists, the
+envelope, seeded/non-repeating draws, the policy and its dwell, the KO beat's
+length per shot, the transport's tick-stream identity, the lock, the tag, and
+the game.js / camera.mjs source pins); `node tests/browser-smoke.mjs
+--only=fighter-framing-desktop,demo-mode,demo-seed-url,demo-hud,demo-hold,demo-camera`
+(the `demo-camera` probe drives a seeded demo to its opener super and a
+synthetic KO, reads the live shot, the beat, the push-in and the bars, replays
+the seed for the same shots at the same ticks, then proves a played match
+draws nothing).

@@ -7,6 +7,7 @@
 // it reads sim + cinematic state and never writes anything back.
 import * as THREE from "three";
 import { PX, SIM_W, SIM_H, SIM_FLOOR, worldX, worldY } from "./shared.mjs";
+import { DEMO_3D_SHOT_ZOOM_CAP } from "../../engine/demo-camera.mjs";
 
 const BASE_FOV = 30;
 const EYE_HEIGHT = 1.02;              // low-angle SF6 hero framing (chest height)
@@ -64,8 +65,14 @@ export class FramingCamera {
     this.smoothedDistance += (distance - this.smoothedDistance) * ease;
 
     // --- Cinematic presentation moves (KO punch-in, recoil, dutch tilt) ----
-    // Demo: cinematic punch-ins stay, but capped so the pair never leaves frame.
-    const zoom = Math.min(demo ? 1.12 : Infinity, Math.max(1, cinematic?.zoom ?? 1));
+    // Demo: cinematic punch-ins stay, but capped so the pair never leaves frame
+    // — except while the 5.4 demo camera director has a SHOT live (a super
+    // cut-in or the KO beat, `cinematic.demoShot`), when the cap lifts to
+    // DEMO_3D_SHOT_ZOOM_CAP so the 3D camera pushes in as far as the 2D one:
+    // the shot frames one fighter on purpose, so "the pair never leaves
+    // frame" is exactly what it is meant to break for a second.
+    const demoCap = cinematic?.demoShot ? DEMO_3D_SHOT_ZOOM_CAP : 1.12;
+    const zoom = Math.min(demo ? demoCap : Infinity, Math.max(1, cinematic?.zoom ?? 1));
     const punch = 1 - 1 / zoom;
     const focusX = worldX(cinematic?.focusX ?? SIM_W * 0.5);
     const focusY = worldY(cinematic?.focusY ?? SIM_H * 0.5);

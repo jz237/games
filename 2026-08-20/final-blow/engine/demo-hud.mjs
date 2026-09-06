@@ -60,9 +60,19 @@ export function demoResultPrompt({ holdMs = 5000, coarsePointer = false, held = 
  * used to be the loudest demo-specific text on a TV (and that sat across CPU
  * 1's Grit row on a phone, where the canvas is cropped by object-fit: cover).
  */
-export function demoSpeedTag({ rate = 1, paused = false, held = false } = {}) {
+export function demoSpeedTag({ rate = 1, paused = false, held = false, cadence = null, beat = "" } = {}) {
   if (held) return { text: "HELD", tone: "held" };
   if (paused) return { text: "PAUSED", tone: "paused" };
+  // 5.4 (sweep #17): while the cadence director drives, the tag shows the
+  // rate the viewer is actually watching — 1× in neutral, 0.75× in an
+  // exchange — and SLOW-MO (never "0.35×") on the KO beat. The operator's
+  // own rate takes the tag back the moment a transport key locks the cadence.
+  if (cadence !== null && cadence !== undefined) {
+    if (beat === "ko") return { text: "SLOW-MO", tone: "slowmo" };
+    const driven = Number(cadence);
+    const label = Number.isFinite(driven) && driven > 0 ? `${driven}×` : "1×";
+    return { text: label, tone: driven === 1 ? "live" : "slow" };
+  }
   const value = Number(rate);
   const label = Number.isFinite(value) && value > 0 ? `${value}×` : "1×";
   return { text: label, tone: value === 1 ? "live" : "slow" };

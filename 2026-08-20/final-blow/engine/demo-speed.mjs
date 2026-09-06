@@ -112,6 +112,15 @@ export function createDemoSpeed({ rate = DEFAULT_DEMO_SPEED, paused = false } = 
     rate: clampDemoSpeed(rate),
     paused: Boolean(paused),
     pendingSteps: 0,
+    // 5.4 FIGHT NIGHT (sweep #17) — THE CADENCE. A second rate the demo's
+    // camera/cadence director drives per frame (1x in neutral, 0.75x in an
+    // exchange, 0.25-0.5x on the KO beat); null = nobody is driving, `rate`
+    // rules. It scales the same wall-clock seconds the same way, so it can no
+    // more perturb the tick stream than the rate can. The operator always
+    // wins: any transport key (or an explicit qa.demoSpeed(rate)) LOCKS the
+    // cadence off for the session, and `rate` alone drives from then on.
+    cadence: null,
+    cadenceLocked: false,
     // Instrumentation: ticks this transport has explicitly frame-stepped, and
     // the wall-clock seconds it has withheld from the clock. Never read back.
     steppedTicks: 0,
@@ -126,6 +135,42 @@ export function createDemoSpeed({ rate = DEFAULT_DEMO_SPEED, paused = false } = 
     nudge(direction) {
       this.rate = nextDemoSpeed(this.rate, direction);
       return this.rate;
+    },
+
+    /**
+     * The director's rate for this frame (null releases it). Ignored while
+     * the operator has the transport (`cadenceLocked`) — and deliberately NOT
+     * snapped to the key ladder: 0.35x is a beat, not a setting.
+     */
+    setCadence(next) {
+      if (this.cadenceLocked) {
+        this.cadence = null;
+        return null;
+      }
+      if (next === null || next === undefined) {
+        this.cadence = null;
+        return null;
+      }
+      const value = Number(next);
+      this.cadence = Number.isFinite(value) && value > 0 ? Math.min(1, value) : null;
+      return this.cadence;
+    },
+
+    /** The operator took the keys: the cadence stands down for the session. */
+    lockCadence() {
+      this.cadenceLocked = true;
+      this.cadence = null;
+      return this.cadenceLocked;
+    },
+
+    unlockCadence() {
+      this.cadenceLocked = false;
+      return this.cadenceLocked;
+    },
+
+    /** What `scale` actually multiplies by this frame. */
+    effectiveRate() {
+      return this.cadence === null ? this.rate : this.cadence;
     },
 
     setPaused(next) {
@@ -173,7 +218,7 @@ export function createDemoSpeed({ rate = DEFAULT_DEMO_SPEED, paused = false } = 
         this.heldSeconds += elapsed;
         return 0;
       }
-      const scaled = elapsed * this.rate;
+      const scaled = elapsed * this.effectiveRate();
       this.heldSeconds += elapsed - scaled;
       return scaled;
     },
@@ -181,6 +226,9 @@ export function createDemoSpeed({ rate = DEFAULT_DEMO_SPEED, paused = false } = 
     snapshot() {
       return {
         rate: this.rate,
+        cadence: this.cadence,
+        cadenceLocked: this.cadenceLocked,
+        effectiveRate: this.effectiveRate(),
         paused: this.paused,
         pendingSteps: this.pendingSteps,
         steppedTicks: this.steppedTicks,

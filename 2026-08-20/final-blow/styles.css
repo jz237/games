@@ -1098,6 +1098,8 @@ kbd,
 .demo-hud-speed[data-tone="slow"] { color: #8affc1; }
 .demo-hud-speed[data-tone="paused"] { color: #ffb347; }
 .demo-hud-speed[data-tone="held"] { color: #ffb347; border-style: dashed; }
+/* 5.4 (sweep #17): the KO beat. Amber like PAUSED so it reads as "time is doing something", with a pulse so it reads as live. */
+.demo-hud-speed[data-tone="slowmo"] { color: #ffd54a; border-color: rgba(255,213,74,.7); animation: demo-prompt .4s ease-in-out infinite alternate; }
 .demo-hud span { grid-area: matchup; color: #fff; font-family: Impact, "Arial Narrow", sans-serif; font-size: 1.75em; font-style: italic; font-weight: 400; letter-spacing: .05em; line-height: 1; }
 .demo-hud em { grid-area: cycle; color: var(--cyan); font-style: normal; font-size: .9em; }
 /* 5.4 SESSION LAYER: the STORY row — story name, bout of the card, format —

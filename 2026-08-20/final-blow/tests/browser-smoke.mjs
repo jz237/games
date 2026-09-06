@@ -4243,6 +4243,80 @@ probe('demo-versus', async () => {
     assert.equal(roundTwo.planned, false);
 });
 
+// 5.4 FIGHT NIGHT (demo sweep #7/#17): the demo CAMERA/CADENCE director. A
+// super draws a seeded shot and the presentation camera pushes in on the
+// attacker (the world behind the cut-in used to sit still); the KO draws a
+// shot, opens the slow-motion beat and drops the letterbox bars; the same
+// seed draws the same shots; a played match draws nothing.
+probe('demo-camera', async () => {
+    const demoCameraProbe = await evaluate(client, `(async () => {
+      const qa = window.__finalBlowQa;
+      const frames = (count) => new Promise((resolve) => { let left = count; const tick = () => (left -= 1) <= 0 ? resolve() : requestAnimationFrame(tick); requestAnimationFrame(tick); });
+      const stepTo = (predicate, limit) => { for (let tick = 0; tick < limit; tick += 1) { if (predicate(window.__finalBlowEngine.snapshot())) return tick; qa.step(1 / 60); } return -1; };
+      // The shot envelopes are wall-clock (like every presentation ease), so
+      // the probe waits on what the camera DID, not on a frame count — a
+      // loaded headless box can render a frame in 500 ms.
+      const settle = async (predicate, limit) => { for (let frame = 0; frame < limit; frame += 1) { await frames(1); if (predicate()) return true; } return false; };
+      const run = async (seed) => {
+        qa.demo(seed);
+        const before = window.__finalBlowEngine.snapshot().violence.superCutIns;
+        const superTick = stepTo((snap) => snap.violence.superCutIns > before, 900);
+        // The shot is drawn synchronously in the latch; the pose eases over the next frames.
+        const superShotId = qa.demoCamera().shot?.id ?? null;
+        const superDrawn = qa.demoCamera().director.supers;
+        let superZoom = 1;
+        await settle(() => { superZoom = Math.max(superZoom, window.__finalBlowEngine.snapshot().camera.presentation.zoom); return superZoom > 1.12; }, 180);
+        const superCam = qa.demoCamera();
+        const quiet = stepTo((snap) => snap.phase === 'fight' && snap.fighters.every((f) => !f.attack && f.hitstunFrames === 0) && qa.pose().every((p) => p.grounded && !p.down), 900);
+        qa.demoKnockout(0);
+        const koShotId = qa.demoCamera().koShot;
+        qa.step(2 / 60);
+        let koZoom = 1;
+        let koLetterbox = 0;
+        await settle(() => { const cam = window.__finalBlowEngine.snapshot().camera.presentation; koZoom = Math.max(koZoom, cam.zoom); koLetterbox = Math.max(koLetterbox, cam.letterbox); return koZoom > 1.1 && koLetterbox > 0.5; }, 180);
+        const koCam = qa.demoCamera();
+        const koSnap = window.__finalBlowEngine.snapshot();
+        return { superTick, quiet, superCam, koCam, superZoom, superShotId, superDrawn, koShotId, koZoom, koLetterbox, koPhase: koSnap.phase, tag: document.querySelector('#demoHudSpeed').textContent };
+      };
+      const first = await run(237);
+      const again = await run(237);
+      qa.exitDemo();
+      qa.aiFight('deathblow', 'jez', 'pro');
+      qa.step(3);
+      await frames(4);
+      const played = { snapshot: window.__finalBlowEngine.snapshot(), camera: qa.demoCamera() };
+      return { first, again, played };
+    })()`);
+    const { first, again, played } = demoCameraProbe;
+    assert.ok(first.superTick >= 0, 'the opener super fires inside 15 s');
+    assert.equal(first.superCam.active, true);
+    assert.ok(['tight', 'creep', 'snap'].includes(first.superShotId), `a super shot is drawn at the latch (${first.superShotId})`);
+    assert.equal(first.superDrawn, 1);
+    assert.ok(first.superZoom > 1.12, `the super pushes in past the played game's 1.08 dolly (peak zoom ${first.superZoom})`);
+    assert.equal(first.superCam.beat, 'exchange', 'a super is an exchange');
+    assert.ok(first.quiet >= 0, 'a quiet grounded tick for the synthetic KO');
+    assert.equal(first.koCam.beat, 'ko', 'the KO opens the slow-motion beat');
+    assert.ok(['freeze', 'creep', 'smash'].includes(first.koShotId), `a KO shot is drawn at the KO (${first.koShotId})`);
+    assert.equal(first.koCam.koShot, first.koShotId);
+    assert.ok(first.koCam.rate >= 0.25 && first.koCam.rate <= 0.5, `the beat's rate is slow motion (${first.koCam.rate})`);
+    assert.equal(first.koCam.cadence, null, 'the QA clock owns the cadence: the transport is not driven (the tick stream is the probe\'s)');
+    assert.equal(first.tag, '0.75×', 'under the QA clock the tag keeps the operator rate');
+    assert.equal(first.koPhase, 'finish');
+    assert.ok(first.koZoom > 1.1, `the KO pushes in (peak zoom ${first.koZoom})`);
+    assert.ok(first.koLetterbox > 0.5, `the letterbox drops on the KO beat (peak ${first.koLetterbox})`);
+    // Same seed, same shots at the same ticks.
+    assert.equal(again.superTick, first.superTick);
+    assert.equal(again.superShotId, first.superShotId);
+    assert.equal(again.koShotId, first.koShotId);
+    assert.deepEqual(again.koCam.director.log.map(({ kind, id, tick }) => [kind, id, tick]), first.koCam.director.log.map(({ kind, id, tick }) => [kind, id, tick]));
+    // A played match: no director, no shot, no cadence, identity camera.
+    assert.equal(played.camera.active, false);
+    assert.equal(played.camera.cadence, null);
+    assert.equal(played.snapshot.camera.presentation.demoShot, null);
+    assert.notEqual(played.snapshot.mode, 'demo');
+    assert.equal(played.snapshot.violence.demoShots, again.koCam.shots, 'the played match drew no shot (the monotonic total stands where the second demo left it)');
+});
+
 probe('offline-cache', async () => {
     offlineCache = await evaluate(client, `(async () => {
       await navigator.serviceWorker.ready;
