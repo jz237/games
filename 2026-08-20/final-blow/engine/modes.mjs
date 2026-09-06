@@ -565,3 +565,26 @@ export function nextDailyRecord(previous, { date, score, wins, bouts, cleared } 
   record.bestStreak = Math.max(record.bestStreak, record.streak);
   return record;
 }
+
+/**
+ * 5.1 (sweep #32): the CPU's Block War roster. Three ids drawn from the
+ * roster the player did NOT pick, shuffled with the supplied unit-interval
+ * `random` so the draft is reproducible under a seeded rng and the QA hook.
+ * The CPU never mirrors the player's team: with ten fighters there are always
+ * seven candidates, and the guard below only matters for an unlocked-roster
+ * edge case where fewer than three remain (it then fills from the picks).
+ */
+export function draftCpuTeam(pickedIds = [], rosterIds = [], random = Math.random, teamSize = TEAM_RULES.teamSize) {
+  const picked = new Set(pickedIds);
+  const pool = rosterIds.filter((id) => !picked.has(id));
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.max(0, Math.min(0.999999, random())) * (index + 1));
+    [pool[index], pool[swap]] = [pool[swap], pool[index]];
+  }
+  const team = pool.slice(0, teamSize);
+  for (const id of pickedIds) {
+    if (team.length >= teamSize) break;
+    if (!team.includes(id)) team.push(id);
+  }
+  return team;
+}

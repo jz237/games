@@ -3801,3 +3801,116 @@ body.reduced-motion .set-score-card.crowned { animation: none; }
   .street-row { grid-template-columns: auto 1fr auto; }
   .street-row .street-age { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   5.1 modes & onboarding (sweep #29-#33): pause-menu move list, the first-run
+   control card, the title newcomer ribbon and the Block War opponent prompt.
+   The overlay sits above the pause panel (z 30) and reuses the frame-data
+   grid; the card is a corner aside on desktop and moves to the top-left on
+   the touch layout so it never shares a corner with the pad or the flick tip.
+   --------------------------------------------------------------------------- */
+.move-list-overlay {
+  position: absolute;
+  z-index: 32;
+  inset: 4% 6%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #4a6578;
+  background: rgba(3, 7, 11, .96);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .7);
+  text-align: left;
+}
+.move-list-overlay[hidden] { display: none !important; }
+.move-list-overlay > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, rgba(10, 184, 220, .16), rgba(239, 44, 40, .12));
+}
+.move-list-overlay > header h3 { margin: 0; font-family: Impact, sans-serif; font-size: clamp(20px, 3vw, 32px); font-style: italic; letter-spacing: .04em; }
+.move-list-overlay > header .eyebrow { margin: 0 0 2px; color: var(--cyan); font-size: 8px; letter-spacing: .16em; }
+.move-list-overlay .move-list-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px 10px; }
+.move-list-extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid #304554;
+  color: #aeb9c2;
+  font: 800 9px/1.4 ui-monospace, monospace;
+}
+.move-list-extras b { margin-right: 6px; color: var(--amber); }
+
+.control-card {
+  position: absolute;
+  z-index: 11;
+  left: 2.5%;
+  bottom: 9%;
+  width: min(330px, 46%);
+  padding: 9px 12px 8px;
+  border: 1px solid rgba(53, 231, 255, .6);
+  border-left-width: 4px;
+  background: rgba(4, 8, 13, .9);
+  color: #e9eef2;
+  font: 850 9px/1.4 system-ui, sans-serif;
+  letter-spacing: .05em;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+  cursor: pointer;
+  animation: speech-card-in .26s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.control-card[hidden] { display: none !important; }
+.control-card-head { display: flex; align-items: center; justify-content: space-between; color: var(--cyan); font-size: 9px; letter-spacing: .16em; }
+.control-card-head button { padding: 0 6px; border: 1px solid #4d6574; background: #09121b; color: white; font-size: 12px; line-height: 1.3; cursor: pointer; }
+.control-card-lines { display: grid; gap: 3px; margin-top: 6px; }
+.control-card-lines span { display: grid; grid-template-columns: 62px 1fr; gap: 6px; padding: 2px 0; border-top: 1px solid rgba(255,255,255,.06); }
+.control-card-lines b { color: var(--amber); }
+.control-card kbd { padding: 0 3px; border: 1px solid #5b7484; border-radius: 3px; background: #0d1620; }
+.control-card p { margin: 6px 0 0; color: #8595a0; font-size: 8px; letter-spacing: .12em; }
+
+.title-newcomer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 213, 74, .7);
+  background: rgba(255, 213, 74, .08);
+  color: var(--amber);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+.title-newcomer[hidden] { display: none !important; }
+.title-newcomer button {
+  padding: 4px 10px;
+  border: 1px solid var(--amber);
+  background: var(--amber);
+  color: #16100a;
+  font: inherit;
+  cursor: pointer;
+}
+.title-newcomer button:hover, .title-newcomer button:focus-visible { background: #ffe28e; }
+
+.team-opponent-choice {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 6px auto 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(53, 231, 255, .55);
+  background: rgba(6, 11, 17, .8);
+}
+.team-opponent-choice[hidden] { display: none !important; }
+.team-opponent-choice .menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: min(560px, 92vw); }
+.team-opponent-choice .arcade-button small { display: block; margin-top: 2px; font-size: 8px; opacity: .72; }
+.team-opponent-choice .arcade-button:focus-visible { outline: 3px solid var(--amber); }
+
+@media (pointer: coarse), (max-width: 760px) {
+  .control-card { left: 2.5%; top: 17%; bottom: auto; width: min(300px, 48%); font-size: 8px; }
+  .move-list-overlay { inset: 3% 3%; }
+}

@@ -92,7 +92,9 @@ function testArenaCollisionRules() {
 
 function testTrainingLab() {
   assert.ok(["guard-after-first", "reversal", "wakeup", "record", "playback"].every((mode) => TRAINING_DUMMY_MODES.includes(mode)));
-  assert.equal(Object.keys(TRAINING_COMBO_TRIALS).length, 8);
+  // 5.1 (sweep #33): the ladder now covers every kit — the Pinelands Devil
+  // and the Commissioner joined the eight this pin was written for.
+  assert.equal(Object.keys(TRAINING_COMBO_TRIALS).length, 10);
   // R1.9 SCHOOL & POCKET: trials grew into tiered ladders (6-8 per fighter);
   // the two shipped hand-authored trials stay first with their ids intact.
   assert.ok(fighterIds.every((id) => {

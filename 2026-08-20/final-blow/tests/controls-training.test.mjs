@@ -15,6 +15,9 @@ import {
   remapKeyBinding,
   remapPadBinding,
   resolveFourButtonInput,
+  CONTROL_STYLE_COMMANDS,
+  commandLabel,
+  styleCopy,
 } from "../engine/controls.mjs";
 import { createTrainingState, trainingDummyInput, trainingSnapshot } from "../engine/training.mjs";
 
@@ -167,5 +170,46 @@ testChords();
 testFinishingWindow();
 testSimplifiedStyle();
 testTrainingDummy();
+testCommandLabels();
 
 console.log("Final Blow four-button controls and training tests passed");
+
+// 5.1 (sweep #29/#31): the command table must agree with the resolver — a
+// label that promises LP&LK under MODERN or a lone HP under LEGEND has to
+// actually produce the move it names.
+function testCommandLabels() {
+  assert.deepEqual(Object.keys(CONTROL_STYLE_COMMANDS).sort(), ["classic", "legend", "modern"]);
+  // MODERN: the LP&LK chord (neutral) is the command special; away is the back
+  // special; the base kick special and the launcher keep their motions.
+  const modernChord = applyControlStyle(resolveFourButtonInput({ lp: true, lkHeld: true }, { style: "modern", facing: 1 }), "modern", 1);
+  assert.equal(modernChord.commandSpecial, true);
+  assert.equal(commandLabel("commandSpecial", "modern"), "LP&LK");
+  const modernBack = applyControlStyle(resolveFourButtonInput({ lp: true, lkHeld: true, left: true }, { style: "modern", facing: 1 }), "modern", 1);
+  assert.equal(modernBack.backSpecial, true);
+  assert.equal(commandLabel("backSpecial", "modern"), "← + LP&LK");
+  assert.equal(commandLabel("special", "modern"), commandLabel("special", "classic"), "modern keeps the kick-special motion");
+  assert.equal(commandLabel("launcher", "modern"), commandLabel("launcher", "classic"), "modern keeps the launcher motion");
+  // LEGEND: HP alone is the command special, ↓ + HP the launcher, ← + HP the
+  // back special, HK the base special.
+  const legend = (raw) => applyControlStyle(resolveFourButtonInput(raw, { style: "legend", facing: 1 }), "legend", 1);
+  assert.equal(legend({ hp: true }).commandSpecial, true);
+  assert.equal(commandLabel("commandSpecial", "legend"), "HP");
+  assert.equal(legend({ hp: true, down: true }).launcher, true);
+  assert.equal(commandLabel("launcher", "legend"), "↓ + HP");
+  assert.equal(legend({ hp: true, left: true }).backSpecial, true);
+  assert.equal(commandLabel("backSpecial", "legend"), "← + HP");
+  assert.equal(legend({ hk: true }).special, true);
+  assert.equal(legend({ hk: true }).limb, "kick");
+  assert.equal(commandLabel("special", "legend"), "HK");
+  // Style-free entries are identical in every style; unknown actions fall
+  // back to the kit's authored string, then to the action name.
+  for (const style of ["classic", "modern", "legend"]) {
+    assert.equal(commandLabel("enhancedCommandSpecial", style), "↓ → + LP&HP");
+    assert.equal(commandLabel("taunt", style), "↓ ↓ + LK&HK");
+    assert.equal(commandLabel("throwObject", style), "↓ ← + KICK");
+  }
+  assert.equal(commandLabel("mystery", "classic", "KIT SAYS"), "KIT SAYS");
+  assert.equal(commandLabel("mystery", "bogus-style"), "MYSTERY");
+  assert.equal(styleCopy("LAND {commandSpecial} · {super}", "legend"), "LAND HP · HP AT FULL GRIT");
+  assert.equal(styleCopy("no tokens", "modern"), "no tokens");
+}

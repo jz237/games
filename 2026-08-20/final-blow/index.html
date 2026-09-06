@@ -138,6 +138,11 @@
         <strong></strong><span></span>
       </div>
       <div id="flowSkipHint" class="flow-skip-hint" hidden>ANY ATTACK / START · SKIP</div>
+      <aside id="controlCard" class="control-card" aria-label="First fight controls" hidden>
+        <div class="control-card-head"><b>YOUR CONTROLS</b><button id="controlCardClose" type="button" aria-label="Dismiss">×</button></div>
+        <div id="controlCardLines" class="control-card-lines"></div>
+        <p>FIGHT SCHOOL TEACHES THE REST · TAP TO DISMISS</p>
+      </aside>
       <div id="introDialogue" class="intro-dialogue" aria-live="polite" hidden></div>
       <div id="soundCaption" class="sound-caption" aria-live="polite" hidden></div>
       <div id="screenWipe" class="screen-wipe" aria-hidden="true"></div>
@@ -155,10 +160,20 @@
         <div class="menu-stack">
           <button id="resumeButton" class="arcade-button primary menu-focus" type="button">RESUME</button>
           <button id="restartButton" class="arcade-button" type="button">RESTART ROUND</button>
+          <button id="pauseMoveListButton" class="arcade-button" type="button">MOVE LIST</button>
           <button id="pauseOptionsButton" class="arcade-button" type="button">CONTROLS &amp; OPTIONS</button>
           <button id="pauseSelectButton" class="arcade-button ghost" type="button">SELECT FIGHTERS</button>
         </div>
         <p>ESC / P / START TO RESUME</p>
+        <section id="moveListOverlay" class="move-list-overlay" aria-labelledby="moveListOverlayName" hidden>
+          <header>
+            <div><p class="eyebrow" id="moveListOverlayStyle">CLASSIC CONTROLS</p><h3 id="moveListOverlayName">DEATHBLOW</h3></div>
+            <button id="moveListOverlayClose" class="arcade-button compact" type="button">BACK</button>
+          </header>
+          <div id="moveListOverlayIdentity" class="move-list-identity"></div>
+          <div id="moveListOverlayRows" class="move-list-rows frame-data"></div>
+          <div id="moveListOverlayExtras" class="move-list-extras"></div>
+        </section>
       </section>
 
       <section id="titleScreen" class="screen title-screen active" aria-labelledby="gameTitle">
@@ -171,11 +186,15 @@
           <p id="titleVersion" class="title-version" aria-label="Version 5.1">VERSION 5.1</p>
           <p class="hook">Ten fighters. Six stages. One last chance to finish it.</p>
         </div>
+        <div id="titleNewcomer" class="title-newcomer" hidden>
+          <span>NEW HERE?</span>
+          <button id="titleNewcomerButton" type="button">FIGHT SCHOOL · 3 MIN</button>
+        </div>
         <div class="menu-stack">
           <button class="arcade-button primary menu-focus" data-mode="arcade">1 PLAYER · ARCADE</button>
           <button class="arcade-button" data-mode="survival">SURVIVAL · THE GAUNTLET</button>
           <button class="arcade-button" data-mode="versus">2 PLAYER · LOCAL VERSUS</button>
-          <button class="arcade-button" data-mode="team">TEAM BATTLE · 3V3 BLOCK WAR</button>
+          <button class="arcade-button" data-mode="team">1–2 PLAYERS · TEAM BATTLE · 3V3</button>
           <button class="arcade-button daily-button" id="dailyButton">DAILY JAWN<small id="dailyStatus">FRESH RUN READY</small></button>
           <div class="menu-row">
             <button class="arcade-button ledger-button" id="blackBookButton">THE BLACK BOOK<small id="blackBookStatus">0 / 35 INKED</small></button>
@@ -184,7 +203,7 @@
           <button class="arcade-button online-button" id="onlineButton">ONLINE · PRIVATE ROOM</button>
           <button class="arcade-button" data-mode="training">TRAINING LAB</button>
           <div class="menu-row">
-            <button class="arcade-button school-button" id="fightSchoolButton">FIGHT SCHOOL<small id="fightSchoolStatus">7 LESSONS · FREE</small></button>
+            <button class="arcade-button school-button" id="fightSchoolButton">FIGHT SCHOOL<small id="fightSchoolStatus">12 LESSONS · FREE</small></button>
             <button class="arcade-button school-button" id="comboTrialsButton">COMBO TRIALS<small id="comboTrialsStatus">EARN MEDALS</small></button>
           </div>
           <button class="arcade-button bracket-button" id="phillyOpenButton">THE PHILLY OPEN · BRACKET<small id="phillyOpenStatus">4 OR 8 ENTRANTS · SINGLE ELIMINATION</small></button>
@@ -295,6 +314,13 @@
           <div id="paletteHint" class="palette-hint">LIGHT CONFIRM · COLOR 1 &nbsp;·&nbsp; HEAVY CONFIRM · COLOR 2</div>
         </header>
         <div id="rosterGrid" class="roster-grid" role="listbox" aria-label="Fighter roster"></div>
+        <div id="teamOpponentChoice" class="team-opponent-choice" role="group" aria-label="Block War opponent" hidden>
+          <span class="difficulty-title">WHO'S ACROSS THE STREET?</span>
+          <div class="menu-row">
+            <button class="arcade-button primary" type="button" data-team-opponent="cpu">VS CPU · AUTO-DRAFT<small>THE CPU PULLS THREE YOU DIDN'T</small></button>
+            <button class="arcade-button" type="button" data-team-opponent="player">VS PLAYER 2<small>SECOND SEAT PICKS THREE</small></button>
+          </div>
+        </div>
         <div id="difficultyBar" class="difficulty-bar" role="radiogroup" aria-label="CPU difficulty" hidden>
           <span class="difficulty-title">CPU DIFFICULTY</span>
           <div id="difficultyOptions" class="difficulty-options"></div>
@@ -592,9 +618,10 @@
           <p>DOWN-AWAY CROUCH-BLOCKS LOWS · NO GUARD BUTTON</p>
           <p><kbd>J</kbd> LP · <kbd>K</kbd> HP · <kbd>N</kbd> LK · <kbd>M</kbd> HK</p>
           <p>LP JAB · HP HOOK · LK LIGHT KICK · HK ROUNDHOUSE</p>
-          <p>SPECIALS: ↓ → + PUNCH · ↓ ← + PUNCH · ↓ → + KICK · → ↓ → + PUNCH · ← → + KICK</p>
-          <p>ENHANCED: MOTION + LP&amp;HP OR LK&amp;HK · SUPER: ↓ → ↓ → + PUNCH OR HP&amp;HK</p>
-          <p>THROW: CLOSE + TOWARD/AWAY + LP OR LK · DOUBLE-TAP DASH</p>
+          <p data-style-copy>SPECIALS: {commandSpecial} · {backSpecial} · {special} · {launcher} · {driveHeavy}</p>
+          <p data-style-copy>ENHANCED: {enhanced} · SUPER: {super}</p>
+          <p>THROW: CLOSE + TOWARD/AWAY + LP OR LK · DASH: DOUBLE-TAP ← OR →</p>
+          <p>THROWABLE: ↓ ← + KICK (EX: LK&amp;HK) · STAGE WEAPON: ↓ + HP OVER IT, HP THROWS · TAUNT: ↓ ↓ + LK&amp;HK</p>
           <p>FINAL BLOW: ANY DISTANCE · LP = A · LK = B · HP/HK DO NOT FINISH</p>
         </section>
         <section>
@@ -603,9 +630,10 @@
           <p>DOWN-AWAY CROUCH-BLOCKS LOWS · NO GUARD BUTTON</p>
           <p><kbd>NUM 1</kbd> LP · <kbd>NUM 2</kbd> HP · <kbd>NUM 4</kbd> LK · <kbd>NUM 5</kbd> HK</p>
           <p>LP JAB · HP HOOK · LK LIGHT KICK · HK ROUNDHOUSE</p>
-          <p>SPECIALS: ↓ → + PUNCH · ↓ ← + PUNCH · ↓ → + KICK · → ↓ → + PUNCH · ← → + KICK</p>
-          <p>ENHANCED: MOTION + LP&amp;HP OR LK&amp;HK · SUPER: ↓ → ↓ → + PUNCH OR HP&amp;HK</p>
-          <p>THROW: CLOSE + TOWARD/AWAY + LP OR LK · DOUBLE-TAP DASH</p>
+          <p data-style-copy>SPECIALS: {commandSpecial} · {backSpecial} · {special} · {launcher} · {driveHeavy}</p>
+          <p data-style-copy>ENHANCED: {enhanced} · SUPER: {super}</p>
+          <p>THROW: CLOSE + TOWARD/AWAY + LP OR LK · DASH: DOUBLE-TAP ← OR →</p>
+          <p>THROWABLE: ↓ ← + KICK (EX: LK&amp;HK) · STAGE WEAPON: ↓ + HP OVER IT, HP THROWS · TAUNT: ↓ ↓ + LK&amp;HK</p>
           <p>FINAL BLOW: ANY DISTANCE · LP = A · LK = B · HP/HK DO NOT FINISH</p>
         </section>
         <section>
@@ -615,6 +643,7 @@
           <p>LP JAB · HP HOOK · LK LIGHT KICK · HK ROUNDHOUSE</p>
           <p id="padEquivalents">PLAYSTATION: □ LP · △ HP · ✕ LK · ○ HK — NINTENDO: Y LP · X HP · B LK · A HK</p>
           <p>SAME MOTIONS, CHORDS AND SINGLE-BUTTON FINAL BLOW AS KEYBOARD</p>
+          <p>DOUBLE-TAP DASH · ↓ ← + KICK THROWABLE · ↓ + HP STAGE WEAPON · ↓ ↓ + LK&amp;HK TAUNT</p>
         </section>
         <section class="options-panel">
           <h3>OPTIONS</h3>

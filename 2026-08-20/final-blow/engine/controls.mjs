@@ -409,3 +409,81 @@ export function touchPadTokens(dx, dy, radius, rules = TOUCH_PAD_RULES) {
   const octant = ((Math.round(angle / rules.sectorDegrees) % 8) + 8) % 8;
   return [...TOUCH_SECTOR_TOKENS[octant]];
 }
+
+// ---------------------------------------------------------------------------
+// 5.1 (sweep #29 / #31): one source of truth for "how do I do X in the active
+// control style". Until now the move list, the school step labels, the
+// options-dialog motion lines and the touch super prompt each hard-coded the
+// CLASSIC motions, so a MODERN player was told to roll ↓ → for a special the
+// LP&LK chord already gives them and a LEGEND player was never told HP is the
+// special button. The table mirrors resolveFourButtonInput/applyControlStyle
+// exactly: MODERN's chord reaches the command special (neutral or ↓), the back
+// special (away) and nothing else — the base kick special, launcher and super
+// motion stay classic; LEGEND's HP pulse is expanded by direction (↓ launcher,
+// away back special, else command special), HK is the base special and an
+// airborne HP/HK is the air special. EX chords and the taunt are style-free.
+// ---------------------------------------------------------------------------
+const CLASSIC_COMMANDS = Object.freeze({
+  special: "↓ → + KICK",
+  airSpecial: "↓ → + KICK IN THE AIR",
+  commandSpecial: "↓ → + PUNCH",
+  backSpecial: "↓ ← + PUNCH",
+  launcher: "→ ↓ → + PUNCH",
+  driveHeavy: "← → + KICK",
+  enhanced: "MOTION + LP&HP OR LK&HK",
+  enhancedCommandSpecial: "↓ → + LP&HP",
+  enhancedBackSpecial: "↓ ← + LP&HP",
+  enhancedLauncher: "→ ↓ → + LP&HP",
+  super: "↓ → ↓ → + PUNCH OR HP&HK",
+  throw: "CLOSE + TOWARD/AWAY + LP OR LK",
+  throwObject: "↓ ← + KICK",
+  enhancedThrowObject: "↓ ← + LK&HK",
+  guardReversal: "IN BLOCKSTUN · LP&HP OR TOWARD + ↓ → + PUNCH",
+  taunt: "↓ ↓ + LK&HK",
+  dash: "DOUBLE-TAP ← OR →",
+  stageWeapon: "↓ + HP OVER THE OBJECT",
+  perfectGuard: "TAP AWAY AS THE HIT LANDS",
+  airTech: "ANY BUTTON WHILE JUGGLED",
+  quickRise: "↑ WHILE DOWN",
+  delayWake: "HOLD ↓ WHILE DOWN",
+});
+
+export const CONTROL_STYLE_COMMANDS = Object.freeze({
+  classic: CLASSIC_COMMANDS,
+  modern: Object.freeze({
+    ...CLASSIC_COMMANDS,
+    commandSpecial: "LP&LK",
+    backSpecial: "← + LP&LK",
+    super: "HP&HK AT FULL GRIT",
+    guardReversal: "IN BLOCKSTUN · LP&HP OR TOWARD + LP&LK",
+  }),
+  legend: Object.freeze({
+    ...CLASSIC_COMMANDS,
+    special: "HK",
+    airSpecial: "HP OR HK IN THE AIR",
+    commandSpecial: "HP",
+    backSpecial: "← + HP",
+    launcher: "↓ + HP",
+    super: "HP AT FULL GRIT",
+    guardReversal: "IN BLOCKSTUN · LP&HP OR TOWARD + HP",
+  }),
+});
+
+/**
+ * The command copy for `action` under `style`. Unknown actions fall back to
+ * `fallback` (a kit's authored command string, say) and then to the action
+ * name upper-cased, so a caller can never render an empty command cell.
+ */
+export function commandLabel(action, style = "classic", fallback = "") {
+  const table = CONTROL_STYLE_COMMANDS[normalizeControlStyle(style)] || CLASSIC_COMMANDS;
+  return table[action] || fallback || String(action || "").toUpperCase();
+}
+
+/**
+ * Replaces `{action}` tokens in a copy template with the style's command —
+ * school step labels and the dialog motion lines are authored once this way
+ * and rendered for whichever style is live.
+ */
+export function styleCopy(template, style = "classic") {
+  return String(template || "").replace(/\{([a-zA-Z]+)\}/g, (_, action) => commandLabel(action, style));
+}

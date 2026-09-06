@@ -30,6 +30,7 @@ import {
   fighterMedalCounts,
   fightSchoolObserve,
   fightSchoolSnapshot,
+  fightSchoolStepLabel,
   medalForTrial,
   normalizeTrialMedals,
   recordTrainingTrialHit,
@@ -37,7 +38,7 @@ import {
   selectTrainingTrial,
   trialDemoScript,
 } from "../engine/training.mjs";
-import { createFighterMove, listFighterFrameData } from "../engine/fighter-kits.mjs";
+import { createFighterMove, listFighterFrameData, prettyProfileName } from "../engine/fighter-kits.mjs";
 import { ATTACK_LEVELS, attackFrameData } from "../engine/defense.mjs";
 
 // ---------------------------------------------------------------------------
@@ -130,7 +131,34 @@ function testLegendResolution() {
 // ---------------------------------------------------------------------------
 function testTrialLadders() {
   const fighters = Object.keys(TRAINING_COMBO_TRIALS);
-  assert.equal(fighters.length, 8);
+  // 5.1 (sweep #33): was 8 — the Pinelands Devil and the Commissioner had no
+  // ladder at all; every kit now carries one.
+  assert.equal(fighters.length, 10);
+  assert.ok(fighters.includes("devil") && fighters.includes("commissioner"));
+  assert.equal(comboTrialsForFighter("devil").length, 8, "devil: bronze pair + six generated (Wing Flit lands, so the signature route exists)");
+  assert.equal(comboTrialsForFighter("commissioner").length, 8);
+  assert.deepEqual(comboTrialsForFighter("devil").slice(0, 2).map(({ id }) => id), ["howl-confirm", "barrens-cashout"]);
+  assert.deepEqual(comboTrialsForFighter("commissioner").slice(0, 2).map(({ id }) => id), ["gavel-confirm", "authority-cashout"]);
+  // EX SPENDER opens with an EX that leaves the dummy standing when the base
+  // EX is a launch: the devil swaps to Wing Flit EX (measured in the browser —
+  // the scripted Pine Howl whiffed over the screech knockdown every run);
+  // DeathBlow and the Commissioner keep their base EX, which lands on time.
+  const exOpener = (id) => comboTrialsForFighter(id).find((trial) => trial.id === `${id}-ex-spender`).steps[0];
+  assert.equal(exOpener("devil").action, "enhancedBackSpecial");
+  assert.equal(exOpener("devil").label, "WING FLIT EX");
+  assert.equal(exOpener("commissioner").action, "enhanced");
+  assert.equal(exOpener("deathblow").action, "enhanced");
+  for (const id of ["jez", "alan", "post", "benny", "donald", "cyraxx", "ali"]) assert.equal(exOpener(id).action, "enhanced", `${id} ladder unchanged`);
+  // The hand-authored labels name the kit's real move names, not paraphrases.
+  for (const fighterId of ["devil", "commissioner"]) {
+    for (const trial of comboTrialsForFighter(fighterId).slice(0, 2)) {
+      for (const step of trial.steps) {
+        const move = createFighterMove(fighterId, step.action, {});
+        const name = move.moveName || prettyProfileName(move.profileId, fighterId);
+        assert.equal(step.label, name, `${fighterId}/${trial.id}: ${step.action} label is the kit's move name`);
+      }
+    }
+  }
   for (const fighterId of fighters) {
     const trials = comboTrialsForFighter(fighterId);
     assert.ok(trials.length >= 6 && trials.length <= 8, `${fighterId} has a 6-8 trial ladder`);
@@ -275,7 +303,24 @@ function testFrameDataExtraction() {
 // FIGHT SCHOOL: curriculum shape + the lesson step machine.
 // ---------------------------------------------------------------------------
 function testFightSchool() {
-  assert.equal(FIGHT_SCHOOL_LESSONS.length, 7);
+  // 5.1 (sweep #31): was 7 — lessons 8-12 add the throwable, the Grit
+  // economy, Perfect Guard + guard reversal, air tech + wake-up options and
+  // the stage weapon. The first seven keep their ids so saved progress holds.
+  assert.equal(FIGHT_SCHOOL_LESSONS.length, 12);
+  assert.deepEqual(FIGHT_SCHOOL_LESSONS.slice(0, 7).map(({ id }) => id),
+    ["footwork", "guard-heights", "four-normals", "qcf-special", "throw-tech", "dizzy-punish", "final-blow"]);
+  assert.deepEqual(FIGHT_SCHOOL_LESSONS.slice(7).map(({ id }) => id),
+    ["throwable", "grit-economy", "split-second", "off-the-floor", "street-furniture"]);
+  // Every hit step names an action the sim can actually report: kit actions,
+  // the guard reversal, or the two projectile classes the school observes.
+  const reportable = new Set(["light", "heavy", "throw", "special", "commandSpecial", "backSpecial", "launcher", "driveHeavy",
+    "enhanced", "enhancedCommandSpecial", "enhancedBackSpecial", "enhancedLauncher", "super", "throwObject", "guardReversal", "stageWeapon"]);
+  for (const lesson of FIGHT_SCHOOL_LESSONS) {
+    for (const step of lesson.steps) {
+      if (step.kind !== "hit") continue;
+      for (const action of step.actions || (step.action ? [step.action] : [])) assert.ok(reportable.has(action), `${lesson.id}/${step.id}: ${action}`);
+    }
+  }
   const ids = new Set(FIGHT_SCHOOL_LESSONS.map((lesson) => lesson.id));
   assert.equal(ids.size, FIGHT_SCHOOL_LESSONS.length, "lesson ids unique");
   for (const lesson of FIGHT_SCHOOL_LESSONS) {
@@ -322,11 +367,60 @@ function testFightSchool() {
   assert.ok(hit("throw", "punch", 9, { back: true }).lessonComplete);
   assert.equal(hit("heavy", "punch", 10, { dizzy: false }), null, "dizzy punish needs the dizzy");
   assert.ok(hit("heavy", "punch", 11, { dizzy: true }).lessonComplete);
-  const graduation = fightSchoolObserve(school, { type: "finisher" });
+  // 5.1: lesson 7 no longer graduates — five more pages follow.
+  const finisher = fightSchoolObserve(school, { type: "finisher" });
+  assert.equal(finisher.lessonComplete, true);
+  assert.equal(finisher.graduated, false);
+  assert.equal(school.lesson, 7, "THE JAWN is armed after the Final Blow");
+
+  // THE JAWN: only the projectile class advances, then a heavy punch.
+  assert.equal(hit("special", "punch", 12), null, "a kick special is not the jawn");
+  assert.ok(hit("throwObject", "punch", 13));
+  assert.ok(hit("heavy", "punch", 14).lessonComplete);
+
+  // GRIT ECONOMY: any EX flavour counts for the first step, then the super.
+  assert.equal(hit("commandSpecial", "punch", 15), null);
+  assert.ok(hit("enhancedLauncher", "punch", 16), "an EX launcher is an EX");
+  assert.ok(hit("super", "punch", 17).lessonComplete);
+
+  // SPLIT SECOND: a plain block never satisfies a perfect step; two perfects,
+  // then the guard reversal must land as its own action.
+  assert.equal(fightSchoolObserve(school, { type: "block", level: "overhead", perfect: false }), null);
+  assert.ok(fightSchoolObserve(school, { type: "block", level: "overhead", perfect: true }));
+  assert.ok(fightSchoolObserve(school, { type: "block", level: "low", perfect: true }), "any level once perfect");
+  assert.equal(hit("special", "punch", 18), null, "a special is not the guard reversal");
+  assert.ok(hit("guardReversal", "punch", 19).lessonComplete);
+
+  // OFF THE FLOOR: air tech, quick rise, delayed wake — in that order.
+  assert.equal(fightSchoolObserve(school, { type: "wake", option: "quick" }), null, "tech first");
+  assert.ok(fightSchoolObserve(school, { type: "airTech" }));
+  assert.equal(fightSchoolObserve(school, { type: "wake", option: "delay" }), null, "quick rise before the delay");
+  assert.ok(fightSchoolObserve(school, { type: "wake", option: "quick" }));
+  assert.ok(fightSchoolObserve(school, { type: "wake", option: "delay" }).lessonComplete);
+
+  // STREET FURNITURE: pick-up, then the thrown weapon's own impact = graduation.
+  assert.equal(hit("stageWeapon", "punch", 20), null, "must pick it up first");
+  assert.ok(fightSchoolObserve(school, { type: "pickup" }));
+  const graduation = hit("stageWeapon", "punch", 21);
   assert.equal(graduation.graduated, true);
   const snapshot = fightSchoolSnapshot(school);
   assert.equal(snapshot.graduated, true);
   assert.equal(Object.keys(snapshot.completed).length, FIGHT_SCHOOL_LESSONS.length);
+
+  // Style-aware labels: the same step reads differently per control style,
+  // and the snapshot renders through the same helper.
+  const qcf = FIGHT_SCHOOL_LESSONS[3].steps[0];
+  assert.equal(fightSchoolStepLabel(qcf, "classic"), "LAND ↓ → + PUNCH");
+  assert.equal(fightSchoolStepLabel(qcf, "modern"), "LAND LP&LK");
+  assert.equal(fightSchoolStepLabel(qcf, "legend"), "LAND HP");
+  const fresh = createFightSchoolState({ lesson: 3 });
+  assert.equal(fightSchoolSnapshot(fresh, { style: "legend" }).steps[0].label, "LAND HP");
+  assert.equal(fightSchoolSnapshot(fresh).steps[0].label, "LAND ↓ → + PUNCH", "classic by default");
+  for (const lesson of FIGHT_SCHOOL_LESSONS) {
+    for (const step of lesson.steps) {
+      assert.ok(!/\{/.test(fightSchoolStepLabel(step, "modern")), `${step.id}: every template token resolves`);
+    }
+  }
 
   // Resume: completed lessons re-seed the machine past themselves.
   const resumed = createFightSchoolState({ lesson: 2, completed: { footwork: true, "guard-heights": true } });

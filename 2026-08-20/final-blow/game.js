@@ -185,6 +185,7 @@ import {
   tallyRows,
   tallyTotal,
   teamBattleSnapshot,
+  draftCpuTeam,
 } from "./engine/modes.mjs";
 import {
   ARCADE_BOSS_ID,
@@ -237,6 +238,8 @@ import {
   pruneFlickSamples,
   touchPadFlick,
   touchPadTokens,
+  commandLabel,
+  styleCopy,
 } from "./engine/controls.mjs";
 import {
   FIGHT_SCHOOL_COACH_LINES,
@@ -264,6 +267,7 @@ import {
   trainingDummyInput,
   trainingSnapshot,
   trialDemoScript,
+  fightSchoolStepLabel,
 } from "./engine/training.mjs";
 import {
   PERFORMANCE_PROFILES,
@@ -2068,6 +2072,11 @@ const state = {
   survivalRun: null,
   teamBattle: null,
   teamPicks: [[], []],
+  // 5.1 (sweep #32): Block War opponent choice. `teamCpu` is the P1 decision
+  // (auto-drafted CPU team vs a second player); `teamChoicePending` holds the
+  // select screen on the two-button prompt after P1's third pick.
+  teamCpu: false,
+  teamChoicePending: false,
   mutators: [],
   matchRules: resolveMatchRules([]),
   // One-shot per round: has the Sudden Death mutator's first-clean-hit dizzy
@@ -2836,8 +2845,8 @@ function renderSchoolPanel() {
     schoolPanelStamp = "";
     return;
   }
-  const snapshot = fightSchoolSnapshot(schoolSession.machine);
-  const stamp = `${snapshot.lesson}:${snapshot.step}:${snapshot.graduated}`;
+  const snapshot = fightSchoolSnapshot(schoolSession.machine, { style: state.controlStyle });
+  const stamp = `${snapshot.lesson}:${snapshot.step}:${snapshot.graduated}:${state.controlStyle}`;
   if (stamp === schoolPanelStamp) return;
   schoolPanelStamp = stamp;
   $("#schoolLessonCounter").textContent = snapshot.graduated
@@ -2857,10 +2866,35 @@ function renderSchoolPanel() {
 function schoolDummyScript(script) {
   const frames = [];
   for (let index = 0; index < 42; index += 1) frames.push({ left: true });
+  // 5.1: "launcher" feeds the kit's rising launcher through the same direct
+  // action field the reversal dummy uses, so the OFF THE FLOOR lesson gets a
+  // real juggle to tech out of; "sweep" is the derived crouching HK — the
+  // knockdown low every kit has — for the wake-up steps. Both breathe longer
+  // than the guard scripts because the player is on the floor or in the air.
   if (script === "low") frames.push({ down: true, heavy: true });
+  else if (script === "launcher") frames.push({ launcher: true });
+  else if (script === "sweep") frames.push({ down: true, heavy: true, limb: "kick" });
   else frames.push({ left: true, heavy: true });
-  for (let index = 0; index < 66; index += 1) frames.push({});
+  const rest = script === "launcher" || script === "sweep" ? 110 : 66;
+  for (let index = 0; index < rest; index += 1) frames.push({});
   return frames;
+}
+
+// 5.1 STREET FURNITURE: the lab's SPAWN STAGE WEAPON button body, shared with
+// the school's "weapon" setup so the lesson can keep an object on the floor.
+function spawnTrainingWeapon() {
+  if (!state.stageWeaponsEnabled) {
+    if (schoolSession.active) schoolSession.restoreWeapons = true;
+    setStageWeapons(true);
+  }
+  if (!state.stageWeapon) resetStageWeapon();
+  if (!state.stageWeapon) return false;
+  state.stageWeapon.phase = "ground";
+  state.stageWeapon.frames = 0;
+  state.stageWeapon.holder = -1;
+  state.fighters.forEach((fighter) => { fighter.carriedWeapon = null; fighter.carryFrames = 0; });
+  updateHud();
+  return true;
 }
 
 function applySchoolStepSetup() {
@@ -2881,6 +2915,10 @@ function applySchoolStepSetup() {
   } else if (lesson.setup === "lowHealth") {
     state.training.autoRecover = false;
     schoolSession.pendingSetup = "lowHealth";
+  } else if (lesson.setup === "weapon") {
+    state.training.autoRecover = true;
+    schoolSession.pendingSetup = "weapon";
+    schoolSession.weaponSpawnTick = -Infinity;
   } else {
     state.training.autoRecover = true;
     schoolSession.pendingSetup = null;
@@ -2900,6 +2938,12 @@ function exitFightSchool({ toTitle = false } = {}) {
   schoolSession.pendingSetup = null;
   stopTrialDemo();
   if (schoolSession.savedDifficulty) setAiDifficulty(schoolSession.savedDifficulty);
+  // 5.1: the STREET FURNITURE lesson may have switched stage weapons on for
+  // a player who keeps them off — hand the option back the way it was.
+  if (schoolSession.restoreWeapons) {
+    schoolSession.restoreWeapons = false;
+    setStageWeapons(false);
+  }
   if (state.mode === "training") {
     state.training.autoRecover = true;
     state.training.dummyMode = "stand";
@@ -3030,6 +3074,17 @@ function schoolTick() {
     dummy.health = 5;
     updateHud();
   }
+  // 5.1 STREET FURNITURE: keep an object on the floor until the lesson is
+  // done — a thrown or expired weapon respawns after a breath (the "thrown"
+  // phase is left alone so the landing hit can still bank the step).
+  if (schoolSession.pendingSetup === "weapon" && state.phase === "fight"
+    && state.simulationTick - (schoolSession.weaponSpawnTick ?? -Infinity) > 60) {
+    const weapon = state.stageWeapon;
+    if (!weapon || !["ground", "held", "thrown"].includes(weapon.phase)) {
+      schoolSession.weaponSpawnTick = state.simulationTick;
+      spawnTrainingWeapon();
+    }
+  }
   if (step?.kind === "walk" && player && player.grounded && !player.attacking
     && player.hitstunFrames <= 0 && player.blockstunFrames <= 0 && Math.abs(player.vx) > 40) {
     const direction = Math.sign(player.vx) === player.facing ? "forward" : "back";
@@ -3051,6 +3106,7 @@ const modeFxDebug = {
   survivalMilestones: 0,
   teamEliminations: 0,
   teamWalkIns: 0,
+  teamDrafts: 0,
   dailyRuns: 0,
   attractScoreBoards: 0,
   scoreSubmissions: 0,
@@ -3380,6 +3436,7 @@ function unlockCommissioner({ quiet = false } = {}) {
   if (!rosterHasCommissioner()) {
     roster.push(commissionerPlayableDef);
     setupRoster();
+  buildMoveListSelect();
   }
   onlineFighterIds.add(ARCADE_BOSS_ID);
   syncOnlineCommissionerOption();
@@ -3398,6 +3455,7 @@ function relockCommissioner() {
   onlineFighterIds.delete(ARCADE_BOSS_ID);
   syncOnlineCommissionerOption();
   setupRoster();
+  buildMoveListSelect();
   return true;
 }
 
@@ -3428,6 +3486,20 @@ function refreshProgressionUi() {
       ? `${records.wins}W · ${records.losses}L · ${records.rankedFighters} RANKED`
       : "NO FIGHTS LOGGED";
   }
+  // 5.1 (sweep #30): the school button reports real progress, and a player
+  // with no fight logged and no lesson done gets a one-line route to it.
+  const school = loadSchoolProgress();
+  const done = Object.keys(school.completed).length;
+  const schoolStatus = $("#fightSchoolStatus");
+  if (schoolStatus) {
+    schoolStatus.textContent = school.graduated || done >= FIGHT_SCHOOL_LESSONS.length
+      ? "GRADUATED · REPLAY ANY LESSON"
+      : done > 0
+        ? `${done} / ${FIGHT_SCHOOL_LESSONS.length} LESSONS DONE`
+        : `${FIGHT_SCHOOL_LESSONS.length} LESSONS · FREE`;
+  }
+  const newcomer = $("#titleNewcomer");
+  if (newcomer) newcomer.hidden = !(records.matches === 0 && done === 0);
 }
 
 function renderBlackBookScreen() {
@@ -10107,25 +10179,94 @@ const MOVE_LEVEL_TAGS = Object.freeze({
   mid: "MID", low: "LOW", overhead: "OH", throw: "THROW", air: "AIR",
 });
 
-function renderMoveList(fighterId = "deathblow") {
-  const kit = getFighterKit(fighterId);
-  if (!kit) return;
-  $("#moveListIdentity").innerHTML = `<strong>${kit.archetype}</strong> · ${kit.summary}`;
+// 5.1 (sweep #29): the command column is rendered for the ACTIVE control
+// style. Normals keep the frame-data row's own command; specials/EX/super go
+// through commandLabel so MODERN reads LP&LK and LEGEND reads HP where CLASSIC
+// reads ↓ → + PUNCH. A kit's authored note after " · " (Allan's "counters
+// strikes") survives the substitution.
+const MOVE_LIST_NORMAL_ACTIONS = new Set(["light", "heavy", "throw"]);
+
+function moveListCommand(row, style = state.controlStyle) {
+  if (MOVE_LIST_NORMAL_ACTIONS.has(row.action)) return row.command;
+  const [, ...notes] = String(row.command || "").split(" · ");
+  const label = commandLabel(row.action, style, row.command);
+  return notes.length ? `${label} · ${notes.join(" · ")}` : label;
+}
+
+function moveListMarkup(fighterId, style = state.controlStyle) {
   const signed = (value) => `${value >= 0 ? "+" : ""}${value}`;
   const rows = listFighterFrameData(fighterId).map((row) => `
     <div class="move-list-row frame-row">
       <b>${row.name}</b>
-      <span>${row.command}</span>
+      <span>${moveListCommand(row, style)}</span>
       <span class="sar">${row.startup} / ${row.active} / ${row.recovery}</span>
       <span class="sar">${row.level === "throw" ? "—" : `${signed(row.onHit)} / ${signed(row.onBlock)}`}</span>
       <span class="sar">${row.damage}</span>
       <em class="level-chip lvl-${row.level}">${MOVE_LEVEL_TAGS[row.level] || row.level.toUpperCase()}</em>
     </div>`);
-  $("#moveListRows").className = "move-list-rows frame-data";
-  $("#moveListRows").innerHTML = `
+  return `
     <div class="move-list-row frame-head">
       <b>MOVE</b><span>COMMAND</span><span>S / A / R</span><span>HIT / BLOCK</span><span>DMG</span><span>LVL</span>
     </div>` + rows.join("");
+}
+
+function renderMoveList(fighterId = "deathblow") {
+  const kit = getFighterKit(fighterId);
+  if (!kit) return;
+  $("#moveListIdentity").innerHTML = `<strong>${kit.archetype}</strong> · ${kit.summary}`;
+  $("#moveListRows").className = "move-list-rows frame-data";
+  $("#moveListRows").innerHTML = moveListMarkup(fighterId);
+}
+
+// The dialog's fighter <select> is built from the live roster (the unlocked
+// Commissioner included) instead of a static eight-option list that had no
+// Pinelands Devil entry.
+function buildMoveListSelect() {
+  const select = $("#moveListSelect");
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = roster.map((fighter) => `<option value="${fighter.id}">${fighter.name}</option>`).join("");
+  select.value = roster.some(({ id }) => id === current) ? current : roster[0].id;
+}
+
+// 5.1 (sweep #29): MOVE LIST from the pause menu — a compact overlay for the
+// fighter P1 is actually holding, no scrolling past the remap grid. Opened
+// from #pauseMoveListButton, closed by its own button, Escape or the pad's
+// back; the pause panel stays underneath so RESUME is one press away.
+const moveListOverlay = { open: false, fighterId: "" };
+
+function openMoveListOverlay(fighterId = state.fighters[0]?.kitId || roster[state.picks[0]]?.id || "deathblow") {
+  const overlay = $("#moveListOverlay");
+  if (!overlay || state.screen !== "fight") return false;
+  const def = roster.find(({ id }) => id === fighterId) || (fighterId === ARCADE_BOSS_ID ? arcadeBoss : null);
+  const kit = getFighterKit(fighterId);
+  if (!kit) return false;
+  moveListOverlay.open = true;
+  moveListOverlay.fighterId = fighterId;
+  $("#moveListOverlayName").textContent = def?.name || fighterId.toUpperCase();
+  $("#moveListOverlayStyle").textContent = `${state.controlStyle.toUpperCase()} CONTROLS`;
+  $("#moveListOverlayIdentity").innerHTML = `<strong>${kit.archetype}</strong> · ${kit.summary}`;
+  $("#moveListOverlayRows").innerHTML = moveListMarkup(fighterId);
+  $("#moveListOverlayExtras").innerHTML = [
+    ["THROWABLE", commandLabel("throwObject", state.controlStyle)],
+    ["STAGE WEAPON", commandLabel("stageWeapon", state.controlStyle)],
+    ["DASH", commandLabel("dash", state.controlStyle)],
+    ["TAUNT", commandLabel("taunt", state.controlStyle)],
+    ["PERFECT GUARD", commandLabel("perfectGuard", state.controlStyle)],
+    ["GUARD REVERSAL", commandLabel("guardReversal", state.controlStyle)],
+  ].map(([name, command]) => `<span><b>${name}</b>${command}</span>`).join("");
+  overlay.hidden = false;
+  $("#moveListOverlayClose")?.focus?.({ preventScroll: true });
+  return true;
+}
+
+function closeMoveListOverlay() {
+  const overlay = $("#moveListOverlay");
+  if (!overlay || !moveListOverlay.open) return false;
+  moveListOverlay.open = false;
+  overlay.hidden = true;
+  $("#pauseMoveListButton")?.focus?.({ preventScroll: true });
+  return true;
 }
 
 function arcadeOpponentDef(match = currentArcadeMatch(state.arcadeRun)) {
@@ -10833,6 +10974,8 @@ function showScreen(name) {
     state.pauseReason = "";
     $("#pausePanel").hidden = true;
     $("#pauseReason").hidden = true;
+    closeMoveListOverlay();
+    hideControlCard();
   }
   $("#hud").classList.toggle("hidden", !playing);
   $("#hud").setAttribute("aria-hidden", String(!playing));
@@ -10882,6 +11025,9 @@ function startSelect(mode) {
   state.survivalRun = null;
   state.teamBattle = null;
   state.teamPicks = [[], []];
+  state.teamCpu = false;
+  state.teamChoicePending = false;
+  renderTeamOpponentChoice();
   dailySession.active = false;
   endScoreRun();
   if (state.mode === "training") {
@@ -10937,6 +11083,9 @@ function chooseFighter(index, palette = 0) {
     return;
   }
   if (state.mode === "team") {
+    // 5.1 (sweep #32): P1's third pick raises the VS CPU / VS PLAYER 2
+    // choice; nothing else on the roster answers until it is made.
+    if (state.teamChoicePending) return;
     const side = state.locks[0] ? 1 : 0;
     const team = state.teamPicks[side];
     if (team.includes(roster[index].id) || team.length >= TEAM_RULES.teamSize) return;
@@ -10946,12 +11095,18 @@ function chooseFighter(index, palette = 0) {
     if (team.length >= TEAM_RULES.teamSize) {
       state.locks[side] = true;
       state.selectingPlayer = 1;
+      if (side === 0) {
+        state.teamChoicePending = true;
+        renderTeamOpponentChoice();
+      }
     }
     $("#selectPrompt").textContent = state.locks[0] && state.locks[1]
       ? "BLOCK WAR · TEAMS SET — STAGE SELECT"
-      : state.locks[0]
-        ? `BLOCK WAR · PLAYER 2 — PICK 3 (${state.teamPicks[1].length + 1}/3)`
-        : `BLOCK WAR · PLAYER 1 — PICK 3 (${state.teamPicks[0].length + 1}/3)`;
+      : state.teamChoicePending
+        ? "BLOCK WAR · YOUR THREE ARE SET — WHO'S ACROSS THE STREET?"
+        : state.locks[0]
+          ? `BLOCK WAR · PLAYER 2 — PICK 3 (${state.teamPicks[1].length + 1}/3)`
+          : `BLOCK WAR · PLAYER 1 — PICK 3 (${state.teamPicks[0].length + 1}/3)`;
     sound("select");
     const lockedCard = $(`.fighter-card[data-index="${index}"]`);
     if (lockedCard) {
@@ -10996,6 +11151,62 @@ function chooseFighter(index, palette = 0) {
   // completes the pair, in which case the VS slam calls both names instead.
   if (!(state.locks[0] && state.locks[1])) announcerSay(`${roster[index].id}-name`);
   updateRosterUI();
+}
+
+// 5.1 (sweep #32): the two-button opponent prompt on the Block War select
+// screen. VS CPU drafts three fighters P1 did not pick (draftCpuTeam over
+// state.rng — seedMatch reseeds at FIGHT, so the draw never leaks into the
+// match stream), reveals them with the lock-in stamp one after another and
+// raises the difficulty bar; VS PLAYER 2 hands the cursor to the second seat
+// exactly as before.
+function renderTeamOpponentChoice() {
+  const choice = $("#teamOpponentChoice");
+  if (!choice) return;
+  const visible = state.screen === "select" && state.mode === "team" && state.teamChoicePending;
+  choice.hidden = !visible;
+  if (visible) $("[data-team-opponent='cpu']")?.focus?.({ preventScroll: true });
+}
+
+function focusTeamOpponentChoice(delta = 0) {
+  const buttons = $$("[data-team-opponent]");
+  if (!buttons.length) return null;
+  const current = Math.max(0, buttons.indexOf(document.activeElement));
+  const next = buttons[(current + delta + buttons.length) % buttons.length];
+  next.focus?.({ preventScroll: true });
+  return next;
+}
+
+function chooseTeamOpponent(kind = "cpu") {
+  if (state.mode !== "team" || !state.teamChoicePending) return false;
+  unlockAudio();
+  state.teamChoicePending = false;
+  if (kind === "cpu") {
+    const drafted = draftCpuTeam(state.teamPicks[0], roster.map(({ id }) => id), () => state.rng.nextFloat());
+    state.teamPicks[1] = drafted;
+    state.teamCpu = true;
+    state.locks[1] = true;
+    state.picks[1] = Math.max(0, rosterIndexById(drafted[drafted.length - 1]));
+    $("#selectPrompt").textContent = "BLOCK WAR · CPU DRAFTED — STAGE SELECT";
+    drafted.forEach((id, order) => {
+      window.setTimeout(() => {
+        if (state.screen !== "select" || state.mode !== "team") return;
+        const card = $(`.fighter-card[data-index="${rosterIndexById(id)}"]`);
+        if (card) {
+          restartCssAnimation(card, "locked-flash");
+          hudFxDebug.selectSlams += 1;
+        }
+      }, 140 + order * 260);
+    });
+    modeFxDebug.teamDrafts += 1;
+  } else {
+    state.teamCpu = false;
+    $("#selectPrompt").textContent = `BLOCK WAR · PLAYER 2 — PICK 3 (${state.teamPicks[1].length + 1}/3)`;
+  }
+  sound("select");
+  renderTeamOpponentChoice();
+  syncDifficultyUi();
+  updateRosterUI();
+  return true;
 }
 
 function updateRosterUI() {
@@ -11086,7 +11297,7 @@ function startMatch(resetSet = true) {
   // then lock the House Rules config for this match BEFORE the fighters are
   // built (Turbo scales movement at makeFighter time).
   if (state.mode === "team" && !state.teamBattle && state.teamPicks[0].length === TEAM_RULES.teamSize) {
-    beginTeamBattle(false);
+    beginTeamBattle(state.teamCpu);
   }
   applyMatchRulesForMatch();
   resetRoundScoreTracking();
@@ -11139,6 +11350,11 @@ function startMatch(resetSet = true) {
   showScreen("fight");
   // After showScreen: the touch HUD only exists (display: flex) once the
   // fight screen has marked it .playing, and the coach checks exactly that.
+  // 5.1: the first-run control card is raised here, on startMatch's own
+  // round-1 path (resetRound only serves later rounds and round restarts),
+  // and BEFORE the flick tip so the two coaching lines never share the
+  // screen — maybeCoachTouchFlick defers while the card is up.
+  if (!rollbackResimulating) maybeShowControlCard();
   maybeCoachTouchFlick();
   updateTrainingUi();
   const arcadeMatch = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
@@ -11340,6 +11556,12 @@ function resetRound() {
   scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "", 0.75);
   }, 1050);
+  // 5.1: a later round always clears the card; round 1 of the first fight
+  // may raise it (render-only, guarded — resetRound runs on a sim path).
+  if (!rollbackResimulating) {
+    if (state.round === 1) maybeShowControlCard();
+    else hideControlCard();
+  }
 }
 
 function announce(main, sub = "", duration = 1, { speak = null } = {}) {
@@ -13031,6 +13253,95 @@ function updateHud() {
   setTouchPrompt(finishing ? "final" : superReady ? "super" : "");
 }
 
+// ---------------------------------------------------------------------------
+// 5.1 (sweep #30): first-run control card. A newcomer used to reach ROUND 1
+// without ever being told J/K/N/M or "hold away to block". The card sits in
+// a corner through the first human fight's round-1 intro and the opening
+// seconds (it is NOT allowed to stretch the intro clock: a replay of that
+// fight would re-run with the stock 2.1 s intro and desync), shows the four
+// buttons for the device actually in the player's hands — keyboard bindings,
+// pad glyphs in the detected label set, or the touch cluster — plus the
+// block rule, the active style's special command and the grab. Dismissed by
+// a tap/click, Escape, or its own timer; shown once per install.
+// ---------------------------------------------------------------------------
+const CONTROL_CARD_KEY = "final-blow-control-card";
+const CONTROL_CARD_MS = 9500;
+const controlCard = { visible: false, timer: 0, shows: 0 };
+
+function controlCardSeen() {
+  try {
+    return localStorage.getItem(CONTROL_CARD_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function controlCardDevice() {
+  if (assignedPadBySide[0] !== null || getPad(0)) return "pad";
+  if (getComputedStyle($("#touchControls")).display !== "none") return "touch";
+  return "keyboard";
+}
+
+function controlCardLines(device = controlCardDevice()) {
+  const style = state.controlStyle;
+  const buttons = device === "pad"
+    ? ATTACK_BUTTONS.map((action) => `${padButtonLabel(padMap[action], activePadLabelSet())} ${BUTTON_LABELS[action]}`)
+    : device === "keyboard"
+      ? ATTACK_BUTTONS.map((action) => `${formatKeyCode(keyMaps[0][action])} ${BUTTON_LABELS[action]}`)
+      : ["LP", "HP", "LK", "HK"].map((label) => `${label} PAD`);
+  const move = device === "keyboard"
+    ? `${formatKeyCode(keyMaps[0].left)} ${formatKeyCode(keyMaps[0].right)} WALK · ${formatKeyCode(keyMaps[0].up)} JUMP · ${formatKeyCode(keyMaps[0].down)} CROUCH`
+    : device === "pad" ? "STICK OR D-PAD WALKS · UP JUMPS · DOWN CROUCHES"
+      : "LEFT PAD WALKS · UP JUMPS · DOWN CROUCHES";
+  return [
+    ["MOVE", move],
+    ["BLOCK", "HOLD AWAY · DOWN-AWAY FOR LOWS"],
+    ["BUTTONS", buttons.join(" · ")],
+    ["SPECIAL", commandLabel("commandSpecial", style)],
+    ["GRAB", "CLOSE + TOWARD + LP"],
+  ];
+}
+
+function showControlCard() {
+  const card = $("#controlCard");
+  if (!card) return false;
+  $("#controlCardLines").innerHTML = controlCardLines()
+    .map(([name, text]) => `<span><b>${name}</b>${text}</span>`).join("");
+  card.hidden = false;
+  controlCard.visible = true;
+  controlCard.shows += 1;
+  window.clearTimeout(controlCard.timer);
+  controlCard.timer = window.setTimeout(() => hideControlCard(), CONTROL_CARD_MS);
+  return true;
+}
+
+function hideControlCard() {
+  const card = $("#controlCard");
+  window.clearTimeout(controlCard.timer);
+  if (!card || !controlCard.visible) return false;
+  controlCard.visible = false;
+  card.hidden = true;
+  // The touch flick tip waited its turn behind the card (two coaching lines
+  // at once is noise); it takes the prompt now if the pad is on screen.
+  if (state.screen === "fight" && !state.paused) maybeCoachTouchFlick();
+  return true;
+}
+
+function maybeShowControlCard() {
+  // No screen check here: startMatch announces ROUND 1 a few lines before
+  // showScreen("fight"), and showScreen only tears the card down when the
+  // destination is NOT the fight screen.
+  if (state.round !== 1) return false;
+  if (!["arcade", "versus", "survival", "team"].includes(state.mode)) return false;
+  if (replayPlayback.active || demoSession.active || controlCardSeen()) return false;
+  try {
+    localStorage.setItem(CONTROL_CARD_KEY, "1");
+  } catch {
+    // Storage refused: the card shows this once and again next load.
+  }
+  return showControlCard();
+}
+
 // 5.x phone flick-to-dash discoverability (sweep #41): a transient coaching
 // line on the touch prompt. The super and finish labels always outrank it —
 // the hint only fills the prompt while it would otherwise be empty, and it
@@ -13055,6 +13366,9 @@ const TOUCH_FLICK_COACH_LIMIT = 3;
 function maybeCoachTouchFlick() {
   if (state.mode === "demo" || replayPlayback.active) return;
   if (getComputedStyle($("#touchControls")).display === "none") return;
+  // 5.1: never alongside the first-run control card — hideControlCard()
+  // re-invokes this once the card is gone, so the tip is deferred, not lost.
+  if (controlCard.visible) return;
   let shown = 0;
   try {
     shown = Number(localStorage.getItem(TOUCH_FLICK_COACH_KEY)) || 0;
@@ -13076,7 +13390,7 @@ function setTouchPrompt(kind = "") {
   const actions = $(".touch-action");
   const hintActive = !kind && Boolean(touchHint.text) && performance.now() < touchHint.until;
   const label = kind === "final" ? "FINISH HIM · LP = A · LK = B · ANY DISTANCE"
-    : kind === "super" ? "SUPER READY · \u2193 \u2192 \u2193 \u2192 + PUNCH"
+    : kind === "super" ? `SUPER READY · ${commandLabel("super", state.controlStyle)}`
       : hintActive ? touchHint.text
         : "";
   prompt.textContent = label;
@@ -13195,7 +13509,18 @@ function updateTrainingUi(input = {}) {
     ? `PLAYING ${snapshot.recordingFrames}F` : `PLAY LOOP ${snapshot.recordingFrames || "—"}F`;
 }
 
+// 5.1 (sweep #31): the dialog's SPECIALS / ENHANCED / SUPER lines were static
+// classic copy. Elements carrying data-style-copy are templates rendered for
+// the live style whenever the option changes.
+function renderControlStyleCopy() {
+  $$("[data-style-copy]").forEach((element) => {
+    if (!element.dataset.template) element.dataset.template = element.textContent;
+    element.textContent = styleCopy(element.dataset.template, state.controlStyle);
+  });
+}
+
 function syncNewOptionsUi() {
+  renderControlStyleCopy();
   $("#goreToggle").checked = state.graphicFatalities;
   $("#stageWeaponToggle").checked = state.stageWeaponsEnabled;
   $("#controlStyleSelect").value = state.controlStyle;
@@ -14659,11 +14984,13 @@ function updateFighter(fighter, opponent, input, dt) {
       fighter.knockdownFrames = Math.max(1, fighter.knockdownFrames - WAKEUP_RULES.quickRiseFrames);
       if (!rollbackResimulating) mechFxDebug.quickRises += 1;
       spawnCombatText(fighter.x, fighter.y - fighter.height - 30, "QUICK RISE", fighter.def.accent);
+      if (!rollbackResimulating && state.mode === "training" && fighter.side === 0) schoolEvent({ type: "wake", option: "quick" });
     } else if (option === "delay") {
       fighter.wakeOption = "delay";
       fighter.knockdownFrames += WAKEUP_RULES.delayFrames;
       if (!rollbackResimulating) mechFxDebug.wakeDelays += 1;
       spawnCombatText(fighter.x, fighter.y - fighter.height - 30, "DELAYED", "#8a93a5");
+      if (!rollbackResimulating && state.mode === "training" && fighter.side === 0) schoolEvent({ type: "wake", option: "delay" });
     }
   }
   const flowSpeed = fighter.def.id === "ali" ? 1 + fighter.rhythmStacks * 0.045 : 1;
@@ -14688,7 +15015,10 @@ function updateFighter(fighter, opponent, input, dt) {
       && fighter.airHitstunFrames >= AIR_RECOVERY_RULES.minimumHitstunFrames) {
       const buffered = fighter.inputBuffer.consume(["light", "heavy", "special"], state.simulationTick);
       const pressed = Boolean(buffered || input.light || input.heavy || input.special);
-      if (canAirRecover(fighter, pressed)) performAirRecovery(fighter);
+      if (canAirRecover(fighter, pressed)) {
+        performAirRecovery(fighter);
+        if (!rollbackResimulating && state.mode === "training" && fighter.side === 0) schoolEvent({ type: "airTech" });
+      }
     }
   } else if (fighter.down || fighter.wakeupFrames > 0 || fighter.landingRecoveryFrames > 0 || fighter.throwTechFlashFrames > 0) {
     fighter.vx *= 0.72;
@@ -15306,6 +15636,20 @@ function triggerProjectile(projectile, victim) {
   applyViolenceResponse(impactTier, { blocked, counter });
   state.lastImpactSide = owner.side;
   projectile.hit = true;
+  // 5.1 FIGHT SCHOOL: thrown objects never went through observeTrainingHit,
+  // so THE JAWN and STREET FURNITURE observe the projectile impact here. The
+  // serial is offset past any fighter attackSerial so the dedupe latch can
+  // never mistake it for the swing that released it.
+  if (!rollbackResimulating && state.mode === "training" && owner.side === 0 && !blocked && !armored) {
+    schoolEvent({
+      type: "hit",
+      action: projectile.stageWeapon ? "stageWeapon" : projectile.throwable ? "throwObject" : "projectile",
+      limb: "punch",
+      attackSerial: 1000000 + state.simulationTick,
+      back: false,
+      dizzy: victim.dizzyFrames > 0,
+    });
+  }
   sound(blocked ? "block" : "hit-heavy", blocked ? victim : owner);
   updateHud();
 }
@@ -15644,7 +15988,11 @@ function tryPickUpStageWeapon(fighter, input) {
   const weapon = state.stageWeapon;
   if (!weapon || weapon.phase !== "ground") return false;
   if (fighter.carriedWeapon) return false;
-  if (isPassiveDifficulty(fighter.aiBrain?.difficulty)) return false;
+  // The passive dummy never arms itself — but makeFighter hands EVERY seat a
+  // brain, and FIGHT SCHOOL runs on "passive", so this guard used to refuse
+  // the human player too (measured: standing 5 px over the object in the
+  // STREET FURNITURE lesson, ↓ + HP did nothing). CPU-controlled seats only.
+  if (sideIsCpuControlled(fighter.side) && isPassiveDifficulty(fighter.aiBrain?.difficulty)) return false;
   if (!input.down || !input.heavy) return false;
   const profile = stageWeaponProfile();
   if (!canPickUpWeapon(fighter, weapon, { range: profile.pickupRange, scale: FIGHTER_SCALE })) return false;
@@ -15658,6 +16006,7 @@ function tryPickUpStageWeapon(fighter, input) {
   fighter.inputBuffer.consume("heavy", state.simulationTick);
   spawnCombatText(fighter.x, fighter.y - fighter.height - 40, profile.name, fighter.def.accent);
   if (!rollbackResimulating) objectSound(profile.style);
+  if (!rollbackResimulating && state.mode === "training" && fighter.side === 0) schoolEvent({ type: "pickup" });
   updateHud();
   return true;
 }
@@ -15973,7 +16322,9 @@ function registerAliFlow(attacker, attack) {
 // owned; medals/school are guarded meta on the announce() pattern.
 function observeTrainingHit(attacker, victim, attack) {
   if (state.mode !== "training" || attacker.side !== 0) return;
-  const action = attack.kitAction || attack.kind;
+  // 5.1: the guard reversal is an advanced move with no kitAction, so it used
+  // to report as a plain "special" — the SPLIT SECOND lesson needs its name.
+  const action = attack.kitAction || (attack.profileId === "guard-reversal" ? "guardReversal" : attack.kind);
   const limb = attack.limb || "punch";
   const trialProgress = recordTrainingTrialHit(state.training, {
     fighterId: attacker.kitId,
@@ -16039,7 +16390,7 @@ function hit(attacker, victim, attack, collision) {
   // LOW/OVERHEAD combat-text hook level), landed-hit lessons below. Both are
   // meta observations on the announce() guard pattern.
   if (!rollbackResimulating && state.mode === "training" && blocked && victim.side === 0) {
-    schoolEvent({ type: "block", level: attack.level });
+    schoolEvent({ type: "block", level: attack.level, perfect });
   }
   if (!blocked) observeTrainingHit(attacker, victim, attack);
   const armored = !blocked
@@ -26639,7 +26990,9 @@ function renderDifficultyOptions() {
 
 // The picker is only meaningful when a CPU is actually in the match.
 function facesCpuOpponent() {
-  return state.mode === "arcade" || (state.mode === "training" && state.training.dummyMode === "cpu");
+  return state.mode === "arcade"
+    || (state.mode === "team" && state.teamCpu)
+    || (state.mode === "training" && state.training.dummyMode === "cpu");
 }
 
 function syncDifficultyUi() {
@@ -28986,6 +29339,7 @@ function setPaused(paused, reason = "") {
   state.paused = Boolean(paused);
   state.pauseReason = state.paused ? String(reason || state.pauseReason || "") : "";
   $("#pausePanel").hidden = !state.paused;
+  if (!state.paused) closeMoveListOverlay();
   $("#pauseReason").hidden = !state.pauseReason;
   $("#pauseReason").textContent = state.pauseReason;
   $("#touchControls").classList.toggle("paused", state.paused);
@@ -29051,12 +29405,34 @@ function titleKeyboard(event) {
   }
   if (state.screen === "fight" && (event.code === "Escape" || event.code === "KeyP")) {
     event.preventDefault();
+    // 5.1: the pause-menu move list closes first; a second press resumes.
+    if (moveListOverlay.open) {
+      closeMoveListOverlay();
+      return;
+    }
+    if (controlCard.visible && !state.paused) hideControlCard();
     setPaused(!state.paused);
     return;
   }
   if (event.code === "Escape") {
     if ($("#controlsDialog").open) return;
     if (state.screen !== "title") showScreen("title");
+  }
+  if (state.screen === "select" && state.teamChoicePending) {
+    // 5.1: the Block War opponent prompt owns the keyboard — arrows move
+    // between its two buttons, Enter / any attack key confirms the focused one.
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) {
+      event.preventDefault();
+      focusTeamOpponentChoice(["ArrowLeft", "ArrowUp"].includes(event.code) ? -1 : 1);
+      return;
+    }
+    const attackKey = keyMaps.some((map) => [map.lp, map.hp, map.lk, map.hk].includes(event.code));
+    if (event.code === "Enter" || event.code === "Space" || attackKey) {
+      event.preventDefault();
+      const focused = $$("[data-team-opponent]").includes(document.activeElement) ? document.activeElement : null;
+      chooseTeamOpponent(focused?.dataset.teamOpponent || "cpu");
+    }
+    return;
   }
   if (state.screen === "select" && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) {
     event.preventDefault();
@@ -29205,6 +29581,7 @@ function menuPadButtonEdge(pad, slot, index) {
 function menuFocusRoot() {
   const dialog = $("#controlsDialog");
   if (dialog.open) return dialog;
+  if (state.screen === "fight" && state.paused && moveListOverlay.open) return $("#moveListOverlay");
   if (state.screen === "fight") return state.paused ? $("#pausePanel") : null;
   return $(`#${state.screen}Screen`);
 }
@@ -29273,6 +29650,20 @@ function handleSelectPadEvent(kind, padIndex) {
   }
   const twoPlayer = ["versus", "team"].includes(state.mode);
   if (padIndex === 1 && !twoPlayer) return;
+  if (state.teamChoicePending) {
+    // 5.1: pad on the Block War opponent prompt — left/right between the two
+    // buttons, A/Y confirms the focused one. Pad 0 only (P2's pad has no say).
+    if (padIndex !== 0) return;
+    if (kind === "left" || kind === "right" || kind === "up" || kind === "down") {
+      focusTeamOpponentChoice(kind === "left" || kind === "up" ? -1 : 1);
+      padNavDebug.moves += 1;
+    } else if (kind === "confirm" || kind === "altConfirm") {
+      padNavDebug.confirms += 1;
+      const focused = $$("[data-team-opponent]").includes(document.activeElement) ? document.activeElement : null;
+      chooseTeamOpponent(focused?.dataset.teamOpponent || "cpu");
+    }
+    return;
+  }
   // Pad 0 drives whichever side is currently picking (the keyboard-cursor
   // rule); a second pad always owns P2's pick in the two-player modes.
   const side = padIndex === 1 ? 1 : (state.locks[0] ? 1 : 0);
@@ -29553,6 +29944,12 @@ $("#onlineReadyButton").addEventListener("click", toggleOnlineReady);
 $("#onlineDisconnectButton").addEventListener("click", () => disconnectOnline(true));
 $("#controlsButton").addEventListener("click", () => { unlockAudio(); $("#controlsDialog").showModal(); });
 $("#moveListSelect").addEventListener("change", (event) => renderMoveList(event.target.value));
+$("#pauseMoveListButton")?.addEventListener("click", () => openMoveListOverlay());
+$("#moveListOverlayClose")?.addEventListener("click", () => closeMoveListOverlay());
+$("#titleNewcomerButton")?.addEventListener("click", () => startFightSchool());
+$("#controlCardClose")?.addEventListener("click", () => hideControlCard());
+$("#controlCard")?.addEventListener("click", () => hideControlCard());
+$$("[data-team-opponent]").forEach((button) => button.addEventListener("click", () => chooseTeamOpponent(button.dataset.teamOpponent)));
 $("#musicToggle").addEventListener("change", () => {
   unlockAudio();
   syncMusic();
@@ -29785,16 +30182,7 @@ $("#trainingTrialResetButton").addEventListener("click", () => {
 });
 $("#trainingResetButton").addEventListener("click", () => resetTrainingPosition(true));
 // Training can force this round's weapon onto the floor for practice.
-$("#trainingWeaponButton").addEventListener("click", () => {
-  if (!state.stageWeaponsEnabled) setStageWeapons(true);
-  if (!state.stageWeapon) resetStageWeapon();
-  if (!state.stageWeapon) return;
-  state.stageWeapon.phase = "ground";
-  state.stageWeapon.frames = 0;
-  state.stageWeapon.holder = -1;
-  state.fighters.forEach((fighter) => { fighter.carriedWeapon = null; fighter.carryFrames = 0; });
-  updateHud();
-});
+$("#trainingWeaponButton").addEventListener("click", () => spawnTrainingWeapon());
 $("#musicSelect").addEventListener("change", (event) => {
   unlockAudio();
   chooseMusic(event.target.value);
@@ -30862,6 +31250,27 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     },
     trialDemoActive() {
       return trialDemo.active;
+    },
+    // --- 5.1 modes & onboarding probes -------------------------------------
+    controlCard(device = null) {
+      return { visible: controlCard.visible, shows: controlCard.shows, seen: controlCardSeen(), device: controlCardDevice(), lines: controlCardLines(device || controlCardDevice()) };
+    },
+    controlCardReset() {
+      localStorage.removeItem(CONTROL_CARD_KEY);
+      hideControlCard();
+      return true;
+    },
+    moveListOverlay(open = true) {
+      if (open) return openMoveListOverlay() && { ...moveListOverlay, rows: $$("#moveListOverlayRows .frame-row").length };
+      closeMoveListOverlay();
+      return { ...moveListOverlay };
+    },
+    teamChoice(kind = "cpu") {
+      const ok = chooseTeamOpponent(kind);
+      return { ok, cpu: state.teamCpu, pending: state.teamChoicePending, picks: state.teamPicks.map((team) => [...team]), difficultyBar: !$("#difficultyBar").hidden };
+    },
+    schoolStepLabel(lessonIndex = 0, stepIndex = 0, style = state.controlStyle) {
+      return fightSchoolStepLabel(FIGHT_SCHOOL_LESSONS[lessonIndex]?.steps[stepIndex], style);
     },
     trialMedals() {
       return JSON.parse(JSON.stringify(trialMedals));
@@ -32090,7 +32499,9 @@ if (!commissionerUnlocked() && blackBookLedger.tallies.finalArcadeClears >= 1) {
   unlockCommissioner({ quiet: true });
 }
 setupRoster();
+buildMoveListSelect();
 renderMoveList();
+renderControlStyleCopy();
 // ---------------------------------------------------------------------------
 // CINEMA 3D bridge — experimental Three.js presentation renderer.
 // The module lazy-loads on first activation (toggle or ?renderer=3d) so the

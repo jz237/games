@@ -1,4 +1,5 @@
-import { getKitMoveProfile, prettyProfileName } from "./fighter-kits.mjs";
+import { FIGHTER_KITS, getKitMoveProfile, prettyProfileName } from "./fighter-kits.mjs";
+import { styleCopy } from "./controls.mjs";
 
 export const TRAINING_DUMMY_MODES = Object.freeze([
   "stand", "guard", "guard-after-first", "crouch", "jump",
@@ -52,6 +53,17 @@ const BASE_COMBO_TRIALS = {
     trial("massive-confirm", "MASSIVE CONFIRM", [["light", "MIC ONE"], ["heavy", "CHAIN WHIP"], ["commandSpecial", "MASSIVE STEP"]]),
     trial("bassline-cashout", "BASSLINE CASHOUT", [["launcher", "BASSLINE RISER"], ["super", "WEST STAINES MASSIVE"]]),
   ]),
+  // 5.1 (sweep #33): the ninth and tenth kits had no ladder at all — the lab
+  // built an empty <select> and read "TRIAL: —" for a base-roster fighter.
+  // Same bronze pair as the eight above, named from their own kit tables.
+  devil: Object.freeze([
+    trial("howl-confirm", "HOWL CONFIRM", [["light", "TALON JAB"], ["heavy", "HORN HOOK"], ["commandSpecial", "PINE HOWL"]]),
+    trial("barrens-cashout", "BARRENS CASHOUT", [["launcher", "UPDRAFT TALON"], ["super", "BARRENS CURSE"]]),
+  ]),
+  commissioner: Object.freeze([
+    trial("gavel-confirm", "GAVEL CONFIRM", [["light", "CANE JAB"], ["heavy", "GAVEL CRACK"], ["commandSpecial", "LEDGER LANCE"]]),
+    trial("authority-cashout", "AUTHORITY CASHOUT", [["launcher", "OVERRULE"], ["super", "FINAL AUTHORITY"]]),
+  ]),
 };
 
 /**
@@ -68,6 +80,20 @@ function kitMoveLabel(fighterId, action, context = {}) {
 
 function generatedTrialsForFighter(fighterId) {
   const label = (action, context) => kitMoveLabel(fighterId, action, context);
+  // 5.1 (sweep #33): EX SPENDER chains an EX into the command special, so the
+  // EX has to leave the dummy STANDING inside the demo's 148-frame gap. The
+  // devil's EX Piney Screech launches (airborne for 25 hitstun, wall-carried
+  // to the corner, down until ~165 frames after impact) and the scripted Pine
+  // Howl at +148 whiffed over the body every run; the Commissioner's Cane
+  // Check EX is a short ground knockdown and lands on time. So the first EX
+  // flavour that does not knock down is preferred when the kit has one with
+  // real hitboxes and damage (only the devil is affected: Wing Flit EX), and
+  // everyone else keeps the base EX their ladder shipped with.
+  const exStanding = ["enhanced", "enhancedCommandSpecial", "enhancedBackSpecial"].find((action) => {
+    const profile = getKitMoveProfile(fighterId, action);
+    return profile?.hitboxes?.length && (profile.damage || 0) > 0 && !profile.knockdown;
+  });
+  const exAction = getKitMoveProfile(fighterId, "enhanced")?.knockdown && exStanding ? exStanding : "enhanced";
   const trials = [
     trial(`${fighterId}-road-work`, "ROAD WORK", [
       ["driveHeavy", label("driveHeavy")],
@@ -83,7 +109,7 @@ function generatedTrialsForFighter(fighterId) {
       ["driveHeavy", label("driveHeavy")],
     ], "silver"),
     trial(`${fighterId}-ex-spender`, "EX SPENDER", [
-      ["enhanced", label("enhanced")],
+      [exAction, label(exAction)],
       ["commandSpecial", label("commandSpecial")],
     ], "gold"),
     trial(`${fighterId}-full-grit-finale`, "FULL GRIT FINALE", [
@@ -105,10 +131,13 @@ function generatedTrialsForFighter(fighterId) {
   return trials;
 }
 
+// 5.1: the ladder is generated for EVERY kit, not just the ids with an
+// authored bronze pair — a kit added without one still gets its six
+// generated trials instead of vanishing from the mode.
 export const TRAINING_COMBO_TRIALS = Object.freeze(Object.fromEntries(
-  Object.entries(BASE_COMBO_TRIALS).map(([fighterId, base]) => [
+  [...new Set([...Object.keys(BASE_COMBO_TRIALS), ...Object.keys(FIGHTER_KITS)])].map((fighterId) => [
     fighterId,
-    Object.freeze([...base, ...generatedTrialsForFighter(fighterId)]),
+    Object.freeze([...(BASE_COMBO_TRIALS[fighterId] || []), ...generatedTrialsForFighter(fighterId)]),
   ]),
 ));
 
@@ -487,11 +516,24 @@ function freezeDeep(value) {
  * The scripted curriculum. Step kinds:
  *   walk     — hold the direction for `frames` sim ticks
  *   block    — block a dummy attack of the given level (dummyScript arms the
- *              scripted playback attack for the step)
- *   hit      — land an attack matching action/limb/back/requireDizzy
+ *              scripted playback attack for the step); `level` omitted means
+ *              any level, `perfect: true` needs a Perfect Guard (5.1)
+ *   hit      — land an attack matching action (or any of `actions`) / limb /
+ *              back / requireDizzy
  *   finisher — execute the Final Blow after the KO
+ *   pickup   — pick the stage weapon up off the floor (5.1)
+ *   airTech  — tech out of a juggle (5.1)
+ *   wake     — choose the wake-up `option` ("quick" | "delay") (5.1)
  * Setup hooks (`setup`) are handled by the game: "dizzy" stuns the dummy,
- * "lowHealth" drops it to a KO-able sliver with auto-life off.
+ * "lowHealth" drops it to a KO-able sliver with auto-life off, "weapon" keeps
+ * the stage weapon on the floor (5.1).
+ *
+ * 5.1 (sweep #31): labels are TEMPLATES — `{commandSpecial}` and friends are
+ * filled by fightSchoolStepLabel() with the live control style's command, so
+ * a MODERN player reads LP&LK where CLASSIC reads ↓ → + PUNCH. The seven
+ * original lessons keep their ids; lessons 8-12 add the Grit economy, the
+ * personal throwable, the stage weapon and the DEPTH defensive tools that
+ * the Black Book already scores but the school never introduced.
  */
 export const FIGHT_SCHOOL_LESSONS = freezeDeep([
   {
@@ -528,7 +570,7 @@ export const FIGHT_SCHOOL_LESSONS = freezeDeep([
     name: "THE QUARTER CIRCLE",
     intro: "Roll down to forward, then punch. Smooth, not fast.",
     steps: [
-      { id: "land-qcf", kind: "hit", action: "commandSpecial", label: "LAND \u2193 \u2192 + PUNCH" },
+      { id: "land-qcf", kind: "hit", action: "commandSpecial", label: "LAND {commandSpecial}" },
     ],
   },
   {
@@ -558,7 +600,63 @@ export const FIGHT_SCHOOL_LESSONS = freezeDeep([
       { id: "execute-finisher", kind: "finisher", label: "KO \u00b7 THEN LP OR LK" },
     ],
   },
+  {
+    id: "throwable",
+    name: "THE JAWN",
+    intro: "Every fighter carries something. Two throws a round \u2014 the pips under your Grit bar count them.",
+    steps: [
+      { id: "land-jawn", kind: "hit", action: "throwObject", label: "LAND {throwObject}" },
+      { id: "jawn-confirm", kind: "hit", action: "heavy", limb: "punch", label: "WALK IN BEHIND IT \u00b7 LAND HP" },
+    ],
+  },
+  {
+    id: "grit-economy",
+    name: "GRIT ECONOMY",
+    intro: "Grit pays for the big stuff. 25 buys an EX version of any special, 100 buys the super.",
+    steps: [
+      { id: "land-ex", kind: "hit", actions: ["enhanced", "enhancedCommandSpecial", "enhancedBackSpecial", "enhancedLauncher"], label: "LAND AN EX \u00b7 {enhanced}" },
+      { id: "land-super", kind: "hit", action: "super", label: "CASH OUT \u00b7 {super}" },
+    ],
+  },
+  {
+    id: "split-second",
+    name: "SPLIT SECOND",
+    intro: "Block late on purpose. Away inside four frames of the hit is a Perfect Guard \u2014 no chip, +3 Grit. Then buy your way out of blockstun.",
+    steps: [
+      { id: "perfect-one", kind: "block", perfect: true, dummyScript: "overhead", label: "PERFECT GUARD \u00b7 {perfectGuard}" },
+      { id: "perfect-two", kind: "block", perfect: true, dummyScript: "overhead", label: "AGAIN \u00b7 WATCH THE CYAN RING" },
+      { id: "guard-reversal", kind: "hit", action: "guardReversal", dummyScript: "overhead", label: "GUARD REVERSAL \u00b7 {guardReversal} \u00b7 30 GRIT" },
+    ],
+  },
+  {
+    id: "off-the-floor",
+    name: "OFF THE FLOOR",
+    intro: "Getting hit is a decision too. Tech the juggle, then pick how you stand up.",
+    steps: [
+      { id: "air-tech", kind: "airTech", dummyScript: "launcher", label: "EAT THE LAUNCHER \u00b7 {airTech}" },
+      { id: "quick-rise", kind: "wake", option: "quick", dummyScript: "sweep", label: "EAT THE SWEEP \u00b7 {quickRise}" },
+      { id: "delay-wake", kind: "wake", option: "delay", dummyScript: "sweep", label: "SWEPT AGAIN \u00b7 {delayWake}" },
+    ],
+  },
+  {
+    id: "street-furniture",
+    name: "STREET FURNITURE",
+    intro: "Every stage drops one object a round. Stand over it, pick it up, throw it \u2014 toward for the hard throw.",
+    setup: "weapon",
+    steps: [
+      { id: "pick-up", kind: "pickup", label: "PICK IT UP \u00b7 {stageWeapon}" },
+      { id: "throw-it", kind: "hit", action: "stageWeapon", label: "TOWARD + HP \u00b7 LAND THE THROW" },
+    ],
+  },
 ]);
+
+/**
+ * The label a step shows for `style` — templates resolve through the shared
+ * command table so every surface (panel, announcer, tests) agrees.
+ */
+export function fightSchoolStepLabel(step, style = "classic") {
+  return styleCopy(step?.label || "", style);
+}
 
 // Philly corner-man voice. The game draws these through a no-repeat bag so a
 // line never lands back-to-back.
@@ -633,11 +731,15 @@ export function fightSchoolObserve(school, event = {}) {
       if (school.walkFrames >= step.frames) advanced = true;
     }
   } else if (step.kind === "block" && event.type === "block") {
-    if (event.level === step.level) advanced = true;
+    const levelOk = !step.level || event.level === step.level;
+    const perfectOk = !step.perfect || Boolean(event.perfect);
+    if (levelOk && perfectOk) advanced = true;
   } else if (step.kind === "hit" && event.type === "hit") {
     if (Number.isInteger(event.attackSerial) && event.attackSerial !== school.lastAttackSerial) {
       school.lastAttackSerial = event.attackSerial;
-      const actionOk = !step.action || event.action === step.action;
+      const actionOk = step.actions
+        ? step.actions.includes(event.action)
+        : !step.action || event.action === step.action;
       const limbOk = !step.limb || step.limb === (event.limb || "punch");
       const backOk = step.back === undefined || Boolean(event.back) === step.back;
       const dizzyOk = !step.requireDizzy || Boolean(event.dizzy);
@@ -645,6 +747,12 @@ export function fightSchoolObserve(school, event = {}) {
     }
   } else if (step.kind === "finisher" && event.type === "finisher") {
     advanced = true;
+  } else if (step.kind === "pickup" && event.type === "pickup") {
+    advanced = true;
+  } else if (step.kind === "airTech" && event.type === "airTech") {
+    advanced = true;
+  } else if (step.kind === "wake" && event.type === "wake") {
+    if (event.option === step.option) advanced = true;
   }
   if (!advanced) return null;
   school.walkFrames = 0;
@@ -664,7 +772,7 @@ export function fightSchoolObserve(school, event = {}) {
   };
 }
 
-export function fightSchoolSnapshot(school) {
+export function fightSchoolSnapshot(school, { style = "classic" } = {}) {
   if (!school) return null;
   const lesson = fightSchoolLesson(school);
   return {
@@ -675,7 +783,7 @@ export function fightSchoolSnapshot(school) {
     step: school.step,
     steps: lesson ? lesson.steps.map((entry, index) => ({
       id: entry.id,
-      label: entry.label,
+      label: fightSchoolStepLabel(entry, style),
       complete: index < school.step,
     })) : [],
     completed: { ...school.completed },

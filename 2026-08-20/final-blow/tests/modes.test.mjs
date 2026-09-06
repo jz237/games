@@ -12,6 +12,7 @@ import {
   createDailyPlan,
   createSurvivalRun,
   createTeamBattle,
+  draftCpuTeam,
   currentSurvivalBout,
   currentTeamPair,
   dailyDateString,
@@ -363,6 +364,7 @@ testSurvivalMilestones();
 testSurvivalAiRamp();
 testTeamRotation();
 testTeamValidation();
+testCpuTeamDraft();
 testMutatorNormalization();
 testMatchRulesRoundTrip();
 testTurboMovementScale();
@@ -371,3 +373,32 @@ testTallyMath();
 testHighScoreTable();
 
 console.log("Final Blow game-mode tests passed");
+
+// 5.1 (sweep #32): the auto-drafted CPU Block War team — three fighters the
+// player did not pick, reproducible under a seeded draw, always a legal team
+// for createTeamBattle.
+function testCpuTeamDraft() {
+  const rosterIds = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "devil", "commissioner"];
+  const picks = ["deathblow", "jez", "alan"];
+  const seeded = () => {
+    let x = 0.137;
+    return () => { x = (x * 9301 + 0.49297) % 1; return x; };
+  };
+  const drafted = draftCpuTeam(picks, rosterIds, seeded());
+  assert.equal(drafted.length, 3);
+  assert.equal(new Set(drafted).size, 3, "no repeats");
+  for (const id of drafted) assert.ok(!picks.includes(id), `${id} was not the player's pick`);
+  for (const id of drafted) assert.ok(rosterIds.includes(id));
+  assert.deepEqual(draftCpuTeam(picks, rosterIds, seeded()), drafted, "same draw, same draft");
+  const battle = createTeamBattle(picks, drafted);
+  assert.deepEqual(battle.teams[1], drafted);
+  // A different draw usually drafts a different trio (10 fighters, 7 spare).
+  const other = draftCpuTeam(picks, rosterIds, () => 0.91);
+  assert.equal(other.length, 3);
+  // Degenerate roster: fewer than three unpicked ids fill from the picks
+  // rather than returning a short team.
+  const tiny = draftCpuTeam(picks, ["deathblow", "jez", "alan", "post"], () => 0.5);
+  assert.equal(tiny.length, 3);
+  assert.equal(tiny[0], "post");
+  assert.equal(new Set(tiny).size, 3);
+}

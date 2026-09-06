@@ -332,3 +332,17 @@ when deep in the clinch with nothing incoming). `selectKitAiIntent` takes
 AI is unchanged. Measured with the session's `fb-gap.mjs` probe (60 s, seed
 237): mean gap 149 → ~155–205 px, time under 150 px 70% → ~30–57% depending on
 the matchup — attacks still lunge in; that is the game's pushback doing its job.
+
+## CPU Block War and the authored trial demos (5.1, sweep #32 / #33)
+
+- **Team Battle vs CPU.** The Block War no longer needs a second seat: after
+  P1's three picks the select screen offers `VS CPU · AUTO-DRAFT`, which draws
+  three fighters P1 did not pick (`draftCpuTeam`, `engine/modes.mjs`), reveals
+  them with the lock-in stamp and raises the difficulty bar. The CPU side runs
+  the same archetype-aware AI as arcade at the chosen difficulty; eliminations,
+  carried health and the walk-ins are unchanged. `VS PLAYER 2` is the old path.
+- **Trial demos for all ten kits.** `WATCH DEMO` in the lab plays an authored
+  input script for every trial of every fighter; the Pinelands Devil and the
+  Commissioner had no trials to demonstrate. Each now carries eight (two
+  authored bronze trials plus the six generated from the kit), and each demo was
+  run through the real sim to completion before shipping.
