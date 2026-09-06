@@ -68,10 +68,8 @@ import {
   UNIFIED_EXT2_CELLS,
   buildUnifiedExt2AcceptMasks,
   UNIFIED_EXT3_BANK,
-  UNIFIED_EXT3_CELLS,
   UNIFIED_EXT4_BANK,
   buildSwingAcceptMasks,
-  swingSubstitute,
   WALK_CELL_COUNT,
   WALK_POSE_MIN_SPEED,
   buildUnifiedAcceptMasks,
@@ -341,6 +339,18 @@ import {
   replaySummary,
   validateReplayRecord,
 } from "./engine/replay.mjs";
+// v5.0 FULL SWING (engineering pass): the substitution resolver and the
+// ambient-pulse state machine are engine modules now, so the gate that keeps
+// the inverted ext4 air-hit cell off screen and the 48-tick pulse decay are
+// unit-tested under Node. game.js keeps the DOM gates and the state reads.
+import { swingContext, swingResolve } from "./engine/swing-resolve.mjs";
+import {
+  ambientPhaseChange,
+  ambientPulseLevel,
+  createAmbientObs,
+  pulseAmbientLatch,
+  stirPulseKind,
+} from "./engine/ambient.mjs";
 import {
   ONLINE_QOL_LEVEL,
   SET_LENGTHS,
@@ -1442,36 +1452,10 @@ function swingCellDrawable(fighterId, cell, bank) {
   return Boolean(atlas.complete && atlas.naturalWidth);
 }
 
-/** The swing substitution for a resolved pose, when its target cell can draw. */
-function swingResolve(fighter, pose) {
-  const attack = fighter.attacking;
-  const grounded = fighter.grounded;
-  const victimAirborne = !grounded && (fighter.hitstunFrames > 0 || fighter.pendingKnockdown || fighter.airHitstunFrames > 0);
-  const ctx = {
-    limb: attack?.limb === "kick" ? "kick" : "punch",
-    heavy: attack?.kind === "heavy",
-    crouching: attack ? Boolean(attack.cancelProfileId?.startsWith("crouch")) : fighter.crouch,
-    attacking: Boolean(attack),
-    airborne: !grounded,
-    victimAirborne,
-    falling: victimAirborne && fighter.vy > 0 && Boolean(fighter.pendingKnockdown),
-  };
-  let sub = swingSubstitute(pose.bank, pose.frame, ctx);
-  // A crouching normal's active window has no motion cell at all (it draws a
-  // base cell); the crouch extension / sweep stand in for it directly.
-  if (!sub && attack && ctx.crouching && pose.bank === "base" && !attack.animation
-    && fighter.attackFrame >= attack.activeStartFrame && fighter.attackFrame < attack.activeEndFrame) {
-    sub = { bank: UNIFIED_EXT3_BANK, frame: ctx.limb === "kick" ? UNIFIED_EXT3_CELLS.sweep : UNIFIED_EXT3_CELLS.crouchPunchExt };
-  }
-  // The substitute may land on ANY authored bank (ext3/ext4 mostly, but the
-  // unified crouch transition, the ext2 crouch recover and the ext descent
-  // too), so the gate is the bank-routed one, not the swing-only one.
-  if (sub && !motionBankCellDrawable(fighter.def.id, sub.frame, sub.bank)) {
-    sub = sub.alt && motionBankCellDrawable(fighter.def.id, sub.alt.frame, sub.alt.bank) ? sub.alt : null;
-  }
-  if (!sub) return pose;
-  return { bank: sub.bank, frame: sub.frame, fallback: pose };
-}
+// The swing substitution for a resolved pose (context derivation, the crouching
+// normal's active-window override, the bank-routed gate with its `alt`
+// fallback) is engine/swing-resolve.mjs — `swingContext` + `swingResolve`,
+// applied in fighterAnimationPose with motionBankCellDrawable as the gate.
 
 /**
  * v4.1 — is this fighter's cell 20 a DESCENT rather than a flinch?
@@ -16859,18 +16843,19 @@ function resetCrowd() {
 // v5.0 AMBIENT REACTIONS: a presentation-side pulse the stage life reacts to
 // (floodlights flare, moths scatter, the wok flares). Latched from the crowd
 // stir and from the KO phase change; never sim state, never resimulated.
-const ambientObs = { phase: null, pulseTick: -100000, pulseAmount: 0, pulseKind: "" };
+// The thresholds, the decay and the KO latch are engine/ambient.mjs (tested);
+// this file keeps the resim guard and the tick.
+const ambientObs = createAmbientObs();
 
 function pulseAmbient(kind, amount) {
   if (rollbackResimulating) return;
-  ambientObs.pulseTick = state.simulationTick;
-  ambientObs.pulseAmount = amount;
-  ambientObs.pulseKind = kind;
+  pulseAmbientLatch(ambientObs, kind, amount, state.simulationTick);
 }
 
 function stirCrowd(amount = 1) {
   state.crowdReaction = Math.min(1.4, state.crowdReaction + amount);
-  if (amount >= 0.7) pulseAmbient(amount >= 1 ? "big" : "splat", amount);
+  const pulseKind = stirPulseKind(amount);
+  if (pulseKind) pulseAmbient(pulseKind, amount);
   // Release 1.6 LOUD: big stirs also latch a one-shot crowd swell/gasp for
   // the render-side crowd bus (guarded + tick-deduped inside the latch).
   if (amount >= 0.5) latchCrowdSwell(amount);
@@ -17503,14 +17488,10 @@ function drawStageAmbient(frame, centre, reaction) {
   const skyX = (centre - W * 0.5) * -0.06;
   const stage = state.stage;
   // v5.0 AMBIENT REACTIONS: a KO is a pulse too, latched on the phase change.
-  if (state.phase !== ambientObs.phase) {
-    if ((state.phase === "finish" || state.phase === "roundover") && state.screen === "fight") pulseAmbient("ko", 1.4);
-    ambientObs.phase = state.phase;
-  }
-  const pulseAge = frame - ambientObs.pulseTick;
+  const koPulse = ambientPhaseChange(ambientObs, state.phase, state.screen);
+  if (koPulse) pulseAmbient(koPulse.kind, koPulse.amount);
   // 0..1 over the first ~40 ticks after a big moment, then gone.
-  const pulse = reduced || pulseAge < 0 || pulseAge > 48 ? 0 : (1 - pulseAge / 48) * Math.min(1, ambientObs.pulseAmount);
-  const ko = ambientObs.pulseKind === "ko" && pulse > 0;
+  const { pulseAge, pulse, ko } = ambientPulseLevel(ambientObs, frame, reduced);
   ctx.save();
   if (stage === "vet") {
     // Floodlights breathe, a blimp crawls the sky, fireworks pop over the bowl.
@@ -17986,7 +17967,31 @@ function fighterAnimationPose(fighter) {
     fighter.def.id,
     { bareHanded },
   );
-  return swingResolve(fighter, resolvedPose);
+  const pose = swingResolve(resolvedPose, swingContext(fighter), (cell, bank) => motionBankCellDrawable(fighter.def.id, cell, bank));
+  recordPoseTrace(fighter, pose);
+  return pose;
+}
+
+// v5.0 QA (engineering pass): the pose TRANSITIONS per side, so a probe can
+// assert the ORDER a strike's drawings arrived in (the 5.0 acceptance
+// evidence — jab `ext2:0 -> ext3:0 -> ext3:2 -> ext2:1 -> unified:7` — was
+// read off by eye from frame attribution, and pose() reports only the
+// current cell). Written at the single resolution choke point above, deduped
+// against the previous entry so the several reads per tick (draw, observers,
+// the CINEMA 3D bridge, pose()) record one transition; only the LIVE fighter
+// on each side is traced, never a ghost or a preview body. 64 entries is
+// four seconds of a busy exchange at the ~4-6 transitions a normal makes.
+const POSE_TRACE_SIZE = 64;
+const poseTrace = [[], []];
+
+function recordPoseTrace(fighter, pose) {
+  const side = fighter.side;
+  if ((side !== 0 && side !== 1) || state.fighters?.[side] !== fighter) return;
+  const ring = poseTrace[side];
+  const last = ring.length ? ring[ring.length - 1] : null;
+  if (last && last.bank === pose.bank && last.frame === pose.frame) return;
+  ring.push({ tick: state.simulationTick, bank: pose.bank, frame: pose.frame });
+  if (ring.length > POSE_TRACE_SIZE) ring.shift();
 }
 
 // Showcase rotation (taunt + round-win): the match seed and banked rounds pick
@@ -29880,6 +29885,31 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
           tick: state.simulationTick,
         };
       });
+    },
+    // v5.0 QA (engineering pass): the last `count` pose transitions of one
+    // side (or both, tagged), oldest first — the frame chains MOTION-ATLAS.md
+    // v5.0 records were read by eye; a probe asserts the ORDER from this.
+    // `poseTraceReset()` clears both rings so a scripted strike starts clean.
+    poseTrace(count = POSE_TRACE_SIZE, side = null) {
+      const sides = side === 0 || side === 1 ? [side] : [0, 1];
+      const take = Math.max(0, Math.floor(count));
+      return sides.flatMap((index) => (take ? poseTrace[index].slice(-take) : [])
+        .map((entry) => ({ side: index, ...entry })));
+    },
+    poseTraceReset() {
+      poseTrace[0].length = 0;
+      poseTrace[1].length = 0;
+      return true;
+    },
+    // The ambient-pulse latch and its level at the current tick, so a probe
+    // can ask whether a big hit / KO actually latched before it measures the
+    // floodlights. Presentation state only, never part of a snapshot.
+    ambient() {
+      return {
+        ...ambientObs,
+        ...ambientPulseLevel(ambientObs, state.simulationTick, state.accessibility.reducedMotion),
+        tick: state.simulationTick,
+      };
     },
     fighter(side, values = {}) {
       const fighter = state.fighters[side];

@@ -213,3 +213,19 @@ depth so the crowd fills the frame, feet on the ground, mirrored by facing,
 the same cell, cheer and fatality-hold dim as the canvas. Stages without a
 painted bank hand over nothing, so Somerset's bespoke silhouettes are never
 doubled. `__finalBlowThree.stats().crowd` reports the billboard count.
+
+### 5.0 ambient pulse — where the numbers live
+
+The stage reaction to a big hit and a KO (the Vet's floodlights swell and a
+burst goes up over the bowl — two on a KO — the K&A sign chase speeds up, the
+wok flares, the gulls scatter, the moths flare) rides one pulse:
+`engine/ambient.mjs`. A crowd stir of 0.7 and up latches it ("splat";
+"big" from 1), the KO phase change latches it at 1.4 (clamped to 1), and it
+decays linearly to nothing over 48 ticks; reduced motion zeroes the level
+without moving the age, so the firework seeds stay put. game.js keeps only
+the resim guard and the tick. `tests/ambient.test.mjs` pins the thresholds,
+the decay and the one-shot KO latch (finish and roundover both, fight screen
+only); `__finalBlowQa.ambient()` returns the latch and the level at the
+current tick so a probe can confirm a pulse fired before it measures the
+floodlights (+27 mean brightness at the KO tick on the Vet, measured by hand
+for 5.0 — the browser probe for it is still to write).

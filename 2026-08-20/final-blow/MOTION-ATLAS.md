@@ -3129,3 +3129,50 @@ onto the idle (0.977/0.977/0.997/0.980 — the table's justification is now the
 entirely under), wake-up aimed at 299. Residuals: the passing keys' leg
 exchange is unverified frame by frame; the motion-bank skin sits a little dark
 of the design; a stray fragment was purged from ext3:14 after slicing.
+
+### Engineering pass after 5.0 — the resolver, the pulse and the pipeline under test
+
+No drawing changed. Three things 5.0 shipped with no test reaching them are
+now engine modules with tests, and game.js calls them:
+
+`engine/swing-resolve.mjs` — `swingContext(fighter)` (the seven fields the
+substitution table reads plus `crouchActive`, the crouching normal's active
+window) and `swingResolve(pose, ctx, drawable)` (the table, the crouch
+extension / sweep override for that window, the bank-routed gate with its
+`alt` fallback). `fighterAnimationPose` applies them with
+`motionBankCellDrawable` as the gate; the old inline `swingResolve(fighter,
+pose)` is gone. `tests/swing-resolve.test.mjs` pins the context derivation
+(the attack's cancel profile answers `crouching` over the stance; `falling`
+is the descent with a knockdown pending), the override switching on and off
+with `attackFrame`, the alt taken only when the descent cannot draw, and a
+sweep of every bank x cell x 256 contexts x 4 gates proving the resolver
+never produces the inverted ext4 air-hit cell and never an ungated one. The
+five frame chains above are pinned at node level: the gate is built from the
+shipped manifests, the track pieces are the engine's, and the kit-less
+strike branch of `fighterPoseDescriptor` is mirrored in the test (with its
+source lines pinned, until #52 makes it an import). All five chains — jab,
+heavy kick, crouch jab, sweep, air kick — reproduce the real-play attribution
+exactly, and with the swing sheets gated off the jab and the air kick are
+the 4.9 read while the heavy kick keeps its compress-band substitute (the
+UNIFIED crouch transition) and the crouch jab its crouched recover (ext2)
+in place of the standing follow — both land on non-swing sheets, which is
+the case the bank-routed gate exists for.
+
+The QA surface gained `poseTrace(count, side)` / `poseTraceReset()`: a
+64-entry per-side ring of pose TRANSITIONS (tick, bank, frame), written at
+the resolution choke point and deduped, so a browser probe can assert the
+order a strike's drawings arrived in instead of reading it off by eye. Only
+the live fighter on each side is traced.
+
+`engine/ambient.mjs` — the ambient-pulse state machine (`stirPulseKind`,
+`pulseAmbientLatch`, `ambientPhaseChange`, `ambientPulseLevel`; the 0.7 /
+1.0 thresholds, the 1.4 KO latch, the 48-tick linear decay, reduced motion
+zeroing the level but not the age). `__finalBlowQa.ambient()` reports the
+latch and its level. See STAGES.md.
+
+`tools/inbetweens` is folded into `tools/swing` (one `color_match` /
+`measure_de` / `fal_edit` / `gen_all`; the 4.9 grammar is
+`grammar-ext2.txt`, `build_ext2.py` was `build_sheet.py --bank ext2`); every
+script derives the checkout from its own location (`repo_root.py`,
+`FINAL_BLOW_ROOT` overrides) instead of one hard-coded path, and
+`tools/README.md` documents the numpy venv and the exact commands.

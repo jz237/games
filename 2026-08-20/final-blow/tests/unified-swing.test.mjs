@@ -178,7 +178,12 @@ function testMeasuredTables() {
 function testRegistryAndWiring() {
   assert.deepEqual(AUTHORED_BANKS.slice(-2), [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]);
   assert.ok(isAuthoredBank(UNIFIED_EXT3_BANK) && isAuthoredBank(UNIFIED_EXT4_BANK));
-  assert.match(gameSource, /return swingResolve\(fighter, resolvedPose\);/);
+  // Engineering pass: the resolver moved to engine/swing-resolve.mjs (tested
+  // in tests/swing-resolve.test.mjs); game.js applies it at the single
+  // resolution choke point with the bank-routed gate. The pin follows.
+  assert.match(gameSource, /const pose = swingResolve\(resolvedPose, swingContext\(fighter\), \(cell, bank\) => motionBankCellDrawable\(fighter\.def\.id, cell, bank\)\);/);
+  assert.match(gameSource, /import \{ swingContext, swingResolve \} from "\.\/engine\/swing-resolve\.mjs";/);
+  assert.ok(!/^function swingResolve\(/m.test(gameSource), "no second resolver in game.js");
   assert.match(gameSource, /if \(bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK\) return swingCellDrawable\(fighterId, cell, bank\);/);
   assert.match(gameSource, /\$\{fighterId\}:\$\{bank\}/);
   const adjustBody = gameSource.slice(gameSource.indexOf("function bankSheetAdjust("), gameSource.indexOf("function bankSheetAdjust(") + 1600);
