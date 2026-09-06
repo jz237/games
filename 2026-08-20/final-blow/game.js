@@ -491,10 +491,27 @@ import {
   createDemoDirector,
   demoCloserPlan,
   demoMatchupKey,
-  demoPersonaFor,
+  demoStoryFor,
+  demoStoryTierFor,
   parseDemoBootRequest,
 } from "./engine/demo.mjs";
 import { DEMO_COVERAGE_BLEND, createDemoChoreographer } from "./engine/demo-choreo.mjs";
+import {
+  createDemoLedger,
+  demoBoutPlan,
+  demoLedgerRecord,
+  demoNextUpText,
+  demoRecordsLine,
+  demoResultEyebrow,
+  demoRoundCardPlan,
+  demoSignOffLine,
+  demoStandingLine,
+  demoStandings,
+  demoStandingsStorageKey,
+  demoStoryBugText,
+  restoreDemoStandings,
+  serializeDemoStandings,
+} from "./engine/demo-session.mjs";
 import {
   ATTRACT_BED_FADE_MS,
   attractSoundChip,
@@ -2583,6 +2600,21 @@ const demoSession = {
   // probe can ask for a CLOCK card or a given opener deterministically.
   // Survives endDemoSession on purpose — it is armed before qa.demo(seed).
   showOverride: null,
+  // 5.4 SESSION LAYER (sweep #3/#11/#14/#15/#16/#25): the card's STORY
+  // resolved onto the seats (engine/demo demoStoryFor — opener, lead seat,
+  // per-seat tier overlay and yield tolerance, the showboat, the comeback
+  // seat), the session LEDGER (wins / losses / streaks / round scores per
+  // fighter, seeded from the build-keyed standings board in localStorage),
+  // the bout the result screen is holding on, the NEXT UP tease from the
+  // director's peek, and the countdown ticker under the result. All meta:
+  // the sim reads the bout's roundsToWin through state.matchRules and the
+  // story's tiers through makeFighter — both under state.mode === "demo" —
+  // and nothing else.
+  story: null,
+  ledger: null,
+  lastBout: null,
+  nextUp: null,
+  resultCountdownTimer: 0,
   resultTimer: 0,
   idleTimer: 0,
   // v2.9 FLOW: per-match coverage choreographer + the matchup keys this demo
@@ -4458,6 +4490,13 @@ function demoSnapshot() {
     source: demoSession.source,
     shareUrl: demoShareUrl(),
     roundsSettled: demoSession.rounds.length,
+    // 5.4 SESSION LAYER: the story cast on the seats, the bout of the card,
+    // the format the sim is running, the tease and the ledger's headline.
+    story: demoSession.story ? { ...demoSession.story } : null,
+    bout: demoSession.show?.bout ? { ...demoSession.show.bout } : null,
+    roundsToWin: state.mode === "demo" ? roundsToWinValue() : null,
+    nextUp: demoSession.nextUp ? { ...demoSession.nextUp } : null,
+    session: demoSessionSnapshot(),
     // 5.4 #31/#32: the hidden-tab hold and the screensaver presence classes.
     hold: {
       ...demoHold.snapshot(),
@@ -4493,6 +4532,143 @@ function demoLedgerRound(winner, type) {
     movesShown: Object.fromEntries(Object.entries(coverage).map(([id, entry]) => [id, entry.movesShown])),
   });
   if (demoSession.rounds.length > DEMO_ROUND_LEDGER_MAX) demoSession.rounds.shift();
+}
+
+// ---------------------------------------------------------------------------
+// 5.4 SESSION LAYER — the ledger, the standings band, the result card and
+// the NEXT UP tease. Every function here runs on the demo path only (its
+// callers are gated on state.mode === "demo" / demoSession.active) and none
+// of it is read by the sim: the bout's roundsToWin reaches the sim through
+// applyMatchRulesForMatch and the story's tiers through makeFighter.
+// ---------------------------------------------------------------------------
+
+/** ROOKIE VS VETERAN: the rookie's full bar when the veteran is on match point. */
+function demoStoryRoundGrit() {
+  const story = demoSession.story;
+  if (!demoSession.active || !story || story.comebackSide < 0) return;
+  const rookie = story.comebackSide;
+  const veteran = 1 - rookie;
+  if (state.rounds[veteran] === roundsToWinValue() - 1 && state.rounds[rookie] < state.rounds[veteran]) {
+    state.fighters[rookie].meter = GRIT_RULES.maximum;
+  }
+}
+
+/** Bank the settled bout on the session ledger and the build-keyed board. */
+function demoRecordBout(winner) {
+  if (!demoSession.active || !demoSession.ledger || rollbackResimulating) return null;
+  const closing = demoSession.closerLog.at(-1);
+  const entry = demoLedgerRecord(demoSession.ledger, {
+    cycle: demoSession.cycle?.cycle || 0,
+    pair: state.fighters.map((fighter) => fighter.def.id),
+    winner,
+    rounds: state.rounds,
+    finisher: Boolean(closing && closing.cycle === (demoSession.cycle?.cycle || 0) && closing.kind === "finisher"),
+    story: demoSession.story?.id || "",
+    bout: demoSession.show?.bout || null,
+  });
+  demoSession.lastBout = entry;
+  try {
+    localStorage.setItem(demoStandingsStorageKey(GAME_VERSION), JSON.stringify(serializeDemoStandings(demoSession.ledger, { build: GAME_VERSION, now: Date.now() })));
+  } catch { /* storage full/blocked — the board stays in memory for the session */ }
+  return entry;
+}
+
+/** The NEXT UP tease from the director's peek (nothing consumed). */
+function demoNextUpFromPeek() {
+  const next = demoSession.director?.peek?.();
+  if (!next) return null;
+  const name = (id) => roster.find((entry) => entry.id === id)?.name || id;
+  return {
+    cycle: next.cycle,
+    pair: [...next.pair],
+    first: name(next.pair[0]),
+    second: name(next.pair[1]),
+    stageName: stages[next.stage]?.name || "",
+    bout: next.bout ? { ...next.bout } : null,
+    story: next.story,
+    storyLabel: demoStoryFor(next.story).label,
+  };
+}
+
+/** The set-score card as the bout's score, and the sign-off under the quote. */
+function renderDemoResultCard(winner) {
+  const card = $("#setScoreCard");
+  const entry = demoSession.lastBout;
+  if (!card || !entry) return;
+  const names = state.fighters.map((fighter) => fighter.def.name);
+  const bout = demoSession.show?.bout || null;
+  const records = state.fighters.map((fighter) => ({ name: fighter.def.name, ...(demoSession.ledger?.fighters?.[fighter.def.id] || {}) }));
+  $("#setScoreTitle").textContent = `${demoSession.story?.label || "EXHIBITION"} · ${bout ? bout.label : "BEST OF 3"}`;
+  $("#setScoreLine").innerHTML = `
+    <b class="${winner === 0 ? "champ" : ""}">${names[0]}</b>
+    <span>${state.rounds[0]} — ${state.rounds[1]}</span>
+    <b class="${winner === 1 ? "champ" : ""}">${names[1]}</b>`;
+  $("#setScoreSub").textContent = demoRecordsLine({ first: records[0], second: records[1] });
+  const cycle = demoSession.cycle?.cycle || 0;
+  $("#setScorePips").innerHTML = demoSession.closerLog
+    .filter((round) => round.cycle === cycle)
+    .map((round) => `<i class="${round.winner === 0 ? "left" : "right"}"></i>`)
+    .join("");
+  card.classList.remove("champion", "crowned");
+  card.hidden = false;
+  // The sign-off (sweep #25): seeded variant from the director, one family
+  // per situation, on the recap line the demo never used.
+  const recap = $("#resultRecap");
+  if (recap) {
+    recap.textContent = demoSignOffLine({
+      variant: demoSession.show?.signOff ?? 0,
+      winnerName: names[winner], loserName: names[1 - winner],
+      rounds: state.rounds, winner, bout,
+      nextBout: demoSession.nextUp?.bout || null,
+      streak: demoSession.ledger?.fighters?.[state.fighters[winner].def.id]?.streak || 0,
+    });
+    recap.hidden = false;
+  }
+}
+
+// The Release 1.8 high-score takeover's markup, kept so the title's cabinet
+// board is exactly what it was after a demo (renderDemoStandingsBand rewrites
+// the same element as tonight's standings).
+let attractScoresMarkup = null;
+
+function restoreAttractScoresMarkup() {
+  const board = $("#attractScores");
+  if (board && attractScoresMarkup !== null) board.innerHTML = attractScoresMarkup;
+  if (board) board.classList.remove("demo-standings");
+}
+
+/** TONIGHT'S CARD: standings across the bottom, the high scores as its last line in attract mode. */
+function renderDemoStandingsBand() {
+  const board = $("#attractScores");
+  if (!board) return;
+  if (attractScoresMarkup === null) attractScoresMarkup = board.innerHTML;
+  const bout = demoSession.show?.bout || null;
+  const rows = demoStandings(demoSession.ledger || createDemoLedger(), { limit: 8 });
+  const name = (id) => roster.find((entry) => entry.id === id)?.name || id;
+  const table = demoSession.attract ? loadHighScores() : [];
+  const scores = table.slice(0, 3).map((row, index) => `${index + 1} ${row.initials} ${Math.round(row.score).toLocaleString("en-US")}`).join(" · ");
+  board.classList.add("demo-standings");
+  board.innerHTML = `
+    <p class="eyebrow">TONIGHT'S CARD · STANDINGS${bout ? ` · CARD ${bout.card} · BOUT ${bout.slot} OF ${bout.of}` : ""}</p>
+    <div id="attractScoresRows" class="attract-score-rows">${rows.map((row, index) => `
+      <div class="attract-score-row standing${index === 0 ? " top" : ""}"><b>${demoStandingLine({ name: name(row.id), wins: row.wins, losses: row.losses, streak: row.streak })}</b></div>`).join("")}</div>
+    <small>${scores ? `HIGH SCORES · ${scores}` : coarsePointer() ? "TAP TO PLAY" : "PRESS ANY BUTTON TO PLAY"}</small>`;
+  board.hidden = false;
+  if (table.length) modeFxDebug.attractScoreBoards += 1;
+}
+
+/** The QA / snapshot view of the session ledger. */
+function demoSessionSnapshot() {
+  const ledger = demoSession.ledger;
+  if (!ledger) return null;
+  return {
+    cycles: ledger.cycles,
+    cards: ledger.cards,
+    bouts: ledger.bouts.map((entry) => ({ ...entry, rounds: [...entry.rounds] })),
+    standings: demoStandings(ledger).map((row) => ({ ...row })),
+    lastBout: demoSession.lastBout ? { ...demoSession.lastBout, rounds: [...demoSession.lastBout.rounds] } : null,
+    storageKey: demoStandingsStorageKey(GAME_VERSION),
+  };
 }
 
 /**
@@ -4567,6 +4743,10 @@ function armDemoResultTimer(delay, now = performance.now()) {
     demoSession.resultTimer = 0;
     startNextDemoMatch();
   }, delay);
+  // 5.4 SESSION LAYER: a real countdown on the NEXT UP line (render-only).
+  demoSession.resultCountdownTimer = window.setInterval(() => {
+    if (state.screen === "result" && demoSession.active) updateDemoUi();
+  }, 250);
 }
 
 /**
@@ -4679,6 +4859,8 @@ function shiftFightAnnouncement(heldMs, now) {
 function clearDemoResultTimer() {
   window.clearTimeout(demoSession.resultTimer);
   demoSession.resultTimer = 0;
+  window.clearInterval(demoSession.resultCountdownTimer);
+  demoSession.resultCountdownTimer = 0;
 }
 
 function clearIdleDemoTimer() {
@@ -4713,11 +4895,14 @@ function updateDemoUi() {
   panel.classList.toggle("resuming", demoSession.active && demoHold.phase === "resuming");
   const resultStatus = $("#demoResultStatus");
   if (resultStatus && demoSession.active) {
-    resultStatus.textContent = demoResultPrompt({
-      holdMs: DEMO_RESULT_HOLD_MS,
-      coarsePointer: coarsePointer(),
-      held: demoHold.frozen(),
-    });
+    // 5.4 SESSION LAYER: NEXT UP · pair · stage · bout, with the hold's real
+    // remaining time; the 5.3 wording when the director has nothing to tease.
+    const remainingMs = demoSession.resultRemainingMs !== null ? demoSession.resultRemainingMs
+      : demoSession.resultTimer ? demoResultHoldRemaining({ armedAt: demoSession.resultArmedAt, holdMs: DEMO_RESULT_HOLD_MS, now: performance.now() })
+        : DEMO_RESULT_HOLD_MS;
+    resultStatus.textContent = demoSession.nextUp
+      ? demoNextUpText({ next: demoSession.nextUp, remainingMs, coarsePointer: coarsePointer(), held: demoHold.frozen() })
+      : demoResultPrompt({ holdMs: DEMO_RESULT_HOLD_MS, coarsePointer: coarsePointer(), held: demoHold.frozen() });
   }
   if (!demoSession.cycle) return;
   const [firstId, secondId] = demoSession.cycle.picks;
@@ -4732,6 +4917,12 @@ function updateDemoUi() {
   });
   $("#demoHudMatchup").textContent = text.matchup;
   $("#demoHudCycle").textContent = text.cycle;
+  // 5.4 SESSION LAYER: the story row — story name, bout of the card, format.
+  const storyRow = $("#demoHudStory");
+  if (storyRow) {
+    storyRow.textContent = demoStoryBugText({ storyLabel: demoSession.story?.label || "", bout: demoSession.show?.bout || null });
+    storyRow.hidden = !storyRow.textContent;
+  }
   const prompt = panel.querySelector("small");
   if (prompt) prompt.textContent = demoHold.phase === "resuming" ? "RESUMING" : demoHold.phase === "held" ? "HOLDING" : text.prompt;
   // 5.4: a CLOCK card says so on the bug — the viewer should know the
@@ -4781,6 +4972,13 @@ function endDemoSession() {
   demoSession.seed = null;
   demoSession.source = null;
   demoSession.rounds = [];
+  // 5.4 SESSION LAYER: the board is already on disk (written per bout); the
+  // in-memory ledger, story and tease go with the session.
+  demoSession.story = null;
+  demoSession.ledger = null;
+  demoSession.lastBout = null;
+  demoSession.nextUp = null;
+  restoreAttractScoresMarkup();
   window.clearTimeout(demoSession.shareNoteTimer);
   demoSession.shareNoteTimer = 0;
   attractAudio.endShow();
@@ -4899,8 +5097,12 @@ function startNextDemoMatch() {
   // 5.4 FIGHT NIGHT (round-ends): the card's show tag has to be in place
   // BEFORE startMatch builds the fighters — makeFighter reads it to pick the
   // clock brain on a CLOCK card.
-  demoSession.show = { ...cycle.show, ...(demoSession.showOverride?.show || {}) };
+  const showOverride = demoSession.showOverride?.show || {};
+  demoSession.show = { ...cycle.show, ...showOverride };
   if (demoSession.showOverride && !demoSession.showOverride.sticky) demoSession.showOverride = null;
+  // 5.4 SESSION LAYER: the STORY names the opener and the lead seat, the
+  // bout of the card the format (see demoResolveShow).
+  demoResolveShow(cycle, showOverride);
   demoSession.openerShown = false;
   demoSession.openerTick = -1;
   demoSession.openerAction = "";
@@ -4935,6 +5137,8 @@ function startNextDemoMatch() {
     priorShown: demoSession.coverageCarry,
     // 5.4: a CLOCK card hands most windows to the patient brain.
     blend: demoSession.show.format === "clock" ? DEMO_CLOCK_COVERAGE_BLEND : DEMO_COVERAGE_BLEND,
+    // 5.4 SESSION LAYER: the story's per-seat yield tolerance and showboat.
+    story: demoSession.story,
   });
   const pairKey = demoMatchupKey(...cycle.picks);
   if (!demoSession.pairsSeen.includes(pairKey)) demoSession.pairsSeen.push(pairKey);
@@ -4956,8 +5160,38 @@ function startNextDemoMatch() {
   demoSession.resultRemainingMs = null;
   syncDemoPresence(demoPresence.matchStartedAt);
   updateDemoUi();
-  announce(`WATCH DEMO · CYCLE ${cycle.cycle}`, `${state.fighters[0].def.name} VS ${state.fighters[1].def.name}`, 1.2);
+  // 5.4 SESSION LAYER (sweep #16): the round-1 card is the FIGHT CARD — the
+  // bout's place on tonight's card and its story — instead of a counter.
+  // startMatch already booked the ROUND ONE call; this banner speaks nothing.
+  const bout = demoSession.show.bout;
+  announce(
+    bout ? `BOUT ${bout.slot} · ${bout.label}` : `WATCH DEMO · CYCLE ${cycle.cycle}`,
+    `${state.fighters[0].def.name} VS ${state.fighters[1].def.name} · ${demoSession.story?.label || ""} · ${stages[state.stage].name}`,
+    1.2,
+  );
   return true;
+}
+
+/**
+ * 5.4 SESSION LAYER: resolve the card's show tag into a story cast onto the
+ * seats, and the bout of the card. `override` is the QA show override
+ * (qa.demoNextShow): a forced CLOCK format is the clock story, a forced
+ * standard story is a standard card, a forced `bout` kind ("quick" /
+ * "co-main" / "main") reshapes this slot of the card, and a forced opener is
+ * kept. Pure on the director's tag, the override and the cycle number — the
+ * same seed casts the same show.
+ */
+function demoResolveShow(cycle, override = {}) {
+  const show = demoSession.show;
+  const storyId = override.story || (override.format === "clock" ? "clock" : cycle.show.story);
+  const story = demoStoryFor(storyId, { flip: show.flip ?? 0, cycle: cycle.cycle });
+  show.story = story.id;
+  show.format = story.id === "clock" ? "clock" : "standard";
+  show.opener = override.opener || story.opener;
+  show.bout = typeof override.bout === "string" ? demoBoutPlan(cycle.cycle, override.bout)
+    : (cycle.show.bout || demoBoutPlan(cycle.cycle));
+  demoSession.story = story;
+  if (story.superSide === 0 || story.superSide === 1) demoSession.superSide = story.superSide;
 }
 
 /**
@@ -5058,6 +5292,9 @@ function startDemo({ attract = false, qa = false, seed = null, cycle = 1, source
     seed: demoSeed,
   });
   demoSession.seed = demoSeed;
+  // 5.4 SESSION LAYER: tonight's ledger opens on the build-keyed standings
+  // board (a reload resumes the standings; a new build opens a clean board).
+  demoSession.ledger = restoreDemoStandings(storedJson(demoStandingsStorageKey(GAME_VERSION), null), { build: GAME_VERSION });
   document.body.classList.add("demo-active");
   startNextDemoMatch();
   // 5.4 #30: `&cycle=n` opens on card n. The director is advanced through
@@ -5076,14 +5313,20 @@ function scheduleNextDemoMatch() {
   if (!demoSession.active) return;
   clearDemoResultTimer();
   $("#demoResultStatus").hidden = false;
-  // Release 1.8 GRIND: real-cabinet attract loop — while the idle demo holds
-  // its result, the local high-score table takes the screen.
-  if (demoSession.attract) {
-    const table = renderHighScoreBoard();
-    if (table.length) {
-      $("#attractScores").hidden = false;
-      modeFxDebug.attractScoreBoards += 1;
-    }
+  // 5.4 SESSION LAYER (sweep #11/#16/#25): the result hold is TONIGHT'S CARD.
+  // The next matchup comes from the director's peek (nothing consumed), the
+  // standings band takes the bottom of the screen instead of the whole of it
+  // — the Release 1.8 high-score takeover covered the winner for all five
+  // seconds on any cabinet that had ever recorded a score — and the high
+  // scores ride the band's last line in attract mode. The announcer reads
+  // the next pair's names from the reviewed `<id>-name` banks (bag-drawn,
+  // never the same take twice running), behind the attract gate like every
+  // other call.
+  demoSession.nextUp = demoNextUpFromPeek();
+  renderDemoStandingsBand();
+  if (!demoSession.qa && demoSession.nextUp?.pair) {
+    voiceFxDebug.demoNextUpCalls += 1;
+    for (const id of demoSession.nextUp.pair) announcerSay(`${id}-name`, { delay: 1500 });
   }
   // 5.4 (sweep #26/#27): a bout that never reached round 2 (a QA
   // demoResult, a double-perfect) still gets the result hold's five seconds
@@ -11632,6 +11875,13 @@ function activeMutatorsForMatch() {
 function applyMatchRulesForMatch() {
   state.mutators = normalizeMutators(activeMutatorsForMatch());
   state.matchRules = resolveMatchRules(state.mutators);
+  // 5.4 SESSION LAYER (sweep #15): the demo's bout of the card sets the
+  // format — one round on the undercard, best-of-three co-main, best-of-five
+  // main event — through the same field the ONE-ROUND SHOWDOWN mutator uses.
+  // Demo only; every other mode derives its rules from the mutators alone.
+  if (state.mode === "demo" && demoSession.show?.bout?.roundsToWin) {
+    state.matchRules = { ...state.matchRules, roundsToWin: demoSession.show.bout.roundsToWin };
+  }
   state.suddenDeathHitDone = false;
 }
 
@@ -12811,6 +13061,11 @@ function resetRound() {
   warmFighterAudio();
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
   if (state.matchRules.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
+  // 5.4 SESSION LAYER (sweep #3): ROOKIE VS VETERAN — the rookie's late
+  // comeback. When the veteran reaches match point the rookie opens the round
+  // with a full bar (the same demo-only free-Grit write startNextDemoMatch
+  // makes for the showcase seat, a round later). A demo has no rollback.
+  if (state.mode === "demo") demoStoryRoundGrit();
   resetStageWeapon();
   resetCrowd();
   clearBattleDamage();
@@ -12844,7 +13099,19 @@ function resetRound() {
   updateFlowSkipHint();
   updateHud();
   demoRoundCard();
-  announce(`ROUND ${state.round}`, "SETTLE IT", 1.15);
+  // 5.4 SESSION LAYER (sweep #15): a best-of-five has rounds the banks were
+  // never cut for ("ROUND 3" spoke finalround at 1-1), so the demo's card
+  // carries the running score and an honest cue plan (demoRoundCardPlan);
+  // every other mode announces exactly what it always has.
+  if (state.mode === "demo") {
+    const card = demoRoundCardPlan({
+      round: state.round, rounds: state.rounds, roundsToWin: roundsToWinValue(),
+      names: state.fighters.map((fighter) => fighter.def.name), bout: demoSession.show?.bout || null,
+    });
+    announce(card.main, card.sub, 1.15, { speak: card.speak });
+  } else {
+    announce(`ROUND ${state.round}`, "SETTLE IT", 1.15);
+  }
   scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "", 0.75);
   }, 1050);
@@ -14114,7 +14381,7 @@ function showResult(winner) {
   const arcadeDefeat = state.mode === "arcade" && winner === 1 && state.arcadeRun && !dailyOver;
   const survivalOver = state.mode === "survival" && state.survivalRun?.over;
   const teamOver = state.mode === "team" && state.teamBattle?.over;
-  $("#resultEyebrow").textContent = state.mode === "demo" ? `WATCH DEMO · CYCLE ${demoSession.cycle?.cycle || 1}`
+  $("#resultEyebrow").textContent = state.mode === "demo" ? demoResultEyebrow({ cycle: demoSession.cycle?.cycle || 1, bout: demoSession.show?.bout || null })
     : survivalOver ? "THE GAUNTLET · RUN ENDED"
       : teamOver ? "BLOCK WAR · 3V3 SETTLED"
         : dailyOver ? "THE DAILY JAWN · ONE SHOT A DAY"
@@ -14157,11 +14424,15 @@ function showResult(winner) {
   restartCssAnimation($("#resultFinisher"), "enter");
   restartCssAnimation($(".result-copy"), "sweep");
   hudFxDebug.victoryEntrances += 1;
+  // 5.4 SESSION LAYER: bank the bout on the session ledger FIRST — the
+  // standings band, the sign-off and the NEXT UP tease all read it.
+  if (state.mode === "demo") demoRecordBout(winner);
   if (state.mode === "demo") scheduleNextDemoMatch();
   else $("#demoResultStatus").hidden = true;
   // R2.1 STREETS: winner-stays scoreboard card (online rooms + offline versus
   // sets) and the CHANGE FIGHTERS path back to a QoL-speaking lobby.
   renderSetScoreCard();
+  if (state.mode === "demo") renderDemoResultCard(winner);
   $("#changeFightersButton").hidden = !(state.mode === "online" && onlineSession.lobby.remoteQol >= 1);
   if (state.mode === "online") {
     onlineSession.rematchVotes.clear();
@@ -15038,7 +15309,17 @@ function demoChoreoBeat(side, beat) {
 function demoAiTier(kitId) {
   const clock = demoSession.show?.format === "clock" && !demoSession.decisionShown && state.round <= 2;
   demoSession.fightersTier = clock ? DEMO_CLOCK_AI_DIFFICULTY : DEMO_AI_DIFFICULTY;
-  return clock ? DEMO_CLOCK_AI_DIFFICULTY : demoPersonaFor(kitId);
+  // 5.4 SESSION LAYER: the story's per-seat overlay on the persona (the
+  // veteran / rookie grades, the grudge temperament, the spacing brains).
+  // Keyed by kit because the director never seats a kit against itself.
+  return clock ? DEMO_CLOCK_AI_DIFFICULTY : demoStoryTierFor(kitId, demoStoryOverlayFor(kitId));
+}
+
+function demoStoryOverlayFor(kitId) {
+  const story = demoSession.story;
+  if (!story || !state.picks) return null;
+  const seat = state.picks.findIndex((index) => (roster[index]?.kitId || roster[index]?.id) === kitId);
+  return seat >= 0 ? story.tiers[seat] || null : null;
 }
 
 // The round clock at the bell: 99 everywhere, and the CLOCK card's own
@@ -15062,6 +15343,9 @@ function demoPlanCloser(winner) {
     fighterId: attacker.def.id,
     ledger: demoSession.finisherLedger,
     loserGrounded: Boolean(state.fighters[1 - winner].grounded),
+    // 5.4 SESSION LAYER: a one-round QUICK BOUT rations its ceremony.
+    quickBout: demoSession.show?.bout?.kind === "quick",
+    quickFinisher: Boolean(demoSession.show?.quickFinisher),
   });
   if (plan.finisher) {
     demoSession.finisherLedger[attacker.def.id] = (demoSession.finisherLedger[attacker.def.id] || 0) + 1;
@@ -29493,6 +29777,8 @@ const voiceFxDebug = {
   // w51: "TEN SECONDS" clock calls (once per round) and decision round-ends
   // that opened on the timeover bank instead of "ko".
   clockCallouts: 0, decisionCalls: 0,
+  // 5.4 SESSION LAYER: NEXT UP name reads booked during the result hold.
+  demoNextUpCalls: 0,
   // 5.1 manifest counters: banks resolved without a request, and media
   // elements actually created for fighter voice (was 3-5 per take, up to
   // 183 per fighter at fight start; now one per take, grown only on overlap).
@@ -34435,7 +34721,13 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
           openerShown: demoSession.openerShown,
           openerTick: demoSession.openerTick,
           openerAction: demoSession.openerAction,
+          // 5.4 SESSION LAYER: the story and the bout (tests pin one of each
+          // story per ten cycles against the director; the probe reads this).
+          story: demoSession.story ? { ...demoSession.story } : null,
+          bout: demoSession.show?.bout ? { ...demoSession.show.bout } : null,
         },
+        session: demoSessionSnapshot(),
+        choreoStory: demoSession.choreo.story(),
         closers: {
           ledger: { ...demoSession.finisherLedger },
           plan: demoSession.closer ? { ...demoSession.closer } : null,

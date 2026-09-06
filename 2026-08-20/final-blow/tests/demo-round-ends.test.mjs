@@ -72,15 +72,22 @@ test("one CLOCK card in four, never the first card, never two in a row, and ever
   }
 });
 
-test("every eight cycles shows all four openers and both formats, with no opener repeated back to back", () => {
+// 5.4 SESSION LAYER: the pin moved from "every EIGHT cycles show all four
+// openers" to "every TEN cycles show all five" — the story now names the
+// opener, and the guarantee is the story bag's (four standard stories per
+// bag; at most three clock cards in any ten, so at least seven standard
+// draws, and any seven consecutive draws from a four-bag contain a full
+// bag). Eight cycles can hold six standard draws, which a bag boundary can
+// split 3 + 3 — the old window is no longer a guarantee.
+test("every ten cycles shows all five openers and both formats, with no opener repeated back to back", () => {
   for (const seed of [237, 1234, 9001, 42]) {
     const d = director(seed);
-    const cycles = Array.from({ length: 24 }, () => d.next());
-    for (let start = 0; start < cycles.length; start += 8) {
-      const window = cycles.slice(start, start + 8);
+    const cycles = Array.from({ length: 30 }, () => d.next());
+    for (let start = 0; start < cycles.length; start += 10) {
+      const window = cycles.slice(start, start + 10);
       const openers = new Set(window.map((c) => c.show.opener));
-      for (const opener of DEMO_OPENERS) assert.ok(openers.has(opener), `seed ${seed}: cards ${start + 1}-${start + 8} never open on ${opener}`);
-      assert.ok(window.some((c) => c.show.format === "clock"), `seed ${seed}: no clock card in cards ${start + 1}-${start + 8}`);
+      for (const opener of DEMO_OPENERS) assert.ok(openers.has(opener), `seed ${seed}: cards ${start + 1}-${start + 10} never open on ${opener}`);
+      assert.ok(window.some((c) => c.show.format === "clock"), `seed ${seed}: no clock card in cards ${start + 1}-${start + 10}`);
       assert.ok(window.some((c) => c.show.format === "standard"));
     }
     // No two consecutive cards open the same way (a clock card's footsies
@@ -283,7 +290,8 @@ test("game.js reaches the closer, the opener, the clock brain and the clock only
   // seat its archetype persona, a clock card the CLOCK brain.)
   assert.match(game, /aiBrain: createAiBrain\(state\.mode === "demo" \? demoAiTier\(kitId\) : state\.aiDifficulty\),/);
   assert.equal((game.match(/demoAiTier\(kitId\)/g) || []).length, 2);
-  assert.match(game, /return clock \? DEMO_CLOCK_AI_DIFFICULTY : demoPersonaFor\(kitId\);/);
+  // (5.4 session layer: the persona is resolved under the story's overlay.)
+  assert.match(game, /return clock \? DEMO_CLOCK_AI_DIFFICULTY : demoStoryTierFor\(kitId, demoStoryOverlayFor\(kitId\)\);/);
   // The clock: 99 everywhere, the card's length only for the clock brain in a demo.
   assert.match(game, /function roundClockSeconds\(\) \{\s*if \(state\.mode === "demo" && demoSession\.fightersTier === DEMO_CLOCK_AI_DIFFICULTY\) return DEMO_CLOCK_ROUND_SECONDS;\s*return 99;/);
   assert.equal((game.match(/state\.timer = roundClockSeconds\(\);/g) || []).length, 2, "startMatch and resetRound");

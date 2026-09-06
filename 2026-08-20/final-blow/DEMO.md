@@ -6,10 +6,11 @@ Final Blow 1.0E can run a complete CPU-vs-CPU exhibition from the title screen.
 
 - `WATCH DEMO · CPU VS CPU` starts immediately.
 - Both sides use the same delayed-observation, archetype-aware AI available to normal play, each on its kit's demo persona (5.4 — see below).
-- Each exhibition is a normal best-of-three match: the timer, rounds, Grit, enhanced attacks, supers, knockouts, and character-specific Final Blows are unchanged.
-- The director alternates a full-Grit showcase side and opens every card on one of four seeded OPENERS (walk-in super, throw, dash-in heavy, or a footsies feel-out) before the choreographer and the archetype AI take over; one card in four is ON THE CLOCK (see 5.4 below).
+- Exhibitions run as a CARD OF THE NIGHT (5.4 session layer): four one-round QUICK BOUTS on the undercard, a best-of-three CO-MAIN EVENT and a best-of-five MAIN EVENT, then a new card. Inside a bout the timer, rounds, Grit, enhanced attacks, supers, knockouts, and character-specific Final Blows are unchanged.
+- Every card tells a seeded STORY — GRUDGE MATCH, ROOKIE VS VETERAN, SHOWBOAT, ZONING WAR or THE CLOCK — which names its opener (walk-in super, throw, dash-in heavy, a footsies feel-out, or none), which side leads it, how each side is allowed to yield and which per-seat tier plays over the archetype persona; the story and the bout are on the broadcast bug (see 5.4 below).
+- A session ledger carries wins, losses, streaks and round scores across bouts; the standings board persists in localStorage per build, and the result hold is a NEXT UP panel (score, tonight's records, the standings band, the next matchup, a sign-off line).
 - Rounds end four ways — Final Blow A, Final Blow B, a plain knockout with the collapse and curtain call, or a decision at the buzzer — chosen per round by a seeded closer (5.4).
-- Results remain on screen for five seconds before the next exhibition begins.
+- Results remain on screen for five seconds before the next exhibition begins; the countdown is real, and the announcer reads the next pair's names from their reviewed name takes.
 - Keyboard, pointer/touch, or gamepad input exits to the title immediately.
 - `IDLE WATCH DEMO · 45 SECONDS` in Options enables or disables automatic attract mode. It is enabled by default and never tries to bypass browser audio-autoplay rules.
 
@@ -1045,3 +1046,169 @@ restore; `demo-hold` walks a hidden tab through hold → resuming → live;
 `mobile-landscape` asserts the tag/Grit-row separation and the touch prompt at
 844x390). The framing probe is listed because `mobile-landscape` reads its
 desktop numbers.
+
+## The session layer: tonight's card, the stories, the ledger (5.4 Fight Night, sweep #3 / #11 / #14 / #15 / #16 / #25)
+
+Nothing carried across cycles and every exhibition had the same skeleton.
+Measured on the 5.4 head (headless, seeds 237 / 1234 / 9001 × 4 cards,
+`qa.demo(seed)` stepped to every result): 12 of 12 exhibitions were
+best-of-three (mean 75 s of sim, 54-96), the first result of a WATCH DEMO
+press came 64-71 s in, the leader's yield ran 12-27% of every card's fight
+ticks (the choreographer's one fixed tolerance, whoever was fighting), the
+showcase side strictly alternated, taunts were 0-2 per fighter per card,
+and the result screen read `WATCH DEMO · CYCLE 1 / POST WINS / WET PAINT /
+a quote / NEXT RANDOM FIGHT IN 5 SECONDS` with the recap, the score card and
+the board all hidden — the round score (2-1) was nowhere, no fighter had a
+record, nothing said who was next, and on a cabinet with a high score the
+1.8 takeover (`#attractScores`, `inset: 0`, ~90% opaque) covered the winner
+for the whole five seconds. The director's bags forgot everything but the
+current bag.
+
+`engine/demo-session.mjs` is the new pure module (the card, the ledger, the
+board's serialisation, every line of text); `engine/demo.mjs` gained the
+STORIES and a third seeded rng for them; the choreographer reads the story;
+game.js wires it, gated on the demo at every site (pinned from source in
+`tests/demo-session.test.mjs`).
+
+**The card of the night** (`demoBoutPlan(cycle)`). Six bouts per card:
+slots 1-4 are one-round QUICK BOUTS (`roundsToWin` 1), slot 5 the CO-MAIN
+EVENT (best of three), slot 6 the MAIN EVENT (best of five). The format
+reaches the sim through `state.matchRules.roundsToWin` in
+`applyMatchRulesForMatch` — the field the ONE-ROUND SHOWDOWN mutator sets —
+under `state.mode === "demo"` only. A quick bout is match point from the
+bell, which would hand every undercard bout the nine-second ceremony the
+5.4 closer rations, so `demoCloserPlan` takes a `quickBout` flag: match
+point alone earns nothing there, the brink and airborne rules still finish,
+and a seeded `quickFinisher` coin from the director gives half the undercard
+its Final Blow anyway (reason `quick`). The best-of-five needed an honest
+round card: "ROUND 3" spoke `finalround` unconditionally, wrong at 1-1, so
+the demo's `resetRound` banner is `demoRoundCardPlan` — FINAL ROUND +
+`finalround` only on the decider, `setpoint` when one side is on match
+point, `round1`/`round2` on rounds one and two, caption-only otherwise — and
+its sub-line carries the running score (`MAIN EVENT · JEZ 2–1 ALLAN`).
+Every other mode announces exactly what it always has. The round-1 card is
+the fight card (`BOUT 6 · MAIN EVENT / JEZ VS ALLAN · ZONING WAR · CHINESE
+BUFFET`) — the ROUND ONE call was already booked by startMatch.
+
+**The stories** (`DEMO_STORIES`, `demoStoryFor(id, { flip, cycle })`). The
+director's third rng draws a four-bag of standard stories (never the same
+one back to back, even across a refill), a casting coin, a sign-off variant
+bag and the quick-bout coin for every card; a CLOCK card is the clock story
+and leaves the story bag alone, so the clock positions of every existing
+seed are unchanged and `peek()` can name the next card's story and bout for
+the NEXT UP panel. The story SETS the round-ends and personas hooks instead
+of duplicating them:
+
+- GRUDGE MATCH — the throw opener; both seats on the `grudge` overlay (no
+  patience, throw and grab up, the dash-in, no disrespect); NO yield on
+  either seat.
+- ROOKIE VS VETERAN — the walk-in super, led by the veteran (seat `flip`);
+  the veteran plays its persona under a FINAL-grade overlay (6-frame
+  reactions, 0.87 guard), the rookie under a ROOKIE-grade one (17-frame
+  reactions, 0.22 errors, a 0.5 guard); the veteran yields EARLY (coverage
+  gap 2 / health gap 14 instead of 4 / 26), the rookie never; and when the
+  veteran reaches match point the rookie opens the round with a full bar
+  (`demoStoryRoundGrit`, the same demo-only free-Grit write the showcase
+  seat gets at the bell).
+- SHOWBOAT — the dash-in; one seat (`flip`) on the `showboat` overlay
+  (`tauntChance` 0.6) AND the choreographer's `showboatSide`, which stages
+  a taunt on EVERY knockdown regardless of the one-per-exhibition beat
+  ledger (a 150-tick cooldown so one knockdown is one taunt).
+- ZONING WAR — no forced opener (`opener: "none"`, the brains own the
+  bell); both seats on the `spacing` overlay (spacing 1.35, a 200 px clinch
+  line, hold slack 55, the ranged share 2.5, no dash-in) — the grappler
+  keeps away too, which is the story.
+- THE CLOCK — the round-ends clock card exactly as it was (format `clock`,
+  footsies, the clock brain, 30 s).
+
+The overlays are registered at load over every persona
+(`demo-<persona>-<overlay>`, plus `demo-<overlay>` over the fallback tier),
+so a seat keeps its archetype under the story; `demoStoryTierFor(kitId,
+overlay)` with no overlay IS `demoPersonaFor(kitId)` (pinned). The story's
+lead seat replaces the strict alternation where the story names one; the
+choreographer takes `story` (per-seat yield tolerance, `showboatSide`) and
+keeps the 2.9 constants when handed none. `qa.demoNextShow({ story, bout,
+format, opener })` forces any of it for a probe (`bout: "co-main"` is what
+the demo-mode probe uses to get a best-of-three on card 1).
+
+**The ledger and the board.** `demoSession.ledger` banks every settled bout
+at `showResult` (winner, loser, round score, whether it closed on a Final
+Blow, the story, the slot) and keeps per fighter wins / losses / the live
+streak / best streak / rounds won and lost / finishers. It opens on the
+standings stored under `final-blow-demo-standings-v1:<build>` and writes
+back after every bout, so a reload resumes the night's standings and a new
+build opens a clean board (a stored streak is capped at the wins that could
+have built it). The bout log is bounded at 60; the sim never reads any of it.
+
+**The result hold is tonight's card.** The eyebrow is the card's address
+(`WATCH DEMO · CARD 1 · BOUT 6 OF 6 · MAIN EVENT`); the set-score card
+(`#setScoreCard`, the winner-stays scoreboard the demo never used) carries
+`ZONING WAR · MAIN EVENT / JEZ 3 — 2 ALLAN / TONIGHT · JEZ 1-1 · ALLAN
+0-1` with a pip per round; the recap line carries the SIGN-OFF — one family
+per situation (the main event closed the card / a streak of three or more /
+the co-main handing over to the headliner / plain), four or five variants
+each, the variant from the director's seeded bag so the same line never
+runs twice in a row; `#demoResultStatus` is the NEXT UP line from the
+director's peek with a real countdown (`NEXT UP · DEATHBLOW VS PINELANDS
+DEVIL · THE VET PARKING LOT · QUICK BOUT · BEST OF 1 · ZONING WAR · IN 4
+SECONDS · PRESS ANY BUTTON TO PLAY`, a 250 ms render-side ticker; the held
+wording the demo-hold probe pins is unchanged); and the board is a
+STANDINGS BAND across the bottom of the screen (`body.demo-active
+.attract-scores.demo-standings`, bottom-anchored, a gradient that leaves
+the winner's name and pose alone) with the fighters' records as chips and,
+in attract mode, the top three high scores on its last line — no takeover
+any more. The announcer reads the next pair's two `<id>-name` takes 1.5 s
+into the hold (bag-drawn, behind the attract gate like every call; the
+`-wins` call from the KO is long finished by then). The bug gained a STORY
+row between the matchup and the cycle line (`GRUDGE MATCH · BOUT 2 OF 6 ·
+QUICK BOUT · BEST OF 1`); the cycle line the seed-url probe pins is verbatim.
+
+**Measured, same harness after (seeds 237 / 1234 / 9001 × 6 cards = 18
+bouts, every one reaching the result, zero runtime errors):**
+
+    bout length     quick 20-37 s of sim (mean 26.6), co-main 47-81 (67),
+                    main event 103-130 (120); before: 54-96 (75) for all 12
+    first result    20 s / 23 s / 37 s after a WATCH DEMO press
+                    (before 67 / 64 / 71)
+    stories         every seed's six cards tell 4-5 distinct stories; over
+                    seven seeds × 50 director cycles EVERY window of ten
+                    consecutive cards tells all five (pinned)
+    yield share     grudge 0 / 0 / 0 % (before: 12-27 % on every card)
+                    rookie-veteran 0 / 9.5 / 0 · showboat 0 / 0 / 4.4 / 10.3
+                    zoning war 5-17 · clock 0-11
+    showboat        the cast seat taunted 1 / 2 / 1 / 5 times, the other
+                    seat 0 / 0 / 1 / 0 (before: 0-2 per fighter, any seat)
+    tiers           demo-zoner-veteran vs demo-rushdown-rookie,
+                    demo-grappler-grudge vs demo-skirmisher-grudge,
+                    demo-zoner-spacing vs demo-rushdown-spacing … per story
+    closers         plain KO 15 · match-point FB 6 · brink 4 · quick 4 ·
+                    airborne 3 · comeback 2 · decision 1 (34 rounds)
+    result DOM      eyebrow / title / finisher / quote / sign-off / score card
+                    / NEXT UP / standings band all populated on 18 of 18
+
+**A played match is byte-identical.** Same page, same harness, base
+(e54cfa3) and after: `qa.aiFight("deathblow", "jez", "pro")` over 7200
+ticks hashes `4075328251` before and after, `qa.aiFight("post", "ali",
+"street")` over 3600 ticks `237946992` before and after (FNV-1a over every
+fighter's x / y / health / meter / action / state plus the phase and the
+round score per tick). The seeded demo's hash moved (`1291551043` →
+`1847897611` at tick 1800 — the show changed: card 1 is a quick bout with a
+story) and is identical for two `qa.demo(237)` runs in one page. Every new
+site is reached through `state.mode === "demo"` / `demoSession.active`
+(the rules choke point, `makeFighter`'s tier pick, `resetRound`'s comeback
+bar and round card, `demoPlanCloser`, `showResult`, the hold) — pinned from
+source. Built-in AI tiers carry no `overlay` or `persona` (pinned).
+
+Verification: `node --test tests/demo-session.test.mjs` (the card, the
+director's story stream and its ten-cycle guarantee, the casting, the tier
+overlays over every persona, the choreographer's yield refusal and showboat,
+the quick-bout closer, the ledger / board round-trip, every line of text,
+the source gates); `tests/demo-round-ends.test.mjs` moved its opener pin
+from an eight-card window to a ten-card one (the story bag's guarantee;
+reason in the comment) and, with `tests/demo-personas.test.mjs`, its tier
+pin to `demoStoryTierFor(kitId, demoStoryOverlayFor(kitId))`; `node
+tests/browser-smoke.mjs
+--only=fighter-framing-desktop,demo-mode,demo-seed-url,demo-hud,demo-hold,mobile-landscape`
+(demo-mode forces `bout: "co-main"` on card 1 and reads the story and
+`roundsToWin` off the snapshot; demo-seed-url's ledger pin is "at least
+one round" because card 1 is a quick bout).

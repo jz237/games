@@ -3728,7 +3728,16 @@ probe('pose-trace-chains', async () => {
 });
 
 probe('demo-mode', async () => {
+    // 5.4 SESSION LAYER: card 1 of a session is a one-round QUICK BOUT on the
+    // card of the night; this probe walks a plain first-round KO and then the
+    // match-point Final Blow, which needs a best-of-three — the QA show
+    // override reshapes card 1 into the CO-MAIN (the same hook the clock card
+    // below uses). Card 2's forced clock card follows exactly as before.
+    await evaluate(client, `window.__finalBlowQa.demoNextShow({ bout: 'co-main' })`);
     demoOpening = await evaluate(client, `window.__finalBlowQa.demo(237)`);
+    assert.equal(demoOpening.demo.bout.kind, 'co-main');
+    assert.equal(demoOpening.demo.roundsToWin, 2);
+    assert.ok(['grudge', 'rookie-veteran', 'showboat', 'zoning-war'].includes(demoOpening.demo.story.id), demoOpening.demo.story.id);
     assert.equal(demoOpening.mode, 'demo');
     assert.equal(demoOpening.screen, 'fight');
     assert.equal(demoOpening.demo.active, true);
@@ -3736,13 +3745,19 @@ probe('demo-mode', async () => {
     assert.notEqual(demoOpening.fighters[0].id, demoOpening.fighters[1].id);
     // 5.4 PERSONAS: each attract seat plays its kit's archetype persona
     // (engine/demo.mjs DEMO_PERSONAS), reported per side by the snapshot.
+    // 5.4 SESSION LAYER: ...under the card's STORY overlay per seat
+    // (demo-zoner-veteran, demo-grappler-grudge…): the tier is
+    // demoStoryTierFor(kit, story.tiers[side]), which is the bare persona
+    // when the story lays nothing on that seat.
     for (const side of [0, 1]) {
-      assert.match(demoOpening.fighters[side].ai.difficulty, /^demo-[a-z]+$/,
+      assert.match(demoOpening.fighters[side].ai.difficulty, /^demo-[a-z]+(?:-[a-z]+)?$/,
         `CPU ${side + 1} should play a demo persona, got ${demoOpening.fighters[side].ai.difficulty}`);
       assert.equal(demoOpening.demo.personas[side], demoOpening.fighters[side].ai.difficulty);
     }
-    const personaFor = await evaluate(client, `(async () => { const demo = await import('./engine/demo.mjs'); return [${JSON.stringify(demoOpening.fighters[0].id)}, ${JSON.stringify(demoOpening.fighters[1].id)}].map((id) => demo.demoPersonaFor(id)); })()`);
-    assert.deepEqual(demoOpening.demo.personas, personaFor, 'the seats must play the persona their kit names');
+    const personaFor = await evaluate(client, `(async () => { const demo = await import('./engine/demo.mjs'); const tiers = ${JSON.stringify(demoOpening.demo.story.tiers)}; return [${JSON.stringify(demoOpening.fighters[0].id)}, ${JSON.stringify(demoOpening.fighters[1].id)}].map((id, side) => demo.demoStoryTierFor(id, tiers[side])); })()`);
+    assert.deepEqual(demoOpening.demo.personas, personaFor, 'the seats must play the persona their kit names, under the story overlay');
+    const barePersonas = await evaluate(client, `(async () => { const demo = await import('./engine/demo.mjs'); return [${JSON.stringify(demoOpening.fighters[0].id)}, ${JSON.stringify(demoOpening.fighters[1].id)}].map((id) => demo.demoPersonaFor(id)); })()`);
+    for (const side of [0, 1]) assert.ok(demoOpening.demo.personas[side].startsWith(barePersonas[side]), `seat ${side} keeps its archetype under the story`);
     demoThinking = await evaluate(client, `window.__finalBlowQa.step(4.5); window.__finalBlowEngine.snapshot()`);
     assert.ok(demoThinking.fighters[0].ai.decisions > 0, 'CPU 1 should make delayed visual decisions');
     assert.ok(demoThinking.fighters[1].ai.decisions > 0, 'CPU 2 should make delayed visual decisions');
@@ -3809,7 +3824,10 @@ probe('demo-mode', async () => {
     // clock brain, a 30-second clock on the HUD, the chip says so, and the
     // buzzer ends the round as a DECISION (banner + the round-end log); the
     // next round is back on the standard brain and the 99 s clock.
-    await evaluate(client, `window.__finalBlowQa.demoNextShow({ format: 'clock' })`);
+    // (5.4 session layer: slot 2 of the card is a one-round quick bout, so
+    // the override also asks for the co-main's best-of-three — the decision
+    // has to be followed by a round 2 for the brain-swap pin below.)
+    await evaluate(client, `window.__finalBlowQa.demoNextShow({ format: 'clock', bout: 'co-main' })`);
     const demoClockCard = await evaluate(client, `window.__finalBlowQa.demoCycles(2); window.__finalBlowQa.step(2.4); ({ snapshot: window.__finalBlowEngine.snapshot(), coverage: window.__finalBlowQa.demoCoverage(), timer: document.querySelector('#timer').textContent, chip: document.querySelector('#demoHudCycle').textContent })`);
     assert.equal(demoClockCard.snapshot.demo.show.format, 'clock');
     assert.equal(demoClockCard.snapshot.demo.show.opener, 'footsies-first');
@@ -3908,8 +3926,10 @@ probe('demo-seed-url', async () => {
     const loadA = await stepTo(TARGET_TICK);
     assert.equal(loadA.tick, TARGET_TICK);
     // (5.4 closer/personas: rounds run longer than the 5.3 ~17 s ceremony;
-    // seed 237 card 1 settles two rounds inside 100 s, three at the old pace.)
-    assert.ok(loadA.ledger.length >= 2, `seed 237 card 1 settles at least two rounds inside 100 s (got ${loadA.ledger.length})`);
+    // 5.4 session layer: card 1 of the night is a one-round QUICK BOUT, so
+    // the link settles exactly its one round inside 100 s and holds on the
+    // result — the manual steps carry the sim tick on through the hold.)
+    assert.ok(loadA.ledger.length >= 1, `seed 237 card 1 settles its round inside 100 s (got ${loadA.ledger.length})`);
     assert.ok(loadA.ledger.every((entry) => entry.cycle === 1));
     assert.equal(loadA.demo.shareUrl, `${gameUrl.replace('?debug=1', '')}?demo=237`, 'the link drops ?debug and carries the seed');
 

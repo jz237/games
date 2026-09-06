@@ -1063,7 +1063,7 @@ kbd,
   bottom: 3.4%;
   display: grid;
   grid-template-columns: auto auto;
-  grid-template-areas: "show speed" "matchup matchup" "cycle prompt" "actions actions";
+  grid-template-areas: "show speed" "matchup matchup" "story story" "cycle prompt" "actions actions";
   gap: 2px 12px;
   align-items: center;
   justify-content: start;
@@ -1100,6 +1100,11 @@ kbd,
 .demo-hud-speed[data-tone="held"] { color: #ffb347; border-style: dashed; }
 .demo-hud span { grid-area: matchup; color: #fff; font-family: Impact, "Arial Narrow", sans-serif; font-size: 1.75em; font-style: italic; font-weight: 400; letter-spacing: .05em; line-height: 1; }
 .demo-hud em { grid-area: cycle; color: var(--cyan); font-style: normal; font-size: .9em; }
+/* 5.4 SESSION LAYER: the STORY row — story name, bout of the card, format —
+   between the matchup and the cycle line, in the bug's amber so the card's
+   address and its story read as two different things. */
+.demo-hud-story { grid-area: story; color: var(--amber); font-size: .95em; font-weight: 900; letter-spacing: .12em; }
+.demo-hud-story[hidden] { display: none !important; }
 .demo-hud small { grid-area: prompt; justify-self: end; color: #fff; font-size: .9em; animation: demo-prompt .7s ease-in-out infinite alternate; }
 .demo-hud.held small,
 .demo-hud.resuming small { color: #ffb347; animation-duration: .35s; }
@@ -2761,6 +2766,40 @@ body:has(#app:fullscreen) {
    codebase-wide [hidden] convention). */
 .mutator-bar[hidden] { display: none !important; }
 .attract-scores[hidden] { display: none !important; }
+/* 5.4 SESSION LAYER (sweep #11): in a demo the board is TONIGHT'S CARD — a
+   standings band across the BOTTOM of the result screen, so the winner's
+   name and pose stay on screen for the whole hold (the 1.8 takeover was
+   inset: 0 at ~90% opacity for all five seconds). Standings read as chips;
+   the high scores, when a cabinet has any, ride the band's last line. */
+body.demo-active .attract-scores.demo-standings {
+  inset: auto 0 0 0;
+  z-index: 12;
+  align-content: end;
+  gap: clamp(3px, .5vw, 7px);
+  padding: clamp(28px, 4vw, 54px) 3% clamp(10px, 1.4vw, 18px);
+  background: linear-gradient(180deg, rgba(2, 4, 8, 0), rgba(2, 4, 8, .82) 38%, rgba(3, 5, 9, .94));
+  pointer-events: none;
+}
+body.demo-active .attract-scores.demo-standings .eyebrow { margin: 0; color: var(--amber); font-size: clamp(8px, .8vw, 12px); letter-spacing: .24em; }
+body.demo-active .attract-scores.demo-standings .attract-score-rows {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px clamp(8px, 1vw, 16px);
+  width: min(1180px, 96%);
+}
+body.demo-active .attract-scores.demo-standings .attract-score-row.standing {
+  display: block;
+  padding: 3px 10px;
+  border-left: 3px solid rgba(78, 221, 245, .55);
+  background: rgba(4, 12, 18, .72);
+  font-size: clamp(9px, .95vw, 14px);
+  letter-spacing: .1em;
+}
+body.demo-active .attract-scores.demo-standings .attract-score-row.standing b { font-family: Impact, "Arial Narrow", sans-serif; font-style: italic; font-weight: 400; font-size: 1.35em; letter-spacing: .06em; }
+body.demo-active .attract-scores.demo-standings .attract-score-row.standing.top { border-left-color: var(--amber); }
+body.demo-active .attract-scores.demo-standings small { animation: none; font-size: clamp(8px, .8vw, 11px); }
+body.demo-active #resultScreen .result-recap { display: block; margin: 6px 0 0; color: var(--amber); }
 .daily-banner[hidden] { display: none !important; }
 
 /* ===========================================================================

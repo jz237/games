@@ -4,6 +4,7 @@ export const DEMO_IDLE_DELAY_MS = 45_000;
 export const DEMO_RESULT_HOLD_MS = 5_000;
 import { registerAiDifficulty, resolveAiSettings } from "./ai.mjs";
 import { getFighterKit } from "./fighter-kits.mjs";
+import { DEMO_SIGN_OFF_VARIANTS, demoBoutPlan } from "./demo-session.mjs";
 
 // 4.3 DEMO SPACING: the attract-mode CPUs fight on a PRO brain with every kit
 // range widened 1.6x and the mid-band pokes thinned, so the two never sit in
@@ -65,8 +66,12 @@ export const DEMO_CLOCK_COVERAGE_BLEND = 0;
 // three-bag; footsies-first is the CLOCK card's own opener (the feel-out is
 // the clock's story). With one clock card in four, every eight-card window
 // shows all four openers and no two consecutive cards open the same way.
-export const DEMO_OPENERS = Object.freeze(["super", "throw", "dash-in", "footsies-first"]);
-export const DEMO_STANDARD_OPENERS = Object.freeze(["super", "throw", "dash-in"]);
+// 5.4 SESSION LAYER (sweep #3): the STORY now names the opener — "none" is
+// the ZONING WAR's (no forced opener, the spacing brains own the bell) —
+// and every standard story has its own, so the set below is what the
+// stories draw from rather than a bag of its own.
+export const DEMO_OPENERS = Object.freeze(["super", "throw", "dash-in", "footsies-first", "none"]);
+export const DEMO_STANDARD_OPENERS = Object.freeze(["super", "throw", "dash-in", "none"]);
 // One CLOCK card in four; the first card of a session is always standard.
 export const DEMO_FORMATS = Object.freeze(["standard", "clock"]);
 const FORMAT_BAG = Object.freeze(["standard", "standard", "standard", "clock"]);
@@ -93,10 +98,15 @@ export const DEMO_COMEBACK_HEALTH = 50;
  */
 export function demoCloserPlan({
   winner = 0, rounds = [0, 0], roundsToWin = 2, winnerHealth = 100, fighterId = "", ledger = {},
-  loserGrounded = true,
+  loserGrounded = true, quickBout = false, quickFinisher = false,
 } = {}) {
   const loser = 1 - winner;
-  const matchPoint = (rounds[winner] || 0) + 1 >= roundsToWin;
+  // 5.4 SESSION LAYER (sweep #15): a one-round QUICK BOUT is match point from
+  // the bell, which would hand every undercard bout the nine-second ceremony
+  // the closer exists to ration. Match point alone earns nothing there; the
+  // brink and the airborne rules still apply, and the director's seeded
+  // `quickFinisher` coin gives half the undercard a Final Blow anyway.
+  const matchPoint = !quickBout && (rounds[winner] || 0) + 1 >= roundsToWin;
   const comeback = (rounds[winner] || 0) < (rounds[loser] || 0) && winnerHealth <= DEMO_COMEBACK_HEALTH;
   const brink = winnerHealth <= DEMO_BRINK_HEALTH;
   // A loser knocked out in the AIR (a juggle KO) is left hanging by the
@@ -105,7 +115,8 @@ export function demoCloserPlan({
   // a feet-in-the-air read for the whole curtain call, so the ceremony takes
   // him instead: the Final Blow owns its victim from the first frame.
   const airborne = !loserGrounded;
-  const reason = matchPoint ? "match-point" : comeback ? "comeback" : brink ? "brink" : airborne ? "airborne" : "plain";
+  const quick = quickBout && quickFinisher;
+  const reason = matchPoint ? "match-point" : comeback ? "comeback" : brink ? "brink" : airborne ? "airborne" : quick ? "quick" : "plain";
   const finisher = reason !== "plain";
   const shown = Number(ledger?.[fighterId]) || 0;
   return Object.freeze({ finisher, variant: finisher ? shown % 2 : -1, reason });
@@ -228,6 +239,160 @@ export function demoPersonaFor(fighterId) {
   return persona && DEMO_PERSONAS[persona] ? `${DEMO_PERSONA_PREFIX}${persona}` : DEMO_AI_DIFFICULTY;
 }
 
+// ---------------------------------------------------------------------------
+// 5.4 SESSION LAYER — STORIES (sweep #3). Traced on the 5.4 head, every
+// exhibition had the same skeleton: the showcase side strictly alternated,
+// the leader visibly threw the fight for 7-35% of the fight ticks (the
+// choreographer's yield, at one fixed tolerance), every card had exactly one
+// taunt, and both seats always played the same persona strength. A STORY is
+// the seeded per-card answer: it sets the opener, which side leads it, how
+// much each side is allowed to yield, a per-side tier overlay on the seat's
+// persona, and (SHOWBOAT) who disrespects every knockdown. The stories SET
+// the round-ends and personas hooks — the opener draw, `superSide`, the
+// clock format, `demoPersonaFor` — they do not replace them.
+//
+//   GRUDGE            both aggressive, NO yield either side, the throw opener
+//   ROOKIE VS VETERAN asymmetric tiers per seat (the veteran a FINAL-grade
+//                     persona, the rookie a ROOKIE-grade one); the veteran
+//                     gets the walk-in super, yields early; the rookie never
+//                     yields and gets a full bar for the late comeback when
+//                     the veteran reaches match point
+//   SHOWBOAT          one seat taunts after every knockdown (choreographer +
+//                     brain), opens on the dash-in
+//   ZONING WAR        no forced opener, both seats on the SPACING overlay
+//   CLOCK             the round-ends CLOCK card (format "clock", footsies)
+//
+// `flip` (a seeded coin from the director's story stream) decides which seat
+// is the veteran / the showboat, so a seed replays the same casting.
+export const DEMO_STORY_IDS = Object.freeze(["grudge", "rookie-veteran", "showboat", "zoning-war", "clock"]);
+export const DEMO_STANDARD_STORY_IDS = Object.freeze(["grudge", "rookie-veteran", "showboat", "zoning-war"]);
+
+// The choreographer's yield tolerance per seat ({ coverage, health } — the
+// 2.9 round-4 constants are 4 / 26) or null for a seat that never yields.
+const YIELD_DEFAULT = Object.freeze({ coverage: 4, health: 26 });
+const YIELD_EARLY = Object.freeze({ coverage: 2, health: 14 });
+
+export const DEMO_STORIES = Object.freeze({
+  grudge: Object.freeze({
+    id: "grudge", label: "GRUDGE MATCH", opener: "throw", format: "standard",
+    tiers: Object.freeze(["grudge", "grudge"]), yield: Object.freeze([null, null]),
+    superSide: "alternate", showboatSide: -1, comebackSide: -1,
+  }),
+  "rookie-veteran": Object.freeze({
+    id: "rookie-veteran", label: "ROOKIE VS VETERAN", opener: "super", format: "standard",
+    // Indexed by ROLE: [veteran, rookie]; demoStoryFor maps roles to seats.
+    tiers: Object.freeze(["veteran", "rookie"]), yield: Object.freeze([YIELD_EARLY, null]),
+    superSide: "veteran", showboatSide: -1, comebackSide: "rookie",
+  }),
+  showboat: Object.freeze({
+    id: "showboat", label: "SHOWBOAT", opener: "dash-in", format: "standard",
+    tiers: Object.freeze(["showboat", null]), yield: Object.freeze([YIELD_DEFAULT, YIELD_DEFAULT]),
+    superSide: "showboat", showboatSide: "showboat", comebackSide: -1,
+  }),
+  "zoning-war": Object.freeze({
+    id: "zoning-war", label: "ZONING WAR", opener: "none", format: "standard",
+    tiers: Object.freeze(["spacing", "spacing"]), yield: Object.freeze([YIELD_DEFAULT, YIELD_DEFAULT]),
+    superSide: "alternate", showboatSide: -1, comebackSide: -1,
+  }),
+  clock: Object.freeze({
+    id: "clock", label: "THE CLOCK", opener: "footsies-first", format: "clock",
+    tiers: Object.freeze([null, null]), yield: Object.freeze([YIELD_DEFAULT, YIELD_DEFAULT]),
+    superSide: "alternate", showboatSide: -1, comebackSide: -1,
+  }),
+});
+
+// The per-seat tier OVERLAYS a story lays over the seat's persona. Every
+// overlay is registered per persona at load (`demo-<persona>-<overlay>`, plus
+// `demo-<overlay>` over the fallback tier), so a seat still plays its kit's
+// archetype — the grappler grudges at grab range, the zoner grudges with its
+// projectile — with the story's temperament on top.
+export const DEMO_STORY_TIERS = Object.freeze({
+  // Both men come forward: no patience, the throw and the grab up, the dash
+  // in, no disrespect.
+  grudge: Object.freeze({
+    patience: 0, throwWeight: 1.6, closeWeight: 1.2, throwChance: 0.28, grabPressureChance: 0.35,
+    dashInChance: 0.35, meatyChance: 0.6, comboChance: 0.7, tauntChance: 0,
+  }),
+  // FINAL-grade reads on the persona's ranges.
+  veteran: Object.freeze({
+    reactionFrames: 6, decisionFrames: 7, defenseChance: 0.87, antiAirChance: 0.84, comboChance: 0.8,
+    errorChance: 0.03, perfectGuardChance: 0.38, throwTechChance: 0.78, throwWhiffPunishChance: 0.84,
+    wakeupReversalChance: 0.6, tauntChance: 0.02,
+  }),
+  // ROOKIE-grade reads: slow, mistakes, a low guard, the odd taunt.
+  rookie: Object.freeze({
+    reactionFrames: 17, decisionFrames: 16, defenseChance: 0.5, antiAirChance: 0.4, comboChance: 0.3,
+    errorChance: 0.22, perfectGuardChance: 0.05, throwTechChance: 0.15, throwWhiffPunishChance: 0.2,
+    wakeupReversalChance: 0.2, counterFirstChance: 0, tauntChance: 0.2,
+  }),
+  // The brain's own disrespect roll on every safe knockdown (the
+  // choreographer stages the rest — see showboatSide).
+  showboat: Object.freeze({ tauntChance: 0.6 }),
+  // Keep-away for anyone: a wide clinch line, a wide hold band, the ranged
+  // share up, no dash-in, throws down.
+  spacing: Object.freeze({
+    spacing: 1.35, patience: 0.7, spaceRange: 200, holdSlack: 55, rangedWeight: 2.5, pokeWeight: 1.3,
+    throwWeight: 0.4, throwChance: 0.06, dashInChance: 0, grabPressureChance: 0.08,
+  }),
+});
+
+for (const [overlayName, overlay] of Object.entries(DEMO_STORY_TIERS)) {
+  registerAiDifficulty(`${DEMO_AI_DIFFICULTY}-${overlayName}`, {
+    ...resolveAiSettings(DEMO_AI_DIFFICULTY),
+    ...overlay,
+    label: `DEMO · ${overlayName.toUpperCase()}`,
+    overlay: overlayName,
+  });
+  for (const [name, persona] of Object.entries(DEMO_PERSONAS)) {
+    registerAiDifficulty(`${DEMO_PERSONA_PREFIX}${name}-${overlayName}`, {
+      ...resolveAiSettings(`${DEMO_PERSONA_PREFIX}${name}`),
+      ...overlay,
+      label: `${persona.label} · ${overlayName.toUpperCase()}`,
+      persona: name,
+      overlay: overlayName,
+    });
+  }
+}
+
+/** The registered tier for a seat: its persona under a story overlay (or the bare persona). */
+export function demoStoryTierFor(fighterId, overlay = null) {
+  const base = demoPersonaFor(fighterId);
+  if (!overlay || !DEMO_STORY_TIERS[overlay]) return base;
+  return `${base}-${overlay}`;
+}
+
+/**
+ * A story resolved onto the two SEATS. `flip` is the director's seeded coin:
+ * the veteran / the showboat sits on seat `flip`; `alternate` keeps the
+ * round-ends rule (the lead alternates by cycle). Pure — the same inputs
+ * always cast the same show.
+ */
+export function demoStoryFor(storyId = "grudge", { flip = 0, cycle = 1 } = {}) {
+  const story = DEMO_STORIES[storyId] || DEMO_STORIES.grudge;
+  const seat = flip === 1 ? 1 : 0;
+  const alternate = (Math.max(1, Math.floor(Number(cycle) || 1)) - 1) % 2;
+  const roleSeat = (role) => (role === "alternate" ? alternate : role === -1 ? -1 : seat);
+  // Role-indexed tables land on the seats: role 0 (veteran / showboat) on
+  // `seat`, role 1 on the other seat.
+  const bySeat = (table) => {
+    const seats = [null, null];
+    seats[seat] = table[0];
+    seats[1 - seat] = table[1];
+    return Object.freeze(seats);
+  };
+  return Object.freeze({
+    id: story.id,
+    label: story.label,
+    opener: story.opener,
+    format: story.format,
+    superSide: roleSeat(story.superSide),
+    showboatSide: roleSeat(story.showboatSide),
+    comebackSide: story.comebackSide === -1 ? -1 : 1 - seat,
+    tiers: bySeat(story.tiers),
+    yield: bySeat(story.yield),
+  });
+}
+
 function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value)).filter(Boolean))];
 }
@@ -276,16 +441,24 @@ export function createDemoDirector({ fighterIds, stageIds, trackCount = 0, seed 
   // 5.4: the SHOW stream (format + opener) is its own seeded rng so the
   // matchup/stage/track draw of every existing seed is byte-identical to 5.3.
   const showRng = new DeterministicRng(hashSeed(normalizedSeed, "show"));
+  // 5.4 SESSION LAYER: the STORY stream (story bag, the casting coin, the
+  // sign-off variant bag, the quick-bout finisher coin) is a third seeded
+  // rng, so the matchup/stage/track draw AND the clock-card positions of
+  // every existing seed stay exactly what they were.
+  const storyRng = new DeterministicRng(hashSeed(normalizedSeed, "story"));
   let matchupBag = [];
   let stageBag = [];
   let trackBag = [];
   let formatBag = [];
-  let openerBag = [];
+  let storyBag = [];
+  let signOffBag = [];
   let previousMatchup = null;
   let previousStage = null;
   let previousTrack = null;
   let previousFormat = null;
   let previousOpener = null;
+  let previousStory = null;
+  let previousSignOff = null;
   let cycle = 0;
 
   // One CLOCK card per four: a shuffled bag, never two clock cards in a row
@@ -311,6 +484,23 @@ export function createDemoDirector({ fighterIds, stageIds, trackCount = 0, seed 
     // here never touches the matchup/stage/track draw; it is in this one
     // place so peek() and next() see the same head.
     if (!formatBag.length) formatBag = refillFormats();
+    // 5.4 SESSION LAYER: the story bag (four standard stories, never the
+    // same one back to back across a refill) rides the story rng; a CLOCK
+    // card's story is "clock" and leaves the bag alone, so the head here is
+    // the story the next STANDARD card will tell — which is why peek() can
+    // name it.
+    if (!storyBag.length) storyBag = refillBag(DEMO_STANDARD_STORY_IDS, storyRng, previousStory);
+    if (!signOffBag.length) {
+      signOffBag = refillBag(Array.from({ length: DEMO_SIGN_OFF_VARIANTS }, (_, index) => index), storyRng, previousSignOff);
+    }
+  }
+
+  // The next card's show tag without consuming anything (peek and next
+  // agree by construction: both read the bag heads after one refillBags()).
+  function showHead(number) {
+    const format = formatBag[0];
+    const story = format === "clock" ? "clock" : storyBag[0];
+    return { format, story, opener: DEMO_STORIES[story].opener, bout: demoBoutPlan(number) };
   }
 
   // 5.4 FIGHT NIGHT (sweep #26/#27) — PEEK. The next exhibition's unordered
@@ -326,45 +516,57 @@ export function createDemoDirector({ fighterIds, stageIds, trackCount = 0, seed 
   // seat, and revealing the flip early would mean drawing it early.
   function peek() {
     refillBags();
+    const head = showHead(cycle + 1);
     return Object.freeze({
       cycle: cycle + 1,
       pair: Object.freeze([...matchupBag[0]]),
       stage: stageBag[0],
       track: trackBag[0],
-      format: formatBag[0],
+      format: head.format,
+      // 5.4 SESSION LAYER: the NEXT UP panel names the story and the bout.
+      story: head.story,
+      bout: head.bout,
     });
   }
 
   function next() {
     refillBags();
+    const head = showHead(cycle + 1);
     const matchup = matchupBag.shift();
     const stage = stageBag.shift();
     const track = trackBag.shift();
     const format = formatBag.shift();
-    // A CLOCK card always opens on footsies: the feel-out IS the clock's
-    // story, and a free walk-in super is a third of a health bar the round
-    // cannot afford if it is to reach 0. Standard cards rotate the other
-    // three, so six standard cards always exhaust the bag at least once.
-    let opener = "footsies-first";
-    if (format !== "clock") {
-      if (!openerBag.length) openerBag = refillBag(DEMO_STANDARD_OPENERS, showRng, previousOpener);
-      // No two consecutive CARDS open the same way — a clock card's footsies
-      // can sit between two standard cards, so the bag head is checked
-      // against the previous card at draw time too.
-      if (openerBag.length > 1 && openerBag[0] === previousOpener) [openerBag[0], openerBag[1]] = [openerBag[1], openerBag[0]];
-      opener = openerBag.shift();
-    }
+    // 5.4 SESSION LAYER: the STORY names the opener. A CLOCK card is the
+    // clock story (footsies — a free walk-in super is a third of a health
+    // bar the round cannot afford if it is to reach 0) and leaves the story
+    // bag alone; a standard card takes the bag head. Every standard story
+    // has its own opener, so no two consecutive cards open the same way and
+    // ten cards always show every story (pinned in tests/demo-session.test.mjs).
+    const story = head.story;
+    if (format !== "clock") storyBag.shift();
+    const opener = head.opener;
+    // The casting coin (which seat is the veteran / the showboat), the
+    // sign-off variant and the quick-bout finisher coin: drawn for EVERY
+    // card in a fixed order so the story stream stays aligned whatever the
+    // card turned out to be.
+    const flip = storyRng.nextFloat() < 0.5 ? 0 : 1;
+    const signOff = signOffBag.shift();
+    const quickFinisher = storyRng.nextFloat() < 0.5;
     const picks = rng.nextFloat() < 0.5 ? [...matchup] : [matchup[1], matchup[0]];
     previousMatchup = matchup;
     previousStage = stage;
     previousTrack = track;
     previousFormat = format;
     previousOpener = opener;
+    if (format !== "clock") previousStory = story;
+    previousSignOff = signOff;
     cycle += 1;
     return Object.freeze({
       cycle, picks: Object.freeze(picks), stage, track,
-      // 5.4 FIGHT NIGHT: how this card opens and whether it is on the clock.
-      show: Object.freeze({ format, opener }),
+      // 5.4 FIGHT NIGHT: how this card opens and whether it is on the clock;
+      // 5.4 SESSION LAYER: the story it tells, its casting coin, the bout of
+      // the card it is, its sign-off variant and its quick-bout coin.
+      show: Object.freeze({ format, opener, story, flip, bout: head.bout, signOff, quickFinisher }),
     });
   }
 
@@ -381,6 +583,8 @@ export function createDemoDirector({ fighterIds, stageIds, trackCount = 0, seed 
       lastTrack: previousTrack,
       lastFormat: previousFormat,
       lastOpener: previousOpener,
+      lastStory: previousStory,
+      remainingStories: storyBag.length,
       rng: rng.getState(),
     };
   }

@@ -328,9 +328,15 @@ test("game.js gates the persona pick and the Grit policy on the demo", async () 
   // clock card the CLOCK brain and every standard card the persona.)
   assert.ok(source.includes('createAiBrain(state.mode === "demo" ? demoAiTier(kitId) : state.aiDifficulty)'),
     "makeFighter must pick the demo tier only in demo mode");
-  assert.ok(source.includes("return clock ? DEMO_CLOCK_AI_DIFFICULTY : demoPersonaFor(kitId);"),
-    "a standard card's seat plays its persona");
-  assert.equal(source.match(/demoPersonaFor\(/g).length, 1, "demoPersonaFor has exactly one call site");
+  // (5.4 session layer: the pin moved from demoPersonaFor(kitId) to
+  // demoStoryTierFor(kitId, overlay) — the seat still plays its persona,
+  // resolved through demoPersonaFor inside engine/demo.mjs, with the card's
+  // STORY overlay on top; tests/demo-session.test.mjs pins that a null
+  // overlay IS the persona tier.)
+  assert.ok(source.includes("return clock ? DEMO_CLOCK_AI_DIFFICULTY : demoStoryTierFor(kitId, demoStoryOverlayFor(kitId));"),
+    "a standard card's seat plays its persona under the story's overlay");
+  assert.equal(source.match(/demoStoryTierFor\(/g).length, 1, "demoStoryTierFor has exactly one call site");
+  assert.equal(source.match(/demoPersonaFor\(/g), null, "game.js no longer resolves the persona itself");
   assert.ok(source.includes("personas: (state.fighters || []).map((fighter) => fighter.aiBrain?.difficulty || null)"),
     "demoSnapshot must report the persona per seat");
 });

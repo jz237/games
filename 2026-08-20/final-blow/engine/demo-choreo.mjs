@@ -790,6 +790,8 @@ const HEALTH_GAP_TOLERANCE = 26;
 // the trailing side genuinely cannot convert, so the yield runs in bursts.
 const YIELD_FRAMES = 54;
 const YIELD_RELEASE_FRAMES = 40;
+// 5.4 SESSION LAYER: the showboat's one-taunt-per-knockdown cooldown.
+const SHOWBOAT_TAUNT_FRAMES = 150;
 
 /**
  * @param {object} options
@@ -804,9 +806,24 @@ const YIELD_RELEASE_FRAMES = 40;
  */
 export function createDemoChoreographer({
   pair, stageId = "", hasStageWeapon = false, seed = 237,
-  blend = DEMO_COVERAGE_BLEND, priorShown = null,
+  blend = DEMO_COVERAGE_BLEND, priorShown = null, story = null,
 } = {}) {
   if (!Array.isArray(pair) || pair.length !== 2) throw new Error("Demo choreography needs a fighter pair.");
+  // 5.4 SESSION LAYER (sweep #3): the card's STORY (engine/demo demoStoryFor)
+  // replaces two of this file's constants per seat. `yield` is the per-seat
+  // tolerance before the leader stands down ({ coverage, health } — the
+  // round-4 constants below by default) or null for a seat that NEVER yields
+  // (both seats of a GRUDGE, the rookie of ROOKIE VS VETERAN); `showboatSide`
+  // is the seat that disrespects every knockdown. No story = the 2.9 rules.
+  const yieldTolerance = [0, 1].map((side) => {
+    if (!story || !Array.isArray(story.yield)) return { coverage: COVERAGE_GAP_TOLERANCE, health: HEALTH_GAP_TOLERANCE };
+    const tolerance = story.yield[side];
+    return tolerance ? { coverage: Number(tolerance.coverage) || COVERAGE_GAP_TOLERANCE, health: Number(tolerance.health) || HEALTH_GAP_TOLERANCE } : null;
+  });
+  const showboatSide = story && (story.showboatSide === 0 || story.showboatSide === 1) ? story.showboatSide : -1;
+  // The showboat's taunt cooldown: one disrespect per knockdown, not one per
+  // tick of the knockdown.
+  let showboatBlockedUntil = 0;
   const rng = new DeterministicRng(hashSeed("FINAL-BLOW-DEMO-CHOREO", seed, pair[0], pair[1], stageId));
   const checklists = pair.map((fighterId) => demoCoverageChecklist(fighterId));
   const bands = pair.map((fighterId, side) => Object.fromEntries(
@@ -859,6 +876,9 @@ export function createDemoChoreographer({
     //   gritLinks    — `super` chained into a confirmed opener on a full bar
     //   gritPreempts — plain unstarted showcases restarted for the opener
     gritOpeners: 0, gritLinks: 0, gritPreempts: 0,
+    // 5.4 SESSION LAYER diagnostics: the showboat's staged taunts, and the
+    // ticks a seat with no yield tolerance would have yielded on the 2.9 rule.
+    showboatTaunts: 0, yieldRefused: 0,
   };
   const previous = [null, null];
 
@@ -1033,12 +1053,18 @@ export function createDemoChoreographer({
   // materially more of its kit, or it is far enough ahead on health that it is
   // about to (a fighter that spends the round in hitstun cannot stage
   // anything, which is exactly how a 6-of-30 column happens).
-  function dominating(side, view) {
-    if (coverageGap(side) >= COVERAGE_GAP_TOLERANCE) return true;
+  function dominating(side, view, tolerance = yieldTolerance[side]) {
+    if (!tolerance) {
+      // A seat the story never lets yield: measured for the honest half of
+      // the ledger (how often the 2.9 rule WOULD have stood it down).
+      if (dominating(side, view, { coverage: COVERAGE_GAP_TOLERANCE, health: HEALTH_GAP_TOLERANCE })) stats.yieldRefused += 1;
+      return false;
+    }
+    if (coverageGap(side) >= tolerance.coverage) return true;
     const self = view.fighters[side];
     const rival = view.fighters[1 - side];
     if (!Number.isFinite(self?.health) || !Number.isFinite(rival?.health)) return false;
-    return self.health - rival.health >= HEALTH_GAP_TOLERANCE && coverageGap(side) > 0;
+    return self.health - rival.health >= tolerance.health && coverageGap(side) > 0;
   }
 
   // 5.4 GRIT POLICY: the bar is full and there is a super to spend it on.
@@ -1125,6 +1151,20 @@ export function createDemoChoreographer({
     const self = view.fighters[side];
     const opponent = view.fighters[1 - side];
     const distance = Math.abs(opponent.x - self.x);
+    // 5.4 SESSION LAYER: the SHOWBOAT disrespects EVERY knockdown — the beat
+    // ledger's one-per-exhibition rule does not apply to it, only a short
+    // cooldown so one knockdown is one taunt.
+    if (side === showboatSide && opponent.down && distance > 60 && view.tick >= showboatBlockedUntil) {
+      showboatBlockedUntil = view.tick + SHOWBOAT_TAUNT_FRAMES;
+      stats.showboatTaunts += 1;
+      return {
+        beat: "taunt",
+        spec: {
+          kind: "ground", press: { taunt: true }, hold: {},
+          band: { min: 150, max: Infinity },
+        },
+      };
+    }
     if (beatOpen("taunt", view) && opponent.down && distance > 60) {
       // Back off to disrespect range first (the band's away-walk), then pose.
       return {
@@ -2728,5 +2768,7 @@ export function createDemoChoreographer({
     ])),
     hasStageWeapon: () => hasStageWeapon,
     pair: () => [...pair],
+    // 5.4 SESSION LAYER: the story this exhibition was built on (read-only).
+    story: () => (story ? { id: story.id, showboatSide, yield: yieldTolerance.map((t) => (t ? { ...t } : null)) } : null),
   });
 }
