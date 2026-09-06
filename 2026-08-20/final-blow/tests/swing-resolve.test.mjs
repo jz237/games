@@ -257,8 +257,10 @@ function testAirHitNeverReachesTheScreen() {
   }
   assert.ok(resolved === banks.length * 16 * 256 * gates.length);
   assert.ok(substituted > 1000, `the sweep actually exercised the table (${substituted} substitutions)`);
-  // The four ext4 cells 5.0 left unrouted alongside it (MOTION-ATLAS.md v5.0).
-  const unrouted = [E4.airHit, E4.crouchGuardFlinch, E4.stagger, E4.bodyBlow, E4.floorBounce, E4.ko].filter(Number.isInteger);
+  // v5.1 routed the stagger, body blow and KO cells (ext4 routing pass); the
+  // air hit (inverted on every sheet) and the floor bounce (feet-up, and no
+  // ground-bounce state in the sim) stay unrouted.
+  const unrouted = [E4.airHit, E4.floorBounce].filter(Number.isInteger);
   for (const bank of banks) {
     for (let frame = 0; frame < 16; frame += 1) {
       for (const ctx of contexts) {

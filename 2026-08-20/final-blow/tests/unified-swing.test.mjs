@@ -220,7 +220,7 @@ function testRegistryAndWiring() {
   // Engineering pass: the resolver moved to engine/swing-resolve.mjs (tested
   // in tests/swing-resolve.test.mjs); game.js applies it at the single
   // resolution choke point with the bank-routed gate. The pin follows.
-  assert.match(gameSource, /const pose = swingResolve\(resolvedPose, swingContext\(fighter\), \(cell, bank\) => motionBankCellDrawable\(fighter\.def\.id, cell, bank\)\);/);
+  assert.match(gameSource, /const pose = swingResolve\(resolvedPose, swingContext\(fighter, \{ roundDecided: [^}]+\}\), \(cell, bank\) => motionBankCellDrawable\(fighter\.def\.id, cell, bank\)\);/);
   assert.match(gameSource, /import \{ swingContext, swingResolve \} from "\.\/engine\/swing-resolve\.mjs";/);
   assert.ok(!/^function swingResolve\(/m.test(gameSource), "no second resolver in game.js");
   assert.match(gameSource, /if \(bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK\) return swingCellDrawable\(fighterId, cell, bank\);/);
@@ -230,11 +230,14 @@ function testRegistryAndWiring() {
   assert.ok(!/hdSheetPath\([^)]*ext[34]/.test(gameSource));
   // v5.1: the three reaction reads swingResolve hands the table, and the
   // sim field the body blow keys on — snapshotted as presentation data.
-  const resolveBody = gameSource.slice(gameSource.indexOf("function swingResolve("), gameSource.indexOf("function swingResolve(") + 3000);
+  // (5.1 integration: the resolver lives in engine/swing-resolve.mjs — the
+  // reads are pinned there; game.js only hands it the phase read.)
+  const resolverSource = readFileSync(join(testDir, "..", "engine", "swing-resolve.mjs"), "utf8");
+  const resolveBody = resolverSource.slice(resolverSource.indexOf("export function swingContext("), resolverSource.indexOf("export function swingContext(") + 3600);
   assert.match(resolveBody, /bodyBlow: fighter\.hitstunFrames > 0/);
   assert.match(resolveBody, /fighter\.lastHitLevel === ATTACK_LEVELS\.MID \|\| fighter\.lastHitLevel === ATTACK_LEVELS\.LOW/);
   assert.match(resolveBody, /reeling: \(fighter\.dizzyFrames > 0/);
-  assert.match(resolveBody, /ko: roundDecided && fighter\.health <= 0/);
+  assert.match(resolveBody, /ko: Boolean\(roundDecided\) && fighter\.health <= 0/);
   assert.match(gameSource, /"lastHitResult",\s*(\/\/[^\n]*\n\s*)?"lastHitLevel",/, "lastHitLevel is a snapshotted presentation field");
   assert.match(gameSource, /victim\.lastHitLevel = attack\.level;/);
   assert.match(gameSource, /victim\.lastHitLevel = projectile\.level;/);

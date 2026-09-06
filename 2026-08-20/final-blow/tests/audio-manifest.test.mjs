@@ -151,9 +151,14 @@ function announcerLineCounts() {
 
 test("every announcer cue the game captions has exactly that many takes, and vice versa", () => {
   const lines = announcerLineCounts();
-  assert.equal(Object.keys(lines).length, 38);
+  // w51 announcer/clock truth added "tenseconds" as a CAPTION-ONLY cue (no
+  // takes generated yet — MISSING-AUDIO.md Priority 6, an owner call), so it
+  // is captioned but absent from the manifest by design.
+  const CAPTION_ONLY = new Set(["tenseconds"]);
+  assert.equal(Object.keys(lines).length, 39);
+  for (const cue of CAPTION_ONLY) assert.ok(lines[cue] >= 1 && !raw.announcer.cues[cue], `${cue} is caption-only`);
   assert.deepEqual(
-    Object.fromEntries(Object.keys(lines).sort().map((cue) => [cue, lines[cue]])),
+    Object.fromEntries(Object.keys(lines).filter((cue) => !CAPTION_ONLY.has(cue)).sort().map((cue) => [cue, lines[cue]])),
     Object.fromEntries(Object.keys(raw.announcer.cues).sort().map((cue) => [cue, raw.announcer.cues[cue]])),
     "caption list and recorded takes disagree — a caption would show the wrong words",
   );

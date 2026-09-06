@@ -7,7 +7,8 @@ Usage: rebuild_ext_banks.py [--apply]   (without --apply: build into out-fix/ an
 """
 import json, os, subprocess, sys
 A = os.path.dirname(os.path.abspath(__file__))
-G = "/home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-roadmap2/2026-08-20/final-blow"
+sys.path.insert(0, A)
+from repo_root import G  # the checkout this file lives in (FINAL_BLOW_ROOT overrides)
 V = sys.executable
 IDS = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "commissioner", "devil"]
 man = json.load(open(f"{G}/assets/unified/MANIFEST.json"))["fighters"]
