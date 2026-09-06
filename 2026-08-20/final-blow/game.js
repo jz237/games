@@ -270,6 +270,16 @@ import {
   trimVisualBudget,
 } from "./engine/polish.mjs";
 import {
+  CLOCK_CALLOUT_SECONDS,
+  ROUND_END_CAUSES,
+  clockTickPlan,
+  dizzyRingPlan,
+  drawFromBag,
+  roundEndAnnouncerPlan,
+  roundEndBannerSub,
+  roundEndCause,
+} from "./engine/announcer.mjs";
+import {
   buildInviteUrl,
   buildWatchUrl,
   connectPrivateRoom,
@@ -1894,6 +1904,9 @@ const soundCaptionLabels = Object.freeze({
   resume: "FIGHT RESUMED",
   // Release 1.7 DEPTH: the Perfect Guard 'tink' block variant.
   "perfect-guard": "PERFECT GUARD",
+  // w51 clock truth: the :00 buzzer (ticks themselves stay uncaptioned —
+  // ten captions in ten seconds would bury the fight captions).
+  "time-buzzer": "TIME",
 });
 
 const keys = new Set();
@@ -8356,6 +8369,9 @@ function drawElementalWash() {
 const hudFxDebug = {
   damageGhosts: 0, letterSlams: 0, comboHeat: 0, slashWipes: 0,
   selectSlams: 0, victoryEntrances: 0, pipFlips: 0, timerPulses: 0,
+  // w51: clock ticks booked on the same timer edge as timerPulses (QA
+  // asserts the two counters agree — a pulse without a tick is a bug).
+  timerTicks: 0,
   // Wave 7 render-tech one-shots: monotonic totals on the same pattern.
   // sloMoBlurFrames counts rendered frames with the slow-mo smear active
   // (like cinemaFxDebug.handheldFrames — still monotonic, never reset).
@@ -11169,14 +11185,17 @@ function resetRound() {
   }, 1050);
 }
 
-function announce(main, sub = "", duration = 1) {
+function announce(main, sub = "", duration = 1, { speak = null } = {}) {
   if (rollbackResimulating) return;
   const box = $("#announcer");
   const strong = box.querySelector("strong");
   const text = String(main);
   // Wave 9: every banner also books its spoken announcer call (captions
   // always; audio only once real takes exist in assets/audio/announcer/).
-  announcerSpeakBanner(text);
+  // w51: a caller that knows more than the banner text (finishRound knows
+  // whether the round was a decision and whether it closed the match) hands
+  // the exact cue plan in through `speak`; the text map is the fallback.
+  announcerSpeakBanner(text, speak);
   const letters = [...text];
   // Letter-by-letter slam: each character lands with its own scale-punch on a
   // short stagger. The innerHTML rebuild also restarts the animation on
@@ -11416,8 +11435,22 @@ function finishRound(winner, type = -1) {
     // (demo-only; every other mode keeps the full 4.9s beat).
     state.phaseTime = state.mode === "demo" ? DEMO_KO_HOLD_SECONDS : 4.9;
     duckMusic(0.28, 2600);
-    announce(`${winDef.name} WINS`, "KNOCKOUT", 2.4);
-    sound("ko", state.fighters[1 - winner]);
+    // w51 announcer truth: the clock running out on two standing fighters is
+    // a DECISION, not a knockout — the banner says so, the announcer opens on
+    // the timeover bank instead of "K.O.!", and knockout.mp3 (the reviewed
+    // shared KO groan) stays silent because nobody went down; the :00 buzzer
+    // from the clock tick is the sound of that moment. A round win speaks the
+    // winner's name; only the round that closes the match (state.rounds was
+    // incremented above) earns the "<id>-wins" bank.
+    const loser = state.fighters[1 - winner];
+    const cause = roundEndCause({ finisherType: type, timer: state.timer, loserHealth: loser.health });
+    const speak = roundEndAnnouncerPlan({
+      cause,
+      matchWon: state.rounds[winner] >= roundsToWinValue(),
+      fighterId: winDef.id,
+    });
+    announce(`${winDef.name} WINS`, roundEndBannerSub(cause), 2.4, { speak });
+    if (cause !== ROUND_END_CAUSES.decision) sound("ko", loser);
   }
   // Wave 9: round-story callouts (FLAWLESS / COMEBACK / time-over / fatality)
   // layered after the primary call — guarded + deduped like announce().
@@ -12812,6 +12845,14 @@ function updateHud() {
     if (timerLow) {
       restartCssAnimation(timerEl, "tick");
       hudFxDebug.timerPulses += 1;
+      // w51 clock truth: the red heartbeat gets a sound. One synthesised
+      // tick per displayed second on the same edge (rising pitch ladder,
+      // buzzer at :00) and the once-per-round "TEN SECONDS" announcer call
+      // at :10, both behind the updateHud rollback guard above so replays
+      // and resims stay silent. timerTicks and timerPulses must agree.
+      hudFxDebug.timerTicks += 1;
+      clockTickAudio(state.timer);
+      clockCallout();
     }
   }
   if (!timerLow) timerEl.classList.remove("tick");
@@ -13635,7 +13676,12 @@ function enterDizzy(fighter, attacker) {
   if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.2);
   spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "DIZZY", "#ffd54a");
   duckMusic(0.55, 620);
-  sound("ko", fighter);
+  // w51 announcer truth: a dizzy is a stun the fighter recovers from, so it
+  // must not play knockout.mp3 (the same reviewed KO groan a real KO uses —
+  // for the Commissioner/Devil their ko take is "the book hitting the
+  // floor"). The stars get their own synthesised ring instead; the fighter's
+  // dazed voice bark still layers over it below.
+  dizzyRingAudio(fighter);
   // Wave 15: the dizzy flutters in the hands (all gates inside).
   combatHaptic("dizzy");
   // Wave 9: dazed voice bark layered over the ring (guarded + tick-deduped).
@@ -25936,6 +25982,9 @@ function fighterSoundId(fighter) {
 const voiceFxDebug = {
   announcerCalls: 0, announcerBanksLoaded: 0, voiceVariantPlays: 0,
   reactiveCues: 0, storyCallouts: 0, onlineMoments: 0,
+  // w51: "TEN SECONDS" clock calls (once per round) and decision round-ends
+  // that opened on the timeover bank instead of "ko".
+  clockCallouts: 0, decisionCalls: 0,
 };
 // Every probe HEAD request ever issued — QA asserts this stays flat when the
 // same missing bank is requested repeatedly (probe once, cached forever).
@@ -26280,6 +26329,9 @@ function proceduralSound(kind) {
 // the leak probe can assert creation stays proportional to events.
 const audioFxDebug = {
   impactLayers: 0, crowdSwells: 0, ambienceEvents: 0, nodesCreated: 0,
+  // w51: synthesised dizzy rings and clock ticks/buzzers actually voiced
+  // (after the sound-toggle / attract gates, unlike the hudFxDebug edges).
+  dizzyRings: 0, clockTicks: 0,
 };
 // Live node bookkeeping for the QA node-graph hook: persistent = currently
 // connected long-lived nodes (master bus, beds, music routing), one-shots =
@@ -26486,6 +26538,71 @@ function impactLayerAudio(tierName, { counter = false } = {}) {
       attack: 0.002, filterType: "bandpass", freq: ringHz * 1.5024, q: 6,
     });
   }
+}
+
+// --- w51 announcer/clock truth: dizzy ring + clock tick synths -------------
+
+/**
+ * Dizzy ring: three triangle chirps climbing a minor-ish arpeggio on a
+ * wobble LFO (engine/announcer.mjs dizzyRingPlan), replacing the knockout.mp3
+ * groan enterDizzy used to play on a stun the fighter recovers from. Sim-path
+ * trigger on the impactAudioAllowed guard; the variant comes from the tick
+ * hash so consecutive dizzies never ring identically and no RNG stream moves.
+ */
+function dizzyRingAudio(fighter) {
+  if (!impactAudioAllowed()) return;
+  unlockAudio();
+  audioFxDebug.dizzyRings += 1;
+  const variant = presentationHash01(state.simulationTick, fighter?.side ?? 0, 51);
+  const level = state.sfxVolume;
+  for (const chirp of dizzyRingPlan(variant)) {
+    synthToneShot({
+      wave: "triangle", from: chirp.hz, seconds: chirp.seconds, peak: chirp.peak * level,
+      attack: 0.006, filterType: "bandpass", freq: chirp.hz, q: 3,
+      vibratoRate: chirp.vibratoRate, vibratoDepth: chirp.vibratoDepth, delay: chirp.delay,
+    });
+  }
+}
+
+/**
+ * Clock tick for a displayed reading in the final ten seconds (plan in
+ * engine/announcer.mjs: 880 Hz ladder, brighter and shorter under :05, a
+ * square two-partial buzzer at :00). Fired from updateHud's timer edge — the
+ * one place the digit changes — so it can never drift from the red pulse.
+ * Same gates as every other sim-path synth; never a reviewed take.
+ */
+function clockTickAudio(timer) {
+  const plan = clockTickPlan(timer);
+  if (!plan) return;
+  if (plan.kind === "buzzer") showSoundCaption("time-buzzer");
+  // impactLayerAudio pattern: no unlockAudio() here — a fight has already
+  // unlocked the context on its first sample play, and synthToneShot is a
+  // silent no-op on a context that is not running.
+  if (!impactAudioAllowed()) return;
+  audioFxDebug.clockTicks += 1;
+  const level = state.sfxVolume;
+  if (plan.kind === "buzzer") {
+    synthToneShot({ wave: plan.wave, from: plan.hz, seconds: plan.seconds, peak: plan.peak * level, attack: 0.01, filterType: "lowpass", freq: 1400, q: 0.8 });
+    synthToneShot({ wave: plan.wave, from: plan.hz * 1.498, seconds: plan.seconds * 0.9, peak: plan.peak * 0.55 * level, attack: 0.01, filterType: "lowpass", freq: 1400, q: 0.8 });
+    return;
+  }
+  synthToneShot({ wave: plan.wave, from: plan.hz, seconds: plan.seconds, peak: plan.peak * level, attack: 0.002, filterType: "bandpass", freq: plan.hz, q: 4 });
+}
+
+// Once-per-round "TEN SECONDS" call at the :10 reading. Keyed like the voice
+// round tracker (matchSerial:round) so a rollback that replays the edge, or a
+// paused game re-rendering the HUD, cannot book it twice; the announcer busy
+// window and shuffle bag handle spacing and the no-repeat rule.
+let clockCalloutRoundKey = "";
+
+function clockCallout() {
+  if (rollbackResimulating || state.phase !== "fight") return;
+  if (Math.ceil(state.timer) !== CLOCK_CALLOUT_SECONDS) return;
+  const key = `${state.matchSerial}:${state.round}`;
+  if (key === clockCalloutRoundKey) return;
+  clockCalloutRoundKey = key;
+  voiceFxDebug.clockCallouts += 1;
+  announcerSay("tenseconds");
 }
 
 // Pre-impact whoosh layered under the swing sample at attack start.
@@ -26989,6 +27106,13 @@ const ANNOUNCER_LINES = (() => {
     flawless: ["FLAWLESS VICTORY!", "AN ABSOLUTE SHUTOUT!"],
     comeback: ["WHAT A COMEBACK!", "BACK FROM THE DEAD!", "NEVER COUNT THEM OUT!"],
     timeover: ["TIME OVER — DECISION!", "THE CLOCK CALLS IT!", "TIME! JUDGES' DECISION!"],
+    // w51 clock truth: spoken once per round when the clock reads :10.
+    // TODO(tenseconds-takes): no recorded takes exist yet — the cue is absent
+    // from assets/audio/announcer/MANIFEST.json so it is caption-only (zero
+    // requests) until the owner approves generating tenseconds-1..3.mp3 with
+    // the announcer voice (work order in MISSING-AUDIO.md, Priority 6). The
+    // synthesised clock tick carries the moment audibly meanwhile.
+    tenseconds: ["TEN SECONDS!", "CLOCK'S RUNNING!", "TIME'S ALMOST UP!"],
     "fatality-performed": ["FATALITY.", "A GRAPHIC FINISH.", "THAT WAS A FINAL BLOW."],
     // Release 1.7 DEPTH: the guard-crush letter-slam's spoken call.
     guardcrush: ["GUARD CRUSH!", "DEFENSE SHATTERED!", "THE GUARD BREAKS!"],
@@ -27009,29 +27133,12 @@ const ANNOUNCER_LINES = (() => {
 
 // Shuffle bags per cue: every take plays once before any repeats, and the
 // reshuffle never lets the same take land back-to-back across bag borders.
+// w51: the draw itself lives in engine/announcer.mjs (drawFromBag) so the
+// no-repeat rule is unit tested; this keeps the checksum-exempt RNG hookup.
 const announcerBags = new Map();
 
 function announcerBagDraw(cue, size) {
-  if (size <= 1) return 0;
-  let bag = announcerBags.get(cue);
-  if (!bag || bag.size !== size) {
-    bag = { size, order: [], position: 0, last: -1 };
-    announcerBags.set(cue, bag);
-  }
-  if (bag.position >= bag.order.length) {
-    const order = Array.from({ length: size }, (_, index) => index);
-    for (let index = order.length - 1; index > 0; index -= 1) {
-      const swap = Math.floor(visualRandom() * (index + 1));
-      [order[index], order[swap]] = [order[swap], order[index]];
-    }
-    if (order[0] === bag.last) [order[0], order[order.length - 1]] = [order[order.length - 1], order[0]];
-    bag.order = order;
-    bag.position = 0;
-  }
-  const pick = bag.order[bag.position];
-  bag.position += 1;
-  bag.last = pick;
-  return pick;
+  return drawFromBag(announcerBags, cue, size, visualRandom);
 }
 
 // cue -> { takes: [Audio...], probed }. 2.7 critic round: take counts come
@@ -27131,7 +27238,14 @@ function announcerSay(cue, { delay = 0 } = {}) {
 // Banner -> spoken cue map. Runs inside announce() after its rollback guard,
 // so every existing announce call site (round intros, FIGHT, FINISH THEM,
 // KO, FINAL BLOW) gains the spoken call without new sim-path hooks.
-function announcerSpeakBanner(text) {
+function announcerSpeakBanner(text, plan = null) {
+  // w51: an explicit cue plan (finishRound's roundEndAnnouncerPlan) wins
+  // over the text map — it knows decision-vs-KO and round-vs-match.
+  if (Array.isArray(plan)) {
+    if (plan[0]?.cue === "timeover") voiceFxDebug.decisionCalls += 1;
+    for (const { cue, delay = 0 } of plan) announcerSay(cue, { delay });
+    return;
+  }
   if (text === "FIGHT!") {
     announcerSay("fight");
     return;
@@ -27155,9 +27269,11 @@ function announcerSpeakBanner(text) {
     return;
   }
   if (text.endsWith(" WINS")) {
-    announcerSay("ko");
+    // Text-only fallback (no caller uses it since w51 — finishRound always
+    // passes a plan). Without the round/match facts it can only be honest
+    // about the KO call, so it books the name bank, never "-wins".
     const fighter = roster.find(({ name }) => text === `${name} WINS`);
-    if (fighter) announcerSay(`${fighter.id}-wins`, { delay: 950 });
+    for (const { cue, delay } of roundEndAnnouncerPlan({ fighterId: fighter?.id || "" })) announcerSay(cue, { delay });
   }
 }
 
@@ -27253,12 +27369,13 @@ function queueStoryCallouts(winner, type) {
   if (key === storyRoundKey) return;
   storyRoundKey = key;
   const loser = state.fighters[1 - winner];
+  // w51: the time-over line is no longer a layered story callout — a decision
+  // OPENS on the timeover bank (finishRound's plan), so queuing it again here
+  // spoke "TIME OVER — DECISION!" twice. PERFECT / COMEBACK still layer over
+  // a decision when they are true.
   if (type >= 0) {
     voiceFxDebug.storyCallouts += 1;
     announcerSay("fatality-performed", { delay: 2400 });
-  } else if (state.timer <= 0 && loser.health > 0) {
-    voiceFxDebug.storyCallouts += 1;
-    announcerSay("timeover", { delay: 1100 });
   } else if (state.fighters[winner].health >= 100) {
     voiceFxDebug.storyCallouts += 1;
     announcerSay("perfect", { delay: 1200 });
@@ -29125,6 +29242,14 @@ window.__finalBlowEngine = {
         storyCallouts: voiceFxDebug.storyCallouts,
         onlineMoments: voiceFxDebug.onlineMoments,
         voiceProbeRequests,
+        // w51 announcer/clock truth: timer-edge ticks booked (must equal
+        // timerPulses), ticks/rings actually voiced past the audio gates,
+        // once-per-round TEN SECONDS calls and decision round-ends.
+        timerTicks: hudFxDebug.timerTicks,
+        clockTicksVoiced: audioFxDebug.clockTicks,
+        dizzyRings: audioFxDebug.dizzyRings,
+        clockCallouts: voiceFxDebug.clockCallouts,
+        decisionCalls: voiceFxDebug.decisionCalls,
         // Release 1.7 DEPTH: sim-mechanic one-shot totals (mechFxDebug —
         // monotonic, resim-guarded at every increment site).
         guardCrushes: mechFxDebug.guardCrushes,

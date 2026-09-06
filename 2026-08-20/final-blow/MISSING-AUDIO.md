@@ -20,6 +20,7 @@ verified** (valid mp3, 0.4–6.0s, mean above −35 dB, peak below −0.5 dB).
 | P4 online moments | DONE — 12/12 |
 | P5 variant retakes | DONE — 30/30 |
 | P0 rejected-cue retakes | NOT GENERATED — 0/117, blocked (see Priority 0) |
+| P6 clock callout (w51) | NOT GENERATED — 0/3, caption-only until approved (see Priority 6) |
 
 P0 is not a quota problem: fresh takes for the rejected cues cannot land at
 their canonical paths while the review contract holds — rejected recordings
@@ -313,6 +314,29 @@ different read (15 × 2 = 30 files). Which cue survived for which fighter is
 `APPROVED_CORE_CUES` in `engine/audio-review.mjs`; a cue that is not listed
 there needs a fresh original take first (Priority 0), not a variant.
 
+## Priority 6 — clock callout (announcer voice) — NOT GENERATED (0/3, owner call)
+
+Roadmap2 w51 (sweep #27) wired the final-ten-seconds clock: a synthesised
+tick ladder from :10 to the :00 buzzer (`clockTickAudio` in game.js, never a
+reviewed take) plus a once-per-round announcer call at :10 on the
+`tenseconds` cue. The cue is caption-only today — it is deliberately absent
+from `assets/audio/announcer/MANIFEST.json`, so the bank issues zero requests.
+Generating voice was out of scope for w51; when Jez approves, generate the
+three takes below with the announcer voice, add `"tenseconds": 3` to the
+manifest, and nothing else changes (`TODO(tenseconds-takes)` in game.js).
+
+| File | Line to speak |
+| --- | --- |
+| assets/audio/announcer/tenseconds-1.mp3 | TEN SECONDS! |
+| assets/audio/announcer/tenseconds-2.mp3 | CLOCK'S RUNNING! |
+| assets/audio/announcer/tenseconds-3.mp3 | TIME'S ALMOST UP! |
+
+Same wave, no new files: a time-over round now opens on the existing
+`timeover` bank instead of `ko` (and never plays `knockout.mp3`), a dizzy no
+longer plays `knockout.mp3` either (synth ring), and the fighter call after
+the KO call is `<id>-name` for a round win and `<id>-wins` only for the round
+that closes the match.
+
 ## Priority 0 — retakes for the cues the SFX review rejected — NOT GENERATED (0/117, blocked on review cycle)
 
 Jez reviewed all 170 sounds on 2026-08-23 and rejected 117. The 84 that had
@@ -344,4 +368,5 @@ until he decides either way.
 | P3 match-story | 14 |
 | P4 online moments | 12 |
 | P5 fighter variant retakes | 30 |
-| **Total** | **544** |
+| P6 clock callout (w51, not generated) | 3 |
+| **Total** | **547** |

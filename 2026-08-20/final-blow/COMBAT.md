@@ -82,6 +82,40 @@ Best-of-three with the existing 99-count timer, unchanged. Post-throw invulnerab
 rose from 30 to 40 frames so there is no throw loop without a defensive answer, and
 knockdown/wake-up were retuned (48/16) to keep okizeme readable.
 
+#### Announcer and clock truth (roadmap2 w51, sweep #22/#27)
+
+The round-end call now says what happened. `engine/announcer.mjs` classifies every
+`finishRound` (`roundEndCause`: finisher / knockout / decision) and builds the spoken
+plan (`roundEndAnnouncerPlan`); game.js only executes it.
+
+- **Time over is a DECISION.** The clock reaching 0 with the loser still holding
+  health shows `<NAME> WINS · DECISION`, the announcer opens on the `timeover` bank
+  ("TIME OVER — DECISION!" / "THE CLOCK CALLS IT!" / "TIME! JUDGES' DECISION!")
+  instead of "K.O.!", and `knockout.mp3` does not play — nobody went down. The old
+  duplicate time-over story callout (1.1 s later) is gone. PERFECT / COMEBACK still
+  layer over a decision when true.
+- **Round win vs match win.** After the KO (or time-over) call the announcer speaks
+  the winner's `<id>-name` bank for a round win and the `<id>-wins` bank
+  ("THE WINNER — BENNY!") only for the round that reaches `roundsToWin` — so the
+  match-winner lines are heard once per match, not after round 1 of a first-to-2.
+- **Dizzy is not a KO.** `enterDizzy` no longer plays `knockout.mp3` (the reviewed
+  shared KO groan — for the Commissioner/Devil their long defeat take). It rings a
+  synthesised three-chirp wobble (`dizzyRingAudio`, tick-hash variant so consecutive
+  dizzies differ); the dazed voice bark still layers over it.
+- **The last ten seconds tick.** On the same HUD edge that pulses the red digits,
+  `clockTickAudio` plays a triangle ladder — 880 Hz at :10 rising 22 Hz a second,
+  brighter/shorter 1320 Hz+ under :05 — and a square two-partial buzzer at :00, so
+  no two consecutive ticks sound alike and the ear can count down without reading a
+  20 px timer. At :10 the announcer calls `tenseconds` once per round
+  ("TEN SECONDS!" / "CLOCK'S RUNNING!" / "TIME'S ALMOST UP!"). No recorded takes
+  exist yet, so that line is caption-only (zero requests; work order in
+  MISSING-AUDIO.md Priority 6). All of it sits behind the updateHud/announce()
+  rollback guards; replays and resims stay silent. QA: `snapshot().violence`
+  exposes `timerTicks` (must equal `timerPulses`), `clockTicksVoiced`,
+  `dizzyRings`, `clockCallouts` and `decisionCalls`.
+- Every announcer cue draws from a shuffle bag (`drawFromBag`, now unit tested):
+  each take plays once per bag and the same take never lands back to back.
+
 ## Verification
 
 ```sh
