@@ -3003,3 +3003,40 @@ reflected. The healed knee is marginally smoother than the fabric around it at
 11x and is invisible at 1:1. Crops: `unified-v44/w6-donald-*.png`.
 
 **Ten of ten fighters now walk with alternating legs.**
+
+## v4.9 — IN-BETWEENS: THE THIRD SHEET, GENERATED FROM THE FIGHTER'S OWN SHEET
+
+Every fighter now carries `assets/unified/<id>-ext2.webp` (bank `unified-ext2`,
+grammar cells 24-39): a punch and kick WIND-UP and RECOVER, the heavy's deeper
+pair, the crouch pair, the throw's reach and release, plus two reserved special
+cells. The one-generation law said a second generation would strobe at 11-14
+dE; the way round it was to stop generating from text alone. Each sheet was
+produced by `openai/gpt-image-2/edit` with the fighter's unified sheet as the
+image-to-image reference (`tools/inbetweens/grammar.txt`, `gen_all.py`), then
+colour-matched onto that sheet with a per-cluster LAB mean shift
+(`color_match.py`; offsets under 5 units). Measured against each fighter's
+unified sheet: keyed raws 2.3-2.6 weighted dE (gi-blue cluster up to 5.5),
+matched sheets 0.9-1.3 — the shipped ext sheets sit at 0.66, the known strobe
+at 7.3+. Cell-to-cell, the in-betweens sit 1.2-2.7 dE from the unified palette
+against 4.7-6.1 for the motion cells they hand to and 3.4-11.1 for the base:11
+recovery cell they replace.
+
+Slicer (`build_ext2.py`): un-premultiplied edge despill (round-trips a shipped
+sheet at 0.09 RGB), bleed-over heads from the next row dropped by the
+bottom-edge rule, one scale per sheet from the tallest STANDING cell to 306,
+feet on row 314, torso band (20-57.5%) on column 160; a wide wind-up whose
+limbs would leave the cell is fit-scaled about that column and the engine
+draws it back up through `UNIFIED_EXT2_CELL_ADJUST` (1.0-1.23; commissioner's
+1.033 folded in per cell, bankSheetAdjust untouched).
+
+Routing (`inbetween` option, passed only when the fighter's ext2 sheet is
+whole — every track is byte-identical without it): a LIGHT's whole startup is
+the new `cock` beat on the cocked limb (crouching heavies too), and its
+extension now holds through the active window instead of dropping to base 10;
+the heavy windup's LOAD band opens on the deep wind-up (what deathblow and
+donald, motion3 off, never had); `attackRecoveryKeys` band 0.24 is the limb's
+recover cell (was base 11); the throw clinch opens on the reach and the throw
+recovery's second band on the release. Verified in real play by frame
+attribution: jab `ext2:0 x3 -> motion:0 -> motion:4 -> ext2:1 -> unified:7 ->
+idle`, heavy `ext:5 -> ext2:4 -> motion2:4 -> motion:2 -> motion:0 -> motion:4
+-> ext2:5 -> unified:7 -> idle`, in both renderers.

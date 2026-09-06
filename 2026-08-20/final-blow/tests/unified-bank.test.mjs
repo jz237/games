@@ -17,6 +17,7 @@ import {
   UNIFIED_CELL_COUNT,
   UNIFIED_CELL_HEIGHT,
   UNIFIED_EXT_BANK,
+  UNIFIED_EXT2_BANK,
   UNIFIED_EXT_CELLS,
   UNIFIED_RETIRED_CELLS,
   UNIFIED_ROUTED_CELLS,
@@ -849,7 +850,7 @@ function testHeightReconciliationsMoved() {
 }
 
 function testBankRegistryAndWiring() {
-  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK],
+  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK],
     "both renderers and resolveMotionPose route off this one list");
   assert.equal(isAuthoredBank(UNIFIED_BANK), true);
 

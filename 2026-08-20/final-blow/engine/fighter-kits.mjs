@@ -1983,6 +1983,7 @@ export function safeBaseFrame(fighterId, frame) {
  * it, exactly as they already do for the sheet adjust.
  */
 export function baseCellDrawAdjust(fighterId, bank, frame) {
+  if (bank === UNIFIED_EXT2_BANK) return UNIFIED_EXT2_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT_BANK) return UNIFIED_EXT_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_BANK) return UNIFIED_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank !== "base") return 1;
@@ -2173,6 +2174,44 @@ export function unifiedDrawnHeight(fighterId, cell) {
 export function unifiedExtDrawnHeight(fighterId, frame) {
   const raw = UNIFIED_EXT_CELL_HEIGHT[fighterId]?.[frame];
   return Number.isFinite(raw) ? raw * baseCellDrawAdjust(fighterId, UNIFIED_EXT_BANK, frame) : 0;
+}
+
+// v4.9 IN-BETWEENS: measured on the built ext2 sheets (alpha >= 24 content
+// height per cell). Every cell is registered like the unified bank — feet on
+// row 314, torso band on column 160 — so no height reconciliation is needed;
+// the ADJUST table restores the size of the wide wind-ups the slicer had to
+// fit into the cell, with the commissioner's 1.033 sheet correction folded in
+// per cell exactly as the ext table does (bankSheetAdjust must not branch).
+export const UNIFIED_EXT2_CELL_HEIGHT = Object.freeze({
+  deathblow: Object.freeze([303, 306, 313, 313, 299, 269, 302, 255, 204, 199, 190, 188, 247, 245, 277, 284]),
+  jez: Object.freeze([305, 306, 313, 305, 296, 213, 291, 300, 213, 208, 189, 202, 300, 269, 294, 303]),
+  alan: Object.freeze([306, 303, 313, 306, 299, 271, 309, 303, 214, 191, 145, 184, 300, 264, 293, 302]),
+  post: Object.freeze([306, 303, 307, 303, 274, 278, 306, 305, 202, 190, 192, 177, 251, 256, 278, 283]),
+  benny: Object.freeze([306, 306, 313, 313, 294, 267, 295, 283, 185, 185, 158, 189, 275, 275, 275, 278]),
+  donald: Object.freeze([299, 306, 312, 303, 284, 243, 295, 295, 218, 203, 210, 185, 285, 284, 291, 285]),
+  cyraxx: Object.freeze([306, 306, 313, 313, 287, 263, 305, 296, 189, 187, 173, 186, 279, 279, 279, 279]),
+  ali: Object.freeze([299, 306, 306, 306, 291, 268, 309, 284, 210, 210, 187, 199, 248, 277, 279, 283]),
+  commissioner: Object.freeze([303, 306, 303, 307, 273, 257, 297, 297, 188, 181, 159, 184, 261, 265, 263, 267]),
+  devil: Object.freeze([305, 305, 311, 302, 253, 241, 295, 263, 191, 203, 210, 206, 305, 273, 269, 306]),
+});
+
+const UNIFIED_EXT2_CELL_ADJUST = Object.freeze({
+  deathblow: Object.freeze({ 3: 1.0086, 7: 1.1449, 12: 1.1364 }),
+  jez: Object.freeze({ 2: 1.0263, 5: 1.2218, 10: 1.0408 }),
+  alan: Object.freeze({ 4: 1.0041, 10: 1.2166 }),
+  post: Object.freeze({ 4: 1.0813, 11: 1.0603, 12: 1.1234 }),
+  benny: Object.freeze({ 2: 1.0248, 3: 1.0248, 6: 1.0091, 10: 1.2284 }),
+  donald: Object.freeze({ 11: 1.0773, 12: 1.0213 }),
+  cyraxx: Object.freeze({ 2: 1.0065, 3: 1.0065 }),
+  ali: Object.freeze({ 7: 1.0936, 12: 1.1156 }),
+  commissioner: Object.freeze({ 0: 1.033, 1: 1.033, 2: 1.033, 3: 1.033, 4: 1.033, 5: 1.033, 6: 1.033, 7: 1.033, 8: 1.033, 9: 1.033, 10: 1.0748, 11: 1.033, 12: 1.0516, 13: 1.033, 14: 1.033, 15: 1.033 }),
+  devil: Object.freeze({ 4: 1.1131, 5: 1.0652, 7: 1.1124, 8: 1.0791, 10: 1.0376 }),
+});
+
+/** Drawn (corrected) content height of an ext2 cell, by SHEET FRAME. */
+export function unifiedExt2DrawnHeight(fighterId, frame) {
+  const raw = UNIFIED_EXT2_CELL_HEIGHT[fighterId]?.[frame];
+  return Number.isFinite(raw) ? raw * baseCellDrawAdjust(fighterId, UNIFIED_EXT2_BANK, frame) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -2409,6 +2448,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([171, 163, 164, 168, 187, 171, 186, 174, 177, 174, 176, 197, 201, 174, 212, 180]),
     motion3: Object.freeze([161, 158, 158, 158, 164, 188, 158, 166, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([180, 170, 162, 166, 163, 226, 186, 177, 180, 247, 192, 184, 180, 199, 210, 270]),
+    "unified-ext2": Object.freeze([163, 162, 158, 158, 165, 180, 164, 187, 212, 215, 220, 220, 191, 192, 176, 172]),
     ref: 162,
   }),
   jez: Object.freeze({
@@ -2418,6 +2458,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([182, 160, 158, 158, 182, 222, 168, 186, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([176, 162, 164, 162, 166, 206, 194, 179, 164, 230, 184, 184, 181, 176, 174, 280]),
     "unified-ext": Object.freeze([176, 165, 166, 172, 190, 182, 175, 198]),
+    "unified-ext2": Object.freeze([162, 162, 158, 162, 166, 208, 169, 164, 208, 210, 220, 214, 164, 180, 168, 164]),
     ref: 162,
   }),
   alan: Object.freeze({
@@ -2427,6 +2468,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([160, 158, 158, 161, 168, 214, 158, 172, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([178, 163, 162, 163, 164, 210, 202, 182, 166, 236, 190, 185, 181, 174, 182, 266]),
     "unified-ext": Object.freeze([178, 168, 170, 160, 170, 184, 180, 192]),
+    "unified-ext2": Object.freeze([162, 163, 158, 162, 165, 179, 160, 163, 208, 219, 242, 222, 164, 182, 168, 164]),
     ref: 162,
   }),
   post: Object.freeze({
@@ -2435,6 +2477,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([174, 163, 163, 163, 190, 166, 197, 170, 184, 181, 187, 196, 199, 190, 211, 183]),
     motion3: Object.freeze([172, 158, 158, 158, 176, 204, 158, 178, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([176, 169, 170, 170, 172, 228, 192, 179, 178, 234, 179, 174, 170, 166, 192, 266]),
+    "unified-ext2": Object.freeze([162, 163, 161, 163, 178, 176, 162, 162, 214, 220, 218, 226, 189, 186, 176, 173]),
     ref: 162,
   }),
   donald: Object.freeze({
@@ -2443,6 +2486,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([175, 163, 162, 169, 197, 172, 196, 181, 183, 175, 188, 202, 197, 191, 209, 200]),
     motion3: Object.freeze([176, 158, 158, 158, 178, 203, 164, 184, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([185, 176, 171, 175, 173, 219, 194, 188, 166, 238, 194, 191, 184, 190, 202, 258]),
+    "unified-ext2": Object.freeze([165, 162, 158, 163, 172, 193, 167, 167, 206, 213, 210, 222, 172, 172, 169, 172]),
     ref: 162,
   }),
   devil: Object.freeze({
@@ -2451,6 +2495,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([164, 163, 217, 215, 212, 166, 206, 175, 190, 183, 180, 190, 190, 187, 222, 172]),
     motion3: Object.freeze([158, 158, 158, 158, 157, 198, 158, 160, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([176, 164, 164, 162, 165, 222, 196, 176, 174, 228, 186, 186, 172, 172, 192, 258]),
+    "unified-ext2": Object.freeze([162, 162, 159, 164, 188, 194, 167, 183, 219, 213, 210, 212, 162, 178, 180, 162]),
     ref: 165,
   }),
   ali: Object.freeze({
@@ -2467,6 +2512,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     // 3.1 wave fell into with four fighters at once.
     unified: Object.freeze([168, 162, 166, 164, 163, 202, 194, 168, 157, 218, 176, 178, 170, 178, 175, 262]),
     "unified-ext": Object.freeze([166, 163, 163, 181, 176, 188, 166, 196]),
+    "unified-ext2": Object.freeze([165, 162, 162, 162, 169, 180, 160, 172, 210, 210, 221, 215, 190, 176, 175, 173]),
     ref: 162,
   }),
   benny: Object.freeze({
@@ -2476,6 +2522,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([160, 158, 158, 158, 158, 204, 158, 179, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([175, 166, 166, 165, 162, 217, 206, 178, 160, 240, 182, 190, 175, 179, 178, 278]),
     "unified-ext": Object.freeze([174, 168, 169, 170, 179, 182, 169, 214]),
+    "unified-ext2": Object.freeze([162, 162, 158, 158, 168, 181, 167, 173, 222, 222, 236, 220, 177, 177, 177, 176]),
     ref: 162,
   }),
   commissioner: Object.freeze({
@@ -2485,6 +2532,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([160, 158, 158, 158, 166, 204, 158, 187, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([171, 163, 162, 166, 164, 216, 197, 180, 158, 229, 178, 184, 180, 178, 177, 272]),
     "unified-ext": Object.freeze([171, 170, 174, 160, 157, 183, 172, 194]),
+    "unified-ext2": Object.freeze([163, 162, 163, 161, 178, 186, 166, 166, 220, 224, 235, 222, 184, 182, 183, 181]),
     ref: 158,
   }),
   cyraxx: Object.freeze({
@@ -2494,6 +2542,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([162, 158, 158, 158, 158, 214, 158, 170, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([166, 162, 162, 162, 162, 211, 188, 174, 157, 240, 174, 176, 171, 180, 168, 278]),
     "unified-ext": Object.freeze([168, 162, 166, 170, 166, 174, 170, 191]),
+    "unified-ext2": Object.freeze([162, 162, 158, 158, 171, 183, 162, 166, 220, 221, 228, 222, 175, 175, 175, 175]),
     ref: 165,
   }),
 });
@@ -2555,6 +2604,18 @@ export function auditBodyCentres() {
     // who HAVE an ext sheet carry one. Its airborne cells (jump-ascent and
     // jump-descend) are routed, so an unmeasured row would put the B2 body-drop
     // straight back into the middle of those fighters' jumps.
+    // v4.9: the ext2 row is sixteen entries on every fighter who has the sheet.
+    const ext2Centres = table[UNIFIED_EXT2_BANK];
+    if (ext2Centres) {
+      if (ext2Centres.length !== UNIFIED_EXT2_CELL_COUNT) {
+        errors.push(`${fighterId}/${UNIFIED_EXT2_BANK}: ${ext2Centres.length} entries`);
+      }
+      ext2Centres.forEach((value, index) => {
+        if (!Number.isFinite(value) || value > 320 || (value < 0 && value !== -1)) {
+          errors.push(`${fighterId}/${UNIFIED_EXT2_BANK}[${index}]: ${value}`);
+        }
+      });
+    }
     const extCentres = table[UNIFIED_EXT_BANK];
     if (extCentres) {
       if (extCentres.length !== UNIFIED_EXT_CELL_COUNT) {
@@ -3244,6 +3305,132 @@ export function unifiedExtFighterIds(masks) {
 }
 
 // ---------------------------------------------------------------------------
+// v4.9 IN-BETWEENS — THE THIRD SHEET: attack anticipation and recovery keys.
+//
+// `<id>-ext2.webp` is a 1280x1280 4x4 sheet of 320px cells (no padding needed)
+// generated as ONE 4x4 sheet per fighter with that fighter's own unified sheet
+// as the image-to-image reference, then colour-matched onto it (per-cluster
+// LAB mean shift; measured 0.9-1.3 weighted dE against the unified sheet, the
+// shipped ext sheets sit at 0.66 and the cross-generation strobe at 11-14).
+// The cells are the instants BEFORE and AFTER a strike: a light's wind-up and
+// recover per limb, the heavy's deeper pair, the crouch pair, and the throw's
+// reach and release. Every consumer degrades to the pre-4.9 read when the
+// sheet is missing — the beats fire only when the caller passes `inbetween`.
+export const UNIFIED_EXT2_BANK = "unified-ext2";
+export const UNIFIED_EXT2_CELL_COUNT = 16;
+/** Grammar cell number of ext2 SHEET frame 0 (grammar cells 24..39). */
+export const UNIFIED_EXT2_BASE = 24;
+
+/** The ext2 grammar, BY SHEET FRAME (0..15). */
+export const UNIFIED_EXT2_CELLS = Object.freeze({
+  punchWindup: 0,        // 24 — rear arm cocked, weight loaded, the instant before a jab
+  punchRecover: 1,       // 25 — the arm halfway back, weight settling
+  kickWindup: 2,         // 26 — knee chambered tight on the support leg
+  kickRecover: 3,        // 27 — the leg coming back down, foot just off the floor
+  heavyPunchWindup: 4,   // 28 — deep loaded stance, fist behind the shoulder
+  heavyPunchRecover: 5,  // 29 — over-committed follow-through, weight far forward
+  heavyKickWindup: 6,    // 30 — sunk on one leg, knee high, arms swung back
+  heavyKickRecover: 7,   // 31 — the leg swinging back down across the body
+  crouchPunchWindup: 8,  // 32 — crouched, arm cocked at the ribs
+  crouchPunchRecover: 9, // 33 — crouched, arm halfway back
+  crouchKickWindup: 10,  // 34 — crouched, sweep leg gathered, hand on the floor
+  crouchKickRecover: 11, // 35 — crouched, the sweep leg returning
+  throwWindup: 12,       // 36 — both arms reaching to grab
+  throwRecover: 13,      // 37 — the release, arms swinging down and back
+  specialWindup: 14,     // 38 — hands gathered at the hip (reserved)
+  specialRecover: 15,    // 39 — arms dropping after a thrust (reserved)
+});
+
+/** The sixteen beats an ext2 sheet carries, in sheet-frame order. */
+export const UNIFIED_EXT2_BEATS = Object.freeze([
+  "punch-windup", "punch-recover", "kick-windup", "kick-recover",
+  "heavy-punch-windup", "heavy-punch-recover", "heavy-kick-windup", "heavy-kick-recover",
+  "crouch-punch-windup", "crouch-punch-recover", "crouch-kick-windup", "crouch-kick-recover",
+  "throw-windup", "throw-recover", "special-windup", "special-recover",
+]);
+
+/** Routed this wave: every strike and throw in-between. */
+export const UNIFIED_EXT2_ROUTED_CELLS = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+/** Drawn but not yet routed: the specials keep their authored kit art. */
+export const UNIFIED_EXT2_RESERVED_CELLS = Object.freeze([14, 15]);
+
+/** Grammar cell (24..39) -> sheet frame (0..15). Returns -1 otherwise. */
+export function unifiedExt2Frame(cell) {
+  const frame = cell - UNIFIED_EXT2_BASE;
+  return frame >= 0 && frame < UNIFIED_EXT2_CELL_COUNT ? frame : -1;
+}
+
+/** Sheet frame (0..15) -> grammar cell (24..39). */
+export function unifiedExt2Cell(frame) {
+  return frame + UNIFIED_EXT2_BASE;
+}
+
+/** An ext2 descriptor. `cell` is a SHEET FRAME; `fallback` is the pre-4.9 chain. */
+export function unifiedExt2Pose(cell, fallback) {
+  return { bank: UNIFIED_EXT2_BANK, frame: cell, fallback };
+}
+
+/** Chain-constructor sibling of xkey. Takes a SHEET FRAME. */
+export const x2key = (cell) => Object.freeze({ bank: UNIFIED_EXT2_BANK, cell });
+
+/**
+ * THE EXT2 GATE: all routed cells accepted, the main sheet whole, or nothing.
+ * Reserved cells are forced false so a stray descriptor draws nothing.
+ */
+export function buildUnifiedExt2AcceptMasks(manifest, unifiedMasks = null) {
+  const masks = {};
+  for (const [fighterId, entry] of Object.entries(manifest?.fighters || {})) {
+    const accept = new Array(UNIFIED_EXT2_CELL_COUNT).fill(false);
+    for (const cell of entry?.ext2Cells || []) {
+      const frame = unifiedExt2Frame(cell?.frame);
+      if (frame >= 0) accept[frame] = cell.accept === true;
+    }
+    const mainWhole = unifiedMasks ? Boolean(unifiedMasks[fighterId]?.whole) : true;
+    const routedOk = UNIFIED_EXT2_ROUTED_CELLS.every((frame) => accept[frame]);
+    const whole = Boolean(entry?.ext2Sheet) && mainWhole && routedOk;
+    const gated = accept.map((ok, frame) => ok && UNIFIED_EXT2_ROUTED_CELLS.includes(frame));
+    masks[fighterId] = Object.freeze({
+      whole,
+      accept: Object.freeze(whole ? gated : new Array(UNIFIED_EXT2_CELL_COUNT).fill(false)),
+      sheet: entry?.ext2Sheet || null,
+    });
+  }
+  return masks;
+}
+
+/** The fighter ids carrying a whole ext2 sheet, from a built mask table. */
+export function unifiedExt2FighterIds(masks) {
+  return Object.keys(masks || {}).filter((id) => masks[id]?.whole).sort();
+}
+
+/** Which ext2 cell opens a kit-less normal, by limb and stance. */
+export function inbetweenWindupCell(limb, { heavy = false, crouching = false } = {}) {
+  const kick = limb === "kick";
+  if (crouching) return kick ? UNIFIED_EXT2_CELLS.crouchKickWindup : UNIFIED_EXT2_CELLS.crouchPunchWindup;
+  if (heavy) return kick ? UNIFIED_EXT2_CELLS.heavyKickWindup : UNIFIED_EXT2_CELLS.heavyPunchWindup;
+  return kick ? UNIFIED_EXT2_CELLS.kickWindup : UNIFIED_EXT2_CELLS.punchWindup;
+}
+
+/** Which ext2 cell a kit-less normal recovers on, by limb and stance. */
+export function inbetweenRecoverCell(limb, { heavy = false, crouching = false } = {}) {
+  const kick = limb === "kick";
+  if (crouching) return kick ? UNIFIED_EXT2_CELLS.crouchKickRecover : UNIFIED_EXT2_CELLS.crouchPunchRecover;
+  if (heavy) return kick ? UNIFIED_EXT2_CELLS.heavyKickRecover : UNIFIED_EXT2_CELLS.heavyPunchRecover;
+  return kick ? UNIFIED_EXT2_CELLS.kickRecover : UNIFIED_EXT2_CELLS.punchRecover;
+}
+
+/**
+ * A LIGHT's anticipation (and a crouching heavy's): one drawing over the
+ * whole startup, the limb cocked. Without `inbetween` the chain is empty and
+ * the caller's per-tick base read (cell 8 then 9) shows exactly as before.
+ */
+export function lightWindupKeys(limb, { inbetween = false, heavy = false, crouching = false } = {}) {
+  return [
+    { at: 0, chain: inbetween ? [x2key(inbetweenWindupCell(limb, { heavy, crouching }))] : [] },
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // v4.0 — THE SIX-KEY ALTERNATING WALK, and the end of the single-phase stride.
 //
 // Everything the block above says about the four-key cycle was true of a 3.0
@@ -3495,9 +3682,15 @@ export function beatPoseAt(keys, progress, fallback) {
  * slots that both degrade to the same authored cell" is one hold, not two.
  */
 export function defaultBeatKeyResolve(key, {
-  motion3 = false, unified = false, ext = false, fallback = null,
+  motion3 = false, unified = false, ext = false, ext2 = false, fallback = null,
 } = {}) {
   for (const link of key?.chain || []) {
+    // v4.9: an ext2 link is skipped unless the caller audits a fighter who
+    // HAS the in-between sheet, so every earlier budget keeps its meaning.
+    if (link.bank === UNIFIED_EXT2_BANK) {
+      if (ext2) return `unified-ext2:${link.cell}`;
+      continue;
+    }
     if (link.bank === MOTION3_BANK) {
       if (motion3) return `motion3:${link.key}`;
       continue;
@@ -3844,7 +4037,7 @@ export function airNormalKeys(startupPhase, recoverPhase) {
  * crouch-trans is an all-fours prowl and is accept:false for him, so his chain
  * degrades to the cocked cell exactly as before.
  */
-export function heavyWindupKeys(limb, { extended = false } = {}) {
+export function heavyWindupKeys(limb, { extended = false, inbetween = false } = {}) {
   const kick = limb === "kick";
   const cocked = kick ? MOTION2_CELLS.windupKick : MOTION2_CELLS.windupPunch;
   // v4.0 — THE CHAMBER IS THE FIGHTER'S OWN DRAWING NOW.
@@ -3904,7 +4097,10 @@ export function heavyWindupKeys(limb, { extended = false } = {}) {
     //    which is a one-foot-planted weight-shifted body with the arms
     //    trailing — a WEIGHT SHIFT, which is what an anticipation is, rather
     //    than the symmetric squat T2 threw out.
-    { at: 0.36, chain: [m3key(mid), m2key(MOTION2_CELLS.dashBrake)] },
+    //    v4.9: with the in-between sheet the LOAD is the fighter's own deep
+    //    wind-up drawing (fist behind the shoulder / knee high, arms back),
+    //    which is what deathblow and donald — motion3 off — were missing.
+    { at: 0.36, chain: [...(inbetween ? [x2key(kick ? UNIFIED_EXT2_CELLS.heavyKickWindup : UNIFIED_EXT2_CELLS.heavyPunchWindup)] : []), m3key(mid), m2key(MOTION2_CELLS.dashBrake)] },
     // 3. COMPRESS — the deepest coil on the sheet, and now it is immediately
     //    before the release instead of in the middle of the beat.
     //    v3.0 critic round (RULE 2): the first cut routed the unified crouch-
@@ -3966,7 +4162,7 @@ export function dashKeys() {
  * third breathes instead of freezing. An empty chain means "whatever the
  * caller's fallback is at this instant" — the kit cell, then the idle cycle.
  */
-export function throwClinchKeys() {
+export function throwClinchKeys({ inbetween = false } = {}) {
   return [
     // v2.9 final round (R7) — THE GRAB MUST PRECEDE THE HURL. Measured on the
     // 2.9 build: the victim leaves the ground at T10 and wears motion2:11
@@ -3977,7 +4173,7 @@ export function throwClinchKeys() {
     // seize landed at or behind the launch. The seize now owns the clinch from
     // the first tick; a grab you can see is the whole point of the beat.
     // SEIZE — the two hands closing, on the first tick of the clinch.
-    { at: 0, chain: [m2key(MOTION2_CELLS.throwGrab)] },
+    { at: 0, chain: [...(inbetween ? [x2key(UNIFIED_EXT2_CELLS.throwWindup)] : []), m2key(MOTION2_CELLS.throwGrab)] },
     // LOAD — the weight drops to lift.
     // v3.0 critic round (RULE 2): the unified crouch-transition was routed
     // here by the first cut and is retired from it. This band's neighbours are
@@ -3994,7 +4190,7 @@ export function throwClinchKeys() {
   ];
 }
 
-export function throwRecoveryKeys() {
+export function throwRecoveryKeys({ inbetween = false } = {}) {
   // v2.9 final round (R7) — THE A-B-A FLIP. Round 2's track played
   // specials:7 -> motion:4 -> specials:7 AGAIN -> motion3:6 -> base:9,
   // because bands 0.00 and 0.40 both had EMPTY chains and therefore both
@@ -4017,7 +4213,7 @@ export function throwRecoveryKeys() {
   // motion bank still degrades to exactly the pre-fix read.
   return [
     { at: 0, chain: [m1key(MOTION_CELLS.follow)] },
-    { at: 0.26, chain: [m3key(MOTION3_KEYS.throwRecover), m2key(MOTION2_CELLS.dashBrake)] },
+    { at: 0.26, chain: [...(inbetween ? [x2key(UNIFIED_EXT2_CELLS.throwRecover)] : []), m3key(MOTION3_KEYS.throwRecover), m2key(MOTION2_CELLS.dashBrake)] },
     { at: 0.52, chain: [] },
     { at: 0.78, chain: [] },
   ];
@@ -4032,10 +4228,12 @@ export function throwRecoveryKeys() {
  * recovers, and the tail hands back to the caller's idle read so the last
  * third breathes instead of freezing.
  */
-export function attackRecoveryKeys() {
+export function attackRecoveryKeys({ inbetween = false } = {}, { limb = "punch", heavy = false, crouching = false } = {}) {
   return [
     { at: 0, chain: [m1key(MOTION_CELLS.follow)] },
-    { at: 0.24, chain: [] },
+    // v4.9: the fighter's own RECOVER drawing — the limb halfway back, the
+    // weight settling — fills the band that used to fall to base 11.
+    { at: 0.24, chain: inbetween ? [x2key(inbetweenRecoverCell(limb, { heavy, crouching }))] : [] },
     { at: 0.46, chain: [m3key(MOTION3_KEYS.attackSettle)] },
     { at: 0.66, chain: [] },
   ];
@@ -4584,7 +4782,7 @@ export function buildMotionAcceptMasks(manifest, cellCount = MOTION_CELL_COUNT) 
 // were added, and the 3D renderer walks this list to decide which pose banks it
 // must build a texture for.
 export const AUTHORED_BANKS = Object.freeze([
-  "motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK,
+  "motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK,
 ]);
 
 /** True for a bank that must clear the sheet + accept-mask gate before it draws. */
@@ -4656,7 +4854,7 @@ export function attackMotionBeat(attack, attackFrame, options = undefined) {
     return {
       beat: "throwRecover",
       cell: null,
-      keys: throwRecoveryKeys(),
+      keys: throwRecoveryKeys(options),
       phase: Math.min(0.999, (attackFrame - end) / tail),
     };
   }
@@ -4763,6 +4961,20 @@ export function attackMotionBeat(attack, attackFrame, options = undefined) {
     // generic base windup while devil got his authored charge. Only the
     // smear flash (when one will fire) is reserved out of the window;
     // genuinely instant moves (< 2 ticks of room) still skip it.
+    // v4.9 IN-BETWEENS: a LIGHT's anticipation, and a crouching heavy's — the
+    // one startup the 2.9 flow left on raw base cells (8 then 9). With the
+    // in-between sheet the whole startup wears the fighter's own cocked limb;
+    // the beat exists only when the caller passes `inbetween`, so every
+    // fighter without the sheet classifies exactly as before.
+    if (options?.inbetween && !attack.animation && !airborne
+      && attack.level !== ATTACK_LEVELS.OVERHEAD && attack.kitAction !== "driveHeavy"
+      && (attack.kind === "light" || (attack.kind === "heavy" && crouching)) && start >= 1) {
+      return {
+        beat: "cock", cell: null,
+        keys: lightWindupKeys(attack.limb, { inbetween: true, heavy: attack.kind === "heavy", crouching }),
+        phase: Math.min(0.999, Math.max(0, attackFrame / start)),
+      };
+    }
     if (attack.superMove || (attack.gritCost || 0) > 0) {
       const chargeEnd = start - (smearEligible ? 2 : 0);
       if (chargeEnd >= 2 && attackFrame < chargeEnd) {
@@ -4781,7 +4993,7 @@ export function attackMotionBeat(attack, attackFrame, options = undefined) {
       return {
         beat: "recover",
         cell: MOTION_CELLS.follow,
-        keys: attackRecoveryKeys(),
+        keys: attackRecoveryKeys(options, { limb: attack.limb, heavy: attack.kind === "heavy", crouching }),
         phase: Math.min(0.999, (attackFrame - end) / tail),
       };
     }
@@ -4796,9 +5008,12 @@ export function attackMotionBeat(attack, attackFrame, options = undefined) {
   // which read as punch / re-cock / punch. The extension beat's FALLBACK is
   // that exact base cell, so a missing/rejected bank still shows the 2.6
   // read frame-for-frame.
+  // v4.9 IN-BETWEENS: with the fighter's own recover drawing waiting after
+  // the swing, a light holds its extension through the whole active window
+  // instead of dropping to the raw base strike cell for its back half.
   if (!attack.animation && !crouching && !airborne && attack.kitAction !== "driveHeavy"
     && (attack.kind === "light" || attack.kind === "heavy")
-    && progress < (attack.kind === "light" ? 0.52 : 0.67)) {
+    && progress < (attack.kind === "light" ? (options?.inbetween ? 1 : 0.52) : 0.67)) {
     return { beat: "extension", cell: attack.limb === "kick" ? MOTION_CELLS.kickExt : MOTION_CELLS.punchExt };
   }
   // Follow-through key: the authored weight-carry replaces the recovery cell

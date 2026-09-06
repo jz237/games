@@ -1,0 +1,21 @@
+The reference image is a sprite sheet of ONE fighter: {LOOK}, painted in a detailed 2D fighting-game sprite style with painterly shading.
+
+Draw a NEW 4-by-4 sprite sheet of EXACTLY THE SAME character: identical face, hair, costume, colours, proportions, art style, line weight, lighting direction and figure scale as the reference cells. 16 equal square cells in a perfect grid on the same flat solid magenta (#FF00FF) background — no scenery, no floor, no cast shadows, no glow, no motion blur, no grid lines, no borders, no text. The character faces to the RIGHT in every cell like the reference. Feet planted on the same floor line near the bottom of each cell; standing figures are the same height as the reference's standing cells (about 95% of the cell); every figure centred in its own cell and never touching the edges.
+
+The 16 cells, left to right, top to bottom, are the in-between moments of the attacks. None of them is the strike itself — every cell is the instant BEFORE or the instant AFTER a strike:
+1. PUNCH WIND-UP — standing, weight loaded on the back foot, rear arm cocked back at the shoulder, fist tight, lead hand up in guard, torso turned slightly away: the instant before a straight punch.
+2. PUNCH RECOVER — the punch is over: the punching arm bent and pulling back halfway toward the body, weight settling back, guard hand returning.
+3. KICK WIND-UP — standing on the support leg, the kicking knee raised and chambered tight to the chest, foot tucked under the thigh, arms out for balance: the instant before a side kick.
+4. KICK RECOVER — the kicking leg coming back down, knee still bent, foot a hand's width above the floor, torso re-centering.
+5. HEAVY PUNCH WIND-UP — deep loaded stance, punching arm pulled far back behind the shoulder, shoulders wound up, front knee bent, fist by the ear.
+6. HEAVY PUNCH RECOVER — after a huge punch: the arm already bent and dropping back toward the hip, weight far forward over the front leg, head lowered, NOT extended.
+7. HEAVY KICK WIND-UP — standing on one leg only, the other knee lifted high and chambered tight, body sunk and leaning back, both arms swung back for momentum.
+8. HEAVY KICK RECOVER — the kicking leg swinging back down and across the body, torso twisted, arms trailing.
+9. CROUCH PUNCH WIND-UP — crouching low, punching arm cocked at the ribs, other hand near the floor.
+10. CROUCH PUNCH RECOVER — crouching, arm bent and halfway back from a low straight punch.
+11. CROUCH KICK WIND-UP — crouching, sweeping leg gathered under the body, one hand on the floor for balance: the instant before a leg sweep.
+12. CROUCH KICK RECOVER — crouching, the sweeping leg returning, hand still on the floor.
+13. THROW WIND-UP — standing, both arms reaching forward at chest height, hands open to grab.
+14. THROW RECOVER — a throw just released: arms swinging down and back, weight forward, torso bent.
+15. SPECIAL WIND-UP — both hands drawn together at the hip, knees bent, an energy-gathering stance.
+16. SPECIAL RECOVER — both arms thrust forward and now dropping, weight settling, shoulders relaxing.

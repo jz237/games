@@ -64,6 +64,9 @@ import {
   UNIFIED_CELLS,
   UNIFIED_EXT_BANK,
   UNIFIED_EXT_CELLS,
+  UNIFIED_EXT2_BANK,
+  UNIFIED_EXT2_CELLS,
+  buildUnifiedExt2AcceptMasks,
   WALK_CELL_COUNT,
   WALK_POSE_MIN_SPEED,
   buildUnifiedAcceptMasks,
@@ -1222,7 +1225,7 @@ function motion3KeyDrawable(fighterId, key) {
 // engine/fighter-kits.mjs and the routing list in fighterAnimationPose.
 // ---------------------------------------------------------------------------
 const fighterUnifiedAtlases = {};
-const unifiedBankState = { masks: null, extMasks: null, requested: false, ready: null };
+const unifiedBankState = { masks: null, extMasks: null, ext2Masks: null, requested: false, ready: null };
 
 /** Every unified sheet, main or ext, is this square once padded. */
 const UNIFIED_SHEET_PX = 1280;
@@ -1239,8 +1242,11 @@ function ensureUnifiedManifest() {
       unifiedBankState.masks = manifest ? buildUnifiedAcceptMasks(manifest) : {};
       unifiedBankState.extMasks = manifest
         ? buildUnifiedExtAcceptMasks(manifest, unifiedBankState.masks) : {};
+      // v4.9: the in-between gate is built from the main gate the same way.
+      unifiedBankState.ext2Masks = manifest
+        ? buildUnifiedExt2AcceptMasks(manifest, unifiedBankState.masks) : {};
     })
-    .catch(() => { unifiedBankState.masks = {}; unifiedBankState.extMasks = {}; });
+    .catch(() => { unifiedBankState.masks = {}; unifiedBankState.extMasks = {}; unifiedBankState.ext2Masks = {}; });
   return unifiedBankState.ready;
 }
 
@@ -1360,6 +1366,43 @@ function unifiedFighterExtReady(fighterId) {
   return unifiedExtCellDrawable(fighterId, UNIFIED_EXT_CELLS.idleBreathe);
 }
 
+// ---------------------------------------------------------------------------
+// v4.9 IN-BETWEENS — the ext2 sheet. It ships as a 1280x1280 4x4 sheet, so
+// unlike the ext sheet it needs no padding: the Image itself is the atlas.
+// Same manifest-before-sheet order: a fighter whose ext2 block is not whole
+// never has the file requested.
+// ---------------------------------------------------------------------------
+const fighterUnifiedExt2Atlases = {};
+
+/** True once the manifest has confirmed this fighter's ext2 sheet is whole. */
+function unifiedFighterExt2Whole(fighterId) {
+  return Boolean(unifiedBankState.ext2Masks?.[fighterId]?.whole);
+}
+
+function ensureUnifiedExt2Atlas(fighterId) {
+  let atlas = fighterUnifiedExt2Atlases[fighterId];
+  if (!atlas) {
+    atlas = new Image();
+    atlas.src = `assets/unified/${fighterId}-ext2.webp`;
+    fighterUnifiedExt2Atlases[fighterId] = atlas;
+  }
+  return atlas;
+}
+
+/** `cell` is a SHEET FRAME (0-15), never a grammar cell number. */
+function unifiedExt2CellDrawable(fighterId, cell) {
+  ensureUnifiedManifest();
+  const mask = unifiedBankState.ext2Masks?.[fighterId];
+  if (!mask?.whole || !mask.accept[cell]) return false;
+  const atlas = ensureUnifiedExt2Atlas(fighterId);
+  return Boolean(atlas.complete && atlas.naturalWidth);
+}
+
+/** Is this fighter animating off the in-between sheet right now? One gate. */
+function unifiedFighterExt2Ready(fighterId) {
+  return unifiedExt2CellDrawable(fighterId, UNIFIED_EXT2_CELLS.punchWindup);
+}
+
 /**
  * v4.1 — is this fighter's cell 20 a DESCENT rather than a flinch?
  *
@@ -1377,6 +1420,7 @@ function unifiedFighterExtDescendReady(fighterId) {
 /** Bank-routed drawable gate for resolveMotionPose (all six authored banks). */
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
+  if (bank === UNIFIED_EXT2_BANK) return unifiedExt2CellDrawable(fighterId, cell);
   if (bank === UNIFIED_EXT_BANK) return unifiedExtCellDrawable(fighterId, cell);
   if (bank === UNIFIED_BANK) return unifiedCellDrawable(fighterId, cell);
   if (bank === "walk") return walkCellDrawable(fighterId, cell);
@@ -1451,6 +1495,12 @@ function preloadAuthoredBanks(fighterIds) {
       // mid-stride would change both on one tick. Decoding it before FIGHT!
       // keeps that off the screen, and padding it here rather than on the first
       // draw keeps the canvas build out of a frame budget.
+      // v4.9: the in-between sheet decodes before FIGHT! too — its first use
+      // is the first jab of the round.
+      if (unifiedFighterExt2Whole(id)) {
+        const atlas2 = ensureUnifiedExt2Atlas(id);
+        if (typeof atlas2.decode === "function") atlas2.decode().catch(() => {});
+      }
       if (!unifiedFighterExtWhole(id)) continue;
       // The first call starts the request and returns null; the decode then
       // calls back to build the padded canvas. Both paths end at the same
@@ -1509,6 +1559,9 @@ function altAtlasSource(fighterId, bank) {
   if (bank === UNIFIED_EXT_BANK) {
     return { image: fighterUnifiedExtAtlases[fighterId], key: `${fighterId}:unified-ext` };
   }
+  if (bank === UNIFIED_EXT2_BANK) {
+    return { image: fighterUnifiedExt2Atlases[fighterId], key: `${fighterId}:unified-ext2` };
+  }
   const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
   // The boss shares one sheet across banks — collapse to one cache entry.
   if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
@@ -1556,7 +1609,9 @@ function paletteAtlas(fighterId, side, bank = "base") {
               ? fighterUnifiedAtlases[fighterId] || fighterAtlases[fighterId]
               : bank === UNIFIED_EXT_BANK
                 ? fighterUnifiedExtAtlases[fighterId] || fighterAtlases[fighterId]
-                : fighterAtlases[fighterId];
+                : bank === UNIFIED_EXT2_BANK
+                  ? fighterUnifiedExt2Atlases[fighterId] || fighterAtlases[fighterId]
+                  : fighterAtlases[fighterId];
   if (matchPalettes[side] !== 1) return base;
   return ensureAltAtlas(fighterId, bank) || base;
 }
@@ -17881,6 +17936,12 @@ function fighterPoseDescriptor(fighter) {
   const extOpt = ext
     ? (unifiedFighterExtDescendReady(fighter.def.id) ? EXTENDED_DESCEND : EXTENDED)
     : undefined;
+  // v4.9 IN-BETWEENS: the third capability answer. `beatOpt` carries the ext
+  // answer and adds `inbetween` when this fighter's ext2 sheet is whole, so
+  // the strike tracks (light cock, heavy load, recovery, throw reach/release)
+  // pick up his own drawings; without the sheet every track is byte-identical.
+  const ext2 = unifiedFighterExt2Ready(fighter.def.id);
+  const beatOpt = ext2 ? Object.freeze({ ...(extOpt || {}), inbetween: true }) : extOpt;
   // The BREATHING IDLE, and the only place a unified fighter's idle comes from.
   // 3.0 collapsed the idle to ONE drawing on purpose — the base bank's
   // four-cell breathing cycle is 9.5-22.5 dE of costume away from the unified
@@ -17963,7 +18024,7 @@ function fighterPoseDescriptor(fighter) {
       : uni(UNIFIED_CELLS.guard, { bank: "base", frame: roles.guard });
     const hold = fighter.grabbing;
     const clinch = clamp((hold.frame || 0) / Math.max(1, hold.total || 1), 0, 0.999);
-    return beatPoseAt(throwClinchKeys(), clinch, fallback);
+    return beatPoseAt(throwClinchKeys(beatOpt), clinch, fallback);
   }
   if (fighter.dizzyFrames > 0 || fighter.guardCrushFrames > 0) {
     // v2.9 critic round (B5): a REAL woozy loop. The 2.9 read alternated the
@@ -18291,7 +18352,7 @@ function fighterPoseDescriptor(fighter) {
     // motion3 recovery key. The fallback is the kit cell, exactly as before.
     const throwRecover = motionObs[fighter.side]?.throwRecoverFrames ?? -1;
     if (attack.kind === "throw" && throwRecover >= 0 && kitPose) {
-      return beatPoseAt(throwRecoveryKeys(),
+      return beatPoseAt(throwRecoveryKeys(beatOpt),
         clamp(throwRecover / THROW_RECOVERY_RENDER_TICKS, 0, 0.999),
         // v2.9 final round (R7): three tiers, not two. The old split put the
         // kit cell under every band below 0.74, so the track's two empty
@@ -18330,7 +18391,7 @@ function fighterPoseDescriptor(fighter) {
     // v2.7 FRAMES: authored smear / full-extension / follow-through keys ride
     // the kit-less normals timeline, each falling back to the exact base cell
     // this path showed before.
-    const beat = attackMotionBeat(attack, fighter.attackFrame, extOpt);
+    const beat = attackMotionBeat(attack, fighter.attackFrame, beatOpt);
     // v2.9 FLOW: the authored anticipation key re-skins the late startup
     // ticks (windup → smear → extension → follow reads as one swing), and
     // air normals wear the authored jumping-strike key through their active
@@ -18342,6 +18403,12 @@ function fighterPoseDescriptor(fighter) {
     // resolveMotionPose keeps a prop out of every one of them.
     if (beat?.beat === "windup") {
       return beatPoseAt(beat.keys, beat.phase, { bank: "base", frame: frames[1] });
+    }
+    // v4.9 IN-BETWEENS: a light's anticipation (and a crouching heavy's) on
+    // the fighter's own cocked limb. The fallback is the exact pre-4.9 startup
+    // read — base 8 for the first 48% of the startup, then base 9.
+    if (beat?.beat === "cock") {
+      return beatPoseAt(beat.keys, beat.phase, () => base(time < startup * 0.48 ? frames[0] : frames[1]));
     }
     // v2.9 final round (T3): the heavy KICK's arc bridge. The two ticks the
     // punch spends on its smear flash are spent here HOLDING THE CHAMBER cell
@@ -27272,7 +27339,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.8");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.9");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -28572,7 +28639,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "4.8-frontrow",
+  version: "4.9-inbetween",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -28760,6 +28827,7 @@ window.__finalBlowEngine = {
         enhanced: trap.enhanced,
       })),
       crowd: crowdSnapshot(state.crowd, state.simulationTick, { viewLeft: 0, viewRight: W }),
+      inbetweens: state.fighters.map((fighter) => unifiedFighterExt2Ready(fighter.def.id)),
       crowdSprites: {
         manifest: Boolean(crowdSheets.manifest),
         ready: Boolean(state.crowd?.people?.some((person) => person.sprite && crowdSpriteCharacter(person))),

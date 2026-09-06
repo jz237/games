@@ -66,7 +66,28 @@
    "slicerBug": "A despill written as max(green, channel - spill) silently clamps every channel up to green, destroying any colour whose blue sits below its green -- every gold, orange and warm skin tone on this roster. It turned post's safety orange into salmon and ali's gold satin into pink and cost THREE generations that were wrongly rejected as colour regressions before it was caught by sampling the raw PNG. The corrected slicer reproduces the archived cyraxx sheet within 0.93-2.14 dE. Sample the RAW generation before blaming the model for a colour shift.",
    "encoding": "Sheets are written LOSSLESS. Lossy WebP at q97 introduces a mean |dRGB| of 3.29 on this art, which would consume the entire 0-3.4 dE same-generation floor the whole one-generation law is built on. The cost is file size: ali.webp is 937KB against the 3.0 sheet's 415KB."
   },
-  "extDefectsWave14": "THE TWO DEFECTIVE EXT CELLS ON jez/alan/benny/commissioner/cyraxx STAY RETIRED, and this wave establishes WHY they cannot be patched. Both are WHOLE-BODY POSE errors, not missing objects: cell 20 drew a hit reaction instead of a descent (IoU 0.47-0.77 against that fighter's own hit cells) and cell 18 drew the A-half leg phase where the B half was asked for (+26.15 / +42.34 / +39.40 / +3.98 / +47.46, all positive where their own cell 3 is negative). Same-generation compositing can transplant a RIGID PROP -- it cannot synthesise a new drawing of a whole figure, and no other cell on those sheets contains a B-half weight-sink or a controlled descent to lift from. A single-panel REGENERATION is worse: it is a different generation, which is 11-14 dE against a 0-3.4 dE same-generation floor, so the repaired panel would strobe against its own sheet every time it played. The fix is therefore a WHOLE-SHEET regeneration with the v4.1 pose lines, which is proven to work -- ali's new sheet has neither defect and 4.1 routes his cell 20 on its own accept flag -- and is a future wave's job, not a patch. The 4.1 integration re-confirmed the IoU calibration on the shipping sheets: jez 0.474, alan 0.767, benny 0.651, commissioner 0.484, cyraxx 0.496 against their own hit cells, reproducing the recorded 0.47-0.77 band. ali measures 0.510 there too -- silhouette IoU is BLUNT on a heavy figure, where any two of his cells overlap heavily -- so the verdict is the pose read, which separates cleanly: his head sits 24.7px FORWARD of his torso centre in cell 20 where his own cells 12/13/14 carry it 6.1px, 3.9px and 0.7px BACK, and his IoU against his OWN ascent is 0.493, the highest on the roster by a third."
+  "extDefectsWave14": "THE TWO DEFECTIVE EXT CELLS ON jez/alan/benny/commissioner/cyraxx STAY RETIRED, and this wave establishes WHY they cannot be patched. Both are WHOLE-BODY POSE errors, not missing objects: cell 20 drew a hit reaction instead of a descent (IoU 0.47-0.77 against that fighter's own hit cells) and cell 18 drew the A-half leg phase where the B half was asked for (+26.15 / +42.34 / +39.40 / +3.98 / +47.46, all positive where their own cell 3 is negative). Same-generation compositing can transplant a RIGID PROP -- it cannot synthesise a new drawing of a whole figure, and no other cell on those sheets contains a B-half weight-sink or a controlled descent to lift from. A single-panel REGENERATION is worse: it is a different generation, which is 11-14 dE against a 0-3.4 dE same-generation floor, so the repaired panel would strobe against its own sheet every time it played. The fix is therefore a WHOLE-SHEET regeneration with the v4.1 pose lines, which is proven to work -- ali's new sheet has neither defect and 4.1 routes his cell 20 on its own accept flag -- and is a future wave's job, not a patch. The 4.1 integration re-confirmed the IoU calibration on the shipping sheets: jez 0.474, alan 0.767, benny 0.651, commissioner 0.484, cyraxx 0.496 against their own hit cells, reproducing the recorded 0.47-0.77 band. ali measures 0.510 there too -- silhouette IoU is BLUNT on a heavy figure, where any two of his cells overlap heavily -- so the verdict is the pose read, which separates cleanly: his head sits 24.7px FORWARD of his torso centre in cell 20 where his own cells 12/13/14 carry it 6.1px, 3.9px and 0.7px BACK, and his IoU against his OWN ascent is 0.493, the highest on the roster by a third.",
+  "ext2Sheet": "<id>-ext2.webp, 1280x1280 RGBA WebP, 4x4 grid, 320px cells, ext2 frames 0-15 = grammar cells 24-39. Generated as ONE 4x4 sheet per fighter with that fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), keyed on magenta with an un-premultiplied edge despill, colour-matched onto the unified sheet (per-cluster LAB mean shift), tallest standing figure to 306px, feet on row 314, torso band (20-57.5% of the figure) on column 160. Built by final-blow-art-archive/inbetweens-v49/build_ext2.py.",
+  "ext2PoseIds": [
+   "punch-windup",
+   "punch-recover",
+   "kick-windup",
+   "kick-recover",
+   "heavy-punch-windup",
+   "heavy-punch-recover",
+   "heavy-kick-windup",
+   "heavy-kick-recover",
+   "crouch-punch-windup",
+   "crouch-punch-recover",
+   "crouch-kick-windup",
+   "crouch-kick-recover",
+   "throw-windup",
+   "throw-recover",
+   "special-windup",
+   "special-recover"
+  ],
+  "ext2CellCount": 16,
+  "ext2Status": "WIRED AND SHIPPING (v4.9). ALL TEN fighters carry an ext2 sheet. Cells 24-37 are routed: the light cock (whole startup), the heavy LOAD band, the recovery band after the follow-through, the crouch pair, the throw reach and release. 38-39 (special wind-up / recover) are drawn and RESERVED \u2014 the specials keep their authored kit art. Gated all fourteen routed cells or none, and the main sheet must be whole. Measured 0.9-1.3 weighted dE against each fighter's unified sheet (the shipped ext sheets sit at 0.66; the cross-generation strobe is 11-14)."
  },
  "fighters": {
   "deathblow": {
@@ -88,21 +109,21 @@
      "id": "walk-contact-a",
      "accept": true,
      "note": "U2 FAIL (phase). Good drawing, wrong phase relationship: stride separation 128.0px (needs >=66.7, base mean 111.1) and it plants two feet correctly, but its near/far leg luminance is +21.2 and cell 3's is +16.4 -- SAME sign, so cells 1 and 3 lead with the same foot. Silhouette IoU against cell 3 is 0.842.",
-     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. "
+     "notes": "SINGLE-PHASE by design \u2014 parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. "
     },
     {
      "frame": 2,
      "id": "walk-passing-a",
      "accept": true,
      "note": "U2 FAIL (phase). Plants exactly one foot as a passing key should and its separation drops to 56.5px, but it is a near-duplicate of cell 4 (IoU 0.878) -- the two passing keys swing the same leg.",
-     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. "
+     "notes": "SINGLE-PHASE by design \u2014 parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. "
     },
     {
      "frame": 3,
      "id": "walk-contact-b",
      "accept": true,
      "note": "U2 FAIL (phase). Should be the PHASE MIRROR of cell 1 and is not: separation 129.5px, leg luminance +16.4 against cell 1's +21.2, no inversion. Four generations were spent on this cell alone; see MOTION-ATLAS.md for what was tried.",
-     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. ",
+     "notes": "SINGLE-PHASE by design \u2014 parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. ",
      "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 1. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
@@ -110,7 +131,7 @@
      "id": "walk-passing-b",
      "accept": true,
      "note": "U2 FAIL (phase). Separation 72.0px, one foot planted; near-duplicate of cell 2 (IoU 0.878).",
-     "notes": "SINGLE-PHASE by design — parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. ",
+     "notes": "SINGLE-PHASE by design \u2014 parity with the shipped base walk (37/40 base cells share one lead foot); phase inversion was retired as a gate for the roster and applied here for consistency. ",
      "wave16": "REBUILT BY COMPOSITING (v4.3), zero new generations. The two leg regions exchanged roles in place, so this key now leads with the opposite LIMB from cell 2. Geometry, feet, floor contact, outline and alpha are the 3.0 pixels unchanged; only the near/far tonal role of the two legs is swapped. The 'SINGLE-PHASE by design' note above is now SUPERSEDED for this cell."
     },
     {
@@ -208,7 +229,107 @@
     "W4torsoColMeasured": "153.6..170.2, sd 3.51, identical to the 3.0 sheet",
     "W6compositeInvisibility": "inspected at 8-11x on both rebuilt cells. There is no seam to find because nothing was cut, moved or pasted: the leg silhouettes, both feet, the soles, the outline and the floor contact are the source pixels. No doubled or missing foot, no depth-order change, no lighting contradiction -- the light direction is untouched and only the near/far tonal role swaps. PASS.",
     "composite": "cell 3 cut row 229, cell 4 cut row 237 -- both sit on the BLACK CARGO-SHORTS HEM, a hard garment edge, so the join carries no tonal step and needs no feather. Material mask = bare tanned skin (L>46, r>b+18, r>60); the black sneakers and the ink outline are excluded and untouched."
-   }
+   },
+   "ext2Sheet": "deathblow-ext2.webp",
+   "ext2Scale": 1.3846,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0086 restores its size."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.1449 restores its size."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.1364 restores its size."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ]
   },
   "jez": {
    "sheet": "jez.webp",
@@ -668,6 +789,106 @@
      "id": "mid-reaction",
      "accept": true,
      "note": "NEW. Mid reaction -- the flinch between light-hit (12) and big-hit (13)."
+    }
+   ],
+   "ext2Sheet": "jez-ext2.webp",
+   "ext2Scale": 1.3846,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0263 restores its size."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.2218 restores its size."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0408 restores its size."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
     }
    ]
   },
@@ -1134,6 +1355,106 @@
      "accept": true,
      "note": "NEW. Mid reaction -- the flinch between light-hit (12) and big-hit (13)."
     }
+   ],
+   "ext2Sheet": "alan-ext2.webp",
+   "ext2Scale": 1.3973,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0041 restores its size."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.2166 restores its size."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
    ]
   },
   "post": {
@@ -1512,7 +1833,107 @@
     "W4torsoColMeasured": "154.9..174.4, sd 5.12, identical to the 3.0 sheet",
     "W6compositeInvisibility": "inspected at 8-11x on both rebuilt cells. There is no seam to find because nothing was cut, moved or pasted: the leg silhouettes, both feet, the soles, the outline and the floor contact are the source pixels. No doubled or missing foot, no depth-order change, no lighting contradiction -- the light direction is untouched and only the near/far tonal role swaps. PASS.",
     "composite": "cell 3 cut row 214, cell 4 cut row 209, both at the crotch where the trouser legs part. Material mask = safety-orange twill and the pale rolled cuff (r>70, r>b+30, r>g+12); the black boots are excluded and untouched."
-   }
+   },
+   "ext2Sheet": "post-ext2.webp",
+   "ext2Scale": 1.354,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0813 restores its size."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0603 restores its size."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.1234 restores its size."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ]
   },
   "benny": {
    "sheet": "benny.webp",
@@ -1968,6 +2389,106 @@
      "accept": true,
      "note": "NEW. Mid reaction -- the flinch between light-hit (12) and big-hit (13)."
     }
+   ],
+   "ext2Sheet": "benny-ext2.webp",
+   "ext2Scale": 1.3421,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0248 restores its size."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0248 restores its size."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0091 restores its size."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.2284 restores its size."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
    ]
   },
   "donald": {
@@ -2351,7 +2872,107 @@
     "W6": "PASS by eye at 8-11x. Crops in unified-v44/W6-*.png.",
     "byteIdenticalCells": "0,1,2,5,6,7,8,9,10,11,12,13,14,15",
     "note": "the sheet is saved WEBP lossless with exact=True; without exact the encoder zeroes the RGB under alpha=0 and the untouched cells stop being byte-identical."
-   }
+   },
+   "ext2Sheet": "donald-ext2.webp",
+   "ext2Scale": 1.3973,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0773 restores its size."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0213 restores its size."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ]
   },
   "cyraxx": {
    "scale": 1.4712,
@@ -2805,6 +3426,106 @@
      "id": "mid-reaction",
      "accept": true,
      "note": "NEW. Mid reaction -- the flinch between light-hit (12) and big-hit (13)."
+    }
+   ],
+   "ext2Sheet": "cyraxx-ext2.webp",
+   "ext2Scale": 1.2911,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0065 restores its size."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0065 restores its size."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
     }
    ]
   },
@@ -3405,7 +4126,107 @@
      "note": "mid-reaction, doubled forward, near fist still closed on the mic."
     }
    ],
-   "wave14Integration": "WIRED IN 4.1. The hold this entry used to describe is discharged: extSheetPending / extCellsPending were renamed to extSheet / extCells, which takes the ext roster from five fighters to six. The integration pass ALSO RE-MEASURED the two engine tables his redraw made stale, which is the trap MOTION-ATLAS records the 3.1 wave falling into. Measured values, all reproduced independently rather than copied from internal.wave14.integrationNotes, and the method validated first by reproducing every UNTOUCHED sheet's recorded row exactly (nine UNIFIED_CELL_HEIGHT rows 16/16, five UNIFIED_EXT_CELL_HEIGHT rows 8/8, and all fourteen CELL_BODY_CENTRE rows): CELL_BODY_CENTRE.ali.unified re-measured (max drift 35 rows at cell 8, the jump-rise the airborne anchor reads) and a 'unified-ext' row added; UNIFIED_CELL_HEIGHT and UNIFIED_EXT_CELL_HEIGHT installed; UNIFIED_CELL_ADJUST refitted onto his new 294px idle (0.894/0.886/0.894/0.900 -> 0.961/0.987/0.980/0.970) and UNIFIED_EXT_CELL_ADJUST added for 17 and 18; UNIFIED_GUARD_FLINCH_ADJUST 1.058 -> 1.135, because his unified guard cell grew 274 -> 294 and the old number let a blocked hit draw 7% short of his own guard; WAKEUP_RISE_HEIGHT standUnified 271 -> 294 and the unified crouch rung 199 -> 226. He needs NO sheet adjust, so nothing is folded into his per-cell ext table -- see the commissioner's block in UNIFIED_EXT_CELL_ADJUST for the one entry that is. AND HIS CELL 20 IS ROUTED: it is the roster's first real jump-descend, so the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20 while the other five keep the 4.0 arc. See format.extStatus."
+   "wave14Integration": "WIRED IN 4.1. The hold this entry used to describe is discharged: extSheetPending / extCellsPending were renamed to extSheet / extCells, which takes the ext roster from five fighters to six. The integration pass ALSO RE-MEASURED the two engine tables his redraw made stale, which is the trap MOTION-ATLAS records the 3.1 wave falling into. Measured values, all reproduced independently rather than copied from internal.wave14.integrationNotes, and the method validated first by reproducing every UNTOUCHED sheet's recorded row exactly (nine UNIFIED_CELL_HEIGHT rows 16/16, five UNIFIED_EXT_CELL_HEIGHT rows 8/8, and all fourteen CELL_BODY_CENTRE rows): CELL_BODY_CENTRE.ali.unified re-measured (max drift 35 rows at cell 8, the jump-rise the airborne anchor reads) and a 'unified-ext' row added; UNIFIED_CELL_HEIGHT and UNIFIED_EXT_CELL_HEIGHT installed; UNIFIED_CELL_ADJUST refitted onto his new 294px idle (0.894/0.886/0.894/0.900 -> 0.961/0.987/0.980/0.970) and UNIFIED_EXT_CELL_ADJUST added for 17 and 18; UNIFIED_GUARD_FLINCH_ADJUST 1.058 -> 1.135, because his unified guard cell grew 274 -> 294 and the old number let a blocked hit draw 7% short of his own guard; WAKEUP_RISE_HEIGHT standUnified 271 -> 294 and the unified crouch rung 199 -> 226. He needs NO sheet adjust, so nothing is folded into his per-cell ext table -- see the commissioner's block in UNIFIED_EXT_CELL_ADJUST for the one entry that is. AND HIS CELL 20 IS ROUTED: it is the roster's first real jump-descend, so the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20 while the other five keep the 4.0 arc. See format.extStatus.",
+   "ext2Sheet": "ali-ext2.webp",
+   "ext2Scale": 1.3722,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0936 restores its size."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.1156 restores its size."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ]
   },
   "commissioner": {
    "sheet": "commissioner.webp",
@@ -3865,6 +4686,106 @@
      "accept": true,
      "note": "NEW. Mid reaction -- the flinch between light-hit (12) and big-hit (13)."
     }
+   ],
+   "ext2Sheet": "commissioner-ext2.webp",
+   "ext2Scale": 1.3133,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0405 restores its size."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.018 restores its size."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
    ]
   },
   "devil": {
@@ -4243,7 +5164,107 @@
     "W4torsoColMeasured": "142.5..166.1, sd 5.36, identical to the 3.0 sheet",
     "W6compositeInvisibility": "inspected at 8-11x on both rebuilt cells. There is no seam to find because nothing was cut, moved or pasted: the leg silhouettes, both feet, the soles, the outline and the floor contact are the source pixels. No doubled or missing foot, no depth-order change, no lighting contradiction -- the light direction is untouched and only the near/far tonal role swaps. PASS.",
     "composite": "cut row 250 on BOTH cells 3 and 4 -- his digitigrade legs merge into one raster run above that, so the segmentation only resolves the shanks. Because 250 falls mid-limb rather than on a garment edge, the transform is ramped in over 16 rows (a vertical feather) so the join cannot show a step; verified at 9x. Material mask = olive hide and moss wrap (L>40, g>b+6); claws and outline untouched. The tail is excluded from the leg labelling (seed_minw 18, chain_minw 12, gap 5) -- it otherwise hijacks the rear-leg label, which is what broke the first attempt."
-   }
+   },
+   "ext2Sheet": "devil-ext2.webp",
+   "ext2Scale": 1.3722,
+   "ext2Cells": [
+    {
+     "frame": 24,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 25,
+     "id": "punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 26,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 27,
+     "id": "kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 28,
+     "id": "heavy-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.1131 restores its size."
+    },
+    {
+     "frame": 29,
+     "id": "heavy-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0652 restores its size."
+    },
+    {
+     "frame": 30,
+     "id": "heavy-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 31,
+     "id": "heavy-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.1124 restores its size."
+    },
+    {
+     "frame": 32,
+     "id": "crouch-punch-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0791 restores its size."
+    },
+    {
+     "frame": 33,
+     "id": "crouch-punch-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 34,
+     "id": "crouch-kick-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0376 restores its size."
+    },
+    {
+     "frame": 35,
+     "id": "crouch-kick-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 36,
+     "id": "throw-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 37,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 38,
+     "id": "special-windup",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    },
+    {
+     "frame": 39,
+     "id": "special-recover",
+     "accept": true,
+     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ]
   }
  },
  "internal": {
