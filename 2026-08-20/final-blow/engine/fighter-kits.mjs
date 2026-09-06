@@ -258,7 +258,8 @@ const jezMoves = {
   }),
   enhancedBackSpecial: move("jez-ex-vinyl-step", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
-    startupFrames: 4, activeFrames: 16, recoveryFrames: 10, range: 212, damage: 8, push: 68, meter: 8,
+    // BLOCK ECONOMY: recovery 10→15 (tuned 13→20), −3 on block instead of +4.
+    startupFrames: 4, activeFrames: 16, recoveryFrames: 15, range: 212, damage: 8, push: 68, meter: 8,
     hitstunFrames: 23, blockstunFrames: 17, chipDamage: 3, maxHits: 2, rehitFrames: 7,
     advanceSpeed: 720, ignorePushbox: true, reversalInvulnerableFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, moveName: "VINYL STEP EX", command: "↓ ← + LP&HP", animation: anim(1),
@@ -599,7 +600,10 @@ const bennyMoves = {
   }),
   backSpecial: move("benny-live-wire", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
-    startupFrames: 4, activeFrames: 16, recoveryFrames: 9, range: 194, damage: 7, push: 58, meter: 8,
+    // BLOCK ECONOMY: recovery 9→14 (tuned 12→18), −3 on block instead of +3.
+    // Benny already owns the only plus-on-block jabs in the game; a free
+    // cross-through does not get to be plus as well.
+    startupFrames: 4, activeFrames: 16, recoveryFrames: 14, range: 194, damage: 7, push: 58, meter: 8,
     hitstunFrames: 22, blockstunFrames: 15, chipDamage: 2, maxHits: 2, rehitFrames: 7,
     advanceSpeed: 790, ignorePushbox: true, reversalInvulnerableFrames: 5,
     rushCancel: true, cancelRoutes: bennyCancelRoutes,
@@ -633,7 +637,10 @@ const bennyMoves = {
   }),
   enhancedBackSpecial: move("benny-ex-live-wire", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
-    startupFrames: 2, activeFrames: 22, recoveryFrames: 7, range: 224, damage: 5.5, push: 47, meter: 6,
+    // BLOCK ECONOMY: recovery 7→18 (tuned 9→24), −6 on block instead of +9
+    // (real, third hit at f14: about −15). The voltage cancel still opens at
+    // f22-29 on hit, so the confirm is intact; only the blocked read moved.
+    startupFrames: 2, activeFrames: 22, recoveryFrames: 18, range: 224, damage: 5.5, push: 47, meter: 6,
     hitstunFrames: 23, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 6,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 885, ignorePushbox: true,
     reversalInvulnerableFrames: 8, rushCancel: true, cancelRoutes: bennyCancelRoutes,
@@ -846,7 +853,8 @@ const cyraxxMoves = {
   }),
   backSpecial: move("cyraxx-buffer-skip", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
-    startupFrames: 5, activeFrames: 18, recoveryFrames: 10, range: 201, damage: 7, push: 62, meter: 9,
+    // BLOCK ECONOMY: recovery 10→15 (tuned 13→20), −4 on block instead of +3.
+    startupFrames: 5, activeFrames: 18, recoveryFrames: 15, range: 201, damage: 7, push: 62, meter: 9,
     hitstunFrames: 23, blockstunFrames: 16, chipDamage: 2, maxHits: 2, rehitFrames: 8,
     advanceSpeed: 815, ignorePushbox: true, reversalInvulnerableFrames: 5,
     moveName: "BUFFER SKIP", command: "↓ ← + PUNCH · phase through", animation: anim(1),
@@ -877,7 +885,11 @@ const cyraxxMoves = {
   }),
   enhancedBackSpecial: move("cyraxx-ex-buffer-skip", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
-    startupFrames: 3, activeFrames: 25, recoveryFrames: 7, range: 229, damage: 5.5, push: 46, meter: 7,
+    // BLOCK ECONOMY: recovery 7→18 (tuned 9→24), −6 on block instead of +9
+    // (real, third hit at f17: about −16). The echo (spawn f13, arms f31)
+    // still covers most of the new recovery — that is the read the EX buys,
+    // not free plus frames.
+    startupFrames: 3, activeFrames: 25, recoveryFrames: 18, range: 229, damage: 5.5, push: 46, meter: 7,
     hitstunFrames: 24, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 930, ignorePushbox: true, reversalInvulnerableFrames: 9,
     projectile: { spawnFrames: [13], speed: 0, lifeFrames: 82, armFrames: 18, xOffsets: [-34], yOffsets: [-117], width: 108, height: 143, damage: 8, chipDamage: 2, hitstunFrames: 22, blockstunFrames: 17, push: 85, level: ATTACK_LEVELS.MID, color: "#8cff4d", style: "feedback" },
@@ -973,7 +985,10 @@ const aliMoves = {
   }),
   backSpecial: move("ali-beat-skip", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
-    startupFrames: 4, activeFrames: 17, recoveryFrames: 8, range: 196, damage: 7, push: 54, meter: 8,
+    // BLOCK ECONOMY: recovery 8→14 (tuned 11→18), −3 on block instead of +4.
+    // On hit the flow cancel still opens before recovery, so Ali's rhythm
+    // game is untouched; only the blocked read now belongs to the blocker.
+    startupFrames: 4, activeFrames: 17, recoveryFrames: 14, range: 196, damage: 7, push: 54, meter: 8,
     hitstunFrames: 22, blockstunFrames: 15, chipDamage: 2, maxHits: 2, rehitFrames: 8,
     advanceSpeed: 835, ignorePushbox: true, reversalInvulnerableFrames: 5,
     rhythmCancel: true, rhythmCancelStacks: 2, cancelRoutes: aliFlowRoutes,
@@ -1007,7 +1022,12 @@ const aliMoves = {
   }),
   enhancedBackSpecial: move("ali-ex-beat-skip", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
-    startupFrames: 2, activeFrames: 23, recoveryFrames: 6, range: 222, damage: 5.5, push: 43, meter: 6,
+    // BLOCK ECONOMY: recovery 6→18 (tuned 8→24) so the invulnerable
+    // cross-through reads −6 on block instead of +10 (last-active-frame
+    // convention; with the third hit landing at f16 the real number is about
+    // −14). Startup, active, invulnerability and the side switch are the
+    // payoff and stay; on hit the flow cancel still opens before recovery.
+    startupFrames: 2, activeFrames: 23, recoveryFrames: 18, range: 222, damage: 5.5, push: 43, meter: 6,
     hitstunFrames: 24, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 950, ignorePushbox: true, reversalInvulnerableFrames: 9,
     rhythmCancel: true, rhythmCancelStacks: 1, cancelRoutes: aliFlowRoutes,
@@ -1016,7 +1036,10 @@ const aliMoves = {
   }),
   enhancedLauncher: move("ali-ex-bassline-riser", "special", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
-    startupFrames: 4, activeFrames: 14, recoveryFrames: 14, range: 169, damage: 6.5, push: 54, meter: 7,
+    // BLOCK ECONOMY: recovery 14→15 (tuned 18→20, −2→−4 on block) so the
+    // invulnerable EX riser clears the −3 floor on its own numbers instead
+    // of via the createAttackInstance clamp.
+    startupFrames: 4, activeFrames: 14, recoveryFrames: 15, range: 169, damage: 6.5, push: 54, meter: 7,
     hitstunFrames: 26, blockstunFrames: 16, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -610, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 11,

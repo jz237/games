@@ -121,8 +121,18 @@ function testCancelRoutes() {
   assert.equal(canCancelAttack(special, "heavy", special.activeEndFrame, "hit"), false);
   const rushSpecial = { ...special, cancelRoutes: ["special", "commandSpecial", "enhanced", "super"] };
   assert.equal(canCancelAttack(rushSpecial, "commandSpecial", rushSpecial.activeEndFrame, "hit"), true);
+  // A route-only special (no rushCancel/rhythmCancel flag) is not a voltage
+  // or flow cancel, so the block-economy budget never applies to it.
   assert.equal(canCancelAttack(rushSpecial, "commandSpecial", rushSpecial.activeEndFrame, "block"), true);
   assert.equal(canCancelAttack(rushSpecial, "heavy", rushSpecial.activeEndFrame, "hit"), false);
+  // BLOCK ECONOMY: a flagged voltage cancel keeps its first blocked cancel
+  // (pin changed from 'always true' — the old rule was an unlimited true
+  // blockstring, see tempo.test.mjs for the Blitz measurement) and refuses
+  // the second in the same string; on hit it stays unlimited.
+  const voltage = { ...rushSpecial, rushCancel: true };
+  assert.equal(canCancelAttack(voltage, "commandSpecial", voltage.activeEndFrame, "block"), true);
+  assert.equal(canCancelAttack(voltage, "commandSpecial", voltage.activeEndFrame, "block", { blockedSpecialCancels: 1 }), false);
+  assert.equal(canCancelAttack(voltage, "commandSpecial", voltage.activeEndFrame, "hit", { blockedSpecialCancels: 3 }), true);
 }
 
 testGritMoves();

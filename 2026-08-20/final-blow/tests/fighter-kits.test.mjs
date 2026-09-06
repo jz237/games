@@ -15,7 +15,8 @@ import {
   selectKitMoveKey,
 } from "../engine/fighter-kits.mjs";
 import { GRIT_RULES } from "../engine/combos.mjs";
-import { MOVEMENT_RULES } from "../engine/defense.mjs";
+import { MOVEMENT_RULES, attackFrameData } from "../engine/defense.mjs";
+import { ARCADE_TUNING, REVERSAL_BLOCK_DISADVANTAGE_FRAMES } from "../engine/foundation.mjs";
 
 function history(tokens) {
   return tokens.map((token, index) => ({ token, frame: index * 4 + 1 }));
@@ -226,9 +227,63 @@ function testCommandsAndAi() {
   assert.equal(selectKitAiIntent("ali", { distance: 180, roll: 0.2 }).action, "commandSpecial");
 }
 
+// BLOCK ECONOMY invariant: any move that carries reversal invulnerability is
+// negative on block, across every kit, on its own authored numbers. Before
+// this pass the three rushdown EX back specials were invulnerable from frame
+// 0 AND +9/+10 on block (last-active-frame convention), which has no
+// counter-read at all. The foundation clamp is a backstop only: the second
+// assertion proves it never fires on shipped data, so a kit edit that leans
+// on it fails here instead of shipping a silently stretched move.
+function testReversalInvulnerabilityIsNegativeOnBlock() {
+  let audited = 0;
+  for (const id of Object.keys(FIGHTER_KITS)) {
+    for (const [key, raw] of Object.entries(FIGHTER_KITS[id].moves)) {
+      const move = createFighterMove(id, key, {});
+      if (!move || !(move.reversalInvulnerableFrames > 0)) continue;
+      audited += 1;
+      const data = attackFrameData(move);
+      assert.ok(
+        data.onBlock <= -REVERSAL_BLOCK_DISADVANTAGE_FRAMES,
+        `${id} ${move.profileId} is invulnerable (${move.reversalInvulnerableFrames}f) so it must be at least −${REVERSAL_BLOCK_DISADVANTAGE_FRAMES} on block, got ${data.onBlock}`,
+      );
+      const authoredRecovery = Math.max(4, Math.round(raw.recoveryFrames * (ARCADE_TUNING.recovery[raw.baseKind] ?? 1)));
+      assert.equal(
+        move.recoveryFrames,
+        authoredRecovery,
+        `${id} ${move.profileId}: the on-block floor must come from the authored recovery, not the createAttackInstance clamp`,
+      );
+    }
+  }
+  assert.ok(audited >= 30, `the audit must actually cover the roster's reversals (saw ${audited})`);
+
+  // The three EX cross-throughs keep their payoff (2-3f startup, the side
+  // switch, the invulnerability) and pay for it in recovery: the documented
+  // numbers, pinned so a retune is a deliberate edit here too.
+  const expected = {
+    "ali-ex-beat-skip": { startup: 2, onBlock: -6 },
+    "benny-ex-live-wire": { startup: 2, onBlock: -6 },
+    "cyraxx-ex-buffer-skip": { startup: 3, onBlock: -6 },
+  };
+  for (const [id, action] of [["ali", "enhancedBackSpecial"], ["benny", "enhancedBackSpecial"], ["cyraxx", "enhancedBackSpecial"]]) {
+    const move = createFighterMove(id, action, {});
+    const data = attackFrameData(move);
+    assert.equal(data.startup, expected[move.profileId].startup, `${move.profileId} keeps its startup`);
+    assert.equal(data.onBlock, expected[move.profileId].onBlock, `${move.profileId} on-block`);
+    assert.equal(move.ignorePushbox, true, `${move.profileId} still crosses through`);
+    assert.ok(move.reversalInvulnerableFrames >= 8, `${move.profileId} keeps its invulnerability`);
+  }
+  // Their free versions were plus too (+3/+3/+4) and are now ordinary
+  // minus-on-block specials like every other fighter's.
+  for (const id of ["ali", "benny", "cyraxx"]) {
+    const data = attackFrameData(createFighterMove(id, "backSpecial", {}));
+    assert.ok(data.onBlock <= -3 && data.onBlock >= -5, `${id} back special lands −3..−5 on block, got ${data.onBlock}`);
+  }
+}
+
 testCompleteKits();
 testDistinctArchetypesAndFrameData();
 testMoveInstancesAndArt();
 testCommandsAndAi();
+testReversalInvulnerabilityIsNegativeOnBlock();
 
 console.log("Final Blow eight-fighter kit tests passed");

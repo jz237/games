@@ -154,6 +154,34 @@ test("perfect guard is a strict just-defend window on the guard start tick", () 
   assert.ok(PERFECT_GUARD_RULES.gritBonus > 0 && PERFECT_GUARD_RULES.gritBonus <= 5);
 });
 
+test("perfect guard re-arms inside a string on a fresh back tap (block economy)", async () => {
+  // The rule is pure: whatever tick the guard was (re)stamped on is the tick
+  // the window counts from. Hit 2 of a two-hit string lands 7 frames after
+  // hit 1 (a rehit cadence shared by most of the roster's specials); with the
+  // original stamp it is 7 frames stale and cannot be perfect, with a re-stamp
+  // 3 frames before impact it is.
+  const firstHit = 1000;
+  const secondHit = firstHit + 7;
+  const originalStamp = firstHit - 2;
+  assert.equal(isPerfectGuard(originalStamp, firstHit), true, "hit 1 was a perfect guard");
+  assert.equal(isPerfectGuard(originalStamp, secondHit), false, "a held guard cannot perfect hit 2");
+  const reStamp = secondHit - 3;
+  assert.equal(isPerfectGuard(reStamp, secondHit), true, "a re-tap inside blockstun can perfect hit 2");
+  assert.ok(PERFECT_GUARD_RULES.windowFrames < 7, "the window is tighter than the rehit cadence, so the re-tap is still a read");
+
+  // game.js only ever refused this because blockstun forces guarding true
+  // and the stamp keyed on a fresh guarding edge. The re-arm keys on the
+  // directional back edge (guardInputHeld) while blockstun is live; the
+  // engine-internal input.guard channel the CPU drives is deliberately not
+  // part of the edge.
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../game.js", import.meta.url), "utf8");
+  assert.match(source, /const backTapped = directionContext\(fighter, input\)\.backHeld;/);
+  assert.match(source, /const guardTapEdge = backTapped && !fighter\.guardInputHeld;/);
+  assert.match(source, /if \(fighter\.guarding && \(!wasGuarding \|\| \(fighter\.blockstunFrames > 0 && guardTapEdge\)\)\)/);
+  assert.match(source, /guardInputHeld: false,/, "the edge memory is a plain fighter field so rollback carries it");
+});
+
 // ---------------------------------------------------------------------------
 // Release 1.7 DEPTH — rollback round-trip for every new gameplay field
 // ---------------------------------------------------------------------------

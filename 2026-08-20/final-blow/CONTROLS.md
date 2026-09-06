@@ -19,6 +19,8 @@ opening normal.
 | Up | Jump. Up-toward and up-away give the forward and back jump arcs. |
 | Down | Crouch. Crouching alone does **not** block. |
 | Down + away | Crouch-block, which is the only way to guard lows. |
+| Tap away ≤4 frames before impact | **Perfect Guard**: no chip, shorter blockstun, +3 Grit, no guard-gauge pressure. Release and tap away again *inside* blockstun to re-arm it against the next hit of a string. |
+| Away + special motion, or LP+HP, in blockstun | **Guard reversal** (30 Grit). |
 | Double-tap left / right | Dash. Backdash keeps its startup invulnerability. |
 | Flick the touch pad left / right | Dash on a phone (5.x). A quick sweep of the thumb to the pad edge is read as the same double-tap; see **Touch** below. |
 

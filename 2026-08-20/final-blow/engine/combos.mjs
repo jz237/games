@@ -8,6 +8,42 @@ export const GRIT_RULES = Object.freeze({
   superCost: 100,
   hitGainMultiplier: 1,
   damageTakenGainMultiplier: 0.45,
+  // BLOCK ECONOMY (post-5.0): a blocked strike pays the attacker half. Before
+  // this, chip pressure built a super exactly as fast as landing hits — seven
+  // blocked Blitzes banked 168 Grit for Benny while the blocker got 76 — so
+  // the player who read the string correctly was still losing the long game.
+  // At 0.5x versus the defender's 0.45x a blocked hit is close to Grit-neutral.
+  blockGainMultiplier: 0.5,
+  // A projectile pays a flat sum once per projectile, hit or block. The old
+  // flat 15 on every touch let Donald fund GOLDEN BACK NINE (100 Grit) with
+  // seven blocked Shockwaves in 5.25 s of zero-risk zoning; a blocked shot is
+  // now worth 6, so the same wall needs seventeen blocked orbs (~13 s).
+  projectileGain: Object.freeze({ hit: 15, block: 6 }),
+});
+
+// Grit the attacker banks for one connecting hit of `attack`. The defender's
+// 0.45x share is unchanged by the block: blocking correctly is the one thing
+// in the economy that keeps its full rate.
+export function attackGritGain(attack, { blocked = false } = {}) {
+  const base = Number.isFinite(attack?.meter) ? attack.meter : 0;
+  return base * (blocked ? GRIT_RULES.blockGainMultiplier : GRIT_RULES.hitGainMultiplier);
+}
+
+export function projectileGritGain({ blocked = false } = {}) {
+  return blocked ? GRIT_RULES.projectileGain.block : GRIT_RULES.projectileGain.hit;
+}
+
+// BLOCK ECONOMY: a special that cancels into another special (Benny's voltage
+// cancels, Ali's flow cancels) may do so on BLOCK only this many times per
+// string. One blocked cancel keeps the rushdown identity — Blitz into Blitz is
+// still real pressure — but the second one is refused, so the string ends on
+// the cancelled move's own recovery instead of looping into a true
+// blockstring. Measured before the rule: Blitz (last hit f21, blockstun to
+// f38) cancelled into Blitz at f34 was airtight for as long as the buttons
+// lasted and guard-crushed on the seventh rep. On HIT the cancels are still
+// unlimited; supers already required a hit.
+export const SPECIAL_CANCEL_RULES = Object.freeze({
+  blockedPerString: 1,
 });
 
 // Short, high-impact combos. The scaling curve drops hard after the third hit so
@@ -357,7 +393,18 @@ const cancelRoutes = {
 
 export const CANCEL_ROUTES = deepFreeze(cancelRoutes);
 
-export function canCancelAttack(attack, nextAction, attackFrame, connected = "") {
+const SPECIAL_CANCEL_ROUTES = Object.freeze(["special", "commandSpecial", "enhanced"]);
+
+// A voltage/flow cancel is a special (rushCancel / rhythmCancel) going into
+// another special. Ordinary normal-into-special cancels are not counted: a
+// blocked heavy into one special is the genre's standard frame trap and ends
+// on that special's recovery by itself.
+export function isSpecialIntoSpecialCancel(attack, nextAction) {
+  return Boolean(attack && (attack.rushCancel || attack.rhythmCancel))
+    && SPECIAL_CANCEL_ROUTES.includes(nextAction);
+}
+
+export function canCancelAttack(attack, nextAction, attackFrame, connected = "", { blockedSpecialCancels = 0 } = {}) {
   const routeId = attack?.cancelProfileId || attack?.profileId;
   const allowedRoutes = attack?.cancelRoutes || CANCEL_ROUTES[routeId];
   if (!attack || !connected || !allowedRoutes?.includes(nextAction)) return false;
@@ -366,5 +413,9 @@ export function canCancelAttack(attack, nextAction, attackFrame, connected = "")
   const latest = attack.activeEndFrame + (attack.kind === "light" ? 7 : 5);
   if (attackFrame < earliest || attackFrame > latest) return false;
   if (nextAction === "super" && connected !== "hit") return false;
+  // BLOCK ECONOMY: the string's blocked special-into-special budget is spent.
+  if (connected === "block"
+    && isSpecialIntoSpecialCancel(attack, nextAction)
+    && blockedSpecialCancels >= SPECIAL_CANCEL_RULES.blockedPerString) return false;
   return true;
 }

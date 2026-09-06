@@ -50,9 +50,12 @@ import {
   COMBO_RULES,
   GRIT_RULES,
   ComboTracker,
+  attackGritGain,
   canCancelAttack,
   createAdvancedMove,
   gritCostForAction,
+  isSpecialIntoSpecialCancel,
+  projectileGritGain,
   recognizeCombatCommand,
 } from "./engine/combos.mjs";
 import {
@@ -6540,6 +6543,12 @@ function makeFighter(index, side, overrideDef = null) {
     dashFrames: 0,
     dashCooldownFrames: 0,
     attackRearmFrames: 0,
+    // BLOCK ECONOMY: blocked special-into-special cancels spent in the
+    // current string (reset by any non-cancel attack start) and whether the
+    // guard input was held last tick, for the Perfect Guard tap re-arm. Both
+    // are plain sim fields, so the rollback snapshot carries them for free.
+    blockedSpecialCancels: 0,
+    guardInputHeld: false,
     dashDirection: 0,
     queuedDashDirection: 0,
     directionTapTracker: new DirectionTapTracker(),
@@ -13544,6 +13553,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   fighter.lastAttackHitFrame = -Infinity;
   fighter.attackConnected = "";
   fighter.cancelledFrom = cancelledFrom;
+  // BLOCK ECONOMY: a fresh (non-cancel) swing opens a new string, so its
+  // blocked special-into-special budget resets; tryAttackCancel spends it.
+  if (!cancelledFrom) fighter.blockedSpecialCancels = 0;
   fighter.linkedFrom = linkedFrom;
   fighter.counterTriggered = false;
   fighter.trapDeployed = false;
@@ -13557,7 +13569,15 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   fighter.dashFrames = 0;
   fighter.queuedDashDirection = 0;
   fighter.lastHitResult = reversal ? "reversal" : "";
-  if (reversal || fighter.attacking.reversalInvulnerableFrames) {
+  // BLOCK ECONOMY: reversal invulnerability is granted when the move is a
+  // real reversal (wake-up window, guard reversal) or when it is paid for
+  // (EX and super, gritCost > 0). Before this, every free back special and
+  // launcher carrying reversalInvulnerableFrames was hurtbox-less from frame
+  // 0 in NEUTRAL too, so Benny/Cyraxx/Ali could press ↓← at any time and hit
+  // through anything. The field itself stays on the move so the same special
+  // is still a genuine wake-up reversal.
+  const invulnerableStart = reversal || (fighter.attacking.reversalInvulnerableFrames > 0 && gritCost > 0);
+  if (invulnerableStart) {
     fighter.invulnerableFrames = Math.max(
       fighter.invulnerableFrames,
       fighter.attacking.reversalInvulnerableFrames || DEFENSE_RULES.reversalWindowFrames,
@@ -14424,7 +14444,13 @@ function tryAttackCancel(fighter, input) {
   const action = bufferedAction(fighter, attackActionPriority.filter((candidate) => candidate !== "throw"));
   const actionGroup = fighterActionGroup(action);
   if (current.rhythmCancel && fighter.rhythmStacks < (current.rhythmCancelStacks || 2)) return false;
-  if (!action || !canCancelAttack(current, actionGroup, fighter.attackFrame, fighter.attackConnected)) return false;
+  // BLOCK ECONOMY: the string's blocked special-into-special budget rides
+  // along so a second blocked voltage/flow cancel is refused (see
+  // SPECIAL_CANCEL_RULES). The refusal is silent: the move simply finishes on
+  // its own recovery, which is the punish window the blocker earned.
+  const connectedBefore = fighter.attackConnected;
+  const cancelBudget = { blockedSpecialCancels: fighter.blockedSpecialCancels };
+  if (!action || !canCancelAttack(current, actionGroup, fighter.attackFrame, connectedBefore, cancelBudget)) return false;
   const queuedLimb = fighter.inputBuffer.entries.find((entry) => entry.action === action)?.payload?.limb;
   const moveContext = {
     airborne: !fighter.grounded,
@@ -14448,6 +14474,12 @@ function tryAttackCancel(fighter, input) {
   if (!started) {
     fighter.attacking = current;
     return false;
+  }
+  // BLOCK ECONOMY: a blocked special-into-special cancel spends one unit of
+  // the string's budget. beginAttack keeps the counter because the cancel
+  // passed cancelledFrom, so this is the only place it moves.
+  if (connectedBefore === "block" && isSpecialIntoSpecialCancel(current, actionGroup)) {
+    fighter.blockedSpecialCancels += 1;
   }
   fighter.confirmWindowFrames = 12;
   const chain = ["light", "heavy", "launcher", "driveHeavy"].includes(actionGroup);
@@ -14773,7 +14805,21 @@ function updateFighter(fighter, opponent, input, dt) {
   // Release 1.7: Perfect Guard — stamp the tick a FRESH guard began. Blockstun
   // holds guarding true continuously, so a held guard keeps its original
   // stamp; only releasing and re-tapping back can arm a new just-defend.
-  if (fighter.guarding && !wasGuarding) fighter.guardStartedTick = state.simulationTick;
+  // BLOCK ECONOMY: that re-tap now counts INSIDE blockstun too (Garou-style
+  // tap-tap just-defend). Before, guarding never went false during a string,
+  // so only its first hit could ever be perfect-guarded and a blockstring
+  // was 'nothing I can do'. The edge is the directional back input only: the
+  // engine-internal input.guard channel the CPU's defend intent drives never
+  // re-arms, so the CPU's just-defend rate stays close to the authored
+  // perfectGuardChance (a retreat-intent flip inside blockstun can still
+  // produce a tap, but decisions are 7-28 frames apart and it reads as a
+  // legitimately late tap).
+  const backTapped = directionContext(fighter, input).backHeld;
+  const guardTapEdge = backTapped && !fighter.guardInputHeld;
+  fighter.guardInputHeld = backTapped;
+  if (fighter.guarding && (!wasGuarding || (fighter.blockstunFrames > 0 && guardTapEdge))) {
+    fighter.guardStartedTick = state.simulationTick;
+  }
 
   applyFighterPhysics(fighter, dt);
 }
@@ -15168,7 +15214,14 @@ function triggerProjectile(projectile, victim) {
   }
   owner.attackConnected = blocked ? "block" : "hit";
   owner.confirmWindowFrames = 12;
-  owner.meter = clamp(owner.meter + 15 * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
+  // BLOCK ECONOMY: a projectile pays its owner once (gritPaid latches on the
+  // projectile, which is rollback-cloned with it) — 15 on hit, 6 on block —
+  // so a wall of blocked orbs no longer funds a super in five seconds. The
+  // defender's 0.45x share of the old flat 15 is unchanged.
+  if (!projectile.gritPaid) {
+    projectile.gritPaid = true;
+    owner.meter = clamp(owner.meter + projectileGritGain({ blocked }), 0, GRIT_RULES.maximum);
+  }
   victim.meter = clamp(victim.meter + 15 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   state.effects.push({ kind: projectile.style === "feedback" ? "feedbackBurst" : "projectileBurst", x: projectile.x, y: projectile.y, life: 0.5, max: 0.5, color: projectile.color });
   const impactTier = projectile.stageWeapon ? "weapon" : projectile.throwable ? "heavy" : "special";
@@ -16014,7 +16067,10 @@ function hit(attacker, victim, attack, collision) {
     addStun(victim, attacker, attack, { counter, blocked });
     if (victim.carriedWeapon) dropStageWeapon(victim, false);
   }
-  attacker.meter = clamp(attacker.meter + attack.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
+  // BLOCK ECONOMY: a blocked hit pays the attacker half (attackGritGain);
+  // the defender's share is untouched, so blocking correctly is close to
+  // Grit-neutral instead of funding the attacker's super.
+  attacker.meter = clamp(attacker.meter + attackGritGain(attack, { blocked }), 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + attack.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   // Release 1.7: a Perfect Guard banks bonus Grit for the defender.
   if (perfect) victim.meter = clamp(victim.meter + PERFECT_GUARD_RULES.gritBonus, 0, GRIT_RULES.maximum);

@@ -284,6 +284,16 @@ export const WHIFF_RECOVERY_MINIMUM_FRAMES = 2;
 // keep their exact timing.
 export const ATTACK_REARM_FRAMES = 4;
 
+// BLOCK ECONOMY invariant: a move that carries reversal invulnerability must
+// be negative on block by at least this much. Before 5.0's sweep the three
+// rushdown EX back specials (BEAT SKIP EX, LIVE WIRE EX, BUFFER SKIP EX) were
+// 2-3f startup, invulnerable from frame 0, cross-through AND +9/+10 on block:
+// block it and you still lose your turn, press and you get hit through it.
+// Every kit's numbers are hand-tuned to satisfy this (the kit test asserts the
+// clamp never fires on authored data); the clamp here is the backstop so a
+// future kit edit cannot ship a plus-on-block invulnerable move by accident.
+export const REVERSAL_BLOCK_DISADVANTAGE_FRAMES = 3;
+
 export function whiffRecoveryFrames(attack) {
   if (!attack || attack.projectile || attack.trap || attack.throwableId) return 0;
   const kind = WHIFF_RECOVERY_TAX[attack.baseKind] !== undefined ? attack.baseKind : attack.kind;
@@ -313,6 +323,9 @@ export function createAttackInstance(kind, overrides = {}) {
   const tuningKind = BASE_MOVES[move.baseKind] ? move.baseKind : kind;
   move.damage = tuned(ARCADE_TUNING.damage, tuningKind, move.damage, { minimum: 1 });
   move.recoveryFrames = tuned(ARCADE_TUNING.recovery, tuningKind, move.recoveryFrames, { round: true, minimum: 4 });
+  if (move.reversalInvulnerableFrames > 0) {
+    move.recoveryFrames = Math.max(move.recoveryFrames, (move.blockstunFrames || 0) + REVERSAL_BLOCK_DISADVANTAGE_FRAMES);
+  }
   if (move.chipDamage) {
     move.chipDamage = tuned(ARCADE_TUNING.chipDamage, tuningKind, move.chipDamage, { minimum: 0 });
   }

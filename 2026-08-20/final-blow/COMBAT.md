@@ -218,3 +218,40 @@ through `SHARED_SYNTH_VOICES` in `sound()`. QA: `snapshot().audio.variation`
 is the last shared draw (`kind`, `rate`, `db`, `gain`) and
 `snapshot().violence` carries `sharedVariations`, `dashScuffs` and
 `weaponClatters` totals. Unit coverage in `tests/shared-sfx.test.mjs`.
+## Block economy (post-5.0 sweep)
+
+The 4.4 Tempo / 4.5 Re-Arm pass made a *whiffed* swing pay; this pass makes the
+*blocked* side of the exchange pay too, so a correct block is a real decision
+rather than a slower way to lose. Four rules, all in `engine/combos.mjs` /
+`engine/foundation.mjs` with the sim wiring in `game.js`:
+
+| Rule | Before | Now |
+| --- | --- | --- |
+| Voltage / flow cancel on block | unlimited (Blitz→Blitz was a true blockstring: last hit f21, blockstun to f38, cancelled Blitz active f34; guard crush on rep 7, 168 Grit banked) | **one** blocked special→special cancel per string (`SPECIAL_CANCEL_RULES.blockedPerString`); the second is refused and the string ends on the move's own recovery (blocker free f38, Benny f45). On hit still unlimited. Normal→special cancels on block are untouched. |
+| Reversal invulnerability | free back specials/launchers hurtbox-less from frame 0 in neutral; Ali/Benny/Cyraxx EX back specials +10/+9/+9 on block | invulnerability is granted only to a real reversal (wake-up window, guard reversal) or a paid move (EX/super); every invulnerable move must be ≤ −3 on block (`REVERSAL_BLOCK_DISADVANTAGE_FRAMES`, clamped in `createAttackInstance` and asserted across all ten kits) |
+| Grit on a blocked strike | attacker 1.0× move meter, defender 0.45× | attacker **0.5×** (`GRIT_RULES.blockGainMultiplier`), defender 0.45× — close to neutral |
+| Grit per projectile | flat 15 per touch, hit or block, no cap | **15 hit / 6 block**, paid once per projectile (`projectile.gritPaid`). Seven blocked Shockwaves in 5.25 s used to fund GOLDEN BACK NINE (105 Grit); now 42, the same wall needs seventeen orbs (~13 s) |
+| Perfect Guard inside a string | first hit only — blockstun held `guarding` true, so no fresh stamp | releasing and **re-tapping away during blockstun** re-stamps the window (Garou-style tap-tap just-defend); the 4-frame window is still tighter than the roster's 6–8-frame rehit cadence |
+
+Retuned recoveries (authored → tuned, on-block by the frame-data panel's
+last-active-frame convention; a 3-hit move whose last hit lands mid-window is
+effectively worse by the idle active frames, roughly −14 to −16 for the EX trio):
+
+| Move | Recovery | On block |
+| --- | --- | --- |
+| BEAT SKIP EX (ali) | 6→18 (8→24) | +10 → **−6** |
+| LIVE WIRE EX (benny) | 7→18 (9→24) | +9 → **−6** |
+| BUFFER SKIP EX (cyraxx) | 7→18 (9→24) | +9 → **−6** |
+| VINYL STEP EX (jez) | 10→15 (13→20) | +4 → **−3** |
+| BEAT SKIP (ali) | 8→14 (11→18) | +4 → **−3** |
+| LIVE WIRE (benny) | 9→14 (12→18) | +3 → **−3** |
+| BUFFER SKIP (cyraxx) | 10→15 (13→20) | +3 → **−4** |
+| BASSLINE RISER EX (ali) | 14→15 (18→20) | −2 → **−4** |
+
+Startup, active frames, damage, the cross-through (`ignorePushbox`) and the
+invulnerability frames are unchanged on all of them — the payoff stays, the
+blocked read now belongs to the blocker. Tests: `tests/tempo.test.mjs` (Blitz
+measurement, cancel budget, Grit rates, Shockwave arithmetic, clamp + neutral
+gate pins), `tests/fighter-kits.test.mjs` (the invariant over every kit, and a
+proof that the clamp never fires on authored data), `tests/combos.test.mjs`
+(changed pin), `tests/depth-defense.test.mjs` (re-arm case).
