@@ -67,6 +67,11 @@ import {
   UNIFIED_EXT2_BANK,
   UNIFIED_EXT2_CELLS,
   buildUnifiedExt2AcceptMasks,
+  UNIFIED_EXT3_BANK,
+  UNIFIED_EXT3_CELLS,
+  UNIFIED_EXT4_BANK,
+  buildSwingAcceptMasks,
+  swingSubstitute,
   WALK_CELL_COUNT,
   WALK_POSE_MIN_SPEED,
   buildUnifiedAcceptMasks,
@@ -1225,7 +1230,7 @@ function motion3KeyDrawable(fighterId, key) {
 // engine/fighter-kits.mjs and the routing list in fighterAnimationPose.
 // ---------------------------------------------------------------------------
 const fighterUnifiedAtlases = {};
-const unifiedBankState = { masks: null, extMasks: null, ext2Masks: null, requested: false, ready: null };
+const unifiedBankState = { masks: null, extMasks: null, ext2Masks: null, ext3Masks: null, ext4Masks: null, requested: false, ready: null };
 
 /** Every unified sheet, main or ext, is this square once padded. */
 const UNIFIED_SHEET_PX = 1280;
@@ -1245,8 +1250,11 @@ function ensureUnifiedManifest() {
       // v4.9: the in-between gate is built from the main gate the same way.
       unifiedBankState.ext2Masks = manifest
         ? buildUnifiedExt2AcceptMasks(manifest, unifiedBankState.masks) : {};
+      // v5.0: the swing and reaction sheets gate per cell off the same main gate.
+      unifiedBankState.ext3Masks = manifest ? buildSwingAcceptMasks(manifest, UNIFIED_EXT3_BANK, unifiedBankState.masks) : {};
+      unifiedBankState.ext4Masks = manifest ? buildSwingAcceptMasks(manifest, UNIFIED_EXT4_BANK, unifiedBankState.masks) : {};
     })
-    .catch(() => { unifiedBankState.masks = {}; unifiedBankState.extMasks = {}; unifiedBankState.ext2Masks = {}; });
+    .catch(() => { unifiedBankState.masks = {}; unifiedBankState.extMasks = {}; unifiedBankState.ext2Masks = {}; unifiedBankState.ext3Masks = {}; unifiedBankState.ext4Masks = {}; });
   return unifiedBankState.ready;
 }
 
@@ -1403,6 +1411,68 @@ function unifiedFighterExt2Ready(fighterId) {
   return unifiedExt2CellDrawable(fighterId, UNIFIED_EXT2_CELLS.punchWindup);
 }
 
+// ---------------------------------------------------------------------------
+// v5.0 FULL SWING — the ext3 (strikes) and ext4 (reactions) sheets. Loaded
+// like ext2; gated per cell; consumed by swingSubstitute at pose resolution.
+// ---------------------------------------------------------------------------
+const fighterSwingAtlases = { [UNIFIED_EXT3_BANK]: {}, [UNIFIED_EXT4_BANK]: {} };
+const swingMaskKey = { [UNIFIED_EXT3_BANK]: "ext3Masks", [UNIFIED_EXT4_BANK]: "ext4Masks" };
+const swingSuffix = { [UNIFIED_EXT3_BANK]: "ext3", [UNIFIED_EXT4_BANK]: "ext4" };
+
+function swingFighterWhole(fighterId, bank) {
+  return Boolean(unifiedBankState[swingMaskKey[bank]]?.[fighterId]?.whole);
+}
+
+function ensureSwingAtlas(fighterId, bank) {
+  let atlas = fighterSwingAtlases[bank][fighterId];
+  if (!atlas) {
+    atlas = new Image();
+    atlas.src = `assets/unified/${fighterId}-${swingSuffix[bank]}.webp`;
+    fighterSwingAtlases[bank][fighterId] = atlas;
+  }
+  return atlas;
+}
+
+/** `cell` is a SHEET FRAME (0-15). */
+function swingCellDrawable(fighterId, cell, bank) {
+  ensureUnifiedManifest();
+  const mask = unifiedBankState[swingMaskKey[bank]]?.[fighterId];
+  if (!mask?.whole || !mask.accept[cell]) return false;
+  const atlas = ensureSwingAtlas(fighterId, bank);
+  return Boolean(atlas.complete && atlas.naturalWidth);
+}
+
+/** The swing substitution for a resolved pose, when its target cell can draw. */
+function swingResolve(fighter, pose) {
+  const attack = fighter.attacking;
+  const grounded = fighter.grounded;
+  const victimAirborne = !grounded && (fighter.hitstunFrames > 0 || fighter.pendingKnockdown || fighter.airHitstunFrames > 0);
+  const ctx = {
+    limb: attack?.limb === "kick" ? "kick" : "punch",
+    heavy: attack?.kind === "heavy",
+    crouching: attack ? Boolean(attack.cancelProfileId?.startsWith("crouch")) : fighter.crouch,
+    attacking: Boolean(attack),
+    airborne: !grounded,
+    victimAirborne,
+    falling: victimAirborne && fighter.vy > 0 && Boolean(fighter.pendingKnockdown),
+  };
+  let sub = swingSubstitute(pose.bank, pose.frame, ctx);
+  // A crouching normal's active window has no motion cell at all (it draws a
+  // base cell); the crouch extension / sweep stand in for it directly.
+  if (!sub && attack && ctx.crouching && pose.bank === "base" && !attack.animation
+    && fighter.attackFrame >= attack.activeStartFrame && fighter.attackFrame < attack.activeEndFrame) {
+    sub = { bank: UNIFIED_EXT3_BANK, frame: ctx.limb === "kick" ? UNIFIED_EXT3_CELLS.sweep : UNIFIED_EXT3_CELLS.crouchPunchExt };
+  }
+  // The substitute may land on ANY authored bank (ext3/ext4 mostly, but the
+  // unified crouch transition, the ext2 crouch recover and the ext descent
+  // too), so the gate is the bank-routed one, not the swing-only one.
+  if (sub && !motionBankCellDrawable(fighter.def.id, sub.frame, sub.bank)) {
+    sub = sub.alt && motionBankCellDrawable(fighter.def.id, sub.alt.frame, sub.alt.bank) ? sub.alt : null;
+  }
+  if (!sub) return pose;
+  return { bank: sub.bank, frame: sub.frame, fallback: pose };
+}
+
 /**
  * v4.1 — is this fighter's cell 20 a DESCENT rather than a flinch?
  *
@@ -1421,6 +1491,7 @@ function unifiedFighterExtDescendReady(fighterId) {
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
   if (bank === UNIFIED_EXT2_BANK) return unifiedExt2CellDrawable(fighterId, cell);
+  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK) return swingCellDrawable(fighterId, cell, bank);
   if (bank === UNIFIED_EXT_BANK) return unifiedExtCellDrawable(fighterId, cell);
   if (bank === UNIFIED_BANK) return unifiedCellDrawable(fighterId, cell);
   if (bank === "walk") return walkCellDrawable(fighterId, cell);
@@ -1501,6 +1572,11 @@ function preloadAuthoredBanks(fighterIds) {
         const atlas2 = ensureUnifiedExt2Atlas(id);
         if (typeof atlas2.decode === "function") atlas2.decode().catch(() => {});
       }
+      for (const swingBank of [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]) {
+        if (!swingFighterWhole(id, swingBank)) continue;
+        const swingAtlas = ensureSwingAtlas(id, swingBank);
+        if (typeof swingAtlas.decode === "function") swingAtlas.decode().catch(() => {});
+      }
       if (!unifiedFighterExtWhole(id)) continue;
       // The first call starts the request and returns null; the decode then
       // calls back to build the padded canvas. Both paths end at the same
@@ -1562,6 +1638,9 @@ function altAtlasSource(fighterId, bank) {
   if (bank === UNIFIED_EXT2_BANK) {
     return { image: fighterUnifiedExt2Atlases[fighterId], key: `${fighterId}:unified-ext2` };
   }
+  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK) {
+    return { image: fighterSwingAtlases[bank][fighterId], key: `${fighterId}:${bank}` };
+  }
   const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
   // The boss shares one sheet across banks — collapse to one cache entry.
   if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
@@ -1611,7 +1690,9 @@ function paletteAtlas(fighterId, side, bank = "base") {
                 ? fighterUnifiedExtAtlases[fighterId] || fighterAtlases[fighterId]
                 : bank === UNIFIED_EXT2_BANK
                   ? fighterUnifiedExt2Atlases[fighterId] || fighterAtlases[fighterId]
-                  : fighterAtlases[fighterId];
+                  : bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK
+                    ? fighterSwingAtlases[bank][fighterId] || fighterAtlases[fighterId]
+                    : fighterAtlases[fighterId];
   if (matchPalettes[side] !== 1) return base;
   return ensureAltAtlas(fighterId, bank) || base;
 }
@@ -16775,8 +16856,21 @@ function resetCrowd() {
 }
 
 // Big moments ripple through the crowd, then it goes back to its routes.
+// v5.0 AMBIENT REACTIONS: a presentation-side pulse the stage life reacts to
+// (floodlights flare, moths scatter, the wok flares). Latched from the crowd
+// stir and from the KO phase change; never sim state, never resimulated.
+const ambientObs = { phase: null, pulseTick: -100000, pulseAmount: 0, pulseKind: "" };
+
+function pulseAmbient(kind, amount) {
+  if (rollbackResimulating) return;
+  ambientObs.pulseTick = state.simulationTick;
+  ambientObs.pulseAmount = amount;
+  ambientObs.pulseKind = kind;
+}
+
 function stirCrowd(amount = 1) {
   state.crowdReaction = Math.min(1.4, state.crowdReaction + amount);
+  if (amount >= 0.7) pulseAmbient(amount >= 1 ? "big" : "splat", amount);
   // Release 1.6 LOUD: big stirs also latch a one-shot crowd swell/gasp for
   // the render-side crowd bus (guarded + tick-deduped inside the latch).
   if (amount >= 0.5) latchCrowdSwell(amount);
@@ -17408,11 +17502,25 @@ function drawStageAmbient(frame, centre, reaction) {
   const f = reduced ? 0 : frame;
   const skyX = (centre - W * 0.5) * -0.06;
   const stage = state.stage;
+  // v5.0 AMBIENT REACTIONS: a KO is a pulse too, latched on the phase change.
+  if (state.phase !== ambientObs.phase) {
+    if ((state.phase === "finish" || state.phase === "roundover") && state.screen === "fight") pulseAmbient("ko", 1.4);
+    ambientObs.phase = state.phase;
+  }
+  const pulseAge = frame - ambientObs.pulseTick;
+  // 0..1 over the first ~40 ticks after a big moment, then gone.
+  const pulse = reduced || pulseAge < 0 || pulseAge > 48 ? 0 : (1 - pulseAge / 48) * Math.min(1, ambientObs.pulseAmount);
+  const ko = ambientObs.pulseKind === "ko" && pulse > 0;
   ctx.save();
   if (stage === "vet") {
     // Floodlights breathe, a blimp crawls the sky, fireworks pop over the bowl.
     for (const [lx, ly] of [[125, 88], [1230, 232]]) {
-      ambientGlow(lx + skyX * 0.5, ly, 90, "255,236,190", 0.09 + Math.sin(f * 0.03 + lx) * 0.035);
+      ambientGlow(lx + skyX * 0.5, ly, 90 + pulse * 120, "255,236,190", 0.09 + Math.sin(f * 0.03 + lx) * 0.035 + pulse * 0.28);
+    }
+    // A big moment sets off a burst over the bowl right now (and a KO two).
+    if (pulse > 0) {
+      ambientFirework(pulseAge, 100000, 71 + ambientObs.pulseTick, 420, 860, 80, 170);
+      if (ko) ambientFirework(Math.max(0, pulseAge - 14), 100000, 93 + ambientObs.pulseTick, 300, 980, 60, 160);
     }
     if (!reduced) {
       const blimpX = ((f * 0.32 + 700) % (W + 760)) - 380 + skyX;
@@ -17445,7 +17553,7 @@ function drawStageAmbient(frame, centre, reaction) {
       ctx.fill();
     }
     for (let bulb = 0; bulb < 28; bulb += 1) {
-      const lit = ((bulb - Math.floor(f * 0.18)) % 7 + 7) % 7 === 0;
+      const lit = ((bulb - Math.floor(f * (0.18 + pulse * 0.6))) % 7 + 7) % 7 === 0;
       if (!lit) continue;
       ambientGlow(368 + bulb * 24 + skyX * 0.3, 234, 7, "255,228,200", 0.55);
     }
@@ -17457,6 +17565,7 @@ function drawStageAmbient(frame, centre, reaction) {
       if (f % 50 < 6) ambientGlow(planeX - 8, planeY + 1, 7, "255,80,70", 0.9);
       if ((f + 25) % 50 < 4) ambientGlow(planeX + 8, planeY + 1, 7, "230,240,255", 0.9);
     }
+    if (pulse > 0) ambientFirework(pulseAge, 100000, 37 + ambientObs.pulseTick, 420, 980, 70, 150);
     const shipX = 1040 - ((f * 0.04) % 820) + skyX * 0.4;
     for (let light = 0; light < 5; light += 1) {
       ambientGlow(shipX + light * 7, 365 + (light % 2), 4, "255,214,150", 0.55);
@@ -17484,6 +17593,7 @@ function drawStageAmbient(frame, centre, reaction) {
     }
     const flare = (f + 170) % 330;
     if (flare < 14) ambientGlow(1040, 158, 60, "255,170,70", (14 - flare) / 14 * 0.6);
+    if (pulse > 0) ambientGlow(1040, 150, 60 + pulse * 90, "255,190,90", pulse * 0.8);
     for (const px of [40, 330, 640, 940, 1240]) {
       ambientGlow(px, 74, 46, "255,196,120", 0.08 + Math.sin(f * 0.05 + px) * 0.03);
     }
@@ -17502,8 +17612,8 @@ function drawStageAmbient(frame, centre, reaction) {
       ctx.globalAlpha = 1;
       for (let gull = 0; gull < 5; gull += 1) {
         const lane = gull % 2 === 0 ? -1 : 1;
-        const gx = ((f * (0.35 + gull * 0.07) + gull * 260) % (W + 260)) - 130;
-        const gy = 90 + gull * 34 + Math.sin(f * 0.012 + gull) * 16;
+        const gx = ((f * (0.35 + gull * 0.07) + gull * 260 + pulse * 90 * (gull + 1)) % (W + 260)) - 130;
+        const gy = 90 + gull * 34 + Math.sin(f * 0.012 + gull) * 16 - pulse * 40;
         if (gx > 330 && gx < 960) continue;
         ambientGull(gx + skyX * (1 + lane * 0.2), gy, Math.sin(f * 0.28 + gull * 1.7) * 4, 8 + (gull % 3) * 2, 0.75);
       }
@@ -17518,7 +17628,7 @@ function drawStageAmbient(frame, centre, reaction) {
     if (!reduced) {
       for (let moth = 0; moth < 6; moth += 1) {
         const a = f * (0.09 + moth * 0.013) + moth * 1.3;
-        const r = 9 + Math.sin(f * 0.031 + moth * 2.1) * 8 + moth * 2;
+        const r = (9 + Math.sin(f * 0.031 + moth * 2.1) * 8 + moth * 2) * (1 + pulse * 2.4);
         ctx.fillStyle = "rgba(255,236,190,.85)";
         ctx.beginPath();
         ctx.arc(533 + skyX * 0.4 + Math.cos(a) * r, 140 + Math.sin(a * 1.4) * r * 0.55, 1.3, 0, Math.PI * 2);
@@ -17528,6 +17638,7 @@ function drawStageAmbient(frame, centre, reaction) {
     for (const [wx, wy, ww, wh, salt] of [[62, 38, 22, 20, 1], [137, 38, 22, 20, 2], [196, 182, 22, 24, 3], [1050, 188, 22, 26, 4]]) {
       const flicker = presentationHash01(Math.floor(f / 5), salt);
       if (flicker > 0.45) ambientGlow(wx + ww * 0.5 + skyX * 0.4, wy + wh * 0.5, 26, "150,190,255", 0.12 + flicker * 0.2);
+      if (ko) ambientGlow(wx + ww * 0.5 + skyX * 0.4, wy + wh * 0.5, 30, "240,245,255", pulse * 0.5);
     }
     if (!reduced) {
       const pass = f % 760;
@@ -17558,7 +17669,7 @@ function drawStageAmbient(frame, centre, reaction) {
         ambientGlow(x + size, 288, size, "255,250,235", 0.9);
       }
       for (let bird = 0; bird < 3; bird += 1) {
-        const scatter = (f + bird * 90) % 900;
+        const scatter = pulseAge >= 0 && pulseAge < 60 ? pulseAge + bird * 4 : (f + bird * 90) % 900;
         const fly = scatter < 60 ? scatter / 60 : 0;
         const bx = 150 + bird * 26 + skyX * 0.2 + fly * (60 + bird * 20) + (scatter >= 60 ? 0 : 0);
         const by = 332 + (bird % 2) * 4 - fly * (90 + bird * 15) + (fly ? 0 : Math.abs(Math.sin(f * 0.11 + bird)) * -2);
@@ -17867,12 +17978,15 @@ function fighterAnimationPose(fighter) {
   // it covers every present and future beat of a kit-less move — not just the
   // recovery cell the critics happened to catch.
   const bareHanded = Boolean(fighter.attacking) && bareHandedAttack(fighter.attacking);
-  return resolveMotionPose(
+  // v5.0 FULL SWING: the resolved drawing is substituted with its same-family
+  // strike/reaction cell when the fighter's sheet has one. Timing untouched.
+  const resolvedPose = resolveMotionPose(
     fighterPoseDescriptor(fighter),
     (cell, bank) => motionBankCellDrawable(fighter.def.id, cell, bank),
     fighter.def.id,
     { bareHanded },
   );
+  return swingResolve(fighter, resolvedPose);
 }
 
 // Showcase rotation (taunt + round-win): the match seed and banked rounds pick
@@ -18010,7 +18124,7 @@ function fighterPoseDescriptor(fighter) {
     // Paced by the GRAB's own counter, not attackFrame: attackFrame is frozen
     // for the whole hold, which is exactly why one drawing owned all of it.
     const kitPose = fighter.attacking
-      ? attackAnimationPose(fighter.attacking, fighter.attackFrame) : null;
+      ? attackAnimationPose(fighter.attacking, fighter.attackFrame, beatOpt) : null;
     // v2.9 final round: the kit-less fallback was the HARDCODED index 8 — the
     // last raw base index left in this file after the semantic map landed.
     // base:8 is deathblow's GUARD cell, so his throw drew the same stance
@@ -18343,7 +18457,7 @@ function fighterPoseDescriptor(fighter) {
   // crouch-guard and lasts two ticks.
   if (fighter.attacking) {
     const attack = fighter.attacking;
-    const kitPose = attackAnimationPose(attack, fighter.attackFrame);
+    const kitPose = attackAnimationPose(attack, fighter.attackFrame, beatOpt);
     // v2.9 critic round 2 (B1): the throw ATTACKER's recovery. Measured 31
     // ticks (round 1) then 25 frozen on the kit's release cell, because BOTH
     // attackFrame and attackTime stop advancing through a throw's cinematic —
@@ -27339,7 +27453,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.9");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-5.0");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -28639,7 +28753,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "4.9-inbetween",
+  version: "5.0-fullswing",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -28828,6 +28942,7 @@ window.__finalBlowEngine = {
       })),
       crowd: crowdSnapshot(state.crowd, state.simulationTick, { viewLeft: 0, viewRight: W }),
       inbetweens: state.fighters.map((fighter) => unifiedFighterExt2Ready(fighter.def.id)),
+      swing: state.fighters.map((fighter) => [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK].map((bank) => swingCellDrawable(fighter.def.id, 0, bank))),
       crowdSprites: {
         manifest: Boolean(crowdSheets.manifest),
         ready: Boolean(state.crowd?.people?.some((person) => person.sprite && crowdSpriteCharacter(person))),

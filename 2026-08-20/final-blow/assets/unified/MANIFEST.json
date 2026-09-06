@@ -87,7 +87,46 @@
    "special-recover"
   ],
   "ext2CellCount": 16,
-  "ext2Status": "WIRED AND SHIPPING (v4.9). ALL TEN fighters carry an ext2 sheet. Cells 24-37 are routed: the light cock (whole startup), the heavy LOAD band, the recovery band after the follow-through, the crouch pair, the throw reach and release. 38-39 (special wind-up / recover) are drawn and RESERVED \u2014 the specials keep their authored kit art. Gated all fourteen routed cells or none, and the main sheet must be whole. Measured 0.9-1.3 weighted dE against each fighter's unified sheet (the shipped ext sheets sit at 0.66; the cross-generation strobe is 11-14)."
+  "ext2Status": "WIRED AND SHIPPING (v4.9). ALL TEN fighters carry an ext2 sheet. Cells 24-37 are routed: the light cock (whole startup), the heavy LOAD band, the recovery band after the follow-through, the crouch pair, the throw reach and release. 38-39 (special wind-up / recover) are drawn and RESERVED \u2014 the specials keep their authored kit art. Gated all fourteen routed cells or none, and the main sheet must be whole. Measured 0.9-1.3 weighted dE against each fighter's unified sheet (the shipped ext sheets sit at 0.66; the cross-generation strobe is 11-14).",
+  "ext3Sheet": "<id>-ext3.webp, 1280x1280 RGBA WebP, 4x4, ext3 frames 0-15 = grammar cells 40-55: the strikes at full extension, the smears, follow-throughs, crouch and air attacks, landing, crouch guard. Generated the 4.9 way from the fighter's unified sheet, colour-matched, built AT THE UNIFIED SCALE (its standing cells are lunges, so the unified scale is the anchor).",
+  "ext3PoseIds": [
+   "punch-extension",
+   "kick-extension",
+   "follow-through",
+   "punch-smear",
+   "crouch-punch-extension",
+   "sweep",
+   "air-punch",
+   "air-kick",
+   "air-chamber",
+   "rising-smear",
+   "landing",
+   "kick-follow-through",
+   "crouch-guard",
+   "heavy-punch-extension",
+   "heavy-kick-extension",
+   "sweep-follow-through"
+  ],
+  "ext4Sheet": "<id>-ext4.webp, 1280x1280 RGBA WebP, 4x4, ext4 frames 0-15 = grammar cells 56-71: the reactions. Same pipeline as ext3.",
+  "ext4PoseIds": [
+   "guard-flinch",
+   "head-snap",
+   "body-blow",
+   "big-hit",
+   "stagger",
+   "dizzy",
+   "launched",
+   "air-hit",
+   "wall-splat",
+   "crumple",
+   "falling",
+   "floor-bounce",
+   "getup-a",
+   "getup-b",
+   "thrown",
+   "ko"
+  ],
+  "swingStatus": "WIRED AND SHIPPING (v5.0). Consumed by swingSubstitute at pose resolution: a resolved motion/motion2 cell with a same-family equivalent on the fighter's ext3/ext4 sheet draws the equivalent instead, gated per cell. Tracks and hold budgets are untouched."
  },
  "fighters": {
   "deathblow": {
@@ -328,6 +367,206 @@
      "id": "special-recover",
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ],
+   "ext3Sheet": "deathblow-ext3.webp",
+   "ext3Scale": 1.2697,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0713 restores its size."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0329 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.4016 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0827 restores its size."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0653 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1515 restores its size."
+    }
+   ],
+   "ext4Sheet": "deathblow-ext4.webp",
+   "ext4Scale": 1.2697,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0171 restores its size."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0038 restores its size."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0554 restores its size."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0162 restores its size."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
     }
    ]
   },
@@ -889,6 +1128,206 @@
      "id": "special-recover",
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ],
+   "ext3Sheet": "jez-ext3.webp",
+   "ext3Scale": 1.4037,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0506 restores its size."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0433 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.376 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1238 restores its size."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0153 restores its size."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1256 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1131 restores its size."
+    }
+   ],
+   "ext4Sheet": "jez-ext4.webp",
+   "ext4Scale": 1.4037,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.019 restores its size."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0103 restores its size."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1112 restores its size."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0123 restores its size."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0777 restores its size."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0738 restores its size."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0164 restores its size."
     }
    ]
   },
@@ -1455,6 +1894,206 @@
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
     }
+   ],
+   "ext3Sheet": "alan-ext3.webp",
+   "ext3Scale": 1.3304,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0599 restores its size."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0357 restores its size."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1868 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.233 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0031 restores its size."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.181 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2998 restores its size."
+    }
+   ],
+   "ext4Sheet": "alan-ext4.webp",
+   "ext4Scale": 1.3304,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0563 restores its size."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1415 restores its size."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0011 restores its size."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    }
    ]
   },
   "post": {
@@ -1932,6 +2571,206 @@
      "id": "special-recover",
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ],
+   "ext3Sheet": "post-ext3.webp",
+   "ext3Scale": 1.36,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0628 restores its size."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0039 restores its size."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0735 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.35 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0815 restores its size."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0339 restores its size."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0178 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1449 restores its size."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2849 restores its size."
+    }
+   ],
+   "ext4Sheet": "post-ext4.webp",
+   "ext4Scale": 1.36,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0415 restores its size."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0202 restores its size."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1581 restores its size."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1129 restores its size."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0551 restores its size."
     }
    ]
   },
@@ -2489,6 +3328,206 @@
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
     }
+   ],
+   "ext3Sheet": "benny-ext3.webp",
+   "ext3Scale": 1.4037,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0619 restores its size."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.093 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.4479 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0942 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.4104 restores its size."
+    }
+   ],
+   "ext4Sheet": "benny-ext4.webp",
+   "ext4Scale": 1.4037,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0135 restores its size."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0649 restores its size."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1638 restores its size."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0817 restores its size."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1151 restores its size."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0924 restores its size."
+    }
    ]
   },
   "donald": {
@@ -2971,6 +4010,206 @@
      "id": "special-recover",
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ],
+   "ext3Sheet": "donald-ext3.webp",
+   "ext3Scale": 1.2389,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2782 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1621 restores its size."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0067 restores its size."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1242 restores its size."
+    }
+   ],
+   "ext4Sheet": "donald-ext4.webp",
+   "ext4Scale": 1.2389,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0433 restores its size."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.094 restores its size."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
     }
    ]
   },
@@ -3527,14 +4766,214 @@
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
     }
+   ],
+   "ext3Sheet": "cyraxx-ext3.webp",
+   "ext3Scale": 1.4712,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1034 restores its size."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0643 restores its size."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1195 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.599 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.114 restores its size."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.112 restores its size."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1637 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2013 restores its size."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.4744 restores its size."
+    }
+   ],
+   "ext4Sheet": "cyraxx-ext4.webp",
+   "ext4Scale": 1.4712,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0529 restores its size."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0623 restores its size."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1096 restores its size."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1547 restores its size."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2401 restores its size."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2768 restores its size."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.005 restores its size."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1456 restores its size."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0911 restores its size."
+    }
    ]
   },
   "ali": {
    "sheet": "ali.webp",
-   "scale": 1.5,
+   "scale": 1.4366,
    "targetH": 306,
    "floorRow": 315,
-   "generations": 2,
+   "generations": 3,
    "note": "v4.1: REPLACED WITH A 24-CELL SHEET FROM ONE GENERATION, and he is the sixth fighter on the roster with a genuinely alternating walk. The named near-leg marker -- the BROAD BLACK OUTSIDE-SEAM STRIPE, present on ONE trouser leg and absent on the other -- sits on the FORWARD leg in all three A-half keys (1 +0.210, 17 +0.333, 2 +0.140) and on the REAR leg in all three B-half keys (3 -0.445, 18 -0.398, 4 -0.450): a clean 3/3 split with the swap exactly where the prompt asked for it, between panels 3 and 4. The 3.0 sheet it replaces does NOT alternate (its two contact keys measure +0.319 and +0.275, both forward, and are 92% identical). THE LEG-LUMINANCE PROXY IS BLIND ON THIS FIGHTER -- his gold satin is uniformly specular, so it reads +20.9/+17.6 and sees nothing; the marker-side metric and the 1:1 read are the verdict, exactly as MOTION-ATLAS says. The MICROPHONE is in his near fist in all 24 cells and the boombox on his back in all 24, after two same-generation repairs (see internal.wave14.repairs).",
    "cells": [
     {
@@ -4081,152 +5520,354 @@
      "frame": 16,
      "id": "idle-breathe",
      "accept": true,
-     "note": "idle-breathe. The second idle key, so the stance breathes on two drawings."
+     "note": "idle-breathe. The second idle key, so the stance breathes on two drawings. v5.0: redrawn with the sheet."
     },
     {
      "frame": 17,
      "id": "walk-down-a",
      "accept": true,
-     "note": "walk-down-a, the weight-sink between contact A and passing A. Marker FORWARD (+0.333), correctly in the A half."
+     "note": "walk-down-a, the weight-sink between contact A and passing A. Marker FORWARD (+0.333), correctly in the A half. v5.0: redrawn with the sheet."
     },
     {
      "frame": 18,
      "id": "walk-down-b",
      "accept": true,
-     "note": "walk-down-b. Marker REAR (-0.398), correctly in the B half. THIS SHEET DOES NOT HAVE THE 4.0 CELL-18 DEFECT: on all five 4.0 ext sheets cell 18 carries cell 17's phase (jez +26.15, alan +42.34, benny +39.40, cyraxx +47.46, all positive where their cell 3 is negative). Here 17 and 18 sit on opposite ends, so the six-key cycle has no phase pop."
+     "note": "walk-down-b. Marker REAR (-0.398), correctly in the B half. THIS SHEET DOES NOT HAVE THE 4.0 CELL-18 DEFECT: on all five 4.0 ext sheets cell 18 carries cell 17's phase (jez +26.15, alan +42.34, benny +39.40, cyraxx +47.46, all positive where their cell 3 is negative). Here 17 and 18 sit on opposite ends, so the six-key cycle has no phase pop. v5.0: redrawn with the sheet."
     },
     {
      "frame": 19,
      "id": "jump-ascent",
      "accept": true,
-     "note": "jump-ascent, still rising."
+     "note": "jump-ascent, still rising. v5.0: redrawn with the sheet."
     },
     {
      "frame": 20,
      "id": "jump-descend",
      "accept": true,
-     "note": "jump-descend, AND IT IS A REAL DESCENT. On all five 4.0 sheets this cell generated as a hit reaction and is RETIRED FROM ROUTING on those fighters. The v4.1 prompt rewrote the panel to forbid that reading explicitly -- torso upright, head level, legs reaching down, 'THIS IS NOT A HIT REACTION' -- and it came back correct. accept:true and ROUTED as of 4.1: the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20, where the five holdouts stop at 8 -> 19. Re-read at 1:1 by the integration pass and confirmed: torso vertical, head LEVEL and carried 24.7px FORWARD of his torso-band centre where his own cells 12, 13 and 14 carry it 6.1px, 3.9px and 0.7px BACK, legs straight and reaching down to the floor line. IoU 0.493 against his own cell 19, the highest ascent-affinity on the roster by a third. His raw silhouette IoU against his own light-hit is 0.510, inside the five holdouts' 0.47-0.77 band, but that metric is BLUNT on a heavy figure in a bulky tracksuit -- the pose discriminators are the verdict, exactly as the marker metric is the verdict on his walk where the luminance proxy is blind."
+     "note": "jump-descend, AND IT IS A REAL DESCENT. On all five 4.0 sheets this cell generated as a hit reaction and is RETIRED FROM ROUTING on those fighters. The v4.1 prompt rewrote the panel to forbid that reading explicitly -- torso upright, head level, legs reaching down, 'THIS IS NOT A HIT REACTION' -- and it came back correct. accept:true and ROUTED as of 4.1: the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20, where the five holdouts stop at 8 -> 19. Re-read at 1:1 by the integration pass and confirmed: torso vertical, head LEVEL and carried 24.7px FORWARD of his torso-band centre where his own cells 12, 13 and 14 carry it 6.1px, 3.9px and 0.7px BACK, legs straight and reaching down to the floor line. IoU 0.493 against his own cell 19, the highest ascent-affinity on the roster by a third. His raw silhouette IoU against his own light-hit is 0.510, inside the five holdouts' 0.47-0.77 band, but that metric is BLUNT on a heavy figure in a bulky tracksuit -- the pose discriminators are the verdict, exactly as the marker metric is the verdict on his walk where the luminance proxy is blind. v5.0: redrawn with the sheet."
     },
     {
      "frame": 21,
      "id": "punch-windup",
      "accept": true,
-     "note": "punch-windup, coiled, has not fired."
+     "note": "punch-windup, coiled, has not fired. v5.0: redrawn with the sheet."
     },
     {
      "frame": 22,
      "id": "kick-windup",
      "accept": true,
-     "note": "kick-windup, knee snapped up high."
+     "note": "kick-windup, knee snapped up high. v5.0: redrawn with the sheet."
     },
     {
      "frame": 23,
      "id": "mid-reaction",
      "accept": true,
-     "note": "mid-reaction, doubled forward, near fist still closed on the mic."
+     "note": "mid-reaction, doubled forward, near fist still closed on the mic. v5.0: redrawn with the sheet."
     }
    ],
    "wave14Integration": "WIRED IN 4.1. The hold this entry used to describe is discharged: extSheetPending / extCellsPending were renamed to extSheet / extCells, which takes the ext roster from five fighters to six. The integration pass ALSO RE-MEASURED the two engine tables his redraw made stale, which is the trap MOTION-ATLAS records the 3.1 wave falling into. Measured values, all reproduced independently rather than copied from internal.wave14.integrationNotes, and the method validated first by reproducing every UNTOUCHED sheet's recorded row exactly (nine UNIFIED_CELL_HEIGHT rows 16/16, five UNIFIED_EXT_CELL_HEIGHT rows 8/8, and all fourteen CELL_BODY_CENTRE rows): CELL_BODY_CENTRE.ali.unified re-measured (max drift 35 rows at cell 8, the jump-rise the airborne anchor reads) and a 'unified-ext' row added; UNIFIED_CELL_HEIGHT and UNIFIED_EXT_CELL_HEIGHT installed; UNIFIED_CELL_ADJUST refitted onto his new 294px idle (0.894/0.886/0.894/0.900 -> 0.961/0.987/0.980/0.970) and UNIFIED_EXT_CELL_ADJUST added for 17 and 18; UNIFIED_GUARD_FLINCH_ADJUST 1.058 -> 1.135, because his unified guard cell grew 274 -> 294 and the old number let a blocked hit draw 7% short of his own guard; WAKEUP_RISE_HEIGHT standUnified 271 -> 294 and the unified crouch rung 199 -> 226. He needs NO sheet adjust, so nothing is folded into his per-cell ext table -- see the commissioner's block in UNIFIED_EXT_CELL_ADJUST for the one entry that is. AND HIS CELL 20 IS ROUTED: it is the roster's first real jump-descend, so the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20 while the other five keep the 4.0 arc. See format.extStatus.",
    "ext2Sheet": "ali-ext2.webp",
-   "ext2Scale": 1.3722,
+   "ext2Scale": 1.2645,
    "ext2Cells": [
     {
      "frame": 24,
      "id": "punch-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 25,
      "id": "punch-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 26,
      "id": "kick-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 27,
      "id": "kick-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 28,
      "id": "heavy-punch-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 29,
      "id": "heavy-punch-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 30,
      "id": "heavy-kick-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 31,
      "id": "heavy-kick-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.0936 restores its size."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 32,
      "id": "crouch-punch-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 33,
      "id": "crouch-punch-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 34,
      "id": "crouch-kick-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 35,
      "id": "crouch-kick-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 36,
      "id": "throw-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314. Fit-scaled to the cell; drawAdjust 1.1156 restores its size."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 37,
      "id": "throw-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 38,
      "id": "special-windup",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     },
     {
      "frame": 39,
      "id": "special-recover",
      "accept": true,
-     "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
     }
-   ]
+   ],
+   "generationGrid": "6x4",
+   "redrawn50": "v5.0 REDRAWN FROM THE DESIGN. The 4.1 sheet drew a heavier, dark-skinned man \u2014 a different person from the base atlas, the portrait and the specials (a slim, light-skinned man with a goatee and a boombox on his back), so he strobed between two people every time a bank changed (skin L 33 on the unified/motion generations against 46 on the design). This sheet is ONE 24-panel (6x4) generation with the base atlas and portrait as image-to-image references, colour-matched onto the base atlas (1.74 weighted dE), the boombox held in every cell; ext2/ext3/ext4 were generated from it (1.15/1.23/1.02 dE) at their own 4x4 scales, since a 6x4 panel draws the figure smaller than a 4x4 one. The motion, motion2, motion3 and walk banks were skin-matched toward the base atlas (L 33 -> 38-40) for the cells the swing substitution does not cover. Walk keys 1-4 sit within 2.3% of the idle and the walk-down keys within 1%, so no size correction is applied anywhere on the sheet.",
+   "ext3Scale": 1.36,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.0904."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.1289."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.2476."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.0039."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.4499."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.2424."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.0634."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.6171."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.2697."
+    }
+   ],
+   "ext3Sheet": "ali-ext3.webp",
+   "ext4Scale": 1.4366,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.1219."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.0052."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.1274."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.1899."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.0434."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0, generated from the redrawn unified sheet at its scale. Fit-scaled; drawAdjust 1.0326."
+    }
+   ],
+   "ext4Sheet": "ali-ext4.webp"
   },
   "commissioner": {
    "sheet": "commissioner.webp",
@@ -4786,6 +6427,206 @@
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
     }
+   ],
+   "ext3Sheet": "commissioner-ext3.webp",
+   "ext3Scale": 1.4854,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1129 restores its size."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.3099 restores its size."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0298 restores its size."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2774 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.006 restores its size."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.5316 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0874 restores its size."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1176 restores its size."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.101 restores its size."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1716 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.5115 restores its size."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.6604 restores its size."
+    }
+   ],
+   "ext4Sheet": "commissioner-ext4.webp",
+   "ext4Scale": 1.4854,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0676 restores its size."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1133 restores its size."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2195 restores its size."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0717 restores its size."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0544 restores its size."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1437 restores its size."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0999 restores its size."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1286 restores its size."
+    }
    ]
   },
   "devil": {
@@ -5263,6 +7104,206 @@
      "id": "special-recover",
      "accept": true,
      "note": "v4.9 in-between, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference (gpt-image-2 edit), colour-matched to that sheet (per-cluster LAB mean shift), torso-band on column 160, feet on row 314."
+    }
+   ],
+   "ext3Sheet": "devil-ext3.webp",
+   "ext3Scale": 1.3722,
+   "ext3Cells": [
+    {
+     "frame": 40,
+     "id": "punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1058 restores its size."
+    },
+    {
+     "frame": 41,
+     "id": "kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0647 restores its size."
+    },
+    {
+     "frame": 42,
+     "id": "follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 43,
+     "id": "punch-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2217 restores its size."
+    },
+    {
+     "frame": 44,
+     "id": "crouch-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0726 restores its size."
+    },
+    {
+     "frame": 45,
+     "id": "sweep",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.3871 restores its size."
+    },
+    {
+     "frame": 46,
+     "id": "air-punch",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 47,
+     "id": "air-kick",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.2723 restores its size."
+    },
+    {
+     "frame": 48,
+     "id": "air-chamber",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 49,
+     "id": "rising-smear",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 50,
+     "id": "landing",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 51,
+     "id": "kick-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1923 restores its size."
+    },
+    {
+     "frame": 52,
+     "id": "crouch-guard",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 53,
+     "id": "heavy-punch-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0993 restores its size."
+    },
+    {
+     "frame": 54,
+     "id": "heavy-kick-extension",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 55,
+     "id": "sweep-follow-through",
+     "accept": true,
+     "note": "v5.0 ext3 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.1129 restores its size."
+    }
+   ],
+   "ext4Sheet": "devil-ext4.webp",
+   "ext4Scale": 1.3722,
+   "ext4Cells": [
+    {
+     "frame": 56,
+     "id": "guard-flinch",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 57,
+     "id": "head-snap",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 58,
+     "id": "body-blow",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 59,
+     "id": "big-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0696 restores its size."
+    },
+    {
+     "frame": 60,
+     "id": "stagger",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 61,
+     "id": "dizzy",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 62,
+     "id": "launched",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 63,
+     "id": "air-hit",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 64,
+     "id": "wall-splat",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 65,
+     "id": "crumple",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 66,
+     "id": "falling",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 67,
+     "id": "floor-bounce",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 68,
+     "id": "getup-a",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.03 restores its size."
+    },
+    {
+     "frame": 69,
+     "id": "getup-b",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 70,
+     "id": "thrown",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale."
+    },
+    {
+     "frame": 71,
+     "id": "ko",
+     "accept": true,
+     "note": "v5.0 ext4 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, built at the unified scale. Fit-scaled; drawAdjust 1.0148 restores its size."
     }
    ]
   }

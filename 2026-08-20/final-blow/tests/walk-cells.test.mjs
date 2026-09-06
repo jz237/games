@@ -210,7 +210,7 @@ function testAuthoredBankRegistry() {
   // bank cannot be gated in 2D and ungated in 3D.
   // v4.0 appends the ext sheet: index-addressed against a fixed grammar on a
   // 320px-cell sheet, so it rides the identical sheet + accept-mask gate.
-  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", "unified", "unified-ext", "unified-ext2"]);
+  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", "unified", "unified-ext", "unified-ext2", "unified-ext3", "unified-ext4"]);
   for (const bank of AUTHORED_BANKS) assert.equal(isAuthoredBank(bank), true);
   for (const bank of ["base", "specials", undefined]) {
     assert.equal(isAuthoredBank(bank), false);

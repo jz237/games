@@ -3040,3 +3040,92 @@ recovery's second band on the release. Verified in real play by frame
 attribution: jab `ext2:0 x3 -> motion:0 -> motion:4 -> ext2:1 -> unified:7 ->
 idle`, heavy `ext:5 -> ext2:4 -> motion2:4 -> motion:2 -> motion:0 -> motion:4
 -> ext2:5 -> unified:7 -> idle`, in both renderers.
+
+## v5.0 — FULL SWING: THE STRIKE AND THE REACTION ON THE FIGHTER'S OWN SHEET, AND ALI IS ONE MAN AGAIN
+
+Two more sheets per fighter, generated the 4.9 way (image-to-image from the
+fighter's own unified sheet, per-cluster LAB match, `tools/swing/`):
+`<id>-ext3.webp` (bank `unified-ext3`, cells 40-55: punch and kick EXTENSION,
+follow-through, horizontal smear, crouch punch extension, sweep, air punch, air
+kick, chambered air cell, vertical smear, landing, kick follow, crouch guard,
+heavy punch and heavy kick extension, sweep follow) and `<id>-ext4.webp`
+(`unified-ext4`, cells 56-71: guard flinch, head snap, body blow, big hit,
+stagger, dizzy, launched, air hit, wall splat, crumple, falling, floor bounce,
+get-up A, get-up B, thrown, KO). Matched sheets sit 0.9-1.3 weighted dE from
+their unified sheet. Built at the fighter's UNIFIED scale rather than
+scale-from-tallest (a lunge is the tallest cell on a strike sheet and overshot
+by 4-8%); a wide strike is fit-scaled about its torso column and drawn back up
+through `UNIFIED_EXT3_CELL_ADJUST` (heavy kick extensions run to 1.7). The
+purple impact strokes the model paints around a wall splat, floor bounce,
+launch and air hit are keyed out on those four ext4 cells.
+
+THE SUBSTITUTION LAYER, not new tracks: `swingSubstitute(bank, frame, ctx)`
+(engine) maps the motion/motion2 cell a track resolved to onto its
+same-generation equivalent, and `swingResolve` (game.js, after
+`resolveMotionPose` in `fighterAnimationPose`) applies it when the target cell
+can draw — through the bank-routed gate, since a substitute may land on the
+unified crouch transition, the ext2 crouch recover or the ext descent, and a
+target may carry an `alt` (the descent's chambered-air fallback for the five
+sheets that never accepted their descent). Every track and hold budget of 4.9
+is byte-identical; only the drawing changes. Punch/kick extension by stance and
+weight, follow by limb (a crouching punch holds its crouched recover — a
+standing follow would pop him upright), both smears, land, the attacker's
+air chamber, the heavy compress band on the unified crouch transition, the
+air attack by limb; block hit -> guard flinch, light hit -> head snap, big hit
+-> big hit or launched, wall splat, crumple, dizzy, get-ups, thrown; the
+victim's air recover -> falling once the knockdown is pending, launched while
+carried. The air-hit cell came out INVERTED on every sheet (head down, feet in
+the air — the read 4.6 took off the floor), so it is drawn and never routed;
+crouch guard, stagger, body blow, floor bounce and KO wait for a later pass.
+The two ext2 special cells reserved in 4.9 route through `attackAnimationPose`:
+a plain special's gather for the first half of its startup and its settle for
+the last 45% of its recovery, kit cell otherwise. A crouching normal's active
+window, which never had a motion cell (it drew a base cell), draws the crouch
+extension or the sweep directly.
+
+The wake-up rung follows the drawing: the stretch and the settle key off the
+resolved cell, so with the get-up substituted the rung is `unified-ext4:13`
+and `wakeupRungHeight` measures it on that sheet (without this every swing
+fighter lost the rise and reopened the seam). On the ext4 rung the settles are
+deathblow 0.893 (deepest), post 0.926, devil 0.937, cyraxx 0.980, ali 0.986,
+donald 0.989, the other four at their idle.
+
+AMBIENT REACTIONS: `pulseAmbient(kind, amount)` latches from `stirCrowd` at
+0.7 and above and from the KO phase change; `drawStageAmbient` reads the pulse
+(0..1 over 48 ticks) into each stage's own furniture — the Vet's floodlights
+swell and a burst goes up over the bowl (two on a KO), the other stages their
+sign chases, gull scatter and pool-deck flash. Measured on the Vet canvas: both
+floodlight regions +27 mean brightness at the KO tick, decayed by KO+170, the
+plain sky flat at 74.5 throughout.
+
+Verified by frame attribution in real play (jez): jab `ext2:0 -> ext3:0 ->
+ext3:2 -> ext2:1 -> unified:7 -> idle`; heavy kick `ext:6 -> ext2:6 ->
+unified:6 -> ext3:14 -> ext3:11 -> ext2:7 -> unified:7`; crouch jab `ext2:8 ->
+ext3:4 -> ext2:9 -> unified:7`; sweep `ext2:10 -> ext3:5 -> ext3:15 -> ext2:11`;
+air kick `ext3:8 -> ext3:7 -> motion3:4 -> ext3:8 -> ext3:10 -> unified:6`
+(the motion3 jump-descent is the one cross-generation cell left on that arc).
+
+ALI IS ONE MAN AGAIN. "The DJ turns from a white guy to a black guy and back."
+The 4.1 unified sheet (and the ext, ext2 and motion generations after it) drew
+a heavier, dark-skinned man — a different person from the base atlas, the
+portrait and the specials (a slim, light-skinned man with a goatee and a
+boombox on his back; skin L 33 against 46), so every bank change strobed him
+between two people. The fix is one 24-panel (6x4) generation with the base
+atlas AND the portrait as image-to-image references
+(`grammar-ali-unified-v3.txt`): candidates without the boombox (g2, g4) lost
+the design's prop — every in-play bank carries it — and one that flickered it
+(g3) was rejected; g5 holds it in all 24 cells, alternates its contact keys,
+and is the tightest cycle on the roster (walk keys +0.3% to +2.3% off the idle,
+walk-down keys within 1%, no fit-scaling anywhere), colour-matched onto the
+base atlas at 1.74 dE. ext2/ext3/ext4 were regenerated from that sheet with
+the boombox in the prompt, at their own scales (1.26/1.36/1.44) — a 6x4 panel
+draws its figure smaller than a 4x4 one, so the unified scale does not carry
+(1.15/1.23/1.02 dE). The motion, motion2, motion3 and walk banks were
+skin-matched toward the base atlas (L 33 -> 38-40) for the cells the
+substitution does not cover. Tables re-derived: idle 299, guard 292 (flinch
+1.127 against the 259px block hit), crouch 207, all four walk keys corrected
+onto the idle (0.977/0.977/0.997/0.980 — the table's justification is now the
+1% drawn line, not the 3% reporting line, which this sheet is the first to sit
+entirely under), wake-up aimed at 299. Residuals: the passing keys' leg
+exchange is unverified frame by frame; the motion-bank skin sits a little dark
+of the design; a stray fragment was purged from ext3:14 after slicing.

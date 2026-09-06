@@ -1,0 +1,21 @@
+The reference image is a sprite sheet of ONE fighter: {LOOK}, painted in a detailed 2D fighting-game sprite style with painterly shading.
+
+Draw a NEW 4-by-4 sprite sheet of EXACTLY THE SAME character: identical face, hair, costume, colours, proportions, art style, line weight, lighting direction and figure scale as the reference cells. 16 equal square cells in a perfect grid on the same flat solid magenta (#FF00FF) background — no scenery, no floor, no cast shadows, no glow, no grid lines, no borders, no text. The character faces to the RIGHT in every cell like the reference. Feet planted on the same floor line near the bottom of each cell for grounded poses; airborne poses float in the upper two-thirds of the cell. Standing figures are the same height as the reference's standing cells (about 95% of the cell); every figure centred in its own cell and never touching the edges.
+
+The 16 cells, left to right, top to bottom, are the STRIKES themselves at full extension, plus the airborne and crouching attacks:
+1. PUNCH EXTENSION — a straight punch at the instant of full extension: rear arm fully straight at shoulder height, fist to the right, weight on the front foot, guard hand at the chin.
+2. KICK EXTENSION — a side kick at full extension: kicking leg straight out to the right at waist height, foot flexed, support leg planted, arms out for balance.
+3. FOLLOW-THROUGH — the instant after a big punch: weight carried forward past the target, torso rotated, striking arm across the body, rear heel lifted.
+4. PUNCH SMEAR — the punch in flight, drawn with motion: the punching arm is a horizontal painted speed streak from the shoulder to a blurred fist, the rest of the body sharp.
+5. CROUCH PUNCH EXTENSION — crouching low, a straight punch fully extended to the right at chest height of a crouching opponent.
+6. SWEEP — crouching very low, one hand on the floor, the sweeping leg extended straight out along the floor to the right.
+7. AIR PUNCH — airborne, body tucked, punching down and forward with the rear fist.
+8. AIR KICK — airborne, kicking leg extended down and forward, the other leg tucked, arms up.
+9. AIR CHAMBER — airborne, knees tucked up, fists cocked at the chest: the instant before an air strike.
+10. RISING SMEAR — an uppercut in flight: the punching arm is a vertical painted speed streak from the hip to a blurred fist above the head, body rising.
+11. LANDING — the instant of landing from a jump: deep knee bend, torso leaning forward, arms out for balance.
+12. KICK FOLLOW-THROUGH — the instant after a big kick: the kicking leg swung past to the right, body spun with it, arms trailing.
+13. CROUCH GUARD — crouching, both arms crossed low in front of the body, chin tucked.
+14. HEAVY PUNCH EXTENSION — a haymaker at full extension: whole body committed, rear arm fully straight, front knee deeply bent, head down behind the shoulder.
+15. HEAVY KICK EXTENSION — a roundhouse at full extension high, the kicking leg straight at head height, torso leaned back, arms swung.
+16. SWEEP FOLLOW-THROUGH — the instant after the sweep: spun around low, the sweeping leg trailing behind, hand on the floor.

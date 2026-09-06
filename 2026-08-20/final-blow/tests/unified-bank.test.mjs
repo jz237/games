@@ -24,6 +24,10 @@ import {
   UNIFIED_WALK_KEYS,
   WAKEUP_RISE_HEIGHT,
   WAKEUP_SETTLE_FLOOR,
+  UNIFIED_EXT4_BANK,
+  UNIFIED_EXT4_CELLS,
+  UNIFIED_EXT4_CELL_HEIGHT,
+  wakeupRungHeight,
   airNormalKeys,
   airborneAnchorOffset,
   attackRecoveryKeys,
@@ -604,9 +608,17 @@ function testIdleWalkHeightAndLadder() {
     // cycle". It only ever passed because no sheet before ali had one key under
     // the line while another was over it. Per fighter it says what was meant,
     // and the drawn-height assertion above is what actually holds the quality.
+    //
+    // v5.0: the line is the 1% DRAWN line the assertion above holds, not the 3%
+    // reporting line. ali's redrawn 24-panel sheet is tighter than any before
+    // it (+0.3% to +2.3% against his idle): under 3% on every key, over 1% on
+    // three of them. Against the 3% line that sheet could neither carry a table
+    // (nothing "leaves the deadband") nor go without one (three keys pop) — the
+    // justification for correcting all four is exactly that one of them draws
+    // outside the line the quality is held to.
     assert.ok(UNIFIED_WALK_KEYS.some(
-      (key) => Math.abs(UNIFIED_CELL_HEIGHT[id][key] / idle - 1) > 0.03),
-      `${id}: no walk key leaves the deadband — drop the whole UNIFIED_CELL_ADJUST `
+      (key) => Math.abs(UNIFIED_CELL_HEIGHT[id][key] / idle - 1) > 0.01),
+      `${id}: no walk key leaves the drawn line — drop the whole UNIFIED_CELL_ADJUST `
       + "row rather than carry a table that does nothing");
     // The idle is the ANCHOR — it is the sheet's U1 reference cell and what
     // WAKEUP_RISE_HEIGHT.standUnified was measured on, so it must never be
@@ -749,6 +761,11 @@ function testAirborneAnchoringExtends() {
   }
 }
 
+/** The last wake-up rung as it DRAWS: the ext4 get-up on the swing bank, motion2:15 off it. */
+function wakeupRungOf(id) {
+  return UNIFIED_EXT4_CELL_HEIGHT[id] ? [UNIFIED_EXT4_BANK, UNIFIED_EXT4_CELLS.getupB] : ["motion2", 15];
+}
+
 function testHeightReconciliationsMoved() {
   // THE ONE 2.9 WORKAROUND THE UNIFIED SHEET INVALIDATES. M4's guard-flinch
   // correction matches motion2:8 to the fighter's STANDING GUARD, and for a
@@ -770,7 +787,10 @@ function testHeightReconciliationsMoved() {
     // being hit on five of the eight against the base target, and against the
     // unified one nobody hits it. (Epsilon: post and devil land on the same
     // ratio through two different divisions.)
-    const rung = ["motion2", 15];
+    // v5.0: on the swing bank the last rung DRAWS from the ext4 get-up cell —
+    // the stretch and the settle key off the drawn cell — so it is measured
+    // there; off the bank it is still motion2:15.
+    const rung = wakeupRungOf(id);
     assert.ok(wakeupSettleStart(id, rung[0], rung[1], 16, { unified: true })
       >= wakeupSettleStart(id, rung[0], rung[1], 16) - 1e-9,
       `${id}: aiming at the shorter unified idle must not compress the standing cell FURTHER`);
@@ -802,7 +822,7 @@ function testHeightReconciliationsMoved() {
     // which is the case on six of the nine and on the devil is the upper clamp
     // (his getup rung is TALLER than his unified idle).
     if (settle < 0.999) {
-      const stretched = WAKEUP_RISE_HEIGHT[id].cells[`${rung[0]}:${rung[1]}`]
+      const stretched = wakeupRungHeight(id, rung[0], rung[1])
         * wakeupRiseTransform(1, 16, wakeupRiseStretch(id, rung[0], rung[1], { unified: true })).scaleY;
       assert.ok(Math.abs(settle * WAKEUP_RISE_HEIGHT[id].standUnified - stretched) < 0.5,
         `${id}: the wake-up hands off with a ${(settle * WAKEUP_RISE_HEIGHT[id].standUnified
@@ -811,13 +831,16 @@ function testHeightReconciliationsMoved() {
   }
   // The deepest compression on the roster is PINNED, so a future sheet that
   // pushes a fighter further toward the floor than the worst one today is a
-  // failure rather than a silent drift. ali is the deepest at 0.898 (a 23px
-  // taller idle against an unchanged getup rung), jez next at 0.932.
+  // failure rather than a silent drift. Through 4.9 ali was the deepest at
+  // 0.898 (a 23px taller idle against an unchanged getup rung), jez next at
+  // 0.932. v5.0 measures the rung on the ext4 sheet it now draws from:
+  // deathblow is the deepest at 0.893 (a 206px get-up under a 272px idle),
+  // post next at 0.926; ali's redrawn get-up reaches 0.986 and jez's his idle.
   {
-    const settles = WHOLE.map((id) => [id, wakeupSettleStart(id, "motion2", 15, 16, { unified: true })])
+    const settles = WHOLE.map((id) => [id, wakeupSettleStart(id, ...wakeupRungOf(id), 16, { unified: true })])
       .sort((a, b) => a[1] - b[1]);
-    assert.deepEqual(settles.slice(0, 2).map(([id]) => id), ["ali", "jez"],
-      "the two deepest wake-up settles on the roster are ali's and jez's");
+    assert.deepEqual(settles.slice(0, 2).map(([id]) => id), ["deathblow", "post"],
+      "the two deepest wake-up settles on the roster are deathblow's and post's");
     assert.ok(settles[0][1] > 0.89,
       `${settles[0][0]} settles at ${settles[0][1].toFixed(4)} — deeper than any sheet `
       + "shipped so far, which means the getup rung can no longer reach its own idle");
@@ -850,7 +873,7 @@ function testHeightReconciliationsMoved() {
 }
 
 function testBankRegistryAndWiring() {
-  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK],
+  assert.deepEqual(AUTHORED_BANKS, ["motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, "unified-ext3", "unified-ext4"],
     "both renderers and resolveMotionPose route off this one list");
   assert.equal(isAuthoredBank(UNIFIED_BANK), true);
 

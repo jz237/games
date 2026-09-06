@@ -1984,6 +1984,8 @@ export function safeBaseFrame(fighterId, frame) {
  */
 export function baseCellDrawAdjust(fighterId, bank, frame) {
   if (bank === UNIFIED_EXT2_BANK) return UNIFIED_EXT2_CELL_ADJUST[fighterId]?.[frame] || 1;
+  if (bank === UNIFIED_EXT3_BANK) return UNIFIED_EXT3_CELL_ADJUST[fighterId]?.[frame] || 1;
+  if (bank === UNIFIED_EXT4_BANK) return UNIFIED_EXT4_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT_BANK) return UNIFIED_EXT_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_BANK) return UNIFIED_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank !== "base") return 1;
@@ -2066,7 +2068,7 @@ const UNIFIED_CELL_ADJUST = Object.freeze({
   // +1.4% to +4.1% raw — so only key 1 leaves the 3% deadband, and all four
   // are corrected anyway: that is the rule this table has always used, and
   // correcting only key 1 would leave a 2.7% pop INSIDE his stride.
-  ali: Object.freeze({ 1: 0.961, 2: 0.987, 3: 0.980, 4: 0.970 }),
+  ali: Object.freeze({ 1: 0.977, 2: 0.977, 3: 0.997, 4: 0.980 }),
   benny: Object.freeze({ 1: 0.943, 2: 0.943, 3: 0.933, 4: 0.912 }),
   commissioner: Object.freeze({ 1: 0.947, 2: 0.938, 3: 0.966, 4: 0.950, 7: 1.067 }),
   // cyraxx's cycle is the tightest on the roster at +3.0% to +3.4%, but the
@@ -2127,7 +2129,7 @@ const UNIFIED_EXT_CELL_ADJUST = Object.freeze({
   // (+3.06% each), so both take the same term. He has NO sheet adjust, so
   // nothing is folded in here beyond the height reconciliation — see the
   // commissioner's block above for the one entry that is not a height term.
-  ali: Object.freeze({ 1: 0.970, 2: 0.970 }),
+  ali: Object.freeze({  }),
 });
 
 /**
@@ -2144,7 +2146,7 @@ export const UNIFIED_CELL_HEIGHT = Object.freeze({
   donald: Object.freeze([261, 286, 289, 289, 285, 193, 243, 255, 306, 157, 245, 251, 266, 256, 230, 122]),
   devil: Object.freeze([283, 303, 303, 306, 303, 191, 242, 284, 292, 176, 266, 268, 294, 296, 254, 123]),
   // v4.1: re-measured on the 24-cell sheet that replaced his 3.0 one.
-  ali: Object.freeze([294, 306, 298, 300, 303, 226, 242, 294, 315, 194, 278, 273, 290, 274, 279, 106]),
+  ali: Object.freeze([299, 306, 306, 300, 305, 207, 266, 292, 296, 178, 282, 276, 290, 274, 225, 70]),
   benny: Object.freeze([279, 296, 296, 299, 306, 195, 216, 274, 310, 149, 264, 248, 279, 271, 272, 73]),
   commissioner: Object.freeze([287, 303, 306, 297, 302, 196, 235, 269, 313, 171, 273, 261, 270, 273, 275, 86]),
   cyraxx: Object.freeze([296, 305, 306, 305, 305, 207, 253, 281, 315, 150, 282, 278, 287, 268, 292, 72]),
@@ -2161,7 +2163,7 @@ export const UNIFIED_EXT_CELL_HEIGHT = Object.freeze({
   benny: Object.freeze([282, 293, 291, 288, 271, 264, 291, 202]),
   commissioner: Object.freeze([287, 290, 282, 320, 315, 263, 284, 241]),
   cyraxx: Object.freeze([294, 305, 297, 290, 297, 280, 290, 247]),
-  ali: Object.freeze([297, 303, 303, 267, 275, 250, 298, 237]),
+  ali: Object.freeze([297, 300, 296, 264, 302, 292, 302, 269]),
 });
 
 /** Drawn (corrected) content height of a unified cell, in cell pixels. */
@@ -2190,7 +2192,7 @@ export const UNIFIED_EXT2_CELL_HEIGHT = Object.freeze({
   benny: Object.freeze([306, 306, 313, 313, 294, 267, 295, 283, 185, 185, 158, 189, 275, 275, 275, 278]),
   donald: Object.freeze([299, 306, 312, 303, 284, 243, 295, 295, 218, 203, 210, 185, 285, 284, 291, 285]),
   cyraxx: Object.freeze([306, 306, 313, 313, 287, 263, 305, 296, 189, 187, 173, 186, 279, 279, 279, 279]),
-  ali: Object.freeze([299, 306, 306, 306, 291, 268, 309, 284, 210, 210, 187, 199, 248, 277, 279, 283]),
+  ali: Object.freeze([306, 298, 301, 301, 276, 273, 303, 290, 193, 186, 161, 183, 285, 262, 258, 285]),
   commissioner: Object.freeze([303, 306, 303, 307, 273, 257, 297, 297, 188, 181, 159, 184, 261, 265, 263, 267]),
   devil: Object.freeze([305, 305, 311, 302, 253, 241, 295, 263, 191, 203, 210, 206, 305, 273, 269, 306]),
 });
@@ -2203,7 +2205,7 @@ const UNIFIED_EXT2_CELL_ADJUST = Object.freeze({
   benny: Object.freeze({ 2: 1.0248, 3: 1.0248, 6: 1.0091, 10: 1.2284 }),
   donald: Object.freeze({ 11: 1.0773, 12: 1.0213 }),
   cyraxx: Object.freeze({ 2: 1.0065, 3: 1.0065 }),
-  ali: Object.freeze({ 7: 1.0936, 12: 1.1156 }),
+  ali: Object.freeze({  }),
   commissioner: Object.freeze({ 0: 1.033, 1: 1.033, 2: 1.033, 3: 1.033, 4: 1.033, 5: 1.033, 6: 1.033, 7: 1.033, 8: 1.033, 9: 1.033, 10: 1.0748, 11: 1.033, 12: 1.0516, 13: 1.033, 14: 1.033, 15: 1.033 }),
   devil: Object.freeze({ 4: 1.1131, 5: 1.0652, 7: 1.1124, 8: 1.0791, 10: 1.0376 }),
 });
@@ -2213,6 +2215,56 @@ export function unifiedExt2DrawnHeight(fighterId, frame) {
   const raw = UNIFIED_EXT2_CELL_HEIGHT[fighterId]?.[frame];
   return Number.isFinite(raw) ? raw * baseCellDrawAdjust(fighterId, UNIFIED_EXT2_BANK, frame) : 0;
 }
+
+// v5.0 FULL SWING: measured on the built ext3/ext4 sheets (alpha >= 24).
+export const UNIFIED_EXT3_CELL_HEIGHT = Object.freeze({
+  deathblow: Object.freeze([258, 237, 251, 246, 179, 116, 208, 195, 202, 260, 199, 239, 189, 204, 220, 131]),
+  jez: Object.freeze([296, 279, 296, 283, 188, 130, 222, 201, 209, 285, 188, 254, 205, 195, 270, 154]),
+  alan: Object.freeze([272, 281, 287, 243, 206, 151, 222, 245, 200, 313, 194, 263, 193, 202, 270, 118]),
+  post: Object.freeze([270, 287, 282, 270, 185, 115, 207, 229, 193, 288, 169, 247, 190, 218, 239, 133]),
+  benny: Object.freeze([291, 303, 302, 283, 206, 118, 236, 233, 211, 237, 192, 260, 211, 230, 255, 138]),
+  donald: Object.freeze([247, 250, 250, 248, 176, 112, 213, 190, 190, 233, 150, 230, 195, 225, 242, 148]),
+  cyraxx: Object.freeze([291, 308, 310, 284, 225, 121, 235, 243, 227, 313, 197, 262, 216, 210, 250, 132]),
+  commissioner: Object.freeze([299, 251, 313, 257, 211, 130, 264, 235, 233, 313, 202, 302, 221, 200, 197, 132]),
+  devil: Object.freeze([247, 269, 272, 219, 179, 130, 242, 197, 226, 288, 192, 213, 215, 196, 269, 173]),
+  ali: Object.freeze([281, 272, 298, 245, 192, 113, 233, 177, 218, 311, 193, 242, 201, 231, 176, 145]),
+});
+const UNIFIED_EXT3_CELL_ADJUST = Object.freeze({
+  deathblow: Object.freeze({ 1: 1.0713, 3: 1.0329, 5: 1.4016, 7: 1.0827, 13: 1.0653, 15: 1.1515 }),
+  jez: Object.freeze({ 1: 1.0506, 3: 1.0433, 5: 1.376, 7: 1.1238, 11: 1.0153, 13: 1.1256, 15: 1.1131 }),
+  alan: Object.freeze({ 0: 1.0599, 1: 1.0357, 3: 1.1868, 5: 1.233, 9: 1.0031, 13: 1.181, 15: 1.2998 }),
+  post: Object.freeze({ 0: 1.0628, 1: 1.0039, 3: 1.0735, 5: 1.35, 7: 1.0815, 11: 1.0339, 13: 1.0178, 14: 1.1449, 15: 1.2849 }),
+  benny: Object.freeze({ 0: 1.0619, 3: 1.093, 5: 1.4479, 13: 1.0942, 15: 1.4104 }),
+  donald: Object.freeze({ 5: 1.2782, 10: 1.1621, 14: 1.0067, 15: 1.1242 }),
+  cyraxx: Object.freeze({ 0: 1.1034, 1: 1.0643, 3: 1.1195, 5: 1.599, 9: 1.114, 11: 1.112, 13: 1.1637, 14: 1.2013, 15: 1.4744 }),
+  commissioner: Object.freeze({ 0: 1.1496, 1: 1.3531, 2: 1.0638, 3: 1.3196, 4: 1.0392, 5: 1.5821, 6: 1.1233, 7: 1.1545, 8: 1.033, 9: 1.1373, 10: 1.033, 11: 1.033, 12: 1.033, 13: 1.2103, 14: 1.5614, 15: 1.7152 }),
+  devil: Object.freeze({ 0: 1.1058, 1: 1.0647, 3: 1.2217, 4: 1.0726, 5: 1.3871, 7: 1.2723, 11: 1.1923, 13: 1.0993, 15: 1.1129 }),
+  ali: Object.freeze({ 0: 1.0904, 1: 1.1289, 3: 1.2476, 4: 1.0039, 5: 1.4499, 7: 1.2424, 11: 1.0634, 14: 1.6171, 15: 1.2697 }),
+});
+export const UNIFIED_EXT4_CELL_HEIGHT = Object.freeze({
+  deathblow: Object.freeze([263, 278, 223, 261, 244, 248, 231, 160, 251, 169, 183, 195, 183, 206, 162, 105]),
+  jez: Object.freeze([281, 292, 237, 253, 268, 272, 216, 258, 257, 140, 187, 201, 156, 243, 170, 76]),
+  alan: Object.freeze([289, 291, 246, 270, 240, 258, 250, 278, 258, 177, 173, 208, 202, 239, 180, 108]),
+  post: Object.freeze([272, 280, 238, 268, 261, 258, 242, 275, 259, 186, 171, 187, 166, 219, 221, 99]),
+  benny: Object.freeze([310, 313, 246, 275, 246, 279, 274, 267, 252, 175, 174, 202, 189, 258, 142, 89]),
+  donald: Object.freeze([244, 260, 228, 250, 239, 255, 173, 225, 229, 167, 183, 180, 177, 219, 147, 100]),
+  cyraxx: Object.freeze([313, 313, 282, 290, 276, 306, 291, 300, 294, 185, 163, 177, 212, 246, 203, 101]),
+  commissioner: Object.freeze([273, 312, 251, 279, 231, 287, 193, 281, 279, 169, 215, 181, 209, 244, 143, 97]),
+  devil: Object.freeze([277, 277, 258, 225, 262, 261, 246, 268, 254, 177, 214, 189, 172, 225, 170, 103]),
+  ali: Object.freeze([303, 306, 267, 270, 303, 313, 251, 263, 231, 194, 214, 165, 208, 250, 169, 83]),
+});
+const UNIFIED_EXT4_CELL_ADJUST = Object.freeze({
+  deathblow: Object.freeze({ 3: 1.0171, 10: 1.0038, 11: 1.0554, 14: 1.0162 }),
+  jez: Object.freeze({ 3: 1.019, 4: 1.0103, 6: 1.1112, 11: 1.0123, 12: 1.0777, 14: 1.0738, 15: 1.0164 }),
+  alan: Object.freeze({ 3: 1.0563, 4: 1.1415, 6: 1.0011 }),
+  post: Object.freeze({ 4: 1.0415, 8: 1.0202, 11: 1.1581, 14: 1.1129, 15: 1.0551 }),
+  benny: Object.freeze({ 1: 1.0135, 3: 1.0649, 4: 1.1638, 8: 1.0817, 14: 1.1151, 15: 1.0924 }),
+  donald: Object.freeze({ 4: 1.0433, 6: 1.094 }),
+  cyraxx: Object.freeze({ 0: 1.0529, 1: 1.0623, 3: 1.1096, 4: 1.1547, 10: 1.2401, 11: 1.2768, 12: 1.005, 14: 1.1456, 15: 1.0911 }),
+  commissioner: Object.freeze({ 0: 1.1028, 1: 1.033, 2: 1.033, 3: 1.15, 4: 1.2597, 5: 1.033, 6: 1.1071, 7: 1.033, 8: 1.0892, 9: 1.033, 10: 1.033, 11: 1.1814, 12: 1.033, 13: 1.033, 14: 1.1362, 15: 1.1658 }),
+  devil: Object.freeze({ 3: 1.0696, 12: 1.03, 15: 1.0148 }),
+  ali: Object.freeze({ 3: 1.1219, 5: 1.0052, 8: 1.1274, 11: 1.1899, 14: 1.0434, 15: 1.0326 }),
+});
 
 // ---------------------------------------------------------------------------
 // v2.9 final round (T4) — THE BASE WALK SCALE POP.
@@ -2317,7 +2369,7 @@ const GUARD_FLINCH_ADJUST = Object.freeze({
 // what confirms the measurement rather than the number.
 const UNIFIED_GUARD_FLINCH_ADJUST = Object.freeze({
   jez: 1.063, alan: 0.940, post: 1.038, donald: 0.962,
-  devil: 1.127, ali: 1.135, benny: 0.996, commissioner: 1.029,
+  devil: 1.127, ali: 1.127, benny: 0.996, commissioner: 1.029,
   cyraxx: 1.053,
 });
 
@@ -2449,6 +2501,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([161, 158, 158, 158, 164, 188, 158, 166, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([180, 170, 162, 166, 163, 226, 186, 177, 180, 247, 192, 184, 180, 199, 210, 270]),
     "unified-ext2": Object.freeze([163, 162, 158, 158, 165, 180, 164, 187, 212, 215, 220, 220, 191, 192, 176, 172]),
+    "unified-ext3": Object.freeze([186, 196, 189, 192, 225, 256, 210, 217, 214, 184, 215, 195, 220, 212, 204, 249]),
+    "unified-ext4": Object.freeze([183, 176, 203, 184, 192, 190, 199, 234, 189, 230, 223, 217, 223, 212, 234, 262]),
     ref: 162,
   }),
   jez: Object.freeze({
@@ -2459,6 +2513,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     unified: Object.freeze([176, 162, 164, 162, 166, 206, 194, 179, 164, 230, 184, 184, 181, 176, 174, 280]),
     "unified-ext": Object.freeze([176, 165, 166, 172, 190, 182, 175, 198]),
     "unified-ext2": Object.freeze([162, 162, 158, 162, 166, 208, 169, 164, 208, 210, 220, 214, 164, 180, 168, 164]),
+    "unified-ext3": Object.freeze([166, 175, 166, 173, 220, 250, 204, 214, 210, 172, 220, 188, 212, 217, 180, 238]),
+    "unified-ext4": Object.freeze([174, 168, 196, 188, 180, 178, 206, 186, 186, 244, 221, 214, 236, 193, 230, 276]),
     ref: 162,
   }),
   alan: Object.freeze({
@@ -2469,6 +2525,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     unified: Object.freeze([178, 163, 162, 163, 164, 210, 202, 182, 166, 236, 190, 185, 181, 174, 182, 266]),
     "unified-ext": Object.freeze([178, 168, 170, 160, 170, 184, 180, 192]),
     "unified-ext2": Object.freeze([162, 163, 158, 162, 165, 179, 160, 163, 208, 219, 242, 222, 164, 182, 168, 164]),
+    "unified-ext3": Object.freeze([178, 174, 171, 193, 212, 239, 204, 192, 214, 158, 218, 183, 218, 214, 180, 256]),
+    "unified-ext4": Object.freeze([170, 169, 192, 180, 196, 186, 190, 176, 186, 226, 228, 210, 214, 195, 224, 260]),
     ref: 162,
   }),
   post: Object.freeze({
@@ -2478,6 +2536,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([172, 158, 158, 158, 176, 204, 158, 178, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([176, 169, 170, 170, 172, 228, 192, 179, 178, 234, 179, 174, 170, 166, 192, 266]),
     "unified-ext2": Object.freeze([162, 163, 161, 163, 178, 176, 162, 162, 214, 220, 218, 226, 189, 186, 176, 173]),
+    "unified-ext3": Object.freeze([180, 171, 174, 180, 222, 257, 211, 200, 218, 170, 230, 191, 220, 206, 195, 248]),
+    "unified-ext4": Object.freeze([178, 174, 196, 180, 184, 186, 194, 177, 185, 222, 229, 221, 232, 205, 204, 265]),
     ref: 162,
   }),
   donald: Object.freeze({
@@ -2487,6 +2547,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([176, 158, 158, 158, 178, 203, 164, 184, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([185, 176, 171, 175, 173, 219, 194, 188, 166, 238, 194, 191, 184, 190, 202, 258]),
     "unified-ext2": Object.freeze([165, 162, 158, 163, 172, 193, 167, 167, 206, 213, 210, 222, 172, 172, 169, 172]),
+    "unified-ext3": Object.freeze([191, 190, 190, 190, 226, 258, 208, 220, 220, 198, 240, 200, 217, 202, 194, 240]),
+    "unified-ext4": Object.freeze([192, 184, 200, 190, 195, 187, 228, 202, 200, 231, 223, 224, 226, 205, 241, 264]),
     ref: 162,
   }),
   devil: Object.freeze({
@@ -2496,6 +2558,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion3: Object.freeze([158, 158, 158, 158, 157, 198, 158, 160, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([176, 164, 164, 162, 165, 222, 196, 176, 174, 228, 186, 186, 172, 172, 192, 258]),
     "unified-ext2": Object.freeze([162, 162, 159, 164, 188, 194, 167, 183, 219, 213, 210, 212, 162, 178, 180, 162]),
+    "unified-ext3": Object.freeze([191, 180, 178, 206, 225, 250, 194, 216, 202, 170, 218, 208, 207, 216, 180, 228]),
+    "unified-ext4": Object.freeze([177, 176, 186, 202, 184, 184, 192, 180, 188, 226, 208, 220, 228, 202, 230, 263]),
     ref: 165,
   }),
   ali: Object.freeze({
@@ -2510,9 +2574,11 @@ export const CELL_BODY_CENTRE = Object.freeze({
     // (the tuck) by 16, so the old row visibly misplaced him in the air —
     // and 4.1 routes BOTH of those cells for him. This is the exact trap the
     // 3.1 wave fell into with four fighters at once.
-    unified: Object.freeze([168, 162, 166, 164, 163, 202, 194, 168, 157, 218, 176, 178, 170, 178, 175, 262]),
-    "unified-ext": Object.freeze([166, 163, 163, 181, 176, 188, 166, 196]),
-    "unified-ext2": Object.freeze([165, 162, 162, 162, 169, 180, 160, 172, 210, 210, 221, 215, 190, 176, 175, 173]),
+    unified: Object.freeze([165, 162, 162, 164, 162, 211, 182, 168, 166, 226, 174, 176, 170, 178, 202, 280]),
+    "unified-ext": Object.freeze([166, 164, 166, 182, 164, 168, 164, 180]),
+    "unified-ext2": Object.freeze([162, 166, 164, 164, 176, 178, 163, 170, 218, 222, 234, 223, 172, 184, 186, 172]),
+    "unified-ext3": Object.freeze([174, 178, 166, 192, 218, 258, 198, 226, 206, 159, 218, 194, 214, 199, 226, 242]),
+    "unified-ext4": Object.freeze([163, 162, 181, 180, 163, 158, 189, 183, 199, 218, 208, 232, 210, 190, 230, 273]),
     ref: 162,
   }),
   benny: Object.freeze({
@@ -2523,6 +2589,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     unified: Object.freeze([175, 166, 166, 165, 162, 217, 206, 178, 160, 240, 182, 190, 175, 179, 178, 278]),
     "unified-ext": Object.freeze([174, 168, 169, 170, 179, 182, 169, 214]),
     "unified-ext2": Object.freeze([162, 162, 158, 158, 168, 181, 167, 173, 222, 222, 236, 220, 177, 177, 177, 176]),
+    "unified-ext3": Object.freeze([169, 163, 164, 173, 212, 256, 196, 198, 209, 196, 218, 184, 209, 200, 187, 246]),
+    "unified-ext4": Object.freeze([160, 158, 192, 177, 192, 175, 178, 181, 188, 227, 228, 214, 220, 186, 244, 270]),
     ref: 162,
   }),
   commissioner: Object.freeze({
@@ -2533,6 +2601,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     unified: Object.freeze([171, 163, 162, 166, 164, 216, 197, 180, 158, 229, 178, 184, 180, 178, 177, 272]),
     "unified-ext": Object.freeze([171, 170, 174, 160, 157, 183, 172, 194]),
     "unified-ext2": Object.freeze([163, 162, 163, 161, 178, 186, 166, 166, 220, 224, 235, 222, 184, 182, 183, 181]),
+    "unified-ext3": Object.freeze([165, 189, 158, 186, 209, 250, 182, 197, 198, 158, 214, 164, 204, 214, 216, 248]),
+    "unified-ext4": Object.freeze([178, 158, 189, 175, 199, 171, 218, 174, 175, 230, 207, 224, 211, 192, 243, 266]),
     ref: 158,
   }),
   cyraxx: Object.freeze({
@@ -2543,6 +2613,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     unified: Object.freeze([166, 162, 162, 162, 162, 211, 188, 174, 157, 240, 174, 176, 171, 180, 168, 278]),
     "unified-ext": Object.freeze([168, 162, 166, 170, 166, 174, 170, 191]),
     "unified-ext2": Object.freeze([162, 162, 158, 158, 171, 183, 162, 166, 220, 221, 228, 222, 175, 175, 175, 175]),
+    "unified-ext3": Object.freeze([169, 160, 160, 172, 202, 254, 197, 193, 201, 158, 216, 184, 206, 210, 190, 248]),
+    "unified-ext4": Object.freeze([158, 158, 174, 170, 176, 162, 169, 164, 168, 222, 233, 226, 208, 192, 213, 264]),
     ref: 165,
   }),
 });
@@ -2604,6 +2676,15 @@ export function auditBodyCentres() {
     // who HAVE an ext sheet carry one. Its airborne cells (jump-ascent and
     // jump-descend) are routed, so an unmeasured row would put the B2 body-drop
     // straight back into the middle of those fighters' jumps.
+    // v5.0: the ext3/ext4 rows are sixteen entries on every fighter who has them.
+    for (const swingBank of [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]) {
+      const swingCentres = table[swingBank];
+      if (!swingCentres) continue;
+      if (swingCentres.length !== 16) errors.push(`${fighterId}/${swingBank}: ${swingCentres.length} entries`);
+      swingCentres.forEach((value, index) => {
+        if (!Number.isFinite(value) || value > 320 || (value < 0 && value !== -1)) errors.push(`${fighterId}/${swingBank}[${index}]: ${value}`);
+      });
+    }
     // v4.9: the ext2 row is sixteen entries on every fighter who has the sheet.
     const ext2Centres = table[UNIFIED_EXT2_BANK];
     if (ext2Centres) {
@@ -3350,9 +3431,9 @@ export const UNIFIED_EXT2_BEATS = Object.freeze([
 ]);
 
 /** Routed this wave: every strike and throw in-between. */
-export const UNIFIED_EXT2_ROUTED_CELLS = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
-/** Drawn but not yet routed: the specials keep their authored kit art. */
-export const UNIFIED_EXT2_RESERVED_CELLS = Object.freeze([14, 15]);
+export const UNIFIED_EXT2_ROUTED_CELLS = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+/** v5.0: the special gather/settle are routed on plain specials; nothing is reserved. */
+export const UNIFIED_EXT2_RESERVED_CELLS = Object.freeze([]);
 
 /** Grammar cell (24..39) -> sheet frame (0..15). Returns -1 otherwise. */
 export function unifiedExt2Frame(cell) {
@@ -3401,6 +3482,148 @@ export function buildUnifiedExt2AcceptMasks(manifest, unifiedMasks = null) {
 /** The fighter ids carrying a whole ext2 sheet, from a built mask table. */
 export function unifiedExt2FighterIds(masks) {
   return Object.keys(masks || {}).filter((id) => masks[id]?.whole).sort();
+}
+
+// ---------------------------------------------------------------------------
+// v5.0 FULL SWING — the fourth and fifth sheets: the strikes themselves and
+// the reactions, generated the 4.9 way (image-to-image from the fighter's own
+// unified sheet, colour-matched onto it) so the whole vocabulary is one
+// generation-matched family. They are not routed through new beats: the
+// resolved pose is SUBSTITUTED at draw time (swingSubstitute) whenever it
+// names a motion-family cell that has an equivalent here, so every track's
+// timing and hold budget is untouched and only the drawing changes. Per-cell
+// gates: a rejected cell simply keeps its motion drawing.
+export const UNIFIED_EXT3_BANK = "unified-ext3";
+export const UNIFIED_EXT3_CELL_COUNT = 16;
+export const UNIFIED_EXT3_BASE = 40;
+export const UNIFIED_EXT3_CELLS = Object.freeze({
+  punchExt: 0, kickExt: 1, follow: 2, smearH: 3,
+  crouchPunchExt: 4, sweep: 5, airPunch: 6, airKick: 7,
+  airChamber: 8, smearV: 9, land: 10, kickFollow: 11,
+  crouchGuard: 12, heavyPunchExt: 13, heavyKickExt: 14, sweepFollow: 15,
+});
+export const UNIFIED_EXT3_BEATS = Object.freeze([
+  "punch-extension", "kick-extension", "follow-through", "punch-smear",
+  "crouch-punch-extension", "sweep", "air-punch", "air-kick",
+  "air-chamber", "rising-smear", "landing", "kick-follow-through",
+  "crouch-guard", "heavy-punch-extension", "heavy-kick-extension", "sweep-follow-through",
+]);
+export const UNIFIED_EXT4_BANK = "unified-ext4";
+export const UNIFIED_EXT4_CELL_COUNT = 16;
+export const UNIFIED_EXT4_BASE = 56;
+export const UNIFIED_EXT4_CELLS = Object.freeze({
+  guardFlinch: 0, headSnap: 1, bodyBlow: 2, bigHit: 3,
+  stagger: 4, dizzy: 5, launched: 6, airHit: 7,
+  wallSplat: 8, crumple: 9, falling: 10, floorBounce: 11,
+  getupA: 12, getupB: 13, thrown: 14, ko: 15,
+});
+export const UNIFIED_EXT4_BEATS = Object.freeze([
+  "guard-flinch", "head-snap", "body-blow", "big-hit",
+  "stagger", "dizzy", "launched", "air-hit",
+  "wall-splat", "crumple", "falling", "floor-bounce",
+  "getup-a", "getup-b", "thrown", "ko",
+]);
+export const SWING_BANKS = Object.freeze({
+  [UNIFIED_EXT3_BANK]: Object.freeze({ base: UNIFIED_EXT3_BASE, count: UNIFIED_EXT3_CELL_COUNT, sheetKey: "ext3Sheet", cellsKey: "ext3Cells" }),
+  [UNIFIED_EXT4_BANK]: Object.freeze({ base: UNIFIED_EXT4_BASE, count: UNIFIED_EXT4_CELL_COUNT, sheetKey: "ext4Sheet", cellsKey: "ext4Cells" }),
+});
+
+export function swingFrame(bank, cell) {
+  const spec = SWING_BANKS[bank];
+  if (!spec) return -1;
+  const frame = cell - spec.base;
+  return frame >= 0 && frame < spec.count ? frame : -1;
+}
+
+/** Per-cell gate: the sheet must exist and the main sheet be whole; each cell then stands on its own accept flag. */
+export function buildSwingAcceptMasks(manifest, bank, unifiedMasks = null) {
+  const spec = SWING_BANKS[bank];
+  const masks = {};
+  for (const [fighterId, entry] of Object.entries(manifest?.fighters || {})) {
+    const accept = new Array(spec.count).fill(false);
+    for (const cell of entry?.[spec.cellsKey] || []) {
+      const frame = swingFrame(bank, cell?.frame);
+      if (frame >= 0) accept[frame] = cell.accept === true;
+    }
+    const mainWhole = unifiedMasks ? Boolean(unifiedMasks[fighterId]?.whole) : true;
+    const whole = Boolean(entry?.[spec.sheetKey]) && mainWhole && accept.some(Boolean);
+    masks[fighterId] = Object.freeze({
+      whole,
+      accept: Object.freeze(whole ? accept : new Array(spec.count).fill(false)),
+      sheet: entry?.[spec.sheetKey] || null,
+    });
+  }
+  return masks;
+}
+
+export function swingFighterIds(masks) {
+  return Object.keys(masks || {}).filter((id) => masks[id]?.whole).sort();
+}
+
+/**
+ * THE SUBSTITUTION TABLE. Given a resolved pose (bank, frame) and what the
+ * fighter is doing, the same-family drawing that should stand in for it, or
+ * null. Pure; the caller checks the target cell is drawable.
+ *
+ * ctx: { limb, heavy, crouching, attacking, airborne, victimAirborne, falling }
+ */
+export function swingSubstitute(bank, frame, ctx = {}) {
+  const kick = ctx.limb === "kick";
+  const E3 = UNIFIED_EXT3_CELLS, E4 = UNIFIED_EXT4_CELLS;
+  if (bank === "motion") {
+    switch (frame) {
+      case MOTION_CELLS.punchExt:
+        return { bank: UNIFIED_EXT3_BANK, frame: ctx.crouching ? E3.crouchPunchExt : ctx.heavy ? E3.heavyPunchExt : E3.punchExt };
+      case MOTION_CELLS.kickExt:
+        return { bank: UNIFIED_EXT3_BANK, frame: ctx.crouching ? E3.sweep : ctx.heavy ? E3.heavyKickExt : E3.kickExt };
+      case MOTION_CELLS.follow:
+        if (!ctx.attacking) return null;
+        // A crouching punch has no crouched follow-through drawing; its recover
+        // cell (the arm halfway back, still crouched) holds instead of the
+        // standing follow, which would pop him upright mid-swing.
+        if (ctx.crouching && !kick) return { bank: UNIFIED_EXT2_BANK, frame: UNIFIED_EXT2_CELLS.crouchPunchRecover };
+        return { bank: UNIFIED_EXT3_BANK, frame: kick ? (ctx.crouching ? E3.sweepFollow : E3.kickFollow) : E3.follow };
+      case MOTION_CELLS.smearH: return { bank: UNIFIED_EXT3_BANK, frame: E3.smearH };
+      case MOTION_CELLS.smearV: return { bank: UNIFIED_EXT3_BANK, frame: E3.smearV };
+      case MOTION_CELLS.land: return { bank: UNIFIED_EXT3_BANK, frame: E3.land };
+      case MOTION_CELLS.tuck: return ctx.attacking && ctx.airborne ? { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber } : null;
+      case MOTION_CELLS.bighit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.victimAirborne ? E4.launched : E4.bigHit };
+      case MOTION_CELLS.airrec:
+        // A launched victim: the falling cell once the knockdown is pending,
+        // the launched arch while still carried. The air-hit cell (E4.airHit)
+        // came out INVERTED on every sheet — head down, feet in the air, the
+        // read 4.6 removed from the floor — so it stays drawn but unrouted.
+        if (ctx.falling) return { bank: UNIFIED_EXT4_BANK, frame: E4.falling };
+        if (ctx.victimAirborne) return { bank: UNIFIED_EXT4_BANK, frame: E4.launched };
+        // The ATTACKER's trail after an air strike (and the air-tech flip's
+        // tail) is the ext descent; the same key on the floor is the landing
+        // footing, which is the land cell held rather than a motion cell.
+        // Five sheets never accepted their ext descent (4.0 sheets); for those
+        // the chambered air cell, limbs gathered, is the same-generation trail.
+        if (ctx.airborne) return { bank: UNIFIED_EXT_BANK, frame: UNIFIED_EXT_CELLS.jumpDescend, alt: { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber } };
+        return { bank: UNIFIED_EXT3_BANK, frame: E3.land };
+      case MOTION_CELLS.wallsplat: return { bank: UNIFIED_EXT4_BANK, frame: E4.wallSplat };
+      case MOTION_CELLS.crumple: return { bank: UNIFIED_EXT4_BANK, frame: E4.crumple };
+      default: return null;
+    }
+  }
+  if (bank === "motion2") {
+    switch (frame) {
+      case MOTION2_CELLS.airAttack: return { bank: UNIFIED_EXT3_BANK, frame: kick ? E3.airKick : E3.airPunch };
+      // The heavy windup's COMPRESS band is the stand<->crouch bridge; with
+      // the whole swing on the unified family now, the unified crouch
+      // transition is the same-generation drawing for it.
+      case MOTION2_CELLS.crouchTrans: return ctx.attacking && !ctx.crouching ? { bank: UNIFIED_BANK, frame: UNIFIED_CELLS.crouchTrans } : null;
+      case MOTION2_CELLS.blockHit: return { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch };
+      case MOTION2_CELLS.lightHit: return { bank: UNIFIED_EXT4_BANK, frame: E4.headSnap };
+      case MOTION2_CELLS.dizzy: return { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy };
+      case MOTION2_CELLS.getupA: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupA };
+      case MOTION2_CELLS.getupB: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupB };
+      case MOTION2_CELLS.thrown: return { bank: UNIFIED_EXT4_BANK, frame: E4.thrown };
+      default: return null;
+    }
+  }
+  return null;
 }
 
 /** Which ext2 cell opens a kit-less normal, by limb and stance. */
@@ -4477,7 +4700,7 @@ export const WAKEUP_RISE_HEIGHT = Object.freeze({
   // v4.1: `standUnified` and the unified crouch rung re-measured on the 24-cell
   // sheet (271 -> 294 and 199 -> 226). His base and motion2 rungs are untouched
   // art and re-measure to their recorded values exactly.
-  ali: Object.freeze({ stand: 306, standUnified: 294, cells: Object.freeze({ "motion2:15": 224, "base:12": 304, "unified:5": 226 }) }),
+  ali: Object.freeze({ stand: 306, standUnified: 299, cells: Object.freeze({ "motion2:15": 224, "base:12": 304, "unified:5": 207 }) }),
   benny: Object.freeze({ stand: 306, standUnified: 279, cells: Object.freeze({ "motion2:15": 244, "base:12": 304, "unified:5": 195 }) }),
   commissioner: Object.freeze({ stand: 316, standUnified: 287, cells: Object.freeze({ "motion2:15": 237, "base:12": 288, "unified:5": 196 }) }),
   cyraxx: Object.freeze({ stand: 302, standUnified: 296, cells: Object.freeze({ "motion2:15": 284, "base:12": 241, "unified:5": 207 }) }),
@@ -4491,9 +4714,15 @@ function wakeupStandHeight(entry, options) {
 }
 
 /** The drawn height of a wake-up rung, or 0 when the cell is not a rung. */
-function wakeupRungHeight(fighterId, bank, frame) {
+export function wakeupRungHeight(fighterId, bank, frame) {
   const entry = WAKEUP_RISE_HEIGHT[fighterId];
-  const raw = entry?.cells[`${bank}:${frame}`];
+  let raw = entry?.cells[`${bank}:${frame}`];
+  // v5.0: the swing substitution draws the last rung from the ext4 get-up
+  // cell. It is the SAME rung — the stretch and the settle key off the drawn
+  // cell — so it is measured on that sheet, or the seam it closes reopens.
+  if (!Number.isFinite(raw) && bank === UNIFIED_EXT4_BANK && frame === UNIFIED_EXT4_CELLS.getupB) {
+    raw = UNIFIED_EXT4_CELL_HEIGHT[fighterId]?.[frame];
+  }
   if (!Number.isFinite(raw)) return 0;
   return raw * baseCellDrawAdjust(fighterId, bank, frame);
 }
@@ -4782,7 +5011,7 @@ export function buildMotionAcceptMasks(manifest, cellCount = MOTION_CELL_COUNT) 
 // were added, and the 3D renderer walks this list to decide which pose banks it
 // must build a texture for.
 export const AUTHORED_BANKS = Object.freeze([
-  "motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK,
+  "motion", "motion2", "walk", UNIFIED_BANK, UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK,
 ]);
 
 /** True for a bank that must clear the sheet + accept-mask gate before it draws. */
@@ -5022,9 +5251,16 @@ export function attackMotionBeat(attack, attackFrame, options = undefined) {
   return null;
 }
 
-export function attackAnimationPose(attack, attackFrame) {
+export function attackAnimationPose(attack, attackFrame, options = undefined) {
   const animation = attack?.animation;
   if (!animation) return null;
+  // v5.0: a PLAIN special (no super, no EX charge) gathers on the fighter's
+  // own special wind-up for the first half of its startup and settles on the
+  // special recover for the tail of its recovery, both over the kit's own
+  // cell; supers, EX and throws keep their authored reads. Only with the
+  // in-between sheet — without it the kit art shows exactly as before.
+  const plainSpecial = options?.inbetween && attack.kind === "special" && !attack.superMove
+    && !((attack.gritCost || 0) > 0) && attack.level !== ATTACK_LEVELS.AIR;
   let index = 0;
   if (attackFrame >= attack.activeEndFrame) index = 3;
   else if (attackFrame >= attack.activeStartFrame) {
@@ -5039,9 +5275,19 @@ export function attackAnimationPose(attack, attackFrame) {
     else index = activeProgress < 0.34 ? 1 : activeProgress < 0.67 ? 2 : 3;
   }
   const frame = animation.frames[index];
+  if (plainSpecial) {
+    if (attackFrame < attack.activeStartFrame * 0.5 && attack.activeStartFrame >= 4) {
+      return unifiedExt2Pose(UNIFIED_EXT2_CELLS.specialWindup, { bank: animation.bank, frame });
+    }
+    const total = attack.totalFrames ?? attack.activeEndFrame + 1;
+    const tail = total - attack.activeEndFrame;
+    if (attackFrame >= attack.activeEndFrame && tail >= 6 && attackFrame - attack.activeEndFrame >= tail * 0.55) {
+      return unifiedExt2Pose(UNIFIED_EXT2_CELLS.specialRecover, { bank: animation.bank, frame });
+    }
+  }
   // v2.7 FRAMES: authored charge/smear/follow keys ride over the kit
   // sequence, each carrying the exact cell it replaces as its fallback.
-  const beat = attackMotionBeat(attack, attackFrame);
+  const beat = attackMotionBeat(attack, attackFrame, options);
   if (beat && beat.beat !== "extension") {
     // v2.9 critic round 2 (B1): a beat that carries a KEY TRACK sequences
     // through it, with the kit's own cell as the terminal fallback — that is

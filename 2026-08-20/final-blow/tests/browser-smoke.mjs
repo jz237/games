@@ -350,8 +350,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /4\.9/);
-  assert.equal(title.version.text, 'VERSION 4.9');
+  assert.match(title.build, /5\.0/);
+  assert.equal(title.version.text, 'VERSION 5.0');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -387,7 +387,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '4.9-inbetween');
+  assert.equal(title.engineVersion, '5.0-fullswing');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -3117,7 +3117,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-shell-4\.9/);
+  assert.match(offlineCache.name, /final-blow-shell-5\.0/);
   // 1.9E added engine/atlas-facing.mjs to the shell: game.js imports it, so
   // offline boot needs it cached.
   assert.equal(offlineCache.entries, 22);
@@ -3141,8 +3141,8 @@ try {
     version: window.__finalBlowEngine?.version,
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
-  assert.match(controlledReload.build, /4\.9/);
-  assert.equal(controlledReload.version, '4.9-inbetween');
+  assert.match(controlledReload.build, /5\.0/);
+  assert.equal(controlledReload.version, '5.0-fullswing');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -3159,8 +3159,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /4\.9/);
-  assert.equal(offlineBoot.version, '4.9-inbetween');
+  assert.match(offlineBoot.build, /5\.0/);
+  assert.equal(offlineBoot.version, '5.0-fullswing');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -3204,7 +3204,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 4.9');
+  assert.equal(landscape.version.text, 'VERSION 5.0');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

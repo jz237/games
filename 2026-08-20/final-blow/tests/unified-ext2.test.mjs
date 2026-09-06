@@ -14,6 +14,7 @@ import {
   UNIFIED_EXT2_CELL_HEIGHT,
   UNIFIED_EXT2_RESERVED_CELLS,
   UNIFIED_EXT2_ROUTED_CELLS,
+  attackAnimationPose,
   attackMotionBeat,
   attackRecoveryKeys,
   beatKeyRuns,
@@ -77,6 +78,7 @@ function testGateAllOrNothing() {
   for (const id of ROSTER) {
     for (const frame of UNIFIED_EXT2_ROUTED_CELLS) assert.equal(masks[id].accept[frame], true);
     for (const frame of UNIFIED_EXT2_RESERVED_CELLS) assert.equal(masks[id].accept[frame], false, "reserved cells never draw");
+    assert.equal(UNIFIED_EXT2_RESERVED_CELLS.length, 0, "v5.0 routes the special gather/settle too");
   }
   // Rejecting any routed cell collapses the whole sheet.
   const broken = JSON.parse(JSON.stringify(manifest));
@@ -84,10 +86,10 @@ function testGateAllOrNothing() {
   const brokenMasks = buildUnifiedExt2AcceptMasks(broken, mainMasks);
   assert.equal(brokenMasks.jez.whole, false);
   assert.ok(brokenMasks.jez.accept.every((ok) => ok === false));
-  // Rejecting a reserved cell changes nothing.
-  const reserved = JSON.parse(JSON.stringify(manifest));
-  reserved.fighters.jez.ext2Cells[UNIFIED_EXT2_CELLS.specialWindup].accept = false;
-  assert.equal(buildUnifiedExt2AcceptMasks(reserved, mainMasks).jez.whole, true);
+  // v5.0: the special cells are routed, so rejecting one collapses the sheet too.
+  const special = JSON.parse(JSON.stringify(manifest));
+  special.fighters.jez.ext2Cells[UNIFIED_EXT2_CELLS.specialWindup].accept = false;
+  assert.equal(buildUnifiedExt2AcceptMasks(special, mainMasks).jez.whole, false);
   // A fighter whose main sheet is not whole cannot be whole here.
   const noMain = JSON.parse(JSON.stringify(manifest));
   noMain.fighters.jez.cells[7].accept = false;
@@ -153,6 +155,19 @@ function testInbetweenRouting() {
   assert.equal(attackMotionBeat(air, 0, INBETWEEN)?.beat, "airAttack");
   const special = createFighterMove("jez", "special");
   assert.notEqual(attackMotionBeat(special, 0, INBETWEEN)?.beat, "cock");
+  // v5.0: a plain special gathers on its own wind-up over the kit cell, and
+  // settles on the recover cell at the tail of its recovery; without the
+  // sheet the kit art is untouched.
+  const gather = attackAnimationPose(special, 0, INBETWEEN);
+  assert.equal(gather.bank, UNIFIED_EXT2_BANK);
+  assert.equal(gather.frame, UNIFIED_EXT2_CELLS.specialWindup);
+  assert.equal(gather.fallback.bank, special.animation.bank);
+  assert.deepEqual(attackAnimationPose(special, 0), { bank: special.animation.bank, frame: special.animation.frames[0] });
+  const settle = attackAnimationPose(special, special.totalFrames - 1, INBETWEEN);
+  assert.equal(settle.bank, UNIFIED_EXT2_BANK);
+  assert.equal(settle.frame, UNIFIED_EXT2_CELLS.specialRecover);
+  const superMove = createFighterMove("deathblow", "super");
+  assert.notEqual(attackAnimationPose(superMove, 0, INBETWEEN)?.bank, UNIFIED_EXT2_BANK, "supers keep their charge");
   // Every routed cell is reachable through some track; reserved cells through none.
   const reached = new Set();
   const collect = (keys) => keys.forEach((key) => key.chain.forEach((link) => { if (link.bank === UNIFIED_EXT2_BANK) reached.add(link.cell); }));
@@ -167,6 +182,7 @@ function testInbetweenRouting() {
   }
   collect(throwClinchKeys(INBETWEEN));
   collect(throwRecoveryKeys(INBETWEEN));
+  reached.add(UNIFIED_EXT2_CELLS.specialWindup); reached.add(UNIFIED_EXT2_CELLS.specialRecover); // reached through attackAnimationPose
   assert.deepEqual([...reached].sort((a, b) => a - b), [...UNIFIED_EXT2_ROUTED_CELLS]);
 }
 
@@ -206,7 +222,7 @@ function testMeasuredTables() {
 }
 
 function testRegistryAndWiring() {
-  assert.deepEqual(AUTHORED_BANKS.slice(-2), [UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK], "ext2 is appended last");
+  assert.deepEqual(AUTHORED_BANKS.slice(-4), [UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, "unified-ext3", "unified-ext4"], "the sheets are registered in the order they were added");
   assert.ok(isAuthoredBank(UNIFIED_EXT2_BANK));
   assert.match(gameSource, /if \(bank === UNIFIED_EXT2_BANK\) return unifiedExt2CellDrawable\(fighterId, cell\);/);
   assert.match(gameSource, /const ext2 = unifiedFighterExt2Ready\(fighter\.def\.id\);/);

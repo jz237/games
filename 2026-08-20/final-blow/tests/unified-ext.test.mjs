@@ -643,12 +643,12 @@ function testAli() {
   // recorded rows exactly, so these are facts about the art rather than
   // preferences — if the art changes they must change with it.
   assert.deepEqual([...UNIFIED_CELL_HEIGHT.ali],
-    [294, 306, 298, 300, 303, 226, 242, 294, 315, 194, 278, 273, 290, 274, 279, 106]);
-  assert.deepEqual([...UNIFIED_EXT_CELL_HEIGHT.ali], [297, 303, 303, 267, 275, 250, 298, 237]);
+    [299, 306, 306, 300, 305, 207, 266, 292, 296, 178, 282, 276, 290, 274, 225, 70]);
+  assert.deepEqual([...UNIFIED_EXT_CELL_HEIGHT.ali], [297, 300, 296, 264, 302, 292, 302, 269]);
   assert.deepEqual([...CELL_BODY_CENTRE.ali[UNIFIED_BANK]],
-    [168, 162, 166, 164, 163, 202, 194, 168, 157, 218, 176, 178, 170, 178, 175, 262]);
+    [165, 162, 162, 164, 162, 211, 182, 168, 166, 226, 174, 176, 170, 178, 202, 280]);
   assert.deepEqual([...CELL_BODY_CENTRE.ali[UNIFIED_EXT_BANK]],
-    [166, 163, 163, 181, 176, 188, 166, 196]);
+    [166, 164, 166, 182, 164, 168, 164, 180]);
   // The 3.0 row is GONE, and cell 8 is the one that mattered: it is the
   // jump-rise the airborne anchor reads, it drifted 35 rows, and 4.1 routes it.
   assert.notEqual(CELL_BODY_CENTRE.ali[UNIFIED_BANK][UNIFIED_CELLS.jumpRise], 192,
@@ -660,8 +660,8 @@ function testAli() {
   const idle = UNIFIED_CELL_HEIGHT.ali[UNIFIED_CELLS.idle];
   assert.equal(WAKEUP_RISE_HEIGHT.ali.standUnified, idle);
   assert.equal(WAKEUP_RISE_HEIGHT.ali.cells["unified:5"], UNIFIED_CELL_HEIGHT.ali[UNIFIED_CELLS.crouch]);
-  // His guard grew 274 -> 294 with the redraw, which is what moved the flinch.
-  assert.equal(guardFlinchAdjust("ali", "motion2", MOTION2_CELLS.blockHit, { unified: true }), 1.135);
+  // v5.0: his guard measures 292 on the redrawn sheet against a 259px block-hit.
+  assert.equal(guardFlinchAdjust("ali", "motion2", MOTION2_CELLS.blockHit, { unified: true }), 1.127);
 
   // THE MICROPHONE. His prop is in his near fist in all 24 cells and it is the
   // anchor the whole 4.1 walk technique hangs on — the model swaps the mic
@@ -678,7 +678,7 @@ function testAli() {
 // X-H — registration, and the padding both renderers depend on.
 // ---------------------------------------------------------------------------
 function testRegistration() {
-  assert.deepEqual(AUTHORED_BANKS.slice(-2), [UNIFIED_EXT_BANK, "unified-ext2"]);
+  assert.deepEqual(AUTHORED_BANKS.slice(-4), [UNIFIED_EXT_BANK, "unified-ext2", "unified-ext3", "unified-ext4"]);
   for (const id of EXT) {
     // ON-SCREEN height: content x per-cell adjust x sheet adjust, both sides,
     // or the Commissioner's folded sheet correction reads as a pop that isn't

@@ -1,0 +1,21 @@
+The reference image is a sprite sheet of ONE fighter: {LOOK}, painted in a detailed 2D fighting-game sprite style with painterly shading.
+
+Draw a NEW 4-by-4 sprite sheet of EXACTLY THE SAME character: identical face, hair, costume, colours, proportions, art style, line weight, lighting direction and figure scale as the reference cells. 16 equal square cells in a perfect grid on the same flat solid magenta (#FF00FF) background — no scenery, no floor, no cast shadows, no glow, no grid lines, no borders, no text. The character faces to the RIGHT in every cell like the reference (so blows arrive from the right). Feet on the same floor line near the bottom of each cell for grounded poses; airborne poses float in the upper two-thirds of the cell; floor poses lie along the bottom of the cell. Standing figures are the same height as the reference's standing cells (about 95% of the cell); every figure centred in its own cell and never touching the edges.
+
+The 16 cells, left to right, top to bottom, are the character BEING HIT and recovering:
+1. GUARD FLINCH — blocking a blow from the right: both arms up in a tight guard, head turned away, pushed back a step, feet braced.
+2. HEAD SNAP — hit in the face from the right: head snapped back and to the left, feet still planted, arms loosening.
+3. BODY BLOW — hit in the stomach: folding forward around the impact, feet planted, arms dropping.
+4. BIG HIT — hit hard: torso bent far back, chin up, arms flung wide, one foot lifting.
+5. STAGGER — stumbling backward to the left, off balance, one foot behind, arms out.
+6. DIZZY — woozy: knees bent, head lolling, eyes closed, arms hanging loose, swaying.
+7. LAUNCHED — hit up into the air: body arched backward, limbs flailing, airborne.
+8. AIR HIT — struck in mid-air: tumbling head-down, limbs loose.
+9. WALL SPLAT — slammed back-first against an unseen wall: flattened, arms and legs spread, head thrown back.
+10. CRUMPLE — collapsing: knees buckling to the floor, torso folding forward.
+11. FALLING — falling backward mid-air toward the floor, feet up, arms up.
+12. FLOOR BOUNCE — hitting the floor on the back, legs kicking up, arms out.
+13. GET-UP A — pushing up from the floor onto one knee and one hand.
+14. GET-UP B — rising to standing, half-crouched, one hand still low.
+15. THROWN — hurled through the air toward the right, limp, spinning.
+16. KO — lying on the back on the floor, arms out, out cold.
