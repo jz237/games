@@ -387,3 +387,86 @@ export function createDemoDirector({ fighterIds, stageIds, trackCount = 0, seed 
 
   return Object.freeze({ next, peek, snapshot });
 }
+
+// ---------------------------------------------------------------------------
+// 5.4 FIGHT NIGHT (sweep #30, and the share half of #12): SHAREABLE
+// EXHIBITIONS. The seeded entry has always existed (qa.demo(seed)) but only
+// under the QA manual clock, and the title button and the 45 s attract timer
+// seeded from the wall clock — two WATCH DEMO presses measured 1991900429 and
+// 3442111718 (normalised), so a good exhibition on the TV could never be
+// shown twice. These helpers are the pure half of the feature: the URL
+// grammar, its parser and its builder. game.js owns the boot router and the
+// button; the sim never reads any of this.
+//
+//   ?demo=<seed>            boot straight into the seeded exhibition
+//   ?demo=<seed>&cycle=<n>  ...opening on card n of that seed (1-500)
+//   ?mode=demo              boot into a random exhibition (manifest shortcut)
+//
+// A seed is either an unsigned decimal (237) or a short slug (fight-night):
+// the director hashes String(seed), so 237 and "237" are the same show and a
+// slug is as good a seed as a number. Anything else is refused rather than
+// guessed at — a refused seed means no demo boot, never a different one.
+export const DEMO_SEED_PARAM = "demo";
+export const DEMO_CYCLE_PARAM = "cycle";
+export const DEMO_CYCLE_MAX = 500;
+const DEMO_SEED_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+// The presentation choices a link carries along: which renderer drew it, and
+// the transport rate (cadence only — it never changes a tick). Everything
+// else (debug, a mode deep-link, an online invite) is deliberately dropped.
+const DEMO_SHARE_KEEP = ["renderer", "fighters", "speed"];
+
+export function parseDemoSeed(text) {
+  if (text === null || text === undefined) return null;
+  const value = String(text).trim();
+  if (!value) return null;
+  // All digits is a NUMBER or nothing — never a slug — so 237 and "237" stay
+  // one show and a number past uint32 is refused rather than re-read as text.
+  if (/^\d+$/.test(value)) {
+    const number = Number(value);
+    return value.length <= 10 && number <= 0xffffffff ? number : null;
+  }
+  return DEMO_SEED_SLUG.test(value) ? value : null;
+}
+
+export function parseDemoCycle(text) {
+  if (text === null || text === undefined || String(text).trim() === "") return 1;
+  const number = Number(String(text).trim());
+  if (!Number.isInteger(number) || number < 1) return 1;
+  return Math.min(DEMO_CYCLE_MAX, number);
+}
+
+/**
+ * The boot request a query string asks for, or null when it asks for none.
+ * `?demo=` wins over `?mode=demo`; a `?demo=` that fails to parse is NOT a
+ * random demo — a mistyped share link should land on the title, where the
+ * viewer can see something is off, not on a different exhibition.
+ */
+export function parseDemoBootRequest(search = "") {
+  const params = new URLSearchParams(String(search ?? ""));
+  if (params.has(DEMO_SEED_PARAM)) {
+    const seed = parseDemoSeed(params.get(DEMO_SEED_PARAM));
+    if (seed === null) return null;
+    return { seed, cycle: parseDemoCycle(params.get(DEMO_CYCLE_PARAM)) };
+  }
+  if (params.get("mode") === "demo") return { seed: null, cycle: 1 };
+  return null;
+}
+
+/**
+ * The link for the exhibition on screen. Built from the page's own address so
+ * a deployed copy, a local server and a file:// open each share themselves;
+ * `cycle` is only written when it says something (card 1 is the default).
+ */
+export function buildDemoShareUrl(href, { seed, cycle = 1 } = {}) {
+  const parsed = parseDemoSeed(seed);
+  if (parsed === null) return null;
+  const url = new URL(String(href));
+  const kept = DEMO_SHARE_KEEP.map((key) => [key, url.searchParams.get(key)]).filter(([, value]) => value !== null);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set(DEMO_SEED_PARAM, String(parsed));
+  const card = parseDemoCycle(cycle);
+  if (card > 1) url.searchParams.set(DEMO_CYCLE_PARAM, String(card));
+  for (const [key, value] of kept) url.searchParams.set(key, value);
+  return url.toString();
+}

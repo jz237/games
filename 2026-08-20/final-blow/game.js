@@ -487,10 +487,12 @@ import {
   DEMO_CLOCK_COVERAGE_BLEND,
   DEMO_IDLE_DELAY_MS,
   DEMO_RESULT_HOLD_MS,
+  buildDemoShareUrl,
   createDemoDirector,
   demoCloserPlan,
   demoMatchupKey,
   demoPersonaFor,
+  parseDemoBootRequest,
 } from "./engine/demo.mjs";
 import { DEMO_COVERAGE_BLEND, createDemoChoreographer } from "./engine/demo-choreo.mjs";
 import {
@@ -2577,8 +2579,26 @@ const demoSession = {
   prewarm: null,
   lastPrewarm: null,
   pendingDirector: null,
+  pendingDirectorSeed: null,
   idlePrewarmTimer: 0,
+  // 5.4 FIGHT NIGHT (sweep #30): the RAW seed this exhibition runs on (the
+  // director only exposes its normalised hash) and where the demo was started
+  // from ("button" | "attract" | "qa" | "url"). The seed is what the COPY LINK
+  // bug writes into ?demo=, so a random button/attract show is shareable too.
+  seed: null,
+  source: null,
+  // ...and the round ledger: one entry per round the exhibition settles
+  // (cycle, round, winner, finisher type, the sim tick it happened on, both
+  // health bars and each side's coverage count at that moment). Written at
+  // finishRound on the demo path only, read by qa.demoRounds() and the
+  // seed-url pin, never by the sim — it exists so two loads of the same
+  // ?demo= link can be compared at a tick the SIM chose, not at whatever
+  // frame a probe happened to sample.
+  rounds: [],
+  shareNoteTimer: 0,
 };
+// The ledger is bounded: an unattended cabinet runs for hours.
+const DEMO_ROUND_LEDGER_MAX = 64;
 
 // v3.2 — the demo speed transport. See engine/demo-speed.mjs for why
 // this scales the TICK CADENCE and never dt. `?speed=` seeds it at boot; the
@@ -3509,6 +3529,8 @@ const modeFxDebug = {
   teamDrafts: 0,
   dailyRuns: 0,
   attractScoreBoards: 0,
+  // 5.4 #30: COPY LINK / share presses on the demo HUD bug.
+  demoLinksShared: 0,
   scoreSubmissions: 0,
   // v2.1 PROGRESSION one-shot totals, same monotonic pattern.
   blackBookToasts: 0,
@@ -4359,7 +4381,89 @@ function demoSnapshot() {
     director: demoSession.director?.snapshot() || null,
     // 5.4 (sweep #26/#27): what is warming for the next swap.
     prewarm: demoPrewarmSnapshot(),
+    // 5.4 #30: the raw seed, where the demo came from, the share link the
+    // COPY LINK bug would write, and how many rounds the ledger holds.
+    seed: demoSession.seed,
+    source: demoSession.source,
+    shareUrl: demoShareUrl(),
+    roundsSettled: demoSession.rounds.length,
   };
+}
+
+// 5.4 #30: the link for the exhibition on screen (null outside a demo).
+function demoShareUrl() {
+  if (!demoSession.active || demoSession.seed === null) return null;
+  return buildDemoShareUrl(location.href, { seed: demoSession.seed, cycle: demoSession.cycle?.cycle || 1 });
+}
+
+// 5.4 #30: the round ledger entry. Demo-only, reporting-only — the sim never
+// reads `rounds`, and the coverage counts are copied, not referenced.
+function demoLedgerRound(winner, type) {
+  if (state.mode !== "demo" || !demoSession.active || rollbackResimulating) return;
+  const coverage = demoSession.choreo ? demoSession.choreo.coverage() : {};
+  demoSession.rounds.push({
+    cycle: demoSession.cycle?.cycle || 0,
+    round: state.round,
+    winner,
+    type,
+    tick: state.simulationTick,
+    timer: Math.ceil(state.timer),
+    health: state.fighters.map((fighter) => Math.round(fighter.health * 100) / 100),
+    pair: state.fighters.map((fighter) => fighter.def.id),
+    movesShown: Object.fromEntries(Object.entries(coverage).map(([id, entry]) => [id, entry.movesShown])),
+  });
+  if (demoSession.rounds.length > DEMO_ROUND_LEDGER_MAX) demoSession.rounds.shift();
+}
+
+/**
+ * 5.4 #30: COPY LINK / share. `navigator.share` where the platform has it
+ * (a phone hands the link to any app), the clipboard everywhere else, and
+ * when neither is reachable the address itself goes into the bug so it can be
+ * read off the screen. The button lives INSIDE the demo HUD, which only
+ * exists while a demo is on screen, and the pointer guard below keeps its tap
+ * from counting as "any input" — every other press still ends the demo.
+ */
+async function shareDemoLink() {
+  const url = demoShareUrl();
+  if (!url) return;
+  modeFxDebug.demoLinksShared += 1;
+  const button = $("#demoShareButton");
+  const note = (text, holdMs = 2400) => {
+    window.clearTimeout(demoSession.shareNoteTimer);
+    button.textContent = text;
+    demoSession.shareNoteTimer = window.setTimeout(() => {
+      demoSession.shareNoteTimer = 0;
+      button.textContent = "COPY LINK";
+    }, holdMs);
+  };
+  const [first, second] = state.fighters.map((fighter) => fighter.def.name);
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({
+        title: "FINAL BLOW · WATCH DEMO",
+        text: `${first} vs ${second} — the CPU exhibition, exactly as it played.`,
+        url,
+      });
+      note("LINK SHARED");
+      return;
+    } catch {
+      // Cancelled or no target — fall back to the clipboard below.
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    note("LINK COPIED");
+  } catch {
+    // No clipboard in this context: show the address so it can be read off.
+    note(url.replace(/^https?:\/\//, ""), 9000);
+  }
+}
+
+// The one pointer that must NOT exit the demo: a press on the share bug.
+function isDemoShareTarget(event) {
+  const target = event?.target;
+  return Boolean(demoSession.active && target && typeof target.closest === "function"
+    && target.closest("#demoShareButton"));
 }
 
 function cancelFightAnnouncement() {
@@ -4416,11 +4520,17 @@ function updateDemoUi() {
   const second = roster.find(({ id }) => id === secondId);
   $("#demoHudMatchup").textContent = `${first?.name || firstId} VS ${second?.name || secondId}`;
   // 5.4: a CLOCK card says so on the chip — the viewer should know the
-  // clock is the story of this one.
+  // clock is the story of this one — and (#30) the seed rides on the bug so
+  // what the link will say is what the screen says: SEED 237 · CYCLE 3 is
+  // the exhibition's address.
   const onTheClock = demoSession.show?.format === "clock" ? " · ON THE CLOCK" : "";
-  $("#demoHudCycle").textContent = `CYCLE ${demoSession.cycle.cycle} · ${stages[demoSession.cycle.stage].name}${onTheClock}`;
+  const seedLabel = demoSession.seed === null ? "" : ` · SEED ${demoSession.seed}`;
+  $("#demoHudCycle").textContent = `CYCLE ${demoSession.cycle.cycle} · ${stages[demoSession.cycle.stage].name}${onTheClock}${seedLabel}`;
   const chip = $("#demoHudLoading");
   if (chip) chip.hidden = !(activeFight && introArtHold.active);
+  const share = $("#demoShareButton");
+  share.hidden = demoSession.seed === null;
+  if (!demoSession.shareNoteTimer) share.textContent = "COPY LINK";
 }
 
 function endDemoSession() {
@@ -4447,6 +4557,11 @@ function endDemoSession() {
   demoSession.choreo = null;
   demoSession.pairsSeen = [];
   demoSession.coverageCarry = {};
+  demoSession.seed = null;
+  demoSession.source = null;
+  demoSession.rounds = [];
+  window.clearTimeout(demoSession.shareNoteTimer);
+  demoSession.shareNoteTimer = 0;
   document.body.classList.remove("demo-active");
   $("#demoHud").hidden = true;
   $("#demoResultStatus").hidden = true;
@@ -4601,7 +4716,17 @@ function startNextDemoMatch() {
   return true;
 }
 
-function startDemo({ attract = false, qa = false, seed = null } = {}) {
+/**
+ * THE ONE DEMO ENTRY. The title button, the 45 s attract timer, qa.demo(seed)
+ * and (5.4 #30) the ?demo=<seed>[&cycle=n] boot router all come through here,
+ * which is what makes a share link honest: a URL boot is startDemo with the
+ * link's seed and card, so it replays the exact tick stream qa.demo(seed)
+ * reproduces — pinned by the demo-seed-url smoke probe (two fresh loads and
+ * the QA path settle the same rounds on the same ticks with the same coverage).
+ * `cycle` opens on card n by advancing the director through the same
+ * startNextDemoMatch loop qa.demoCycles uses; `source` is bookkeeping only.
+ */
+function startDemo({ attract = false, qa = false, seed = null, cycle = 1, source = null } = {}) {
   if (onlineSession.role) disconnectOnline(true);
   if (demoSession.active) endDemoSession();
   clearIdleDemoTimer();
@@ -4612,6 +4737,7 @@ function startDemo({ attract = false, qa = false, seed = null } = {}) {
   demoSession.active = true;
   demoSession.attract = Boolean(attract);
   demoSession.qa = Boolean(qa);
+  demoSession.source = source || (qa ? "qa" : attract ? "attract" : "button");
   // v3.2: a demo always STARTS running. The rate is deliberately kept (it is
   // what `?speed=` set, and it should survive the demo's own match loop), but
   // a pause left latched from a previous session would open the next one
@@ -4654,16 +4780,37 @@ function startDemo({ attract = false, qa = false, seed = null } = {}) {
   // 20 s; an explicit seed is the QA reproduction path and always builds
   // its own.
   const pending = seed === null ? demoSession.pendingDirector : null;
+  const pendingSeed = pending ? demoSession.pendingDirectorSeed : null;
   demoSession.pendingDirector = null;
+  demoSession.pendingDirectorSeed = null;
   if (!pending) clearDemoPrewarm(true);
+  // 5.4 #30: the raw seed is kept (the director only exposes its hash) so a
+  // random button/attract exhibition has a shareable address as well — the
+  // adopted director's own raw seed when there is one. Note what that
+  // address promises: the same CARDS and choreography plan always; the same
+  // TICKS from a cold page — which a link always is. A seed passed in
+  // rewinds the page to cold above; the random path deliberately does not
+  // (the announcer/crowd edge trackers key on matchSerial:round, and a rewind
+  // under a played page could swallow a call already booked under that key).
+  const demoSeed = seed ?? pendingSeed ?? hashSeed(Date.now(), performance.now(), state.rng.nextUint32());
   demoSession.director = pending || createDemoDirector({
     fighterIds: roster.map(({ id }) => id),
     stageIds: Object.keys(stages),
     trackCount: musicTracks.length,
-    seed: seed ?? hashSeed(Date.now(), performance.now(), state.rng.nextUint32()),
+    seed: demoSeed,
   });
+  demoSession.seed = demoSeed;
   document.body.classList.add("demo-active");
   startNextDemoMatch();
+  // 5.4 #30: `&cycle=n` opens on card n. The director is advanced through
+  // the same loop qa.demoCycles runs, so ?demo=237&cycle=3 IS
+  // qa.demo(237); qa.demoCycles(3) — same pair, stage, track, choreography
+  // seed and match serial. (A card reached this way opens with an EMPTY
+  // coverage ledger; the cards before it were skipped, not shown, so the
+  // link says "the third card of seed 237 as a cold open", which is what a
+  // second load of the same link gets too.)
+  const cards = Math.max(1, Math.min(500, Math.floor(Number(cycle) || 1)));
+  for (let card = 1; card < cards; card += 1) startNextDemoMatch();
   return demoSnapshot();
 }
 
@@ -4711,11 +4858,14 @@ function scheduleIdleDemo() {
     demoSession.idlePrewarmTimer = 0;
     if (!(state.attractEnabled || state.cabinetMode) || demoSession.active || state.screen !== "title" || document.hidden) return;
     if (!demoSession.pendingDirector) {
+      // (#30: the raw seed is kept beside it so the adopted show is shareable.)
+      const pendingSeed = hashSeed(Date.now(), performance.now(), state.rng.nextUint32());
+      demoSession.pendingDirectorSeed = pendingSeed;
       demoSession.pendingDirector = createDemoDirector({
         fighterIds: roster.map(({ id }) => id),
         stageIds: Object.keys(stages),
         trackCount: musicTracks.length,
-        seed: hashSeed(Date.now(), performance.now(), state.rng.nextUint32()),
+        seed: pendingSeed,
       });
     }
     demoPrewarmNextPair("idle", demoSession.pendingDirector);
@@ -12132,6 +12282,7 @@ function startMatch(resetSet = true) {
   // 3D match never carries a phantom pair's textures.
   if (state.mode !== "demo" && (demoSession.pendingDirector || demoSession.prewarm)) {
     demoSession.pendingDirector = null;
+    demoSession.pendingDirectorSeed = null;
     clearDemoPrewarm(true);
   }
   // v5.1 #35: hold the intro clock (offline only, capped) until both
@@ -12599,6 +12750,8 @@ function finishRound(winner, type = -1) {
   // downstream exactly as before; this is pure observation).
   demoChoreoBeat(winner, "roundEnd");
   if (type >= 0) demoChoreoBeat(winner, "finisher");
+  // 5.4 #30: the demo round ledger (demo-gated inside; reporting only).
+  demoLedgerRound(winner, type);
   const winDef = state.fighters[winner].def;
   // 5.4 FIGHT NIGHT (round-ends): the closer log, demo only, meta only. Reads
   // the loser's health and the clock BEFORE the branches below touch either.
@@ -31455,7 +31608,12 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => { keys.clear(); pressed.clear(); });
-document.addEventListener("pointerdown", () => noteUserActivity(), true);
+// 5.4 #30: a press on the demo HUD's COPY LINK bug is the one pointer that
+// must not count as "the viewer wants out" — every other press still exits.
+document.addEventListener("pointerdown", (event) => {
+  if (isDemoShareTarget(event)) return;
+  noteUserActivity();
+}, true);
 
 window.addEventListener("gamepadconnected", (event) => {
   $("#padStatus").classList.add("connected");
@@ -31825,6 +31983,13 @@ function menuPadLoop() {
 $$('[data-mode]').forEach((button) => button.addEventListener("click", () => startSelect(button.dataset.mode)));
 $("#onlineButton").addEventListener("click", openOnlineLobby);
 $("#demoButton").addEventListener("click", () => startDemo());
+// 5.4 #30: the demo HUD's share bug. `click` only — the capture-phase
+// pointerdown guard above has already let this press through.
+$("#demoShareButton").addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  shareDemoLink();
+});
 // Wave 19: THE PHILLY OPEN bracket screen.
 $("#phillyOpenButton")?.addEventListener("click", showPhillyOpen);
 $("#bracketSize4Button")?.addEventListener("click", () => { bracketSession.setupSize = 4; renderBracketSetup(true); });
@@ -33749,7 +33914,27 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     },
     demo(seed = 237) {
       startDemo({ qa: true, seed });
+    // 5.4 #30: qa.demo(seed, cycle) and the ?demo=<seed>&cycle=<n> boot router
+    // are the SAME call into startDemo — only the clock differs (manual here,
+    // wall clock from a link). See demoRounds()/demoShareUrl() below.
+    demo(seed = 237, cycle = 1) {
+      startDemo({ qa: true, seed, cycle, source: "qa" });
       return window.__finalBlowEngine.snapshot();
+    },
+    // 5.4 #30: the demo round ledger — one entry per settled round, stamped
+    // with the sim tick it settled on. Pure read (copies).
+    demoRounds() {
+      return demoSession.rounds.map((entry) => ({
+        ...entry, health: [...entry.health], pair: [...entry.pair], movesShown: { ...entry.movesShown },
+      }));
+    },
+    // 5.4 #30: the share link the COPY LINK bug would write (null outside a
+    // demo), and the boot request a query string would parse to.
+    demoShareUrl() {
+      return demoShareUrl();
+    },
+    demoBootRequest(search = location.search) {
+      return parseDemoBootRequest(search);
     },
     demoKnockout(winner = 0) {
       if (!demoSession.active || state.mode !== "demo" || state.screen !== "fight") throw new Error("Start a QA demo first");
@@ -35197,7 +35382,19 @@ if (pendingOnlineInvite) {
   // Wave 15 PWA shortcuts: ?mode=arcade|survival|daily deep-links from the
   // manifest jump list land past the title, straight into their mode.
   const bootMode = new URLSearchParams(location.search).get("mode");
-  if (bootMode === "arcade" || bootMode === "survival") {
+  // 5.4 FIGHT NIGHT #30: ?demo=<seed>[&cycle=n] (and the ?mode=demo jump-list
+  // shortcut) boots straight into the exhibition — the same startDemo call
+  // qa.demo(seed, cycle) makes, on the wall clock. It is an ATTRACT start on
+  // purpose: a link opens with no user gesture, so the attract rules for
+  // audio apply (nothing tries to unlock, nothing warns), the result hold
+  // shows the cabinet's board, and any press ends the show. A seed that
+  // fails to parse lands on the title, never on a different exhibition.
+  const bootDemo = parseDemoBootRequest(location.search);
+  if (bootDemo) {
+    showScreen("title");
+    suppressImmersivePrompt = true;
+    startDemo({ attract: true, seed: bootDemo.seed, cycle: bootDemo.cycle, source: "url" });
+  } else if (bootMode === "arcade" || bootMode === "survival") {
     showScreen("title");
     suppressImmersivePrompt = true;
     startSelect(bootMode);

@@ -730,3 +730,118 @@ dividing by zero, and a flawless one says FLAWLESS. The recap and the coach card
 are suppressed wherever the digest is not the player's own fight — demo, replay,
 tournament, online, and any flow with the CPU in seat 0, the same set the
 records fold already refuses.
+
+## Shareable exhibitions — `?demo=<seed>[&cycle=n]` (5.4 Fight Night, sweep #30 / #12)
+
+The deterministic seed path has existed since 2.9 (`qa.demo(seed)`), but only
+under the QA manual clock — `qa.demo(237)` sat at tick 0 after 1.5 s of wall
+clock — and the two ways a viewer actually starts a demo both seeded from the
+wall clock: two WATCH DEMO presses measured director seeds 1991900429 and
+3442111718, and `?demo=237` at boot was ignored (title screen, `demo.active:
+false`). When the owner saw a good exhibition on the TV there was no way to
+show it again or send it. A seed link is the cheapest highlight a
+deterministic sim can offer, so this pass wires the address, not a recording.
+
+**The grammar** (`engine/demo.mjs`, pure: `parseDemoSeed`, `parseDemoCycle`,
+`parseDemoBootRequest`, `buildDemoShareUrl`):
+
+    ?demo=<seed>            boot straight into the seeded exhibition
+    ?demo=<seed>&cycle=<n>  ...opening on card n of that seed (1-500)
+    ?mode=demo              a random exhibition (the manifest jump-list shortcut)
+
+A seed is an unsigned decimal (`237`, up to uint32) or a slug of up to 32
+`[A-Za-z0-9_-]` characters (`fight-night`). The director hashes `String(seed)`,
+so `237` and `"237"` are one show and a slug is as good a seed as a number;
+an all-digit value is judged as a number only, so a seed past uint32 is
+refused rather than re-read as text. A seed that fails to parse is **no demo,
+never a different one** — a mistyped link lands on the title, where something
+visibly went wrong, instead of on an exhibition that quietly is not the one
+that was shared.
+
+**One entry.** The boot router (next to the `?mode=` jump-list block in
+`game.js`) does exactly what `qa.demo(seed, cycle)` does — `showScreen("title")`,
+suppress the one immersive attempt (there is no gesture), then
+`startDemo({ attract: true, seed, cycle, source: "url" })`. It is an ATTRACT
+start on purpose: a link opens with no user gesture, so the attract rules for
+audio apply unchanged (nothing tries to unlock, nothing warns), the result
+hold shows the cabinet's board, and any press ends the show. `&cycle=n`
+advances the director through the same `startNextDemoMatch` loop
+`qa.demoCycles` runs, so `?demo=237&cycle=3` *is* `qa.demo(237, 3)`: same
+pair, stage, track, choreography seed and match serial (measured: both open
+ALI G vs CYRAXX on Janney Street, track 3, share link `?demo=237&cycle=3`).
+
+**The bug.** `#demoHudCycle` now names the exhibition's address — `CYCLE 1 ·
+SOMERSET SEPTA STATION · SEED 237` — and a COPY LINK button sits on the HUD
+(`#demoShareButton`). It is the one thing in the HUD that takes a pointer
+(the HUD itself passes them through) and the one press that must not read as
+"the viewer wants out": the capture-phase `pointerdown` listener consults
+`isDemoShareTarget` before `noteUserActivity`, and the click handler stops its
+own propagation. `navigator.share` where the platform has it (a phone hands
+the link to any app), the clipboard everywhere else, and when neither is
+reachable the address itself goes into the bug for nine seconds so it can be
+read off the screen. A random button/attract show is shareable too: the RAW
+seed is kept on the session (`demoSession.seed`; the director only exposes
+its hash) and the link is built from the page's own address with only the
+exhibition on it — `renderer`, `fighters` and `speed` ride along (presentation
+and cadence, never a tick), `debug`, a mode deep-link and any invite are
+dropped. Measured in headless Chrome: a real pointer on the bug leaves
+`demo.active: true` with the label flipped to LINK COPIED; the next pointer
+on the canvas exits to the title as before. The bug is 70×28 px on a 1440
+canvas and keeps a 26 px minimum on a phone.
+
+**What a link promises, and how far.** The sim is fixed-step and the demo's
+wall-clock callbacks only announce, so a real-time run replays the same ticks
+— but only *within a card*. The 5 s result hold is a wall-clock timer, and
+the QA manual flag drops on the result screen, so card 2 opens on a
+wall-clock tick. That is why the link for the card on screen carries
+`&cycle=n`: it opens that card cold, which is exactly what the next viewer
+gets. Two things follow and are documented rather than hidden. A card reached
+by `&cycle=n` opens with an EMPTY coverage ledger (the cards before it were
+skipped, not shown), so its choreography can differ from the same card
+reached by watching through — the link says "card n of seed s as a cold
+open", and two loads of it agree. And a link copied from a button-started
+demo on a page that had already played matches replays the same CARDS and
+choreography plan but not necessarily the same ticks: only an explicit seed
+rewinds `matchSerial`/rng/tick to cold, and the random path deliberately does
+not (the announcer/crowd edge trackers key on `matchSerial:round`, and a
+rewind under a played page could swallow a call already booked under that
+key). A URL boot is always a cold page, so a link always replays exactly.
+
+**The round ledger.** Comparing two runs "at the same moment" needs a moment
+the SIM chose, not whatever frame a probe sampled, so `finishRound` books one
+entry per settled round on the demo path only (`demoLedgerRound`: cycle,
+round, winner, finisher type, the tick it settled on, both health bars, each
+side's coverage count; bounded to 64, cleared with the session, read by
+`qa.demoRounds()` and never by the sim). The pin (`tests/browser-smoke.mjs`,
+probe `demo-seed-url`): two fresh loads of `?demo=237` and the QA entry, each
+parked by the transport pause and stepped to tick 6000, must agree on the
+ledger, the live coverage ledger and both fighters' state. Measured, all
+three identical:
+
+    seed 237 · card 1 · POST vs ALI G · Somerset
+    round 1  POST   Final Blow A  tick  974  health 82.49 / 0      shown post 9  ali 4
+    round 2  ALI G  Final Blow A  tick 2675  health 0 / 43.39      shown post 18 ali 15
+    round 3  POST   Final Blow A  tick 4287  health 63.44 / 0      shown post 22 ali 23
+    coverage at tick 6000: post 22 / 30, ali 23 / 30
+
+The same three rounds settled on the same ticks with the same bars and
+counts in two loads left entirely to the wall clock (129 s each, no stepping,
+`&speed=1`, 129 s and 109 s of real time). In that pair card 2's first round
+(DEVIL vs DEATHBLOW) also settled on tick 6346 in both loads with the same
+bars — reported, not pinned: the card boundary is the 5 s wall-clock hold,
+so that agreement is the frame landing the same way twice, not a promise the
+probe makes. The promise is per card, and `&cycle=n` is how a link names one.
+
+**Verification.** `node --test tests/demo-share.test.mjs` (10 tests: the
+grammar's accept/refuse table, `237 == "237"` through the director, the
+cycle cap matching `qa.demoCycles`, the boot-request precedence, the share
+link round-tripping through the parser and dropping what it must, and the
+`game.js` wiring pinned from source — the one-entry property, the router
+sitting behind the online-invite branches, the raw seed on the session, the
+demo gating of every new site, the pointer guard ordering, the HUD text, the
+manifest shortcut). `node tests/browser-smoke.mjs --only=demo-seed-url` is
+the tick-for-tick pin above. The played-match proof is the gating: the ledger
+has one call site behind `state.mode !== "demo"`, the bug only exists inside a
+HUD that only exists during a demo, and the router fires only on a parsed
+request — a boot without `?demo=`/`?mode=demo` takes the branch it always
+took.

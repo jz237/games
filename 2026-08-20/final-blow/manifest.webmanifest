@@ -69,6 +69,13 @@
       "description": "Today's seeded challenge run",
       "url": "./?mode=daily",
       "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Watch Demo",
+      "short_name": "Demo",
+      "description": "Sit back: CPU vs CPU exhibitions until you press a button",
+      "url": "./?mode=demo",
+      "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ],
   "background_color": "#030407",

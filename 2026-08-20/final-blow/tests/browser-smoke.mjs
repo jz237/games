@@ -377,7 +377,9 @@ let targetResponse, target, runtimeErrors, failedResponses, voiceProbe404s, isVo
   // 5.3 VERIFICATION HARNESS probes.
   ambientQuiet, ambientKo, ambientDelta, ambientStages, crowdKoHold, tempoWhiff, tempoRearm, tempoDrop,
   timerGuard, announcerDecision, poseChains, cinemaBoot, cinemaHost, cinemaFight, cinemaWeapon, cinemaProjectile,
-  cinemaShot;
+  cinemaShot,
+  // 5.4 FIGHT NIGHT #30: the shareable-exhibition pin.
+  demoSeedUrl;
 // ---------------------------------------------------------------------------
 // The probe registry. Every body below is the 5.2 sequential script, verbatim,
 // wrapped in a named probe so one section can be run on its own (--only), left
@@ -3854,6 +3856,130 @@ probe('demo-mode', async () => {
     assert.equal(await evaluate(client, `document.body.classList.contains('demo-active')`), false);
 });
 
+// 5.4 FIGHT NIGHT (sweep #30): SHAREABLE EXHIBITIONS. ?demo=<seed>[&cycle=n]
+// boots the seeded exhibition on the wall clock through the SAME startDemo
+// call qa.demo(seed, cycle) makes. The pin: two fresh loads of the link and
+// the QA path, each parked by the transport pause and stepped to one sim
+// tick, must agree on the settled rounds (winner, finisher, the tick each
+// round ended on, both health bars, each side's coverage count), on the live
+// coverage ledger and on both fighters' state. The card boundary is NOT
+// pinned — the 5 s result hold is a wall-clock timer, so card 2 opens on a
+// wall-clock tick (measured: same rounds, ticks offset by the hold jitter).
+probe('demo-seed-url', async () => {
+    const TARGET_TICK = 6000; // 100 s of sim: seed 237 card 1 settles 3 rounds by ~4300
+    const capture = `(() => {
+      const snapshot = window.__finalBlowEngine.snapshot();
+      const coverage = window.__finalBlowQa.demoCoverage();
+      return {
+        tick: snapshot.tick, screen: snapshot.screen, mode: snapshot.mode, rounds: snapshot.rounds,
+        demo: { seed: snapshot.demo.seed, source: snapshot.demo.source, attract: snapshot.demo.attract, qa: snapshot.demo.qa, cycle: snapshot.demo.cycle.cycle, picks: snapshot.demo.cycle.picks, stage: snapshot.demo.cycle.stage, shareUrl: snapshot.demo.shareUrl },
+        fighters: snapshot.fighters.map((fighter) => ({ id: fighter.id, x: fighter.x, health: fighter.health, move: fighter.move })),
+        perFighter: Object.fromEntries(Object.entries(coverage.perFighter).map(([id, entry]) => [id, { movesShown: entry.movesShown, moves: entry.moves, beats: entry.beats }])),
+        stats: coverage.stats,
+        ledger: window.__finalBlowQa.demoRounds(),
+        hud: { hidden: document.querySelector('#demoHud').hidden, cycleText: document.querySelector('#demoHudCycle').textContent, shareHidden: document.querySelector('#demoShareButton').hidden },
+      };
+    })()`;
+    const park = `(() => { window.__finalBlowQa.demoPause(true); return window.__finalBlowEngine.snapshot().tick; })()`;
+    const stepTo = async (tick) => {
+      const now = await evaluate(client, park);
+      assert.ok(now <= TARGET_TICK, `the demo must still be inside card 1 when parked, got tick ${now}`);
+      await evaluate(client, `window.__finalBlowQa.step(${(tick - now) / 60})`);
+      return evaluate(client, capture);
+    };
+    const strip = ({ demo, hud, ...rest }) => rest;
+
+    // Load A: the link, on the wall clock (attract rules: no gesture, no unlock).
+    await navigate(client, `${gameUrl}&demo=237`);
+    const opened = await evaluate(client, `(() => { const s = window.__finalBlowEngine.snapshot(); return { screen: s.screen, mode: s.mode, active: s.demo.active, attract: s.demo.attract, qa: s.demo.qa, seed: s.demo.seed, source: s.demo.source, wallClock: window.__finalBlowQa.demoSpeed().active, lastSound: s.audio.lastEvent, hudHidden: document.querySelector('#demoHud').hidden, shareHidden: document.querySelector('#demoShareButton').hidden, cycleText: document.querySelector('#demoHudCycle').textContent }; })()`);
+    assert.equal(opened.screen, 'fight');
+    assert.equal(opened.mode, 'demo');
+    assert.equal(opened.active, true);
+    assert.equal(opened.attract, true, 'a link boot is an attract start (no gesture, attract audio rules)');
+    assert.equal(opened.qa, false, 'a link boot runs on the wall clock, never the manual clock');
+    assert.equal(opened.wallClock, true, 'the transport drives the clock on a link boot (manual mode is off)');
+    assert.equal(opened.seed, 237);
+    assert.equal(opened.source, 'url');
+    assert.equal(opened.lastSound, null, 'no gesture, so the attract audio rules must have let nothing play');
+    assert.equal(opened.hudHidden, false);
+    assert.equal(opened.shareHidden, false, 'the COPY LINK bug must be on the HUD');
+    assert.match(opened.cycleText, /^CYCLE 1 · .+ · SEED 237$/);
+    const loadA = await stepTo(TARGET_TICK);
+    assert.equal(loadA.tick, TARGET_TICK);
+    assert.equal(loadA.ledger.length, 3, 'seed 237 card 1 settles three rounds inside 100 s');
+    assert.ok(loadA.ledger.every((entry) => entry.cycle === 1));
+    assert.equal(loadA.demo.shareUrl, `${gameUrl.replace('?debug=1', '')}?demo=237`, 'the link drops ?debug and carries the seed');
+
+    // Load B: the same link, a fresh page.
+    await navigate(client, `${gameUrl}&demo=237`);
+    const loadB = await stepTo(TARGET_TICK);
+    assert.deepEqual(strip(loadB), strip(loadA), 'two loads of the same ?demo= link must match tick for tick');
+
+    // Load C: the QA entry, same seed, manual clock — same startDemo call.
+    await navigate(client, gameUrl);
+    await evaluate(client, `window.__finalBlowQa.demo(237)`);
+    const loadC = await stepTo(TARGET_TICK);
+    assert.equal(loadC.demo.qa, true);
+    assert.equal(loadC.demo.source, 'qa');
+    assert.deepEqual(strip(loadC), strip(loadA), 'the link path and qa.demo(seed) must match tick for tick');
+
+    // &cycle=n opens card n exactly as qa.demo(seed, n) does.
+    await navigate(client, `${gameUrl}&demo=237&cycle=3`);
+    const cardUrl = await evaluate(client, `(() => { const s = window.__finalBlowEngine.snapshot(); return { cycle: s.demo.cycle, shareUrl: s.demo.shareUrl, matches: s.demo.matches, cycleText: document.querySelector('#demoHudCycle').textContent }; })()`);
+    await navigate(client, gameUrl);
+    const cardQa = await evaluate(client, `(() => { window.__finalBlowQa.demo(237, 3); const s = window.__finalBlowEngine.snapshot(); return { cycle: s.demo.cycle, shareUrl: s.demo.shareUrl, matches: s.demo.matches }; })()`);
+    assert.equal(cardUrl.cycle.cycle, 3);
+    assert.equal(cardUrl.matches, 3);
+    assert.deepEqual(cardUrl.cycle, cardQa.cycle);
+    assert.equal(cardUrl.shareUrl, cardQa.shareUrl);
+    assert.match(cardUrl.shareUrl, /\?demo=237&cycle=3$/);
+    assert.match(cardUrl.cycleText, /^CYCLE 3 · /);
+
+    // The share bug: a real pointer on it must NOT end the demo; one anywhere
+    // else still must. (Clipboard is available in headless; the label flips.)
+    await navigate(client, `${gameUrl}&demo=237`);
+    const bug = await evaluate(client, `(() => { const r = document.querySelector('#demoShareButton').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height }; })()`);
+    assert.ok(bug.height >= 28 && bug.width >= 40, `the bug must be a real target, got ${bug.width}x${bug.height}`);
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await client.send('Input.dispatchMouseEvent', { type, x: bug.x, y: bug.y, button: 'left', clickCount: 1 });
+    }
+    await delay(250);
+    const afterShare = await evaluate(client, `(() => { const s = window.__finalBlowEngine.snapshot(); return { active: s.demo.active, screen: s.screen, label: document.querySelector('#demoShareButton').textContent, presses: window.__finalBlowEngine.snapshot().meta?.fx?.demoLinksShared ?? null }; })()`);
+    assert.equal(afterShare.active, true, 'a press on COPY LINK must not exit the demo');
+    assert.equal(afterShare.screen, 'fight');
+    assert.match(afterShare.label, /LINK COPIED|LINK SHARED|\//, 'the bug must acknowledge the press');
+    if (afterShare.presses !== null) assert.equal(afterShare.presses, 1, 'one press, one share counted');
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await client.send('Input.dispatchMouseEvent', { type, x: 700, y: 450, button: 'left', clickCount: 1 });
+    }
+    await delay(150);
+    const afterCanvas = await evaluate(client, `(() => { const s = window.__finalBlowEngine.snapshot(); return { active: s.demo.active, screen: s.screen }; })()`);
+    assert.equal(afterCanvas.active, false, 'any other press must still end the demo');
+    assert.equal(afterCanvas.screen, 'title');
+
+    // A seed that fails to parse is NO demo, never a different one; ?mode=demo
+    // is the jump-list shortcut (random seed, still shareable).
+    await navigate(client, `${gameUrl}&demo=..%2Fetc`);
+    const refused = await evaluate(client, `(() => { const s = window.__finalBlowEngine.snapshot(); return { screen: s.screen, active: s.demo.active }; })()`);
+    assert.deepEqual(refused, { screen: 'title', active: false });
+    await navigate(client, `${gameUrl}&mode=demo`);
+    const shortcut = await evaluate(client, `(() => { const s = window.__finalBlowEngine.snapshot(); return { screen: s.screen, active: s.demo.active, attract: s.demo.attract, seedType: typeof s.demo.seed, shareUrl: s.demo.shareUrl }; })()`);
+    assert.equal(shortcut.active, true);
+    assert.equal(shortcut.attract, true);
+    assert.equal(shortcut.seedType, 'number');
+    assert.match(shortcut.shareUrl, /\?demo=\d+$/);
+
+    demoSeedUrl = {
+      parkedAt: opened.cycleText,
+      ledger: loadA.ledger.map(({ cycle, round, winner, type, tick, health, movesShown }) => ({ cycle, round, winner, type, tick, health, movesShown })),
+      coverageAtTarget: Object.fromEntries(Object.entries(loadA.perFighter).map(([id, entry]) => [id, entry.movesShown])),
+      shareUrl: loadA.demo.shareUrl,
+      bug: { width: bug.width, height: bug.height, label: afterShare.label },
+    };
+    // Leave the page where the probes before this one left it: a clean boot.
+    await navigate(client, gameUrl);
+});
+
 probe('offline-cache', async () => {
     offlineCache = await evaluate(client, `(async () => {
       await navigator.serviceWorker.ready;
@@ -4718,6 +4844,8 @@ try {
         bothBrainsActive: [demoThinking.fighters[0].ai.decisions, demoThinking.fighters[1].ai.decisions],
         finalBlowElapsed: demoFinalBlow.status.elapsed,
         mobileHud: mobileDemo.hud,
+        // 5.4 #30: the seed-url pin's settled rounds and coverage.
+        seedUrl: demoSeedUrl ?? null,
       },
       mobile: {
         ...landscape,

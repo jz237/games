@@ -1077,6 +1077,29 @@ kbd,
 .demo-hud i { color: var(--amber); font-style: normal; animation: demo-prompt .55s ease-in-out infinite alternate; }
 .demo-hud i[hidden] { display: none !important; }
 @keyframes demo-prompt { to { opacity: .5; } }
+/* 5.4 #30: the COPY LINK bug. The HUD itself passes pointers through (the
+   fight underneath is the show); the bug is the one thing in it that takes a
+   press, and the capture-phase guard in game.js keeps that press from ending
+   the demo. Sized to be a real target on a phone (min 28px) without becoming
+   the loudest thing on a TV. */
+.demo-hud .demo-share {
+  min-height: 28px;
+  margin: -4px -4px -4px 2px;
+  padding: 4px 9px;
+  border: 1px solid rgba(78,221,245,.7);
+  border-radius: 3px;
+  background: rgba(78,221,245,.12);
+  color: var(--cyan);
+  font: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.demo-hud .demo-share:hover,
+.demo-hud .demo-share:focus-visible { background: rgba(78,221,245,.28); color: #fff; outline: none; }
+.demo-hud .demo-share[hidden] { display: none !important; }
 
 .online-interruption {
   position: absolute;
@@ -2292,6 +2315,7 @@ body:has(#app:fullscreen) {
   .online-back { margin-top: 5px; font-size: 7px; }
   .demo-hud { top: 16%; gap: 5px; padding: 3px 6px; font-size: 6px; }
   .demo-hud small { display: none; }
+  .demo-hud .demo-share { min-height: 26px; margin: -3px -3px -3px 1px; padding: 3px 7px; font-size: 7px; }
   .roster-grid { gap: 5px; margin: 9px 0; }
   .fighter-info { padding: 5px 6px; }
   .fighter-info small { display: none; }
