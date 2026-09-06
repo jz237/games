@@ -324,8 +324,12 @@ test("game.js gates the persona pick and the Grit policy on the demo", async () 
   // The scoping is the part that must never regress: the persona lookup runs
   // only for state.mode === "demo", and the demo snapshot reports the seats.
   const source = await readFile(new URL("../game.js", import.meta.url), "utf8");
-  assert.ok(source.includes('createAiBrain(state.mode === "demo" ? demoPersonaFor(kitId) : state.aiDifficulty)'),
-    "makeFighter must pick the persona only in demo mode");
+  // (5.4 integration: the pick runs through demoAiTier(kitId), which hands a
+  // clock card the CLOCK brain and every standard card the persona.)
+  assert.ok(source.includes('createAiBrain(state.mode === "demo" ? demoAiTier(kitId) : state.aiDifficulty)'),
+    "makeFighter must pick the demo tier only in demo mode");
+  assert.ok(source.includes("return clock ? DEMO_CLOCK_AI_DIFFICULTY : demoPersonaFor(kitId);"),
+    "a standard card's seat plays its persona");
   assert.equal(source.match(/demoPersonaFor\(/g).length, 1, "demoPersonaFor has exactly one call site");
   assert.ok(source.includes("personas: (state.fighters || []).map((fighter) => fighter.aiBrain?.difficulty || null)"),
     "demoSnapshot must report the persona per seat");

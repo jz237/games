@@ -222,7 +222,9 @@ test("the clock tier is registered on top of the demo tier: swings cut, no back-
     assert.equal(settings.spaceJumpShare, undefined, `${id} carries no space-jump knob`);
   }
   assert.equal(DEMO_CLOCK_COVERAGE_BLEND, 0, "the choreographer stands down on a clock card");
-  assert.equal(DEMO_COVERAGE_BLEND, 0.8, "the standard card's share is untouched");
+  // (0.8 at 5.3; the personas item lowered the standard card's share to 0.55
+  // and pins the bound in tests/demo-coverage.test.mjs.)
+  assert.equal(DEMO_COVERAGE_BLEND, 0.55, "the standard card's share is the personas item's");
 });
 
 test("swing 1 is the authored kit table bit for bit; swing 0.3 swings less and never more", () => {
@@ -277,8 +279,11 @@ test("game.js reaches the closer, the opener, the clock brain and the clock only
   assert.match(game, /if \(state\.mode === "demo" && state\.phase === "fight" && !demoSession\.openerShown\) \{\s*const scripted = demoOpenerInput\(fighter, opponent, input\);/);
   assert.equal((game.match(/demoOpenerInput\(/g) || []).length, 2);
   // makeFighter: the tier pick.
-  assert.match(game, /aiBrain: createAiBrain\(state\.mode === "demo" \? demoAiTier\(\) : state\.aiDifficulty\),/);
-  assert.equal((game.match(/demoAiTier\(\)/g) || []).length, 2);
+  // (5.4 integration: demoAiTier takes the kit id — a standard card hands each
+  // seat its archetype persona, a clock card the CLOCK brain.)
+  assert.match(game, /aiBrain: createAiBrain\(state\.mode === "demo" \? demoAiTier\(kitId\) : state\.aiDifficulty\),/);
+  assert.equal((game.match(/demoAiTier\(kitId\)/g) || []).length, 2);
+  assert.match(game, /return clock \? DEMO_CLOCK_AI_DIFFICULTY : demoPersonaFor\(kitId\);/);
   // The clock: 99 everywhere, the card's length only for the clock brain in a demo.
   assert.match(game, /function roundClockSeconds\(\) \{\s*if \(state\.mode === "demo" && demoSession\.fightersTier === DEMO_CLOCK_AI_DIFFICULTY\) return DEMO_CLOCK_ROUND_SECONDS;\s*return 99;/);
   assert.equal((game.match(/state\.timer = roundClockSeconds\(\);/g) || []).length, 2, "startMatch and resetRound");
