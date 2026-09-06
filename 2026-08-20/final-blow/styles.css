@@ -1063,7 +1063,7 @@ kbd,
   bottom: 3.4%;
   display: grid;
   grid-template-columns: auto auto;
-  grid-template-areas: "show speed" "matchup matchup" "story story" "cycle prompt" "actions actions";
+  grid-template-areas: "show speed" "matchup matchup" "story story" "line line" "room room" "cycle prompt" "actions actions";
   gap: 2px 12px;
   align-items: center;
   justify-content: start;
@@ -1190,6 +1190,52 @@ body.reduced-motion.demo-active.demo-idle .hud { animation: none; }
 }
 .demo-hud-sound:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .demo-hud-sound[hidden] { display: none !important; }
+/* 5.4 FIGHT NIGHT (sweep #12): THE LOWER THIRD. One line under the matchup
+   that names what just happened (engine/demo-commentary.mjs, written by
+   syncDemoLowerThird only when the line changes), the loudest type in the
+   bug on purpose — 1.95em of the bug's base is ~22 px at 1440x900, the size
+   the sweep asked for so a super reads from the couch — bordered in the
+   fighter's own accent (--line-accent) and amber for the big three (super,
+   comeback, Final Blow). Under it the ROOM read: whom the painted crowd is
+   backing this round and by how many. Both rows collapse when hidden, so
+   the bug measures exactly what it did between calls. */
+.demo-hud .demo-hud-line {
+  grid-area: line;
+  display: block;
+  margin: 3px 0 1px;
+  padding: 3px 12px 3px 9px;
+  border-left: 3px solid var(--line-accent, var(--amber));
+  background: linear-gradient(90deg, rgba(255,255,255,.09), rgba(255,255,255,.02));
+  color: #fff;
+  font-family: Impact, "Arial Narrow", sans-serif;
+  font-size: 1.95em;
+  font-weight: 400;
+  letter-spacing: .06em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+.demo-hud .demo-hud-line.in { animation: demo-line-in .34s cubic-bezier(.2,.9,.3,1) both; }
+.demo-hud .demo-hud-line[hidden] { display: none !important; }
+.demo-hud .demo-hud-line[data-kind="super"],
+.demo-hud .demo-hud-line[data-kind="comeback"],
+.demo-hud .demo-hud-line[data-kind="finisher"] { color: var(--amber); }
+.demo-hud .demo-hud-line[data-kind="round-start"] { color: var(--cyan); }
+.demo-hud .demo-hud-room {
+  grid-area: room;
+  color: var(--cyan);
+  font-size: .95em;
+  font-style: normal;
+  letter-spacing: .13em;
+}
+.demo-hud .demo-hud-room[hidden] { display: none !important; }
+@keyframes demo-line-in {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: none; }
+}
+/* A live line lifts the screensaver dim (the tuck itself stays): the bug is
+   quiet chrome until it has something to say, and then it is the content. */
+body.demo-active.demo-idle .demo-hud.calling { opacity: 1; }
+body.reduced-motion .demo-hud .demo-hud-line.in { animation: none; }
 @keyframes demo-sound-pulse { to { background: rgba(255,177,27,.42); box-shadow: 0 0 10px rgba(255,177,27,.55); } }
 
 .online-interruption {
@@ -2413,6 +2459,8 @@ body:has(#app:fullscreen) {
   .demo-hud .demo-share { min-height: 26px; margin: 0; padding: 3px 7px; font-size: 1em; }
   /* 5.4: the sound chip stays — touch is exactly where TAP FOR SOUND matters. */
   .demo-hud-sound { font-size: 1.6em; padding: 5px 9px; }
+  /* 5.4 #12: the lower third keeps its lead on a phone (13.5 px of a 7.5 px base). */
+  .demo-hud .demo-hud-line { font-size: 1.8em; padding: 2px 8px 2px 6px; }
   .roster-grid { gap: 5px; margin: 9px 0; }
   .fighter-info { padding: 5px 6px; }
   .fighter-info small { display: none; }

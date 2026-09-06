@@ -1652,3 +1652,108 @@ the game.js / camera.mjs source pins); `node tests/browser-smoke.mjs
 synthetic KO, reads the live shot, the beat, the push-in and the bars, replays
 the seed for the same shots at the same ticks, then proves a played match
 draws nothing).
+
+## The lower third — what just happened, and whom the room wants (5.4 Fight Night, sweep #12 / the text half of #21)
+
+**Why.** The sweep counted 22 announcer calls and 53 crowd swells in a 175 s
+attract run and nothing readable on the screen: the centre letter-slam lives
+0.55-2.4 s, the attack-name popups are 9 px, and a muted TV — the common case
+for an attract loop — has no voice at all. The crowd has taken sides since 5.3
+(`createCrowd` deals a favourite per painted person from a per-round house
+lean of 34-66%) and the HUD never said whom the room was backing. Reproduced
+here on `qa.demo(237)` under the QA clock: 175 s of stepping books 17
+announcer calls and 17 crowd swells (one card — the result hold is a
+wall-clock timer, so the QA clock plays one exhibition) and zero lines of
+text a spectator could read; `#demoHudLine` and `#demoHudRoom` did not exist.
+
+**What.** `engine/demo-commentary.mjs` is an EVENT BUS plus a TEXT LINE. The
+demo's sim call sites feed sixteen kinds through one gate in game.js —
+`demoCommentaryEmit` (super, EX, counter hit, throw, tech, weapon pickup and
+committed throw, wall bounce, perfect guard, guard crush), `demoCommentaryHit`
+(FIRST BLOOD once per round, then the counter), `demoCommentaryObserve` (the
+per-tick health observer: CLUTCH the first tick a standing side is at or
+under `DEMO_CLUTCH_HEALTH` 20, COMEBACK the first tick a side that was in the
+clutch AND `DEMO_COMEBACK_DEFICIT` 25 behind while there holds the lead),
+`demoCommentaryRoundStart` (the bell: the round's latches reset and the room
+read is taken from the painted crowd's favourites) and
+`demoCommentaryRoundEnd` (finishRound: the round line with the score, the
+Final Blow with the score, or — for a winner who was in the clutch a real
+deficit down and never led before the KO — the comeback). Every kind has four
+or five authored all-caps variants drawn through `drawFromBag` (the
+announcer/crowd/stinger contract: every variant before a repeat, never the
+same line back to back across a bag border) from a bus-private
+`DeterministicRng` seeded `hashSeed(directorSeed, "commentary", cycle)` —
+its own lane beside the choreographer's, so a `?demo=` link replays the same
+lines on the same ticks. A hold/priority policy (`DEMO_COMMENTARY_POLICY`,
+2-5 s holds; a fresh higher line is protected for 45 ticks against a lesser
+one, which is counted as dropped and never shown) keeps it a lower third
+rather than a ticker. The bell's room read is priority 1 on purpose: first
+contact lands 0.3-1.5 s after the bell (sweep #5) and the first draft
+swallowed FIRST BLOOD behind it. The deficit rule is also measured: without
+it a two-round card on seed 237 called FOUR comebacks as two fighters under
+20 traded the lead; with it, one (`POST FROM 19%`, round 2).
+
+Text only, on purpose — voiced colour commentary is a later, owner-approved
+item (new voice lines need his sign-off). The seam is there: every accepted
+event is published to `bus.subscribe(listener)` frozen, with `cue:
+"demo-<kind>"`, `side`, `line`, `variant` and the tokens, so a voice bank
+subscribes without touching a call site (`stats().subscribers` reports how
+many are listening; the shipped page has none).
+
+**On the bug.** Two grid rows inside `#demoHud` (`"line line"` under the
+matchup, `"room room"` under it — no second panel): `#demoHudLine`, Impact at
+1.95em of the bug's base, measured 21.9 px at 1440x900 (the matchup is 19.7),
+bordered in the fighter's own accent (`--line-accent`) and amber for the big
+three (super, comeback, Final Blow), cyan for the room read; `#demoHudRoom`,
+`THE ROOM BACKS POST · 5-3` / `THE ROOM IS SPLIT · 4-4` / `NO CROWD ON THIS
+STREET` (Janney has no painted people). `syncDemoLowerThird` runs once per
+rendered frame behind `demoSession.active` and writes the DOM only when the
+shown line's id changes; it reads the bus's clock — the sim tick — so a line
+freezes with the hidden-tab hold or PAUSED and scales with the transport
+rate. Both rows collapse when hidden: with the room row up the bug measures
+488x96 px and its top sits at 84% of the frame (the smoke's 78% floor), 95
+px with the line hidden. A live line lifts the screensaver dim
+(`.demo-hud.calling { opacity: 1 }`) while the tuck itself is unchanged — the
+bug is quiet chrome until it has something to say. Reduced motion kills the
+slide-in.
+
+**Measured** (`qa.demo(237)`, 175 s of the QA clock in 2.5 s steps, headless
+1440x900): 31 lines emitted, 3 dropped by the policy, 13 of the 16 kinds in
+one two-round card (first-hit 2, super 1, EX 7, counter 7, throw 1, weapon
+pickup 1 and throw 1, wall bounce 2, perfect guard 1, clutch 4, comeback 1,
+finisher 2, round-start 1; no tech, guard crush or plain round line on this
+seed), 14 distinct lines caught at the 2.5 s sampling cadence — `THE ROOM IS
+BEHIND POST · 5-3`, `COUNTER HIT · POST`, `FULL GRIT SUPER · POST`, `ALI G
+READ THAT ONE`, `ALI G ON THE BRINK · 17%`, `POST ENDS IT · 1-0`, `ALI G LANDS
+THE OPENER`, `ALI G PUTS POST INTO THE WALL`, `POST EATS THE CORNER`, `EX PAINT
+THE TOWN · POST`, `COMEBACK · POST FROM 19%`, `THAT IS THE FINAL BLOW · POST ·
+2-0`. (A kit's EX move is often named "… EX" already; the call site strips the
+word and the line puts it back once — the first trace read `EX PAINT THE TOWN
+EX`.) The screenshots at the super and at the comeback are in the item's
+scratch (`lower-third-super.png`, `lower-third-comeback.png`).
+
+**A played match is byte-identical.** The gate is pinned from source
+(`tests/demo-commentary.test.mjs`: every helper asks `demoCommentaryLive()`
+first, one creation site in `startNextDemoMatch`, the render sync behind the
+session, no `state.` writes in the block) and traced: the seeded demo,
+`qa.demo(237)` + 30 s, checksums `e62a3763` at tick 1800 before and after —
+the bus is live on that run, so the sim paths it observes (hit, beginAttack,
+the guard crush, the wall bounce, techThrow, the weapon, finishRound, the
+step) are proven not to move a byte; the played CPU match,
+`aiFight('deathblow','jez','pro')` + 20 s, checksums `0795b4ea` at tick 1300
+and `ae3e4ad2` at tick 1302 on both trees (the title screen ticks the clock,
+so a sample's origin drifts with load time — only same-tick samples compare,
+and every same-tick pair agreed), and with the origin pinned (`qa.step` to
+tick 130 before `aiFight`) `17c742d5` at tick 1330, twice on each tree.
+`#demoHud` stays hidden and the line row is never painted outside a demo.
+
+Verification: `node --test tests/demo-commentary.test.mjs` (the kinds, the
+banks, the bag rule per kind over 25 refills, seed replay, hold/priority, the
+observer's clutch/comeback/deficit, the round line, the allegiance read, the
+source gates, the DOM/CSS); `qa.demoCommentary()` in the browser (the line on
+screen by the sim clock, what the DOM shows, the room read, the round's
+latches, the recent list, the tally); `node tests/browser-smoke.mjs
+--only=fighter-framing-desktop,demo-mode,demo-seed-url,demo-hud,demo-hold`
+(the bug's corner and size with the new rows, and the tick-for-tick
+determinism the seed-url probe pins — `demoSnapshot().commentary` carries the
+tally, so two loads of one link are compared on it too).

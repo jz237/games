@@ -560,6 +560,7 @@ import {
   demoVersusCard,
   demoVersusCardTimes,
 } from "./engine/demo-versus.mjs";
+import { DEMO_COMMENTARY_KINDS, createDemoCommentaryBus } from "./engine/demo-commentary.mjs";
 import {
   auditGraphicFatalities,
   getGraphicFatality,
@@ -2655,6 +2656,13 @@ const demoSession = {
   // session has featured (bounded by the director's matchup count).
   choreo: null,
   pairsSeen: [],
+  // 5.4 FIGHT NIGHT (sweep #12 / #21): the card's LOWER-THIRD event bus
+  // (engine/demo-commentary.mjs) — one per exhibition, seeded from the
+  // director like the choreographer — and the id of the line the DOM last
+  // showed (render-side bookkeeping for syncDemoLowerThird; -1 forces a
+  // repaint at the card swap, since a fresh bus restarts its ids at 1).
+  commentary: null,
+  lowerThirdShown: -1,
   // v2.9 FLOW: the CUMULATIVE attract ledger — fighterId -> { moveId: count }
   // across the exhibitions this session has already run. A single three-round
   // match cannot honestly demonstrate 30 moves per side every time, so a
@@ -4565,6 +4573,9 @@ function demoSnapshot() {
       cursorIdle: demoPresence.cursorIdle,
       hudIdle: demoPresence.hudIdle,
     },
+    // 5.4 #12: the lower third's tally for this card (deterministic on the
+    // seed: it counts sim events, so two loads of one link agree).
+    commentary: demoSession.commentary ? demoSession.commentary.stats() : null,
   };
 }
 
@@ -5081,6 +5092,9 @@ function endDemoSession() {
   demoSession.decisionShown = false;
   demoSession.fightersTier = "";
   demoSession.choreo = null;
+  demoSession.commentary = null;
+  demoSession.lowerThirdShown = -1;
+  syncDemoLowerThird();
   demoSession.pairsSeen = [];
   demoSession.coverageCarry = {};
   demoSession.seed = null;
@@ -5268,6 +5282,14 @@ function startNextDemoMatch() {
     // 5.4 SESSION LAYER: the story's per-seat yield tolerance and showboat.
     story: demoSession.story,
   });
+  // 5.4 (sweep #12): a fresh lower-third bus per card, seeded from the same
+  // director stream (its own hash lane, so the choreographer's draws and the
+  // bags' draws never share a sequence) — the same ?demo= link shows the
+  // same lines on the same ticks. The round-start read fires at the bell.
+  demoSession.commentary = createDemoCommentaryBus({
+    seed: hashSeed(demoSession.director.snapshot().seed, "commentary", cycle.cycle),
+  });
+  demoSession.lowerThirdShown = -1;
   const pairKey = demoMatchupKey(...cycle.picks);
   if (!demoSession.pairsSeen.includes(pairKey)) demoSession.pairsSeen.push(pairKey);
   while (demoSession.pairsSeen.length > demoSession.director.snapshot().matchupCount) demoSession.pairsSeen.shift();
@@ -10384,6 +10406,8 @@ const hudFxDebug = {
   // sloMoBlurFrames counts rendered frames with the slow-mo smear active
   // (like cinemaFxDebug.handheldFrames — still monotonic, never reset).
   distortionRings: 0, sloMoBlurFrames: 0, superCutIns: 0,
+  // 5.4 #12: lower-third lines painted into #demoHudLine (render side).
+  lowerThirdLines: 0,
 };
 // Release 1.7 DEPTH: monotonic one-shot totals for the new defensive
 // mechanics, on the same hudFxDebug pattern. Each increment site sits inside
@@ -13869,6 +13893,7 @@ function trySkipFightFlow(input0 = {}, input1 = {}) {
     announce("FIGHT!", "INTRO SKIPPED", 0.55);
     updateFlowSkipHint();
     // v5.3 SPECTACLE: a skipped intro is still a round start.
+    demoCommentaryRoundStart();
     demoBell();
     playMusicStinger("roundstart", { source: `round${state.round}-skip` });
     return true;
@@ -13905,6 +13930,8 @@ function finishRound(winner, type = -1) {
   if (type >= 0) demoChoreoBeat(winner, "finisher");
   // 5.4 #30: the demo round ledger (demo-gated inside; reporting only).
   demoLedgerRound(winner, type);
+  // 5.4 #12: the lower third's round line (demo-gated inside; meta only).
+  demoCommentaryRoundEnd(winner, type);
   const winDef = state.fighters[winner].def;
   // 5.4 FIGHT NIGHT (round-ends): the closer log, demo only, meta only. Reads
   // the loser's health and the clock BEFORE the branches below touch either.
@@ -15844,6 +15871,109 @@ function demoChoreoBeat(side, beat) {
 }
 
 // ---------------------------------------------------------------------------
+// 5.4 FIGHT NIGHT (sweep #12, the text half of #21) — THE LOWER THIRD. Every
+// sim call site below feeds the card's event bus through THIS gate (demo
+// mode, a live session with a bus, never during a rollback resimulation), so
+// a played match never reaches the bus and stays byte-identical — pinned
+// from source by tests/demo-commentary.test.mjs and by the checksum trace in
+// DEMO.md. The bus is meta (never snapshotted, never read by the sim); the
+// DOM is written once per rendered frame by syncDemoLowerThird.
+// ---------------------------------------------------------------------------
+function demoCommentaryLive() {
+  return !rollbackResimulating && state.mode === "demo" && demoSession.active && Boolean(demoSession.commentary);
+}
+
+function demoCommentaryNames() {
+  return state.fighters.map((fighter) => fighter.def.name);
+}
+
+function demoCommentaryEmit(kind, side, tokens = {}) {
+  if (!demoCommentaryLive()) return null;
+  const names = demoCommentaryNames();
+  return demoSession.commentary.emit(kind, {
+    side,
+    tick: state.simulationTick,
+    tokens: { NAME: names[side] ?? "", OTHER: names[1 - side] ?? "", ...tokens },
+  });
+}
+
+// A landed hit: FIRST BLOOD once per round, COUNTER HIT when it was one.
+function demoCommentaryHit(attacker, { counter = false } = {}) {
+  if (!demoCommentaryLive()) return;
+  demoSession.commentary.noteHit({ side: attacker.side, tick: state.simulationTick, names: demoCommentaryNames() });
+  if (counter) demoCommentaryEmit("counter", attacker.side);
+}
+
+// The bell: the round's latches reset and the room's allegiance is read from
+// the painted crowd's 5.3 favourites (dealt per round in createCrowd).
+function demoCommentaryRoundStart() {
+  if (!demoCommentaryLive()) return;
+  const people = state.crowd?.people || [];
+  const favourites = [0, 1].map((side) => people.filter((person) => person.sprite?.favourite === side).length);
+  demoSession.commentary.roundStart({ tick: state.simulationTick, names: demoCommentaryNames(), favourites });
+}
+
+// The round settles (finishRound): comeback / Final Blow / the round line.
+function demoCommentaryRoundEnd(winner, type) {
+  if (!demoCommentaryLive()) return;
+  demoSession.commentary.roundEnd({
+    winner,
+    tick: state.simulationTick,
+    names: demoCommentaryNames(),
+    roundNumber: state.round,
+    rounds: [...state.rounds],
+    finisher: type >= 0,
+  });
+}
+
+// The per-tick health observer (CLUTCH at 20%, COMEBACK on the lead flip).
+function demoCommentaryObserve() {
+  if (!demoCommentaryLive() || state.fighters.length !== 2) return;
+  demoSession.commentary.observe({
+    tick: state.simulationTick,
+    phase: state.phase,
+    health: state.fighters.map((fighter) => fighter.health),
+    names: demoCommentaryNames(),
+  });
+}
+
+// Render side: the line and the room read on the broadcast bug. Touches the
+// DOM only when the shown line changes, and reads the bus's clock (the sim
+// tick) so the line freezes with a hold or a pause and scales with the
+// transport rate like everything else on the screen.
+function syncDemoLowerThird() {
+  const line = $("#demoHudLine");
+  const room = $("#demoHudRoom");
+  if (!line || !room) return;
+  const bus = demoSession.active && state.mode === "demo" ? demoSession.commentary : null;
+  const event = bus ? bus.current(state.simulationTick) : null;
+  const shownId = event ? event.id : 0;
+  if (shownId !== demoSession.lowerThirdShown) {
+    demoSession.lowerThirdShown = shownId;
+    line.hidden = !event;
+    line.textContent = event ? event.line : "";
+    line.dataset.kind = event ? event.kind : "";
+    line.dataset.side = event && event.side >= 0 ? String(event.side) : "";
+    const accent = event && event.side >= 0 ? state.fighters[event.side]?.def.accent || "" : "";
+    if (accent) line.style.setProperty("--line-accent", accent);
+    else line.style.removeProperty("--line-accent");
+    if (event) {
+      hudFxDebug.lowerThirdLines += 1;
+      restartCssAnimation(line, "in");
+    }
+    $("#demoHud").classList.toggle("calling", Boolean(event));
+  }
+  const allegiance = bus ? bus.allegiance() : null;
+  const roomText = allegiance ? allegiance.text : "";
+  if (room.textContent !== roomText) {
+    room.textContent = roomText;
+    room.hidden = !roomText;
+    room.dataset.side = allegiance && allegiance.side >= 0 ? String(allegiance.side) : "";
+    room.value = allegiance ? String(allegiance.side) : "";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 5.4 FIGHT NIGHT (round-ends) — the demo's OPENER and CLOSER. Everything in
 // this block is reached only from demo-gated call sites (aiInput's demo
 // branch, checkKnockout's demo branch, makeFighter's demo branch, finishRound's
@@ -16320,6 +16450,14 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     // Wave 7: portrait cut-in band + screen-space distortion ring, latched
     // module-level on the announce() pattern (rollback guard + tick dedupe).
     latchSuperPresentation(fighter);
+    // 5.4 #12: the lower third names the spend (demo-gated inside).
+    demoCommentaryEmit("super", fighter.side);
+  } else if (gritCost > 0) {
+    // ...and an EX (a Grit price that is not the super) names the move.
+    // (A kit's EX move is often NAMED "... EX" already — PAINT THE TOWN EX —
+    // so the word is stripped here and the line puts it back once.)
+    const moveName = fighter.attacking.moveName || prettyProfileName(fighter.attacking.profileId, fighter.kitId) || fighter.attacking.kind;
+    demoCommentaryEmit("ex", fighter.side, { MOVE: String(moveName).replace(/\s*\bEX\b\s*/gi, " ").trim() });
   }
   if (linkedFrom) spawnCombatText(fighter.x, fighter.y - fighter.height - 20, "LINK", fighter.def.accent);
   // Release 1.7A CLEAN HITS: move names remain available in the move list and
@@ -16778,6 +16916,8 @@ function enterGuardCrush(fighter, attacker) {
     // v2.1 PROGRESSION: the crusher's ledger tally (guarded, P1 seat only).
     if (attacker) progressionEvent("guardCrush", {}, attacker.side);
   }
+  // 5.4 #12: the lower third (demo-gated inside); the line belongs to the crusher.
+  demoCommentaryEmit("guard-crush", attacker ? attacker.side : 1 - fighter.side);
   spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "GUARD CRUSH", "#7de8ff");
   // Announcer letter-slam banner + its spoken bank cue (announce() carries the
   // resim guard and books the guardcrush announcer bank).
@@ -17257,6 +17397,8 @@ function performWallBounce(fighter, wallDirection) {
   );
   announcerSay("wallbounce");
   sound("hit-heavy", fighter);
+  // 5.4 #12: the lower third (demo-gated inside).
+  if (attacker) demoCommentaryEmit("wall-bounce", attacker.side);
 }
 
 const attackActionPriority = [...TOURNAMENT_ACTION_PRIORITY];
@@ -18337,6 +18479,8 @@ function throwStyle(fighter) {
 function beginGrabHold(attacker, victim, attack) {
   // v2.9 FLOW: demo coverage beat — a grab actually connected.
   demoChoreoBeat(attacker.side, "throw");
+  // 5.4 #12: the lower third (demo-gated inside).
+  demoCommentaryEmit("throw", attacker.side);
   const style = throwStyle(attacker);
   const back = Boolean(attack.backThrow);
   attacker.grabbing = {
@@ -18597,6 +18741,8 @@ function tryPickUpStageWeapon(fighter, input) {
   weapon.frames = 0;
   // v2.9 FLOW: demo coverage beat — the stage weapon actually got picked up.
   demoChoreoBeat(fighter.side, "weaponPickup");
+  // 5.4 #12: the lower third names the object (demo-gated inside).
+  demoCommentaryEmit("weapon-pickup", fighter.side, { WEAPON: profile.name });
   fighter.carriedWeapon = weapon.weaponId;
   fighter.carryFrames = 0;
   fighter.inputBuffer.consume("heavy", state.simulationTick);
@@ -18707,6 +18853,8 @@ function tryThrowStageWeapon(fighter, input) {
   });
   if (!rollbackResimulating) objectSound(profile.style);
   spawnCombatText(fighter.x, fighter.y - fighter.height - 46, committed ? profile.name : "TOSS", fighter.def.accent);
+  // 5.4 #12: the committed throw is the call; a toss is not a story.
+  if (committed) demoCommentaryEmit("weapon-throw", fighter.side, { WEAPON: profile.name });
   updateHud();
   return true;
 }
@@ -18868,6 +19016,8 @@ function techThrow(attacker, victim, { clinch = false } = {}) {
   }
   // Wave 9: tech shout from the escaping fighter (guarded + tick-deduped).
   fighterReactiveCue(victim, "tech");
+  // 5.4 #12: the lower third — the escapee's line (demo-gated inside).
+  demoCommentaryEmit("tech", victim.side);
   // v2.1 PROGRESSION: the escapee's grab-tech tally (guarded meta counter).
   if (!rollbackResimulating) {
     progressionMatch.techs[victim.side] += 1;
@@ -19066,6 +19216,8 @@ function hit(attacker, victim, attack, collision) {
   if (!blocked && !armored) {
     if (counter) demoChoreoBeat(attacker.side, "counterhit");
     if (!victim.grounded && victim.pendingKnockdown) demoChoreoBeat(attacker.side, "juggle");
+    // 5.4 #12: FIRST BLOOD / COUNTER HIT on the lower third (demo-gated inside).
+    demoCommentaryHit(attacker, { counter });
   }
   let comboResult = { hitNumber: 1, damageScale: 1 };
   if (!blocked && attack.level !== ATTACK_LEVELS.THROW) {
@@ -19276,6 +19428,8 @@ function hit(attacker, victim, attack, collision) {
       // v2.1 PROGRESSION: the defender's Perfect Guard ledger event (guarded).
       progressionEvent("perfectGuard", {}, victim.side);
     }
+    // 5.4 #12: the lower third (demo-gated inside).
+    demoCommentaryEmit("perfect-guard", victim.side);
     state.effects.push({
       kind: "shockRing", x: impact.x, y: impact.y,
       size: 78, life: 0.3, max: 0.3, color: "#63f2ff",
@@ -19764,6 +19918,8 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
       // round reaches this edge (resetRound always returns to "intro"), and
       // the skip path below fires the same cue, so ROUND 2 with the intro
       // skipped still gets its downbeat.
+      // 5.4 #12: the round's allegiance read (demo-gated inside).
+      demoCommentaryRoundStart();
       demoBell();
       playMusicStinger("roundstart", { source: `round${state.round}` });
     }
@@ -19812,6 +19968,8 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   }
   updateComboState();
   syncFighterStateMachines();
+  // 5.4 #12: the lower third's health observer (demo-gated inside, meta only).
+  demoCommentaryObserve();
 
   if (state.mode === "training") {
     let trainingHudDirty = false;
@@ -29650,6 +29808,9 @@ function draw(time) {
   drawCrtOverlay(time);
   // `time` is the RAF timestamp in ms, the same origin performance.now() uses.
   drawDemoSpeedHud(time);
+  // 5.4 #12: the lower third and the room read on the broadcast bug (DOM,
+  // demo only, written only when the shown line changes).
+  if (demoSession.active) syncDemoLowerThird();
   drawDebugOverlay();
   drawTrainingFrameMeter();
 }
@@ -35280,6 +35441,25 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     },
     exitDemo() {
       return exitDemo();
+    },
+    // 5.4 #12: the lower third — the line on screen now (by the sim clock),
+    // the bounded recent list, the per-kind tally, the room read and the
+    // round's latches. Pure reads; null outside a demo.
+    demoCommentary() {
+      if (!demoSession.active || !demoSession.commentary) return null;
+      const bus = demoSession.commentary;
+      const current = bus.current(state.simulationTick);
+      return {
+        current: current ? { ...current, tokens: { ...current.tokens } } : null,
+        shown: { text: $("#demoHudLine").textContent, hidden: $("#demoHudLine").hidden, kind: $("#demoHudLine").dataset.kind || "" },
+        room: { text: $("#demoHudRoom").textContent, hidden: $("#demoHudRoom").hidden },
+        allegiance: bus.allegiance(),
+        round: bus.round(),
+        recent: bus.recent(),
+        stats: bus.stats(),
+        kinds: [...DEMO_COMMENTARY_KINDS],
+        painted: hudFxDebug.lowerThirdLines,
+      };
     },
     // v2.9 FLOW: live read of the demo choreographer's coverage ledger —
     // per-fighter move counts, staged beats, the featured pair/stage and the
