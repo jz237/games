@@ -100,6 +100,9 @@ import {
   throwRecoveryKeys,
   baseCellDrawAdjust,
   baseCellRoles,
+  MOTION_CELL_COUNT,
+  SPECIALS_BANK,
+  SPECIALS_LEGACY_BANK,
   beatPoseAt,
   buildMotion3KeyMap,
   cellDrawAdjust,
@@ -1095,6 +1098,90 @@ function motion3KeyDrawable(fighterId, key) {
 }
 
 // ---------------------------------------------------------------------------
+// v5.3 SPECIALS — THE KIT BANK'S PER-CELL GATE.
+//
+// assets/moves/<id>-specials.webp is the sheet every special, EX, super and
+// throw release draws from, and 5.3 regenerated it in the unified generation.
+// A regeneration can miss: a cell whose ACTION drifted from the shipped
+// drawing is accept:false in assets/moves/MANIFEST.json, and the SHIPPED
+// generation is kept whole under assets/moves/legacy as that cell's fallback.
+// So the bank degrades the way every other bank in this file degrades — per
+// cell, to a real drawing of the same move, never to a base-atlas guess.
+//
+// Deliberately NOT a member of AUTHORED_BANKS: the legacy sheets exist for one
+// cell on one fighter today, and AUTHORED_BANKS is what the CINEMA 3D layer
+// walks to decide which textures to warm at idle. This gate loads a legacy
+// sheet only for a fighter whose manifest block actually rejects a cell.
+//
+// No manifest entry (the Commissioner, the boss, a fighter added later) means
+// NO GATE: his kit poses address his combat atlas and nothing here may touch
+// them. The manifest failing to load means the same thing.
+// ---------------------------------------------------------------------------
+const fighterMoveLegacyAtlases = {};
+const movesBankState = { fighters: null, requested: false };
+
+function ensureMovesManifest() {
+  if (movesBankState.requested) return;
+  movesBankState.requested = true;
+  fetch("assets/moves/MANIFEST.json")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((manifest) => {
+      const fighters = {};
+      for (const [fighterId, entry] of Object.entries(manifest?.fighters || {})) {
+        const accept = new Array(MOTION_CELL_COUNT).fill(true);
+        let rejects = 0;
+        for (const cell of entry.cells || []) {
+          if (!Number.isInteger(cell.frame) || cell.frame < 0 || cell.frame >= MOTION_CELL_COUNT) continue;
+          accept[cell.frame] = cell.accept === true;
+          if (cell.accept !== true) rejects += 1;
+        }
+        fighters[fighterId] = { accept, rejects };
+      }
+      movesBankState.fighters = fighters;
+      // Only a fighter who actually has a rejected cell pays for the fallback
+      // sheet, and he pays for it now rather than on the tick the cell is
+      // wanted (the 2.9 B3 finding: a gate that requests its own sheet always
+      // misses its first draw).
+      for (const [fighterId, entry] of Object.entries(fighters)) {
+        if (entry.rejects > 0) ensureMoveLegacyAtlas(fighterId);
+      }
+    })
+    .catch(() => { movesBankState.fighters = {}; });
+}
+
+function ensureMoveLegacyAtlas(fighterId) {
+  let atlas = fighterMoveLegacyAtlases[fighterId];
+  if (!atlas) {
+    atlas = authoredSheetImage(SPECIALS_LEGACY_BANK, `assets/moves/legacy/${fighterId}-specials.webp`);
+    fighterMoveLegacyAtlases[fighterId] = atlas;
+  }
+  return atlas;
+}
+
+/** Does the 5.3 sheet own this cell? True for any fighter the manifest omits. */
+function specialsCellDrawable(fighterId, cell) {
+  ensureMovesManifest();
+  const entry = movesBankState.fighters?.[fighterId];
+  if (!entry) return true;
+  return entry.accept[cell] !== false;
+}
+
+/**
+ * The one redirect: a rejected specials cell draws the shipped generation.
+ * Applied at the single pose-resolution choke point so drawFighter, the
+ * observers, the cast shadow and the CINEMA 3D bridge all agree. Until the
+ * legacy sheet has decoded the regenerated cell still draws — it is the same
+ * fighter in the same costume, only a drifted action, which is a better hold
+ * than a base-atlas cell.
+ */
+function specialsGenerationPose(fighterId, pose) {
+  if (!pose || pose.bank !== SPECIALS_BANK || specialsCellDrawable(fighterId, pose.frame)) return pose;
+  const atlas = ensureMoveLegacyAtlas(fighterId);
+  if (!atlas.complete || !atlas.naturalWidth) return pose;
+  return { ...pose, bank: SPECIALS_LEGACY_BANK };
+}
+
+// ---------------------------------------------------------------------------
 // v3.0 — THE UNIFIED BANK (assets/unified).
 //
 // Same lazy-sheet, manifest-gated machinery as every other bank, with ONE
@@ -1404,6 +1491,9 @@ function preloadAuthoredBanks(fighterIds) {
   ensureMotion2Manifest();
   ensureMotion3Manifest();
   ensureWalkManifest();
+  // v5.3: the kit bank's per-cell gate, and with it the fallback sheet for any
+  // fighter whose manifest block rejects a cell.
+  ensureMovesManifest();
   for (const id of ids) {
     // Counting only FIRST preloads keeps the probe meaningful: makeFighter is
     // also the rollback rebuild path, and a resimulation must not look like a
@@ -1752,6 +1842,11 @@ function altAtlasSource(fighterId, bank) {
   if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK) {
     return { image: fighterSwingAtlases[bank][fighterId], key: `${fighterId}:${bank}` };
   }
+  // v5.3: the shipped generation kept as the specials bank's per-cell
+  // fallback remaps, silhouettes and builds a 3D texture like any other sheet.
+  if (bank === SPECIALS_LEGACY_BANK) {
+    return { image: fighterMoveLegacyAtlases[fighterId], key: `${fighterId}:${SPECIALS_LEGACY_BANK}` };
+  }
   const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
   // The boss shares one sheet across banks — collapse to one cache entry.
   if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
@@ -1787,23 +1882,27 @@ function ensureAltAtlas(fighterId, bank = "base") {
 function paletteAtlas(fighterId, side, bank = "base") {
   const base = bank === "specials"
     ? fighterMoveAtlases[fighterId] || fighterAtlases[fighterId]
-    : bank === "motion"
-      ? fighterMotionAtlases[fighterId] || fighterAtlases[fighterId]
-      : bank === "motion2"
-        ? fighterMotion2Atlases[fighterId] || fighterAtlases[fighterId]
-        : bank === "motion3"
-          ? fighterMotion3Atlases[fighterId] || fighterAtlases[fighterId]
-          : bank === "walk"
-            ? fighterWalkAtlases[fighterId] || fighterAtlases[fighterId]
-            : bank === UNIFIED_BANK
-              ? fighterUnifiedAtlases[fighterId] || fighterAtlases[fighterId]
-              : bank === UNIFIED_EXT_BANK
-                ? fighterUnifiedExtAtlases[fighterId] || fighterAtlases[fighterId]
-                : bank === UNIFIED_EXT2_BANK
-                  ? fighterUnifiedExt2Atlases[fighterId] || fighterAtlases[fighterId]
-                  : bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK
-                    ? fighterSwingAtlases[bank][fighterId] || fighterAtlases[fighterId]
-                    : fighterAtlases[fighterId];
+    // v5.3: the shipped specials generation, kept as the bank's per-cell
+    // fallback; its own sheet, then the 5.3 sheet, then the combat atlas.
+    : bank === SPECIALS_LEGACY_BANK
+      ? fighterMoveLegacyAtlases[fighterId] || fighterMoveAtlases[fighterId] || fighterAtlases[fighterId]
+      : bank === "motion"
+        ? fighterMotionAtlases[fighterId] || fighterAtlases[fighterId]
+        : bank === "motion2"
+          ? fighterMotion2Atlases[fighterId] || fighterAtlases[fighterId]
+          : bank === "motion3"
+            ? fighterMotion3Atlases[fighterId] || fighterAtlases[fighterId]
+            : bank === "walk"
+              ? fighterWalkAtlases[fighterId] || fighterAtlases[fighterId]
+              : bank === UNIFIED_BANK
+                ? fighterUnifiedAtlases[fighterId] || fighterAtlases[fighterId]
+                : bank === UNIFIED_EXT_BANK
+                  ? fighterUnifiedExtAtlases[fighterId] || fighterAtlases[fighterId]
+                  : bank === UNIFIED_EXT2_BANK
+                    ? fighterUnifiedExt2Atlases[fighterId] || fighterAtlases[fighterId]
+                    : bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK
+                      ? fighterSwingAtlases[bank][fighterId] || fighterAtlases[fighterId]
+                      : fighterAtlases[fighterId];
   if (matchPalettes[side] !== 1) return base;
   return ensureAltAtlas(fighterId, bank) || base;
 }
@@ -18958,7 +19057,11 @@ function fighterAnimationPose(fighter) {
     fighter.def.id,
     { bareHanded },
   );
-  const pose = swingResolve(resolvedPose, swingContext(fighter, { roundDecided: state.phase === "finish" || state.phase === "roundover" || state.phase === "result" }), (cell, bank) => motionBankCellDrawable(fighter.def.id, cell, bank));
+  const swung = swingResolve(resolvedPose, swingContext(fighter, { roundDecided: state.phase === "finish" || state.phase === "roundover" || state.phase === "result" }), (cell, bank) => motionBankCellDrawable(fighter.def.id, cell, bank));
+  // v5.3 SPECIALS: last, because it is the only rule that reads the KIT bank —
+  // everything above resolves the authored banks and may still land on a
+  // specials cell as its terminal fallback.
+  const pose = specialsGenerationPose(fighter.def.id, swung);
   recordPoseTrace(fighter, pose);
   return pose;
 }
@@ -21471,7 +21574,37 @@ const FIGHTER_SIZE_ADJUST = Object.freeze({
 // Per-fighter correction when a pose comes from the specials move sheet, whose
 // cells frame the body slightly differently. Shared by drawFighter and the
 // cast-shadow pass so both size a specials frame identically.
+//
+// v5.3 SPECIALS: re-derived for the regenerated sheets. A specials sheet has
+// exactly ONE standing cell (the victory pose), so unlike a unified/ext sheet
+// it has no standing reference to normalise against — the scale is measured
+// against the sheet it replaces instead. The regeneration redraws the SAME 16
+// actions, so shipped drawn height / new drawn height is that sheet's scale
+// relative to the shipped one per action, and the MEDIAN over the 16 is robust
+// to the few poses whose height genuinely changed. Times the shipped adjust,
+// every special keeps the world size it ships at today on the new drawing.
+// (assets/moves/MANIFEST.json `sheetAdjustFrom` records each derivation;
+// tools/swing/install_specials.py is the measurement.)
+//
+//   deathblow 1.14 x 1.0131 -> 1.155   post   1.02 x 1.0041 -> 1.024
+//   jez       1.03 x 0.9823 -> 1.012   donald 1.04 x 1.0398 -> 1.081
+//   alan      1.06 x 0.9486 -> 1.005   devil  1.04 x 0.9664 -> 1.005
+//   ali       1.04 x 0.9228 -> 0.960   benny  1.02 x 0.8453 -> 0.862
+//   cyraxx    1.05 x 0.9103 -> 0.956
+//
+// The Commissioner is UNCHANGED at 1.02: he has no specials sheet at all (his
+// kit poses address his combat atlas), so nothing about his bank moved.
 const MOVE_SHEET_ADJUST = Object.freeze({
+  deathblow: 1.155, jez: 1.012, alan: 1.005, post: 1.024, benny: 0.862,
+  donald: 1.081, cyraxx: 0.956, ali: 0.96, devil: 1.005, commissioner: 1.02,
+});
+
+// v5.3: the generation the 5.3 sheets replaced, kept whole under
+// assets/moves/legacy as the per-cell fallback (a cell whose action drifted in
+// the regeneration is accept:false in assets/moves/MANIFEST.json). It is the
+// SHIPPED art, so it keeps the SHIPPED table: a rejected cell draws exactly as
+// it does today, at the size it does today, in both renderers.
+const MOVE_SHEET_LEGACY_ADJUST = Object.freeze({
   deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02,
   donald: 1.04, cyraxx: 1.05, ali: 1.04, devil: 1.04, commissioner: 1.02,
 });
@@ -21570,6 +21703,7 @@ function downTiltFor(fighterId, bank, frame) {
 
 function bankSheetAdjust(fighterId, bank) {
   if (bank === "specials") return MOVE_SHEET_ADJUST[fighterId] || 1;
+  if (bank === SPECIALS_LEGACY_BANK) return MOVE_SHEET_LEGACY_ADJUST[fighterId] || 1;
   // v2.9 FLOW: the motion2 sheets share the motion bank's build
   // normalisation, so the Commissioner's +4.6% correction applies to both
   // authored banks from the same table (both renderers read it).
@@ -23184,21 +23318,30 @@ const severedLimbCache = new Map();
 // black glove, torn blue gi at the shoulder). HD sheet when ready (same map
 // the super close-up warms), SD atlas as fallback, null before either loads.
 // 2.7 critic round: renderer/hd holds sheets for SOME fighters only (devil
-// has none; the commissioner has no specials sheet — the authoritative list
-// is renderer/hd/MANIFEST.json, mirrored here so no code path ever REQUESTS
-// an HD sheet that does not exist: with ?renderer=3d the old unconditional
-// warm-ups 404'd on every devil bout). Absent entries skip silently and the
-// SD atlas draws, exactly like an HD sheet that never finished loading.
+// has none — the authoritative list is renderer/hd/MANIFEST.json, mirrored
+// here so no code path ever REQUESTS an HD sheet that does not exist: with
+// ?renderer=3d the old unconditional warm-ups 404'd on every devil bout).
+// Absent entries skip silently and the SD atlas draws, exactly like an HD
+// sheet that never finished loading.
+//
+// v5.3 SPECIALS: the eight renderer/hd/<id>-specials sheets are RETIRED and
+// deleted. They were 2x upscales of the base-generation specials art, and 5.3
+// redrew that art in the unified generation — so an HD swap would have put the
+// OLD generation on the 3D rig's whole specials bank and in the super-portrait
+// close-up while the 2D canvas drew the new one. The rule the wave is built on
+// is that a bank is ONE generation; a stale HD variant is the same fault with
+// an extra download. Regenerating them at 2x is a separate job (the SD sheets
+// are the masters); until then the specials bank is SD in both renderers,
+// which is what every other authored bank already does.
 const HD_SHEETS = new Set([
-  "alan", "alan-specials", "ali", "ali-specials", "benny", "benny-specials",
-  "commissioner", "cyraxx", "cyraxx-specials", "deathblow",
-  "deathblow-specials", "donald", "donald-specials", "jez", "jez-specials",
-  "post", "post-specials",
+  "alan", "ali", "benny", "commissioner", "cyraxx", "deathblow",
+  "donald", "jez", "post",
 ]);
 
 function hdSheetPath(fighterId, bank = "base") {
-  const key = bank === "specials" ? `${fighterId}-specials` : fighterId;
-  return HD_SHEETS.has(key) ? `renderer/hd/${key}.webp` : null;
+  // Only the combat atlas has an HD variant; every other bank is SD-only and
+  // must never be requested from renderer/hd/.
+  return bank === "base" && HD_SHEETS.has(fighterId) ? `renderer/hd/${fighterId}.webp` : null;
 }
 
 function severedArmAtlasSource(victimId) {
@@ -24204,7 +24347,9 @@ function drawFighterCastShadows() {
     const pose = fighterAnimationPose(fighter);
     const atlas = pose.bank === "specials"
       ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
-      : pose.bank === "motion"
+      : pose.bank === SPECIALS_LEGACY_BANK
+        ? fighterMoveLegacyAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
+        : pose.bank === "motion"
         ? fighterMotionAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
         : fighterAtlases[fighter.def.id];
     if (!atlas?.complete || !atlas.naturalWidth) continue;
@@ -25939,9 +26084,11 @@ function superPortrait3d(cut) {
   // requests renderer/hd/.
   const bank = cut.poseBank === "motion" && fighterMotionAtlases[cut.fighterId]?.complete
     ? "motion"
-    : cut.poseBank === "specials" && fighterMoveAtlases[cut.fighterId] ? "specials" : "base";
+    : cut.poseBank === SPECIALS_LEGACY_BANK && fighterMoveLegacyAtlases[cut.fighterId] ? SPECIALS_LEGACY_BANK
+      : cut.poseBank === "specials" && fighterMoveAtlases[cut.fighterId] ? "specials" : "base";
   const sdAtlas = bank === "specials" ? fighterMoveAtlases[cut.fighterId]
-    : bank === "motion" ? fighterMotionAtlases[cut.fighterId] : fighterAtlases[cut.fighterId];
+    : bank === SPECIALS_LEGACY_BANK ? fighterMoveLegacyAtlases[cut.fighterId]
+      : bank === "motion" ? fighterMotionAtlases[cut.fighterId] : fighterAtlases[cut.fighterId];
   if (!sdAtlas?.complete || !sdAtlas.naturalWidth) return null;
   // 2.7 critic round: only warm HD sheets that exist (hdSheetPath returns
   // null for absent fighters/banks — devil, commissioner-specials).
@@ -32897,6 +33044,9 @@ function ensureCinema3d() {
       // identically to drawFighter. Canvas rotation convention (y-down).
       fighterMotionTransform,
       moveSheetAdjust: MOVE_SHEET_ADJUST,
+      // v5.3: the fallback generation keeps the SHIPPED sheet adjust, so a
+      // rejected specials cell is the same size in the rig as on the canvas.
+      moveSheetLegacyAdjust: MOVE_SHEET_LEGACY_ADJUST,
       // v2.7 FRAMES: motion-bank world-size correction for the 3D rigs.
       motionSheetAdjust: MOTION_SHEET_ADJUST,
       // v2.10 WALK: the walk bank's own (currently empty) correction table.

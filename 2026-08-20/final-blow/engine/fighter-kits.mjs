@@ -2024,6 +2024,10 @@ export function safeBaseFrame(fighterId, frame) {
  * it, exactly as they already do for the sheet adjust.
  */
 export function baseCellDrawAdjust(fighterId, bank, frame) {
+  // v5.3: the specials bank is fit-restored per cell like every other sheet
+  // the unified slicer built. The legacy bank deliberately has no per-cell
+  // entry — it is the SHIPPED art and must keep drawing at the size it ships.
+  if (bank === SPECIALS_BANK) return SPECIALS_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT2_BANK) return UNIFIED_EXT2_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT3_BANK) return UNIFIED_EXT3_CELL_ADJUST[fighterId]?.[frame] || 1;
   if (bank === UNIFIED_EXT4_BANK) return UNIFIED_EXT4_CELL_ADJUST[fighterId]?.[frame] || 1;
@@ -2370,6 +2374,63 @@ export const UNIFIED_EXT5_CELL_HEIGHT = Object.freeze({
   commissioner: Object.freeze([285, 213, 210, 310, 218, 309, 310, 236, 300, 300, 288, 303, 305, 242, 284, 302]),
   devil: Object.freeze([217, 173, 226, 269, 250, 273, 265, 221, 274, 280, 261, 285, 291, 209, 276, 272]),
 });
+// ---------------------------------------------------------------------------
+// v5.3 SPECIALS — THE KIT BANK JOINS THE UNIFIED FAMILY.
+//
+// Every special, EX, super and throw release draws assets/moves/<id>-specials
+// (fighter-kits `anim(row)`), and until 5.3 that sheet was the BASE generation
+// — so a special crossed generations twice, on the beat the move is watched.
+// The 5.3 sheets are regenerated from each fighter's unified sheet and sliced
+// by the unified slicer, which fit-scales a pose whose limbs would leave the
+// 320px cell about its torso column and records the restore factor. This is
+// that factor, exactly as UNIFIED_EXT2..EXT5_CELL_ADJUST carries it for the
+// ext banks: assets/moves/MANIFEST.json `cells[].drawAdjust` is the source,
+// and only the entries above 1 are listed.
+//
+// The PER-SHEET half of the correction stays in game.js MOVE_SHEET_ADJUST,
+// because the specials bank has had its own sheet-adjust table since 2.x and
+// the 3D rig reads it from there (host.moveSheetAdjust). Nothing else about
+// the bank changes shape: same 4x4 grammar, same rows, same cell 15.
+//
+// The commissioner has NO specials sheet — his kit poses address his combat
+// atlas — so he has no row here and keeps his 1.02 sheet adjust.
+// ---------------------------------------------------------------------------
+export const SPECIALS_BANK = "specials";
+/**
+ * The generation the 5.3 sheets replaced, kept whole under assets/moves/legacy
+ * as the PER-CELL fallback: a cell whose action drifted in the regeneration is
+ * accept:false in assets/moves/MANIFEST.json and draws from here instead, so a
+ * rejected cell keeps the shipped drawing and can never break a move. It is
+ * deliberately NOT in AUTHORED_BANKS — nothing may warm it eagerly; it is one
+ * cell on one fighter today and it loads on demand.
+ */
+export const SPECIALS_LEGACY_BANK = "specials-legacy";
+
+const SPECIALS_CELL_ADJUST = Object.freeze({
+  deathblow: Object.freeze({ 2: 1.1543, 13: 1.2253 }),
+  jez: Object.freeze({ 1: 1.2148, 2: 1.2377, 4: 1.0283, 5: 1.1925, 9: 1.0494, 10: 1.0001, 13: 1.1235, 15: 1.0135 }),
+  alan: Object.freeze({ 2: 1.0309, 9: 1.0159, 14: 1.0006 }),
+  post: Object.freeze({ 2: 1.3862, 3: 1.0276, 6: 1.6875, 10: 1.0848, 12: 1.1424, 13: 1.173, 14: 1.3434 }),
+  donald: Object.freeze({ 1: 1.3577, 2: 1.2406, 6: 1.5756, 7: 1.3696, 13: 1.2471, 14: 1.0092 }),
+  devil: Object.freeze({ 1: 1.0606, 3: 1.0693, 4: 1.1794, 5: 1.1235, 6: 1.1494, 9: 1.0616, 11: 1.0985, 13: 1.0682, 14: 1.0906, 15: 1.081 }),
+  ali: Object.freeze({ 2: 1.0917, 14: 1.1491 }),
+  benny: Object.freeze({ 1: 1.0235, 2: 1.025, 5: 1.0185, 14: 1.1012 }),
+  cyraxx: Object.freeze({ 1: 1.02, 3: 1.0153, 4: 1.1177, 5: 1.2384, 6: 1.1803, 7: 1.0341, 9: 1.0623, 10: 1.0294, 12: 1.0587, 13: 1.0623, 14: 1.308, 15: 1.0764 }),
+});
+
+/** Audit hook: every entry restores a cell the slicer shrank, never shrinks one. */
+export function auditSpecialsCellAdjust() {
+  const errors = [];
+  for (const [fighterId, cells] of Object.entries(SPECIALS_CELL_ADJUST)) {
+    for (const [frame, value] of Object.entries(cells)) {
+      const index = Number(frame);
+      if (!Number.isInteger(index) || index < 0 || index > 15) errors.push(`${fighterId}[${frame}]: not a cell`);
+      if (!(value >= 1 && value <= 1.75)) errors.push(`${fighterId}[${frame}]: ${value}`);
+    }
+  }
+  return Object.freeze(errors);
+}
+
 const UNIFIED_EXT5_CELL_ADJUST = Object.freeze({
   deathblow: Object.freeze({ 1: 1.0593, 2: 1.1155 }),
   jez: Object.freeze({ 1: 1.1832, 2: 1.26 }),

@@ -66,6 +66,8 @@ export const CINEMA_HOST_OPTIONAL = Object.freeze([
   "fighterBankSheet",      // (fighterId, bank) -> the bank's OWN sheet (Image/canvas) or null: the warm-up gate
   // 5.2 LOCOMOTION (bookends).
   "cinematicDrawRotation", // (bank, frame, cinematicRotation) -> the rotation a prone cinematic cell draws under
+  // 5.3 SPECIALS (the kit bank in the unified generation).
+  "moveSheetLegacyAdjust", // specials-legacy world-size table: the SHIPPED specials adjust, for a rejected cell
 ]);
 
 export const CINEMA_HOST_MEMBERS = Object.freeze([...CINEMA_HOST_REQUIRED, ...CINEMA_HOST_OPTIONAL]);

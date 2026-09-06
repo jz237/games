@@ -41,7 +41,7 @@ import { FIGHTER_MASK_LAYER } from "./post.mjs";
 // drift from the 2D path on which banks exist (motion, motion2, walk).
 // v3.0: ...and on the unified bank's name, so the sheet-adjust branch below
 // cannot drift from the sim's idea of what that bank is called.
-import { AUTHORED_BANKS, UNIFIED_BANK } from "../../engine/fighter-kits.mjs";
+import { AUTHORED_BANKS, SPECIALS_LEGACY_BANK, UNIFIED_BANK } from "../../engine/fighter-kits.mjs";
 // v5.1 TEMPO TELLS: the SAME phase/strength function drawFighter's 2D pass
 // reads, so the whiff fringe and the re-arm wash land on identical ticks in
 // both renderers (no host member: it is pure engine code, not a game.js read).
@@ -1018,9 +1018,18 @@ export class FighterLayer {
       && !this.ensureMotionBank(rig, fighter, pose.bank)) {
       pose = pose.fallback || { bank: "base", frame: pose.frame };
     }
+    // v5.3 SPECIALS: the shipped generation kept as the kit bank's per-cell
+    // fallback rides the same lazy path (SD only, no renderer/hd — there are
+    // no HD specials sheets any more). Not in AUTHORED_BANKS on purpose, so
+    // warmFighterBanks never builds a texture for a sheet that is one cell on
+    // one fighter; it is built the first time that cell actually resolves.
+    if (pose.bank === SPECIALS_LEGACY_BANK && !this.ensureMotionBank(rig, fighter, pose.bank)) {
+      pose = { bank: "specials", frame: pose.frame };
+    }
     const bankName = pose.bank === "specials" && rig.banks.specials ? "specials"
-      : AUTHORED_BANKS.includes(pose.bank) && rig.banks[pose.bank]
-        ? pose.bank : "base";
+      : pose.bank === SPECIALS_LEGACY_BANK && rig.banks[SPECIALS_LEGACY_BANK] ? SPECIALS_LEGACY_BANK
+        : AUTHORED_BANKS.includes(pose.bank) && rig.banks[pose.bank]
+          ? pose.bank : "base";
     // v3.0: the host owns the ALL-SIXTEEN-OR-NOTHING gate; the rig only needs
     // to know the answer so its height reconciliations match the canvas.
     const unifiedActive = host.isUnifiedFighter
@@ -1054,7 +1063,10 @@ export class FighterLayer {
     // the 3D rig holds the same constant mass across the crouch handoff the
     // 2D path does.
     const sizeAdjust = (bankName === "specials" ? (host.moveSheetAdjust[fighter.def.id] || 1)
-      : bankName === "motion" || bankName === "motion2" || bankName === "motion3"
+      // v5.3: the fallback generation keeps the SHIPPED sheet adjust — it is
+      // the shipped art and must draw at the size it ships at.
+      : bankName === SPECIALS_LEGACY_BANK ? (host.moveSheetLegacyAdjust?.[fighter.def.id] || 1)
+        : bankName === "motion" || bankName === "motion2" || bankName === "motion3"
         ? (host.motionSheetAdjust?.[fighter.def.id] || 1)
         // v2.10 WALK: its own table — the walk sheets normalise to each
         // fighter's measured BASE WALK height, not to the motion banks'

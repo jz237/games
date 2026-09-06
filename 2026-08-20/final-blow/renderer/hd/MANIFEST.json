@@ -167,152 +167,21 @@
       "format": "webp q95 (alpha channel lossless)",
       "bytes": 1437276,
       "sha256": "52c8bc1a4ff34e33"
-    },
-    {
-      "original": "assets/moves/alan-specials.webp",
-      "hd": "renderer/hd/alan-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 1332176,
-      "sha256": "a3bb99ac0fd54531"
-    },
-    {
-      "original": "assets/moves/ali-specials.webp",
-      "hd": "renderer/hd/ali-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 1216594,
-      "sha256": "738379a1cd7876ec"
-    },
-    {
-      "original": "assets/moves/benny-specials.webp",
-      "hd": "renderer/hd/benny-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 842892,
-      "sha256": "152aecc4996e59eb"
-    },
-    {
-      "original": "assets/moves/cyraxx-specials.webp",
-      "hd": "renderer/hd/cyraxx-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 921338,
-      "sha256": "8e1cdbc1ee01ff88"
-    },
-    {
-      "original": "assets/moves/deathblow-specials.webp",
-      "hd": "renderer/hd/deathblow-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 905172,
-      "sha256": "1345c4fce0483011",
-      "repainted": "round2 2026-08-30"
-    },
-    {
-      "original": "assets/moves/donald-specials.webp",
-      "hd": "renderer/hd/donald-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 1146800,
-      "sha256": "a2679b4b45246541"
-    },
-    {
-      "original": "assets/moves/jez-specials.webp",
-      "hd": "renderer/hd/jez-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 1297884,
-      "sha256": "607f8d4f85f53274"
-    },
-    {
-      "original": "assets/moves/post-specials.webp",
-      "hd": "renderer/hd/post-specials.webp",
-      "original_size": [
-        1280,
-        1280
-      ],
-      "hd_size": [
-        2560,
-        2560
-      ],
-      "scale": 2,
-      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
-      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
-      "format": "webp q95 (alpha channel lossless)",
-      "bytes": 1374624,
-      "sha256": "be852ed0b810d81f"
     }
   ],
-  "round2_note": "2026-08-30 resident-artist round 2: deathblow.webp, deathblow-specials.webp and jez.webp region-repainted in place (pizza-cutter disc + knuckle plates on DeathBlow's right gauntlet, knuckle/cuff structure on Jez's fists, eye whites + glasses glint on Jez's face). Paint masked to existing alpha; silhouettes unchanged. Tool: scratchpad r2-hands/repaint_hands.py. bytes/sha256 below refresh those 3 files."
+  "round2_note": "2026-08-30 resident-artist round 2: deathblow.webp, deathblow-specials.webp and jez.webp region-repainted in place (pizza-cutter disc + knuckle plates on DeathBlow's right gauntlet, knuckle/cuff structure on Jez's fists, eye whites + glasses glint on Jez's face). Paint masked to existing alpha; silhouettes unchanged. Tool: scratchpad r2-hands/repaint_hands.py. bytes/sha256 below refresh those 3 files.",
+  "retired_2026_09_v5_3": {
+    "files": [
+      "renderer/hd/alan-specials.webp",
+      "renderer/hd/ali-specials.webp",
+      "renderer/hd/benny-specials.webp",
+      "renderer/hd/cyraxx-specials.webp",
+      "renderer/hd/deathblow-specials.webp",
+      "renderer/hd/donald-specials.webp",
+      "renderer/hd/jez-specials.webp",
+      "renderer/hd/post-specials.webp"
+    ],
+    "why": "v5.3 regenerated assets/moves/<id>-specials.webp in the UNIFIED generation. These files are 2x upscales of the base-generation specials art they replaced, so keeping them would have drawn the OLD generation on the CINEMA 3D specials bank and in the super-portrait close-up while the 2D canvas drew the new one \u2014 a bank in two generations, which is the exact fault the wave removes. Deleted rather than left unreferenced; game.js HD_SHEETS no longer lists any -specials key and hdSheetPath answers for the base bank only. Regenerating them from the new SD masters is a separate job; until then the specials bank is SD in both renderers.",
+    "bytes_removed": 9037480
+  }
 }
