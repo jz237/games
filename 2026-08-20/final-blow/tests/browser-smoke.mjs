@@ -488,7 +488,8 @@ probe('title-menu', async () => {
       x: 640, y: 360, zoom: 1, locked: true, mode: 'arena', shot: 'arena', intensity: 0,
       focus: 'fighters', projectileId: null,
       cuts: 0, impactCloseUps: 0, peakZoom: 1, slowMotionHits: 0,
-      presentation: { zoom: 1, x: 0, y: 0, rotation: 0, letterbox: 0 },
+      // (5.4 camera-cadence: the demo shot rides the presentation snapshot; null outside a demo.)
+      presentation: { zoom: 1, x: 0, y: 0, rotation: 0, letterbox: 0, demoShot: null },
     });
 });
 
@@ -4159,6 +4160,11 @@ probe('demo-hold', async () => {
 // ROUND 1 -> FIGHT! in that order — the ROUND 1 card is no longer clobbered
 // by a WATCH DEMO slam. The card's name line is TV-sized.
 probe('demo-versus', async () => {
+    // (5.4 session layer: the corner record reads the build-keyed standings
+    // board, which the demo probes before this one have filled and which
+    // persists across loads by design — clear it so this is the first bout.)
+    await navigate(client, gameUrl);
+    await evaluate(client, `Object.keys(localStorage).filter((k) => k.startsWith('final-blow-demo-standings')).forEach((k) => localStorage.removeItem(k))`);
     await navigate(client, `${gameUrl}&demo=237`);
     const opened = await evaluate(client, `(() => {
       const box = document.querySelector('#introDialogue');
@@ -4236,8 +4242,20 @@ probe('demo-versus', async () => {
     assert.ok(released.log[3].at >= 2600 && released.log[3].at < 3200, `ROUND 1 at the 2.6 s release, got ${released.log[3].at}`);
     assert.ok(released.log[4].at - released.log[3].at >= 1100 && released.log[4].at - released.log[3].at <= 1500, `FIGHT! 1150 ms after ROUND 1, got ${released.log[4].at - released.log[3].at}`);
     assert.equal(released.banner, 'FIGHT!');
-    // Round 2 keeps its plain card: no versus card outside round 1.
-    const roundTwo = await evaluate(client, `(() => { const qa = window.__finalBlowQa; qa.demoPause(true); qa.step(3); qa.demoKnockout(0); qa.step(6.5); const s = window.__finalBlowEngine.snapshot(); return { roundLabel: document.querySelector('#roundLabel').textContent, phase: s.phase, versus: document.querySelector('#introDialogue').classList.contains('versus'), planned: qa.demoRingIntro().planned }; })()`);
+    // Round 2 keeps its plain card: no versus card outside round 1. Card 1 of
+    // seed 237 is a QUICK BOUT (5.4 session layer: one round, no round 2), so
+    // a best-of-three is forced through the QA entry; the card's 2.6 s clock
+    // stop is wall time, so the probe waits it out before stepping.
+    await evaluate(client, `(() => { const qa = window.__finalBlowQa; qa.demoNextShow({ bout: 'co-main' }); qa.demo(237); })()`);
+    await delay(3200);
+    // The KO lands on a grounded, quiet tick so the 5.4 closer takes the PLAIN
+    // knockout (an airborne victim earns the Final Blow ceremony, which is
+    // longer than any fixed step); the step then runs until round 2 is up.
+    const roundTwo = await evaluate(client, `(() => { const qa = window.__finalBlowQa; qa.demoPause(true); qa.step(3);
+      for (let i = 0; i < 900; i += 1) { const snap = window.__finalBlowEngine.snapshot(); if (snap.phase === 'fight' && qa.pose().every((p) => p.grounded && !p.down) && snap.fighters.every((f) => !f.attack && f.hitstunFrames === 0)) break; qa.step(1 / 60); }
+      qa.demoKnockout(0);
+      for (let i = 0; i < 24; i += 1) { if (document.querySelector('#roundLabel').textContent === 'DEMO · ROUND 2') break; qa.step(0.5); }
+      const s = window.__finalBlowEngine.snapshot(); return { roundLabel: document.querySelector('#roundLabel').textContent, phase: s.phase, versus: document.querySelector('#introDialogue').classList.contains('versus'), planned: qa.demoRingIntro().planned }; })()`);
     assert.equal(roundTwo.roundLabel, 'DEMO · ROUND 2', 'round 1 settled, round 2 open');
     assert.equal(roundTwo.versus, false);
     assert.equal(roundTwo.planned, false);
