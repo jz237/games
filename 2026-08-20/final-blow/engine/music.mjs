@@ -62,6 +62,25 @@ export function musicTrackPath(slug) {
   return `${MUSIC_DIR}/${slug}.mp3`;
 }
 
+/**
+ * 5.4 FIGHT NIGHT (sweep #22): the release 1.6 stage -> track resolver, pure.
+ * A stage's planned `todoTrack` wins the moment a file whose src contains
+ * it exists in `tracks` (that is how the two 5.3 beds drop in); otherwise
+ * the mapped title; otherwise the caller's fallback (its current track).
+ * game.js's stageMusicTrackIndex delegates here so the demo's bed binding
+ * can be pinned in node against the director's stage rotation.
+ */
+export function stageTrackIndex(stageId, { stageMusic = {}, tracks = [], fallback = 0 } = {}) {
+  const entry = stageMusic[stageId];
+  if (!entry) return fallback;
+  if (entry.todoTrack) {
+    const pending = tracks.findIndex((track) => String(track.src || "").includes(entry.todoTrack));
+    if (pending >= 0) return pending;
+  }
+  const index = tracks.findIndex((track) => track.title === entry.title);
+  return index >= 0 ? index : fallback;
+}
+
 /** The two new track entries in musicTracks' shape ({ title, src }). */
 export function musicStageTrackEntries() {
   return MUSIC_STAGE_TRACKS.map((track) => Object.freeze({

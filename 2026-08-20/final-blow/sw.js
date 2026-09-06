@@ -39,6 +39,7 @@ const SHELL = [
   "./engine/webrtc.mjs",
   "./engine/rollback.mjs",
   "./engine/demo.mjs",
+  "./engine/demo-audio.mjs",
   "./engine/fatalities.mjs",
   "./engine/fighter-audio.mjs",
   "./engine/atlas-facing.mjs",

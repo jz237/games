@@ -1101,6 +1101,30 @@ kbd,
 .demo-hud .demo-share:focus-visible { background: rgba(78,221,245,.28); color: #fff; outline: none; }
 .demo-hud .demo-share[hidden] { display: none !important; }
 
+/* 5.4 FIGHT NIGHT: the attract show's sound chip. The one interactive thing on
+   the demo HUD (the panel itself is pointer-events: none): TAP FOR SOUND until
+   a gesture arms audio, SOUND AT THE BELL while it waits for the next round
+   card, hidden once the show sounds. Sized to be read and hit from a couch. */
+.demo-hud-sound {
+  pointer-events: auto;
+  cursor: pointer;
+  margin-left: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--amber);
+  border-radius: 2px;
+  background: rgba(255,177,27,.16);
+  color: var(--amber);
+  font: inherit;
+  font-size: 1.5em;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  animation: demo-sound-pulse .9s ease-in-out infinite alternate;
+  touch-action: manipulation;
+}
+.demo-hud-sound:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.demo-hud-sound[hidden] { display: none !important; }
+@keyframes demo-sound-pulse { to { background: rgba(255,177,27,.42); box-shadow: 0 0 10px rgba(255,177,27,.55); } }
+
 .online-interruption {
   position: absolute;
   z-index: 18;
@@ -2316,6 +2340,8 @@ body:has(#app:fullscreen) {
   .demo-hud { top: 16%; gap: 5px; padding: 3px 6px; font-size: 6px; }
   .demo-hud small { display: none; }
   .demo-hud .demo-share { min-height: 26px; margin: -3px -3px -3px 1px; padding: 3px 7px; font-size: 7px; }
+  /* 5.4: the sound chip stays — touch is exactly where TAP FOR SOUND matters. */
+  .demo-hud-sound { font-size: 1.6em; padding: 5px 9px; }
   .roster-grid { gap: 5px; margin: 9px 0; }
   .fighter-info { padding: 5px 6px; }
   .fighter-info small { display: none; }

@@ -845,3 +845,115 @@ has one call site behind `state.mode !== "demo"`, the bug only exists inside a
 HUD that only exists during a demo, and the router fires only on a parsed
 request — a boot without `?demo=`/`?mode=demo` takes the branch it always
 took.
+
+## The sound of the attract show (5.4 Fight Night, sweep #19 / #22 / #24)
+
+The attract loop is the mode that plays the most music and speaks the most
+announcer lines, and until 5.4 it was the one mode with no rule for *when* it
+was allowed to make its first sound.
+
+**What was wrong**, measured in a cold headless Chrome (no gesture, the 45 s
+idle attract, the default autoplay policy):
+
+- The show started at 45.4 s and every audio path held on
+  `demoSession.attract && !state.audioUnlocked` — except two synth paths
+  (`perfectGuardTink`, `objectSound`) that called `unlockAudio()` themselves. At
+  7.8 s into the exhibition the first PERFECT GUARD flipped the flag, and from
+  then on the game hammered the browser: **364 rejected `play()` calls
+  (`NotAllowedError`) and 68 `AudioContext.resume()` attempts with no
+  activation** in one 35 s exhibition. With autoplay allowed (a kiosk flag) the
+  same run joined 8.8 s in — bed, crowd and announcer arriving mid-exchange with
+  the ROUND card already spent. The exit gesture never armed audio, so the
+  next idle cycle was as silent as the first.
+- The bed came from the director's own track bag, independent of the stage
+  bag: **the stage's own theme played in 103 of 600 director cycles (17.2%)**
+  — wildwood 14/100, cruise 16/100, the two tracks 5.3 generated for exactly
+  those stages. And a 138 s exhibition against an 80 s track ran out and
+  jukebox-advanced to the next file mid-round.
+- Fighter voice takes came off a 1,2,3,1,2,3 cursor.
+
+**What ships** (`engine/demo-audio.mjs`, pure; `game.js` wires it):
+
+1. **An arming gate — cold / armed / live.** It advances only on a user
+   gesture Chrome counts as activation (`gestureArmsAudio` reads
+   `navigator.userActivation.hasBeenActive` where it exists; without it,
+   Chrome's table: a key that is not Escape, a mouse press, a touch *release*).
+   Gestures that arm it: any key or pointer on the title (the next idle cycle
+   opens armed), the exit key/press during a show, the transport keys, and a
+   **TAP FOR SOUND** chip on the demo HUD — the one element on that panel that
+   takes a pointer — which arms without exiting. Once armed the show does not
+   join mid-fight: it goes **live at the next ROUND card**. The chip reads
+   SOUND AT THE BELL in between and disappears when the show sounds. A gesture
+   that lands while a card is still up (before FIGHT!) joins that same bell.
+   `attractAudioHeld()` is the ONE gate: `sound`, `impactAudioAllowed`,
+   `playCrowdVoice`, `playMusicStinger`, `announcerSay`, `fighterTauntCue`,
+   `perfectGuardTink`, `objectSound`, `syncMusic`, both render beds and every
+   synth one-shot (through `audioContextRunning`) ask it. Nothing calls
+   `play()` before a gesture — the autoplay rules are honoured, not bypassed.
+2. **The bed is the stage's own theme.** `startMatch` runs
+   `applyAutoStageMusic()` for the demo as well (a manual track pick is
+   honoured exactly as in a played match); the director's track bag still
+   draws, so every seed's matchup order is unchanged, but it no longer picks
+   the bed. The demo's bed **loops** for the exhibition, and is **restarted
+   under the ROUND card** when less than a round (30 s) is left on it, so the
+   seam lands on the punctuation rather than in the fight. The 5.3 stingers
+   fire in the demo the moment the gate is live (round start on both FIGHT
+   edges; KO / TIME OVER / match-win on the round end when a round ends that
+   way — the attract's Final Blow ceremony still returns null there by
+   design). `stageMusicTrackIndex` now delegates to `engine/music
+   stageTrackIndex` so the binding is a pinned fact.
+3. **Fighter voice draws from the shuffle bag in the demo** (`drawFromBag`,
+   the announcer/crowd/stinger contract: every take once per bag, never the
+   same take twice running across the border) on `visualRandom`, so a demo
+   seed replays the same takes; a played match keeps its cursor untouched.
+
+**Where a viewer hears the first sound.** Cold load, no touch: the show is
+silent and the HUD says TAP FOR SOUND. Tap it (or press anything — that exits
+and arms the next cycle) and the chip reads SOUND AT THE BELL. At the next
+ROUND card the announcer's ROUND call is the first thing heard, the bed fades
+in under it over 1.5 s, then FIGHT! and the round-start stinger, then the
+fighters. A page that already has a gesture behind it opens every attract
+cycle with sound from its first card.
+
+**Measured after** (same harness, cold load, default autoplay policy):
+
+    attract start 45.4 s   chip TAP FOR SOUND   play() calls 0   AudioContext 0
+    chip press at +35.5 s (mid-fight)   demo keeps running   chip SOUND AT THE BELL
+    play() calls still 0   hasBeenActive true
+    +18.0 s ROUND 2 card:  philly-after-dark.mp3 (somerset's own bed, fading in)
+                           round2-2.mp3                 <- the first sound
+    +1.41 s                roundstart-1.mp3 (FIGHT edge stinger)
+    +2.27 s                fight-3.mp3, then heavy-swing / light-3 / counter-3
+    rejected play() calls over the whole run: 0 (was 364)
+    exit press -> title, gate armed, next cycle opens with sound
+
+    stage/bed agreement: 100/100 director cycles (seed 237; was 17/100),
+    100% per stage; 600/600 over seeds 1/237/1234/9001/42 in
+    tests/demo-audio.test.mjs (the director's own bag: 103/600)
+    demo voice takes (seed 237, 60 s): 25 takes, 7 multi-take banks,
+    0 back-to-back repeats; seed 9001: 34 takes, 9 banks, 0 repeats
+
+**A played match is byte-identical.** `qa.aiFight('deathblow','jez','pro')`
+stepped 20 s in the base tree and in this one: the tick-stripped trace
+(positions, health, meter, action per second) is identical; the same
+comparison over 45 s agrees through the ROUND 2 card and then diverges in
+*both* base-vs-base and base-vs-branch, because `resetRound` clears
+`qaManualMode` and the render loop ticks the sim on the wall clock from round
+2 — a harness limit, not a change. The source pins in `tests/demo-audio.test.mjs`
+carry the rest: `demoRoundCard`/`demoBell` return before touching anything
+outside the demo, the gate is only consulted behind `demoSession.attract`,
+`bedFadeLevel` only leaves 1 inside the gate's opening, `fightMusic.loop` and
+the voice bag are behind `state.mode === "demo"`.
+
+**Known limits.** Gamepad buttons are not activation in Chrome, so a pad-only
+viewer arms with the chip or a key. The take order of a seeded demo replays
+exactly while the sim is manual-clocked (round 1 in QA); from round 2 the
+render loop's own `visualRandom` draws interleave on the wall clock, as they
+always have for the announcer and crowd bags.
+
+- `node --test tests/demo-audio.test.mjs` — 17 tests: the gate's state
+  machine (cold hold, arm mid-fight, live at the next card, join at an open
+  card, armed pages, the exit gesture arming the next cycle), the chip copy,
+  the activation table, the fade, the loop/bag scoping, the bed-restart
+  decision, the 1.6 resolver, the 600-cycle stage/bed agreement, the bag's
+  no-repeat rule, and the game.js wiring from source.

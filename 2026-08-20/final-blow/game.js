@@ -496,6 +496,16 @@ import {
 } from "./engine/demo.mjs";
 import { DEMO_COVERAGE_BLEND, createDemoChoreographer } from "./engine/demo-choreo.mjs";
 import {
+  ATTRACT_BED_FADE_MS,
+  attractSoundChip,
+  bedFadeStep,
+  createAttractAudioGate,
+  demoBedLoops,
+  demoBedRestartAtCard,
+  demoVoiceDrawsFromBag,
+  gestureArmsAudio,
+} from "./engine/demo-audio.mjs";
+import {
   DEMO_SPEED_RATES,
   createDemoSpeed,
   demoSpeedAllowed,
@@ -563,6 +573,7 @@ import {
   musicStingerFiles,
   musicStingerForRoundEnd,
   musicStingerPath,
+  stageTrackIndex,
 } from "./engine/music.mjs";
 import {
   STAGE_WEAPONS,
@@ -2600,6 +2611,29 @@ const demoSession = {
 // The ledger is bounded: an unattended cabinet runs for hours.
 const DEMO_ROUND_LEDGER_MAX = 64;
 
+// 5.4 FIGHT NIGHT (sweep #19): the attract show's audio ARMING GATE
+// (engine/demo-audio.mjs). The idle loop starts with no user gesture, so
+// every audio path used to hold on `demoSession.attract && !audioUnlocked`
+// — and two synth paths did not, so the first PERFECT GUARD of the show
+// flipped the flag and the bed, announcer and crowd joined 3.9 s into an
+// exchange. Now the gate only advances on a gesture Chrome counts as
+// activation (the exit key/pointer, a press anywhere on the title, the
+// TAP FOR SOUND chip) and opens AT THE NEXT ROUND CARD, so the first sound a
+// viewer hears is the announcer's ROUND call with the bed fading in under it.
+// Render-only, never snapshotted, consulted only behind demoSession.attract.
+const attractAudio = createAttractAudioGate();
+// Where the gate last opened (QA readout): the card it opened on and when.
+let attractAudioLiveAt = null;
+// The bed's fade-in multiplier: 1 everywhere, dropped to 0 at the card the
+// gate opens on and eased back over ATTRACT_BED_FADE_MS (demo only).
+let bedFadeLevel = 1;
+// 5.4 (sweep #24): the demo's fighter-voice shuffle bags (drawFromBag, the
+// announcer/crowd/stinger contract) keyed like fighterSfxCursors; a played
+// match keeps its round-robin cursor untouched. Plus the last dozen takes
+// as "fighter:cue:take" for the QA no-repeat readout (every mode, observation).
+const fighterVoiceBags = new Map();
+const fighterVoiceRecent = [];
+
 // v3.2 — the demo speed transport. See engine/demo-speed.mjs for why
 // this scales the TICK CADENCE and never dt. `?speed=` seeds it at boot; the
 // keys, the qa hooks and the on-screen chip all drive this one object.
@@ -4514,6 +4548,12 @@ function updateDemoUi() {
   const activeFight = demoSession.active && state.mode === "demo" && state.screen === "fight";
   const panel = $("#demoHud");
   panel.hidden = !activeFight;
+  // 5.4 (sweep #19): TAP FOR SOUND until a gesture arms the attract gate,
+  // SOUND AT THE BELL while it waits for its card, gone once it sounds.
+  const chip = $("#demoHudSound");
+  const chipLabel = attractSoundChip({ attract: demoSession.attract && activeFight, state: attractAudio.snapshot().state });
+  if (chipLabel) chip.textContent = chipLabel;
+  chip.hidden = !chipLabel;
   if (!demoSession.cycle) return;
   const [firstId, secondId] = demoSession.cycle.picks;
   const first = roster.find(({ id }) => id === firstId);
@@ -4562,6 +4602,8 @@ function endDemoSession() {
   demoSession.rounds = [];
   window.clearTimeout(demoSession.shareNoteTimer);
   demoSession.shareNoteTimer = 0;
+  attractAudio.endShow();
+  bedFadeLevel = 1;
   document.body.classList.remove("demo-active");
   $("#demoHud").hidden = true;
   $("#demoResultStatus").hidden = true;
@@ -4710,7 +4752,11 @@ function startNextDemoMatch() {
   while (demoSession.pairsSeen.length > demoSession.director.snapshot().matchupCount) demoSession.pairsSeen.shift();
   updateHud();
   state.qaManualMode = demoSession.qa;
-  setTrack(cycle.track, true);
+  // 5.4 (sweep #22): the bed is the STAGE's own theme, set by startMatch's
+  // applyAutoStageMusic above. The director's track bag still draws (its
+  // rng stream, and so every seed's matchup order, is unchanged) but the
+  // draw no longer picks the bed: measured 17.2% stage/track agreement over
+  // 600 director cycles before, 100% after (tests/demo-audio.test.mjs).
   updateDemoUi();
   announce(`WATCH DEMO · CYCLE ${cycle.cycle}`, `${state.fighters[0].def.name} VS ${state.fighters[1].def.name}`, 1.2);
   return true;
@@ -4738,6 +4784,9 @@ function startDemo({ attract = false, qa = false, seed = null, cycle = 1, source
   demoSession.attract = Boolean(attract);
   demoSession.qa = Boolean(qa);
   demoSession.source = source || (qa ? "qa" : attract ? "attract" : "button");
+  // 5.4 (sweep #19): a page that already has a gesture behind it (a played
+  // match, a title press) opens the show ARMED — sound from its first card.
+  if (demoSession.attract) attractAudio.beginShow({ unlocked: state.audioUnlocked });
   // v3.2: a demo always STARTS running. The rate is deliberately kept (it is
   // what `?speed=` set, and it should survive the demo's own match loop), but
   // a pause left latched from a previous session would open the next one
@@ -4773,6 +4822,12 @@ function startDemo({ attract = false, qa = false, seed = null, cycle = 1, source
     // replay playback rewinds; see loadReplayHeader).
     state.simulationTick = 0;
     simulationClock.tick = 0;
+    // 5.4 (sweep #24): the demo's fighter-voice bags draw on visualRandom,
+    // which the rewind above resets — the bags' own memory (position, last
+    // take) has to rewind with it or a second qa.demo(seed) in the same page
+    // plays a different take order to the same stream.
+    fighterVoiceBags.clear();
+    fighterVoiceRecent.length = 0;
   }
   // 5.4 (sweep #27): an unseeded demo (the attract loop, or the WATCH DEMO
   // button pressed during the countdown) adopts the director the idle
@@ -4996,6 +5051,83 @@ function noteUserActivity() {
   if (demoSession.active) return exitDemo();
   if (state.screen === "title") scheduleIdleDemo();
   return false;
+}
+
+// 5.4 FIGHT NIGHT (sweep #19) — the attract audio gate's game.js side.
+
+/** Is every audio path holding for the attract show? The ONE gate. */
+function attractAudioHeld() {
+  return demoSession.attract && !attractAudio.live();
+}
+
+/**
+ * A user gesture on the title or during the attract show. Only a gesture
+ * Chrome counts as activation arms the gate (engine gestureArmsAudio reads
+ * navigator.userActivation where it exists), so play() is never attempted
+ * without one — the autoplay rules are honoured, never bypassed. Idempotent.
+ */
+function armAttractAudio(event) {
+  if (!(demoSession.attract || state.screen === "title")) return false;
+  const accepted = gestureArmsAudio({
+    trusted: Boolean(event?.isTrusted),
+    type: event?.type || "",
+    code: event?.code || event?.key || "",
+    pointerType: event?.pointerType || "",
+    hasBeenActive: typeof navigator.userActivation?.hasBeenActive === "boolean"
+      ? navigator.userActivation.hasBeenActive : null,
+  });
+  if (!accepted) return false;
+  unlockAudio();
+  if (demoSession.attract) {
+    if (attractAudio.gesture()) attractAudioOpened("gesture-at-card");
+    updateDemoUi();
+  }
+  return true;
+}
+
+/** The TAP FOR SOUND chip: arms the gate and does NOT count as "the viewer wants out". */
+function attractSoundChipPress(event) {
+  if (!demoSession.attract) return false;
+  if (!event?.target?.closest?.("#demoHudSound")) return false;
+  event.preventDefault();
+  armAttractAudio(event);
+  return true;
+}
+
+function attractAudioOpened(reason) {
+  bedFadeLevel = 0;
+  audioFxDebug.attractAudioOpens += 1;
+  attractAudioLiveAt = Object.freeze({
+    reason, cycle: demoSession.cycle?.cycle || 0, round: state.round, phase: state.phase, tick: state.simulationTick,
+  });
+  syncMusic();
+}
+
+/**
+ * The ROUND card of a demo round. (1) Attract: the gate's release point —
+ * an armed show goes live HERE, so the first sound is the ROUND call the
+ * caller is about to book, with the bed fading in under it. (2) Every demo:
+ * the bed is restarted under the card when it would otherwise run out inside
+ * the round (sweep #22: the 80 s tracks ended and jukebox-advanced mid-fight).
+ * Called on sim paths (resetRound) — resim-guarded like announce().
+ */
+function demoRoundCard() {
+  if (rollbackResimulating || state.mode !== "demo") return;
+  if (demoSession.attract) {
+    if (attractAudio.roundCard()) attractAudioOpened("card");
+    updateDemoUi();
+  }
+  if (demoBedRestartAtCard({ currentTime: fightMusic.currentTime, duration: fightMusic.duration })) {
+    fightMusic.currentTime = 0;
+    audioFxDebug.demoBedRestarts += 1;
+  }
+  syncMusic();
+}
+
+/** FIGHT! — closes the card window; a gesture from here waits for the next card. */
+function demoBell() {
+  if (rollbackResimulating || !demoSession.attract) return;
+  attractAudio.bell();
 }
 
 function setOnlineStatus(kind, detail) {
@@ -12204,8 +12336,11 @@ function startMatch(resetSet = true) {
   // to unlock audio — the call warns without one.
   if (!(state.mode === "demo" && demoSession.attract)) unlockAudio();
   // Release 1.6: AUTO mode now picks the stage-matched track instead of
-  // cycling the jukebox. Demo/attract keeps whatever was already playing.
-  if (state.mode !== "demo") applyAutoStageMusic();
+  // cycling the jukebox. 5.4 (sweep #22): the demo too — startNextDemoMatch
+  // used to set the bed from the director's own track bag, independent of
+  // the stage bag, so the stage's own theme played in 17% of exhibitions.
+  // A manual track pick is honoured here exactly as in a played match.
+  applyAutoStageMusic();
   resetMusicDuck();
   if (resetSet) {
     state.rounds = [0, 0];
@@ -12320,6 +12455,9 @@ function startMatch(resetSet = true) {
     if (incoming) announcerSay(`${incoming}-name`, { delay: 300 });
   }
   if (state.mutators.length) introLabel = `${introLabel} · ${mutatorLabel(state.mutators)}`;
+  // 5.4 (sweep #19): the demo's ROUND card — the attract gate's release
+  // point, booked BEFORE the announce so the ROUND call itself is heard.
+  demoRoundCard();
   announce(introMain, introLabel, 1.2);
   // Wave 16: rival and FINAL BOUT intros open with a spoken-card exchange —
   // the intro window stretches to fit the read, and the FIGHT call waits.
@@ -12497,6 +12635,7 @@ function resetRound() {
   commandHistory[1].length = 0;
   updateFlowSkipHint();
   updateHud();
+  demoRoundCard();
   announce(`ROUND ${state.round}`, "SETTLE IT", 1.15);
   scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "", 0.75);
@@ -12717,6 +12856,7 @@ function trySkipFightFlow(input0 = {}, input1 = {}) {
     announce("FIGHT!", "INTRO SKIPPED", 0.55);
     updateFlowSkipHint();
     // v5.3 SPECTACLE: a skipped intro is still a round start.
+    demoBell();
     playMusicStinger("roundstart", { source: `round${state.round}-skip` });
     return true;
   }
@@ -18574,6 +18714,7 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
       // round reaches this edge (resetRound always returns to "intro"), and
       // the skip path below fires the same cue, so ROUND 2 with the intro
       // skipped still gets its downbeat.
+      demoBell();
       playMusicStinger("roundstart", { source: `round${state.round}` });
     }
   }
@@ -29033,15 +29174,10 @@ function chooseMusic(choice) {
 // Release 1.6: resolve the best-fit track for a stage. Prefers a stage's
 // planned todoTrack if that file has been composed and added to musicTracks;
 // otherwise falls back to the mapped existing track.
+// 5.4 (sweep #22): the resolution itself is engine/music stageTrackIndex so
+// the demo's stage/bed agreement is a pinned fact (tests/demo-audio.test.mjs).
 function stageMusicTrackIndex(stageId) {
-  const entry = STAGE_MUSIC[stageId];
-  if (!entry) return currentTrackIndex;
-  if (entry.todoTrack) {
-    const pending = musicTracks.findIndex((track) => track.src.includes(entry.todoTrack));
-    if (pending >= 0) return pending;
-  }
-  const index = musicTracks.findIndex((track) => track.title === entry.title);
-  return index >= 0 ? index : currentTrackIndex;
+  return stageTrackIndex(stageId, { stageMusic: STAGE_MUSIC, tracks: musicTracks, fallback: currentTrackIndex });
 }
 
 // Applied at match start when the music mode is AUTO: the header keeps its
@@ -29055,15 +29191,19 @@ function applyAutoStageMusic() {
 function syncMusic() {
   if (!state.audioUnlocked) return;
   const enabled = Boolean($("#musicToggle")?.checked);
-  fightMusic.loop = state.musicChoice !== "auto";
+  // 5.4 (sweep #22): the demo's bed LOOPS for the exhibition instead of
+  // jukebox-advancing on `ended` mid-round; AUTO in every played mode is
+  // untouched (demoBedLoops is false outside the demo).
+  fightMusic.loop = state.musicChoice !== "auto" || demoBedLoops(state.mode);
   // v5.3: the bed's half of the danger crossfade. dangerStemBedGain is 1
   // until the stem starts arriving, so nothing about the ordinary mix moves.
+  // 5.4: bedFadeLevel is 1 outside the attract gate's opening card.
   fightMusic.volume = clamp(
-    musicBaseVolume() * state.musicDuck * state.musicVolume * dangerStemBedGain(dangerStemLevel),
+    musicBaseVolume() * state.musicDuck * state.musicVolume * dangerStemBedGain(dangerStemLevel) * bedFadeLevel,
     0,
     1,
   );
-  if (!enabled || document.hidden || state.paused) {
+  if (!enabled || document.hidden || state.paused || attractAudioHeld()) {
     fightMusic.pause();
     stopDangerStem();
     return;
@@ -29299,11 +29439,23 @@ function fighterVoiceTake(kind, fighterId) {
     if (!bank?.srcs.length) return null;
   }
   const cursorKey = `${fighterId}:${cue}`;
-  const cursor = fighterSfxCursors.get(cursorKey) || 0;
-  fighterSfxCursors.set(cursorKey, cursor + 1);
-  const variantIndex = cursor % bank.srcs.length;
+  let variantIndex;
+  if (demoVoiceDrawsFromBag(state.mode)) {
+    // 5.4 (sweep #24): the demo draws its takes from the shuffle bag — every
+    // take once per bag, never the same take twice running across the
+    // border (the announcer/crowd/stinger contract) — instead of the
+    // predictable 1,2,3,1,2,3 cursor. visualRandom is seeded, so a demo seed
+    // replays the same takes; the played-match cursor below is untouched.
+    variantIndex = drawFromBag(fighterVoiceBags, cursorKey, bank.srcs.length, visualRandom);
+  } else {
+    const cursor = fighterSfxCursors.get(cursorKey) || 0;
+    fighterSfxCursors.set(cursorKey, cursor + 1);
+    variantIndex = cursor % bank.srcs.length;
+  }
   const pool = fighterVoicePool(cue, bank.key, variantIndex, bank.srcs[variantIndex]);
   if (!pool?.length) return null;
+  fighterVoiceRecent.push(`${cursorKey}:${variantIndex + 1}/${bank.srcs.length}`);
+  while (fighterVoiceRecent.length > 24) fighterVoiceRecent.shift();
   if (bank.srcs.length === 1) rate *= 0.94 + visualRandom() * 0.12;
   return { sample: fighterVoiceSample(pool), rate, durationMs: bank.durationsMs?.[variantIndex] || 0 };
 }
@@ -29407,7 +29559,7 @@ function sound(kind, fighter = null) {
   });
   showSoundCaption(kind, fighter);
   if (!$("#soundToggle").checked) return;
-  if (demoSession.attract && !state.audioUnlocked) return;
+  if (attractAudioHeld()) return;
   unlockAudio();
   // Wave 9: signature cues route through the variant banks (no-repeat
   // rotation + micro-variation + reactive placeholders). playbackRate and
@@ -29574,6 +29726,9 @@ function perfectGuardTink() {
   if (rollbackResimulating) return;
   showSoundCaption("perfect-guard");
   if (!$("#soundToggle").checked) return;
+  // 5.4 (sweep #19): this was the path that armed a cold attract show at
+  // the first Perfect Guard — mid-exchange, round card already spent.
+  if (attractAudioHeld()) return;
   unlockAudio();
   if (!state.audio) return;
   const now = state.audio.currentTime;
@@ -29591,6 +29746,7 @@ function perfectGuardTink() {
 
 function objectSound(styleId) {
   if (!$("#soundToggle").checked) return;
+  if (attractAudioHeld()) return;
   unlockAudio();
   if (!state.audio) return;
   const settings = OBJECT_SOUNDS[styleId];
@@ -29672,6 +29828,9 @@ const audioFxDebug = {
   // v5.3 SPECTACLE: round/match music stingers actually started (post every
   // gate) and low-health danger-stem entries (mix crossing 0.5 upward).
   stingerPlays: 0, dangerStemEnters: 0,
+  // 5.4 FIGHT NIGHT: attract audio gate openings and demo bed restarts
+  // under a round card.
+  attractAudioOpens: 0, demoBedRestarts: 0,
 };
 // Live node bookkeeping for the QA node-graph hook: persistent = currently
 // connected long-lived nodes (master bus, beds, music routing), one-shots =
@@ -29682,6 +29841,9 @@ let audioGraph = null;
 let sharedNoiseBuffer = null;
 
 function audioContextRunning() {
+  // 5.4 (sweep #19): the attract gate holds every synth path and both
+  // render beds through this one answer until it opens at a round card.
+  if (attractAudioHeld()) return false;
   return Boolean(state.audio && state.audio.state === "running");
 }
 
@@ -29825,7 +29987,7 @@ const IMPACT_LAYER_TIERS = Object.freeze({
 function impactAudioAllowed() {
   if (rollbackResimulating) return false;
   if (!$("#soundToggle").checked || state.sfxVolume <= 0) return false;
-  if (demoSession.attract && !state.audioUnlocked) return false;
+  if (attractAudioHeld()) return false;
   return true;
 }
 
@@ -30196,7 +30358,7 @@ function playCrowdVoice(cue, amount, { source = "" } = {}) {
   const spec = CROWD_VOICE_CUES[cue];
   if (!spec) return -1;
   if (!$("#soundToggle")?.checked || !(state.sfxVolume > 0)) return -1;
-  if (demoSession.attract && !state.audioUnlocked) return -1;
+  if (attractAudioHeld()) return -1;
   const now = performance.now();
   if (now - (crowdVoiceLastAt.get(cue) ?? -Infinity) < spec.minGapMs) return -1;
   if (!spec.layers && now < crowdVoiceBusyUntil) return -1;
@@ -30272,7 +30434,7 @@ function updateCrowdAudio(dt) {
   // v5.1 STAGE KO BEATS: the cruise ship answers the KO with its horn, once
   // per hold, never the same blast twice running (engine/ambient.mjs
   // pickKoHorn off a hash of the hold tick, so replay and live agree).
-  if (fightLive && soundOn && state.stage === "cruise" && crowdKoHold.startTick >= 0 && koHorn.holdTick !== crowdKoHold.startTick) {
+  if (fightLive && soundOn && !attractAudioHeld() && state.stage === "cruise" && crowdKoHold.startTick >= 0 && koHorn.holdTick !== crowdKoHold.startTick) {
     koHorn.holdTick = crowdKoHold.startTick;
     koHorn.last = pickKoHorn(koHorn.last, presentationHash01(crowdKoHold.startTick, 211));
     playKoHorn(AMBIENT_KO_HORNS[koHorn.last]);
@@ -30406,7 +30568,7 @@ function playMusicStinger(cue, { source = "" } = {}) {
   const spec = MUSIC_STINGERS[cue];
   if (!spec) return -1;
   if (!$("#musicToggle")?.checked || !(state.musicVolume > 0)) return -1;
-  if (demoSession.attract && !state.audioUnlocked) return -1;
+  if (attractAudioHeld()) return -1;
   const bank = musicStingerBank(cue);
   if (!bank.length) return -1;
   let bag = musicStingerBags.get(cue);
@@ -30476,6 +30638,13 @@ function updateMusicLayer(dt) {
   });
   dangerStemLevel = dangerStemStep(dangerStemLevel, target, dt);
   if (previous <= 0.5 && dangerStemLevel > 0.5) audioFxDebug.dangerStemEnters += 1;
+  // 5.4 (sweep #19): the attract bed's fade-in under the opening ROUND call.
+  // bedFadeLevel is only ever below 1 in the demo, so a played match's
+  // syncMusic cadence and volume are byte-identical.
+  if (bedFadeLevel < 1) {
+    bedFadeLevel = bedFadeStep(bedFadeLevel, dt, ATTRACT_BED_FADE_MS);
+    syncMusic();
+  }
   // Only touch the elements when the mix is actually moving or sounding —
   // syncMusic is otherwise the sole owner of fightMusic.volume.
   if (Math.abs(dangerStemLevel - previous) > 0.0005 || dangerStemPlaying) syncMusic();
@@ -30690,7 +30859,8 @@ function updateAmbienceAudio(time, dt) {
   // full level; every other screen is silent (and tears the rig down).
   const wantScreens = state.screen === "fight" || state.screen === "stage";
   const soundOn = Boolean($("#soundToggle")?.checked) && state.sfxVolume > 0;
-  ambienceEngaged = wantScreens && soundOn;
+  // 5.4 (sweep #19): the attract gate holds the ambience rig with the rest.
+  ambienceEngaged = wantScreens && soundOn && !attractAudioHeld();
   if (!ambienceEngaged) {
     ambienceNextEventAt = 0;
     if (ambienceRig) teardownAmbienceRig();
@@ -30939,7 +31109,7 @@ function announcerSay(cue, { delay = 0 } = {}) {
   window.setTimeout(() => {
     showSoundCaption("announcer", null, line);
     if (!$("#soundToggle").checked) return;
-    if (demoSession.attract && !state.audioUnlocked) return;
+    if (attractAudioHeld()) return;
     const take = takeIndex >= 0 ? bank.takes[takeIndex] : null;
     if (!take) return;
     unlockAudio();
@@ -30996,7 +31166,7 @@ function fighterTauntCue(fighter, line = 0) {
   const lineText = FIGHTER_TAUNT_LINES[fighterId]?.[line] || "";
   showSoundCaption("taunt", fighter, lineText);
   if (!$("#soundToggle").checked) return;
-  if (demoSession.attract && !state.audioUnlocked) return;
+  if (attractAudioHeld()) return;
   unlockAudio();
   const bank = fighterVoiceBank(fighterId, "taunt");
   const src = bank?.srcs?.[line];
@@ -31569,6 +31739,10 @@ function titleKeyboard(event) {
 }
 
 window.addEventListener("keydown", (event) => {
+  // 5.4 (sweep #19): any accepted key on the title or during the attract
+  // show arms the audio gate — including the exit key, so the NEXT idle
+  // cycle opens with sound, and the transport keys, which do not exit.
+  armAttractAudio(event);
   // v3.2: the transport claims its keys FIRST. Everything below this
   // treats any keypress during a demo as "the viewer wants out", so without
   // this the slow-motion and frame-step keys would each quit the demo on
@@ -31608,12 +31782,18 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => { keys.clear(); pressed.clear(); });
-// 5.4 #30: a press on the demo HUD's COPY LINK bug is the one pointer that
-// must not count as "the viewer wants out" — every other press still exits.
+// 5.4: the TAP FOR SOUND chip (sweep #19) arms the gate and keeps the show
+// running; a press on the COPY LINK bug (#30) arms it too and must not count
+// as "the viewer wants out"; any other press arms it AND exits (the exit
+// gesture is what arms the next idle cycle). A touch press is not activation
+// in Chrome — its release is, so pointerup arms too (idempotent).
 document.addEventListener("pointerdown", (event) => {
+  if (attractSoundChipPress(event)) return;
+  armAttractAudio(event);
   if (isDemoShareTarget(event)) return;
   noteUserActivity();
 }, true);
+document.addEventListener("pointerup", (event) => { armAttractAudio(event); }, true);
 
 window.addEventListener("gamepadconnected", (event) => {
   $("#padStatus").classList.add("connected");
@@ -32311,7 +32491,10 @@ $("#trackButton").addEventListener("click", () => {
   advanceTrack();
 });
 fightMusic.addEventListener("ended", () => {
-  if (state.musicChoice === "auto") advanceTrack();
+  // 5.4 (sweep #22): the demo bed loops (see syncMusic), so this only ever
+  // fires for a played AUTO match; the guard keeps a demo from jukeboxing
+  // even if the element's loop flag were ever cleared under it.
+  if (state.musicChoice === "auto" && !demoBedLoops(state.mode)) advanceTrack();
   else {
     fightMusic.currentTime = 0;
     syncMusic();
@@ -34510,6 +34693,28 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     // The transport. `qa.demoSpeed()` reads; `qa.demoSpeed(0.25)` sets the
     // rate. It is a TICK CADENCE multiplier — the fixed step it scales the
     // cadence of is never touched, so nothing here can perturb the sim.
+    // 5.4 FIGHT NIGHT (sweep #19/#22/#24): the attract audio gate, where it
+    // opened, the bed's binding/loop/fade/restart state and the last two
+    // dozen fighter-voice takes ("fighter:cue:take/of"). Pure reads.
+    attractAudio() {
+      return {
+        ...attractAudio.snapshot(),
+        held: attractAudioHeld(),
+        attract: demoSession.attract,
+        audioUnlocked: state.audioUnlocked,
+        opens: audioFxDebug.attractAudioOpens,
+        liveAt: attractAudioLiveAt,
+        chip: $("#demoHudSound").hidden ? "" : $("#demoHudSound").textContent,
+        bedTrack: musicTracks[currentTrackIndex]?.title || "",
+        bedLoop: fightMusic.loop,
+        bedPaused: fightMusic.paused,
+        bedFade: Number(bedFadeLevel.toFixed(3)),
+        bedRestarts: audioFxDebug.demoBedRestarts,
+        bedTime: Number((fightMusic.currentTime || 0).toFixed(2)),
+        voiceRecent: fighterVoiceRecent.slice(),
+        voiceBags: fighterVoiceBags.size,
+      };
+    },
     demoSpeed(rate = null) {
       if (rate !== null) demoSpeed.setRate(rate);
       return demoSpeedSnapshot();
