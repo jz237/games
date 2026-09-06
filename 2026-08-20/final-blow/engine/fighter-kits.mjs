@@ -2303,11 +2303,15 @@ const UNIFIED_EXT4_CELL_ADJUST = Object.freeze({
 // sheet factor into every cell, as his ext2/ext3/ext4 rows do, because
 // bankSheetAdjust deliberately has no ext branch (see game.js).
 //
-// REGISTERED, NOT ROUTED: this item ships the sheet, the gate and the tables;
-// no track and no substitution names an ext5 cell yet (the routing pass is
-// the next item, and tests/unified-swing.test.mjs pins every cell unreached
-// until it lands). Registering first is what lets the trace prove the
-// drawing is unchanged with the sheets accepted.
+// Registered by item one (sheet, gate, tables; nothing routed, so the trace
+// could prove the drawing unchanged with the sheets accepted) and ROUTED by
+// item two for the GROUND and BOOKEND cells: dashKeys / throwClinchKeys /
+// crouchBlockstunKeys carry ext5 links ahead of their motion links,
+// swingSubstitute maps the motion dash / charge / victory / signatures and
+// the motion2 pivot / brake / seize / dizzy onto the sheet, and game.js emits
+// the exit brake, the pivot, the entrance, the win and the taunt through
+// unifiedExt5Pose. The AIR cells (4-7) are the next item's;
+// tests/unified-swing.test.mjs pins them unreached until it lands.
 export const UNIFIED_EXT5_CELL_HEIGHT = Object.freeze({
   deathblow: Object.freeze([215, 211, 168, 254, 168, 259, 251, 194, 248, 253, 246, 260, 249, 197, 232, 244]),
   jez: Object.freeze([251, 184, 186, 291, 202, 285, 292, 236, 279, 292, 289, 292, 298, 233, 288, 292]),
@@ -3705,8 +3709,9 @@ export const UNIFIED_EXT4_BEATS = Object.freeze([
 // v5.2 LOCOMOTION — the sixth sheet. Same pipeline and the same per-cell
 // gate as ext3/ext4 (a SWING_BANKS entry, so buildSwingAcceptMasks,
 // swingFrame and the loaders need no bank-specific code). Registered by the
-// install item and ROUTED by the item after it: nothing below names one of
-// these cells yet, and the tests pin all sixteen unreachable until it does.
+// install item; the GROUND and BOOKEND cells (0-3, 8-15) are routed by the
+// item after it (see the UNIFIED_EXT5_CELL_HEIGHT block), the AIR cells
+// (4-7) by the one after that — the tests pin those four unreachable.
 export const UNIFIED_EXT5_BANK = "unified-ext5";
 export const UNIFIED_EXT5_CELL_COUNT = 16;
 export const UNIFIED_EXT5_BASE = 72;
@@ -3744,12 +3749,54 @@ export const SWING_STAND_IN_TARGET = Object.freeze({
   [UNIFIED_EXT3_BANK]: Object.freeze({
     12: Object.freeze({ cell: 5, mode: "match" }),   // crouch guard  -> crouch
   }),
+  // v5.2 LOCOMOTION — the ground and bookend stand-ins, by the same rule.
+  // Measured on the shipped ext5 sheets against the unified rung (drawn
+  // height x fit-restore, the commissioner's fold on both sides):
+  //   turnaround   a standing plan between the idle, walk and guard rungs:
+  //                MATCH the idle (commissioner +8.0%, cyraxx +5.9%, jez
+  //                +5.1%, deathblow -6.6%, devil -4.9%; the rest inside 3%).
+  //   entrances    a standing hold that releases to the idle before FIGHT!:
+  //                MATCH (entrance B donald -10.0%, deathblow -9.6%, alan
+  //                -4.7%, devil -7.8%; entrance A deathblow -7.0%, post -7.9%).
+  //   crouch guard flinch  a crouch: MATCH the crouch rung like the ext3
+  //                crouch guard it hands to (cyraxx +31.4%, commissioner
+  //                +23.5%, ali +16.9%, donald +13.5%, the rest +7..9%; the
+  //                clamp floor leaves cyraxx 5% over).
+  //   power charge / victory / taunt  different plans (a wide low stance, the
+  //                arms raised, a fist up): CEILING at the idle (victory
+  //                donald +9.6%, cyraxx +8.9%, alan +5.8%; taunt jez +7.6%,
+  //                commissioner +6.3%; charge cyraxx +4.7%, commissioner
+  //                +4.5%) — a fighter does not grow for a pose.
+  //   The three dash cells, the throw grab and the dizzy sway take exactly 1:
+  //   a lunge, a lean and a sway are the motion, and each replaces a motion
+  //   cell that never had a reconciliation either.
+  [UNIFIED_EXT5_BANK]: Object.freeze({
+    3: Object.freeze({ cell: 0, mode: "match" }),    // turnaround    -> idle
+    8: Object.freeze({ cell: 0, mode: "ceiling" }),  // power charge  <= idle
+    9: Object.freeze({ cell: 0, mode: "match" }),    // entrance A    -> idle
+    10: Object.freeze({ cell: 0, mode: "match" }),   // entrance B    -> idle
+    11: Object.freeze({ cell: 0, mode: "ceiling" }), // victory       <= idle
+    12: Object.freeze({ cell: 0, mode: "ceiling" }), // taunt         <= idle
+    13: Object.freeze({ cell: 5, mode: "match" }),   // crouch guard flinch -> crouch
+  }),
 });
 
 /** Chain-constructor siblings of x2key for the swing sheets. SHEET FRAMES. */
 export const x3key = (cell) => Object.freeze({ bank: UNIFIED_EXT3_BANK, cell });
 export const x4key = (cell) => Object.freeze({ bank: UNIFIED_EXT4_BANK, cell });
 export const x5key = (cell) => Object.freeze({ bank: UNIFIED_EXT5_BANK, cell });
+
+/**
+ * v5.2: an ext5 descriptor over the exact pre-5.2 chain, for the pose sites
+ * game.js emits DIRECTLY rather than through a track or the substitution
+ * table: the dash-exit brake, the turnaround latch, the intro entrance, the
+ * win pose and the taunt. `cell` is a SHEET FRAME. The fallback matters on
+ * the devil, whose motion2 dash brake is rejected — with the table alone his
+ * dash exit would resolve base:12 and never be substituted.
+ */
+export function unifiedExt5Pose(cell, fallback) {
+  return { bank: UNIFIED_EXT5_BANK, frame: cell, fallback };
+}
 
 export function swingFrame(bank, cell) {
   const spec = SWING_BANKS[bank];
@@ -3814,7 +3861,27 @@ export function swingFighterIds(masks) {
  *                            against this fighter (ctx.ko); the plain
  *                            knockdown keeps drawing the unified cell
  *   motion2:10 dizzy      -> the reel for the ONSET of a dizzy / guard crush
- *                            (ctx.reeling), then the authored sway
+ *                            (ctx.reeling), then the ext4 slump and the ext5
+ *                            sway alternating on ctx.swayBeat (v5.2)
+ *
+ * v5.2 LOCOMOTION — the ground and bookend cells of the ext5 sheet, keyed
+ * on the motion cells the tracks and descriptors resolve. Context-free:
+ *
+ *   motion:7   dash       -> ext5:1 dash stretch (dashKeys also links the
+ *                            launch / stretch / brake ahead of its motion
+ *                            links, since the launch band's motion link is
+ *                            the brake and the table cannot tell the two
+ *                            brake bands apart)
+ *   motion:12  charge     -> ext5:8 power charge (the super / EX stance)
+ *   motion:13  victory2   -> ext5:11 victory
+ *   motion:14  sig1       -> ext5:9 entrance A
+ *   motion:15  sig2       -> ext5:10 entrance B
+ *   motion2:5  turnaround -> ext5:3
+ *   motion2:6  dash brake -> ext5:2 (the dash-exit tail, and the throw
+ *                            recovery's brake fallback)
+ *   motion2:12 throw grab -> ext5:14 (the clinch also links it in its load
+ *                            band, since the seize band leads with ext2's
+ *                            reach on every fighter)
  *
  * NOT routed, on purpose: the air hit (7) and the FLOOR BOUNCE (11). Both
  * came out with the feet in the air on every sheet (the bounce is a body on
@@ -3824,7 +3891,7 @@ export function swingFighterIds(masks) {
  */
 export function swingSubstitute(bank, frame, ctx = {}) {
   const kick = ctx.limb === "kick";
-  const E3 = UNIFIED_EXT3_CELLS, E4 = UNIFIED_EXT4_CELLS;
+  const E3 = UNIFIED_EXT3_CELLS, E4 = UNIFIED_EXT4_CELLS, E5 = UNIFIED_EXT5_CELLS;
   if (bank === UNIFIED_BANK) {
     switch (frame) {
       case UNIFIED_CELLS.lightHit:
@@ -3871,11 +3938,23 @@ export function swingSubstitute(bank, frame, ctx = {}) {
         return { bank: UNIFIED_EXT3_BANK, frame: E3.land };
       case MOTION_CELLS.wallsplat: return { bank: UNIFIED_EXT4_BANK, frame: E4.wallSplat };
       case MOTION_CELLS.crumple: return { bank: UNIFIED_EXT4_BANK, frame: E4.crumple };
+      // v5.2 LOCOMOTION — the ground and bookend cells. Context-free: each
+      // motion cell here has exactly one meaning wherever a track resolves it.
+      case MOTION_CELLS.dash: return { bank: UNIFIED_EXT5_BANK, frame: E5.dashStretch };
+      case MOTION_CELLS.charge: return { bank: UNIFIED_EXT5_BANK, frame: E5.powerCharge };
+      case MOTION_CELLS.victory2: return { bank: UNIFIED_EXT5_BANK, frame: E5.victory };
+      case MOTION_CELLS.sig1: return { bank: UNIFIED_EXT5_BANK, frame: E5.entranceA };
+      case MOTION_CELLS.sig2: return { bank: UNIFIED_EXT5_BANK, frame: E5.entranceB };
       default: return null;
     }
   }
   if (bank === "motion2") {
     switch (frame) {
+      // v5.2 LOCOMOTION: the pivot, the brake (the dash-exit tail and the
+      // throw recovery's brake fallback), the seize.
+      case MOTION2_CELLS.turnaround: return { bank: UNIFIED_EXT5_BANK, frame: E5.turnaround };
+      case MOTION2_CELLS.dashBrake: return { bank: UNIFIED_EXT5_BANK, frame: E5.dashBrake };
+      case MOTION2_CELLS.throwGrab: return { bank: UNIFIED_EXT5_BANK, frame: E5.throwGrab };
       case MOTION2_CELLS.airAttack: return { bank: UNIFIED_EXT3_BANK, frame: kick ? E3.airKick : E3.airPunch };
       // The heavy windup's COMPRESS band is the stand<->crouch bridge; with
       // the whole swing on the unified family now, the unified crouch
@@ -3888,7 +3967,15 @@ export function swingSubstitute(bank, frame, ctx = {}) {
         // A blocked hit's settle fallback lands here too: keep the flinch.
         if (ctx.blocking) return ctx.crouching ? { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard } : { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch };
         return { bank: UNIFIED_EXT4_BANK, frame: ctx.bodyBlow ? E4.bodyBlow : E4.headSnap };
-      case MOTION2_CELLS.dizzy: return { bank: UNIFIED_EXT4_BANK, frame: ctx.reeling ? E4.stagger : E4.dizzy };
+      case MOTION2_CELLS.dizzy:
+        // v5.1: the reel for the onset. v5.2: then the loop ALTERNATES the
+        // ext4 slump with the ext5 sway on its own beat (ctx.swayBeat, the
+        // resolver's 12-tick parity of the dizzy clock) instead of holding
+        // one cell for the 116 ticks after the reel; the slump is the alt
+        // where the sway cannot draw, so the loop never leaves the family.
+        if (ctx.reeling) return { bank: UNIFIED_EXT4_BANK, frame: E4.stagger };
+        if (ctx.swayBeat) return { bank: UNIFIED_EXT5_BANK, frame: E5.dizzySway, alt: { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy } };
+        return { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy };
       case MOTION2_CELLS.getupA: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupA };
       case MOTION2_CELLS.getupB: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupB };
       case MOTION2_CELLS.thrown: return { bank: UNIFIED_EXT4_BANK, frame: E4.thrown };
@@ -4647,11 +4734,22 @@ export function kickArcTransform(progress) {
  * through a transitional body plan on the way INTO the lunge as well as out.
  */
 export function dashKeys() {
+  // v5.2 LOCOMOTION: the dash in THREE same-generation drawings, one link
+  // ahead of every motion link so the band grid (and so every hold budget)
+  // is untouched — launch, stretch, brake. The 2.9 dash crossed four banks
+  // in thirteen ticks (motion2:6 -> motion:7 -> motion3:5 -> motion2:6 on
+  // jez); every fighter with the ext5 sheet now enters from the unified idle,
+  // dashes on his own sheet and brakes back onto it. The stretch owns bands
+  // 0.16 AND 0.42 (there is one stretch drawing, where motion3 supplied a
+  // second body): merged, that is 8 ticks at the 16-tick audit span —
+  // exactly MOTION_HOLD_BUDGET — and 6 on a 13-tick dash. The launch is a
+  // running leap, the brake the planted-foot skid, so a dash is no longer
+  // brake -> stretch -> brake.
   return [
-    { at: 0, chain: [m3key(MOTION3_KEYS.dashLaunch), m2key(MOTION2_CELLS.dashBrake)] },
-    { at: 0.16, chain: [m1key(MOTION_CELLS.dash)] },
-    { at: 0.42, chain: [m3key(MOTION3_KEYS.dashBodyB), m1key(MOTION_CELLS.dash)] },
-    { at: 0.68, chain: [m2key(MOTION2_CELLS.dashBrake)] },
+    { at: 0, chain: [x5key(UNIFIED_EXT5_CELLS.dashLaunch), m3key(MOTION3_KEYS.dashLaunch), m2key(MOTION2_CELLS.dashBrake)] },
+    { at: 0.16, chain: [x5key(UNIFIED_EXT5_CELLS.dashStretch), m1key(MOTION_CELLS.dash)] },
+    { at: 0.42, chain: [x5key(UNIFIED_EXT5_CELLS.dashStretch), m3key(MOTION3_KEYS.dashBodyB), m1key(MOTION_CELLS.dash)] },
+    { at: 0.68, chain: [x5key(UNIFIED_EXT5_CELLS.dashBrake), m2key(MOTION2_CELLS.dashBrake)] },
   ];
 }
 
@@ -4683,7 +4781,13 @@ export function throwClinchKeys({ inbetween = false } = {}) {
     // unified cell in cost 3 crossings where the 2.9 read had 1 (measured
     // roster-wide: worst crossing 8.84 dE mean against 7.35). The cell is not
     // gone from the sheet; it is not routed HERE.
-    { at: 0.34, chain: [m3key(MOTION3_KEYS.throwClinch), m2key(MOTION2_CELLS.crouchTrans)] },
+    // v5.2 LOCOMOTION: the fighter's own THROW GRAB — the two hands closing —
+    // takes the load band, so the clinch reads reach (ext2) -> seize (ext5)
+    // -> hurl (kit) on one sheet family. The 5.0 substitution had been
+    // standing the UNIFIED crouch transition in for the crouchTrans link
+    // here (a half-crouch in the middle of a grab, the exact drawing RULE 2
+    // retired from this band in 3.0); the seize is what the band means.
+    { at: 0.34, chain: [x5key(UNIFIED_EXT5_CELLS.throwGrab), m3key(MOTION3_KEYS.throwClinch), m2key(MOTION2_CELLS.crouchTrans)] },
     // HURL — the kit's own release art, which the recovery beat then carries
     // forward instead of re-showing. Never a return to the seize: the beat is
     // monotonic, like the recovery below it.
@@ -4769,10 +4873,29 @@ export const BLOCK_EXIT_AT = 0.42;
  * caller's crouch read, which is exactly what drew before on every tick. A
  * fighter without the cell is therefore byte-identical.
  */
-export function crouchBlockstunKeys() {
+export function crouchBlockstunKeys({ flinch = false } = {}) {
+  // v5.2 LOCOMOTION: with `flinch` — the caller's ONE capability answer,
+  // true when this fighter's ext5 crouch guard flinch can draw, exactly as
+  // `inbetween` and `extended` are passed — the crouched block gets an
+  // IMPACT and a SETTLE like the standing one. The flinch (knees folded,
+  // forearms up, jolted) opens the impact band and the ext3 crouch guard
+  // takes the settle band the standing track spends on its motion3
+  // block-settle slot; the last band still hands to the crouch read. Same
+  // grid, so the budget is untouched: 8 / 3 / 6 ticks at the 17-tick audit
+  // span. Without the answer the track is the 5.1 one, byte for byte —
+  // which is what ali reads while his flinch cell is HELD (a painted impact
+  // burst): opening the settle on the crouch guard for him too would merge
+  // his impact and settle into one 11-tick hold.
+  if (!flinch) {
+    return [
+      { at: 0, chain: [x3key(UNIFIED_EXT3_CELLS.crouchGuard)] },
+      { at: BLOCK_EXIT_AT, chain: [] },
+      { at: 0.62, chain: [] },
+    ];
+  }
   return [
-    { at: 0, chain: [x3key(UNIFIED_EXT3_CELLS.crouchGuard)] },
-    { at: BLOCK_EXIT_AT, chain: [] },
+    { at: 0, chain: [x5key(UNIFIED_EXT5_CELLS.crouchGuardFlinch), x3key(UNIFIED_EXT3_CELLS.crouchGuard)] },
+    { at: BLOCK_EXIT_AT, chain: [x3key(UNIFIED_EXT3_CELLS.crouchGuard)] },
     { at: 0.62, chain: [] },
   ];
 }

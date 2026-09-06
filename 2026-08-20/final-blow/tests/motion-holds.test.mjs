@@ -15,6 +15,7 @@ import {
   airNormalKeys,
   attackRecoveryKeys,
   blockstunKeys,
+  crouchBlockstunKeys,
   throwClinchKeys,
   airborneAnchorOffset,
   airborneAnchorRamp,
@@ -186,6 +187,20 @@ function testHoldBudget() {
   for (const span of [2, 3, 5, 8]) {
     assert.ok(beatKeyRuns(dashKeys(), span).length >= 1);
     assert.ok(beatKeyRuns(jumpArcKeys(0.22), span).length >= 1);
+  }
+  // v5.2 LOCOMOTION: the same budgets with the ext5 sheet answering. A
+  // same-generation cell replaces a drawing and never changes timing, so
+  // the worst hold on every routed track is no longer than it was on the
+  // shipping cells. The dash's one stretch drawing owns two bands — 8 ticks
+  // at the 16-tick span, exactly the budget — where motion3 supplied a
+  // second body; the crouched block, which had NO pose change at all before
+  // 5.1 and one before 5.2, now has three drawings inside the budget.
+  const withSwing = (key) => defaultBeatKeyResolve(key, { motion3: false, ext2: true, swing: true });
+  assert.equal(assertBudget("dash + ext5", dashKeys(), SPANS.dash, MOTION_HOLD_BUDGET, withSwing, 3), MOTION_HOLD_BUDGET);
+  assert.equal(assertBudget("crouch block + ext5", crouchBlockstunKeys({ flinch: true }), 17, MOTION_HOLD_BUDGET, withSwing, 3), 8);
+  assertBudget("throw clinch + ext5", throwClinchKeys({ inbetween: true }), 24, MOTION_HOLD_BUDGET + 1, withSwing, 3);
+  for (const [name, keys, span] of [["dash", dashKeys(), SPANS.dash], ["throw clinch", throwClinchKeys({ inbetween: true }), 24]]) {
+    assert.ok(longestBeatHold(keys, span, withSwing) <= longestBeatHold(keys, span, shipping), `${name}: the ext5 sheet never lengthens a hold`);
   }
 }
 

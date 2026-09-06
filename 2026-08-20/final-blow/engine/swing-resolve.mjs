@@ -24,6 +24,27 @@ import { ATTACK_LEVELS, GUARD_RULES, STUN_RULES } from "./defense.mjs";
 // (which starts at full amplitude) is already carrying the sway when it lands.
 export const REEL_ONSET_TICKS = 12;
 
+// v5.2 LOCOMOTION: the dizzy loop's own beat. After the reel the loop used
+// to hold the ext4 slump for the remaining ~116 ticks of a dizzy (14x the
+// hold budget) with the wobble transform doing all the work; it now
+// alternates the slump with the ext5 sway every DIZZY_SWAY_TICKS, keyed on
+// the ELAPSED ticks of the dizzy / guard-crush clock (sim state, so a
+// rollback resim and both renderers agree). The same 12 ticks as the reel,
+// so the whole loop — reel, slump, sway, slump, sway... — is one cadence, and
+// the 86-tick rotation sway in fighterMotionTransform rides across it.
+export const DIZZY_SWAY_TICKS = REEL_ONSET_TICKS;
+
+/** Parity of the dizzy / guard-crush clock, in DIZZY_SWAY_TICKS beats: true on the odd beats. */
+export function dizzySwayBeat(fighter) {
+  const elapsed = fighter.dizzyFrames > 0
+    ? (fighter.dizzyTotalFrames || STUN_RULES.dizzyFrames) - fighter.dizzyFrames
+    : fighter.guardCrushFrames > 0
+      ? (fighter.guardCrushTotalFrames || GUARD_RULES.crushFrames) - fighter.guardCrushFrames
+      : -1;
+  if (!(elapsed >= 0)) return false;
+  return Math.floor(elapsed / DIZZY_SWAY_TICKS) % 2 === 1;
+}
+
 /**
  * The substitution context for a fighter snapshot. The seven 5.0 fields plus
  * the three 5.1 reaction reads are what `swingSubstitute` reads; `crouchActive` is the one extra the resolver needs
@@ -68,6 +89,10 @@ export function swingContext(fighter, { roundDecided = false } = {}) {
     reeling: (fighter.dizzyFrames > 0 && fighter.dizzyFrames > (fighter.dizzyTotalFrames || STUN_RULES.dizzyFrames) - REEL_ONSET_TICKS)
       || (fighter.guardCrushFrames > 0 && fighter.guardCrushFrames > (fighter.guardCrushTotalFrames || GUARD_RULES.crushFrames) - REEL_ONSET_TICKS),
     ko: Boolean(roundDecided) && fighter.health <= 0,
+    // v5.2: the dizzy loop's beat — the odd DIZZY_SWAY_TICKS beats of the
+    // dizzy / guard-crush clock wear the ext5 sway, the even ones the ext4
+    // slump. Reeling wins for the onset (the table checks it first).
+    swayBeat: dizzySwayBeat(fighter),
     // In blockstun the settle band's fallback is the light-hit cell (motion3
     // block-settle is not accepted on every sheet); the table keeps the flinch
     // for a blocking fighter rather than snapping his head on a block.

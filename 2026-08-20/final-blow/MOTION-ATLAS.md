@@ -3633,3 +3633,115 @@ x4 -> motion2:6 x4`; the only line that differs is the gate's own header,
 which now lists the bank. Every hold budget in `tests/motion-holds` stands
 untouched (370 tests, all green; the swing script gained four functions). This is the baseline the routing
 item's before/after is measured against.
+
+## v5.2 — LOCOMOTION, ITEM TWO: THE GROUND AND BOOKEND CELLS REACH THE SCREEN
+
+Routing only, no art. Item one proved the registered sheet changed nothing;
+this item spends twelve of its sixteen cells — the dash in three drawings,
+the turnaround, the power charge, the two entrances, the victory, the taunt,
+the crouch guard flinch, the throw grab and the dizzy sway — and leaves the
+four AIR cells (apex tuck, descent, air recover, air-hit-upright) pinned
+unreachable for the item after it. The rule this item was written under: a
+same-generation cell REPLACES A DRAWING AND NEVER CHANGES TIMING. Every ext5
+link sits AHEAD of the motion link it stands in for, in the band that link
+already owned, so the band grid — and so every hold budget in
+`tests/motion-holds` — is the one the motion links set; where a beat is
+emitted directly rather than through a track, the ext5 descriptor carries
+the exact pre-5.2 chain as its fallback (`unifiedExt5Pose`, the sibling of
+`unifiedExt2Pose`), and the substitution table maps the motion cells
+themselves so any path that resolves one lands on the sheet.
+
+THE DASH WAS FOUR BANKS IN THIRTEEN TICKS. Traced with every sheet whole,
+jez's forward dash read `unified:0 -> motion2:6 x2 -> motion:7 x2 -> motion3:5
+x3 -> motion2:6 x6 -> unified:0`: the 2.9 brake key bookending a stretch that
+itself changed generation halfway, and on the devil — whose motion2 brake is
+rejected — `base:5 x2 -> motion:7 x2 -> motion3:5 x3 -> base:12 x6`, a base
+cell at both ends. `dashKeys` now leads every band with the sheet: launch
+(ext5:0, a running leap) for band 0, the stretch (ext5:1, the horizontal
+lunge, fit-restored 1.01-1.29) for bands 0.16 AND 0.42 — there is one stretch
+drawing where motion3 supplied a second body, and the two bands merge into 8
+ticks at the 16-tick audit span, exactly MOTION_HOLD_BUDGET, 6 on a 13-tick
+dash — and the brake (ext5:2, the planted-foot skid) for band 0.68. The
+dash-exit velocity-decay branch in game.js draws the same brake over its
+motion2 chain, so the tail is the drawing the dash left on. Attributions
+(entered from and exited to unified:0, `MOTION_RULES.dashExitFrames` = 4
+exit ticks counted):
+
+    jez        forward  unified:0 -> ext5:0 x2 -> ext5:1 x5 -> ext5:2 x6 -> unified:0   9+4, 13 of 13 on the family
+               back     unified:0 -> ext5:0 x2 -> ext5:1 x7 -> ext5:2 x7 -> unified:0   12+4, 16 of 16
+    deathblow  forward  unified:0 -> ext5:0 x3 -> ext5:1 x6 -> ext5:2 x8 -> unified:0   13+4, 17 of 17
+               back     unified:0 -> ext5:0 x3 -> ext5:1 x8 -> ext5:2 x9 -> unified:0   16+4, 20 of 20
+    devil      forward  unified:0 -> ext5:0 x2 -> ext5:1 x5 -> ext5:2 x6 -> unified:0   9+4, 13 of 13
+               back     unified:0 -> ext5:0 x2 -> ext5:1 x6 -> ext5:2 x7 -> unified:0   11+4, 15 of 15
+
+The hold lengths are the ones the 5.1 read had, tick for tick (deathblow's
+back dash held motion2:6 for the same 9 = 5 band + 4 exit ticks); only the
+generation changed. Without the sheet the gate returns the 5.1 read exactly.
+
+THE REST, by frame attribution (jez, every sheet whole; deathblow and the
+devil identical unless noted):
+
+    turnaround     unified:0 -> ext5:3 x3 -> unified:0          the 3-tick latch, over motion2:5; the draw-site audit
+                                                               counts the ext5 pivot as the pivot drawn
+    super charge   ext5:8 x4 -> ext3:3 x2                       the charge band over motion:12, then the reserved smear
+                   (deathblow / devil ext5:8 x7 -> ext3:3 x2; ali ext5:8 x5, his super has no smear room)
+    intro          ext5:9 x30 -> unified:0 | ext5:10 x30 -> unified:0   the seed-and-side pick, over motion:14 / motion:15
+    win            ext5:11 x45 on all three showcase picks     over specials:15 / motion:13 / motion:15
+    taunt          ext5:12 x45 on all three picks
+    throw          ext2:12 x9 -> ext5:14 x7 -> [hurl] -> ext3:2 x9 -> ext2:13 x9 -> unified:7 x9 -> unified:0
+                                                               reach -> SEIZE -> hurl: the load band drew the UNIFIED
+                                                               crouch transition before (the devil, whose motion2:4 is
+                                                               off, drew the guard) — the seize is what the band means
+    dizzy          ext4:4 x12 -> ext5:15 x12 -> ext4:5 x12 -> ext5:15 x12 -> ... (11 runs over 128 ticks)
+                                                               was ext4:4 x12 -> ext4:5 x116; the loop now alternates
+                                                               the slump and the sway on the 12-tick beat the reel set
+                                                               (`DIZZY_SWAY_TICKS`, `ctx.swayBeat` = parity of the
+                                                               elapsed dizzy / guard-crush clock, sim state), the
+                                                               slump as the sway's `alt` so a held sheet keeps the loop
+    crouched block ext5:13 x8 -> ext3:12 x3 -> unified:5 x6    an IMPACT and a SETTLE, like the standing
+                                                               ext4:0 x8 -> unified:7 x9; was ext3:12 x8 -> unified:5 x9
+
+The crouched block takes the flinch through a capability answer
+(`crouchBlockstunKeys({ flinch })`, answered per fighter from the per-cell
+gate exactly as `inbetween` and `extended` are), not through the gate alone:
+ali's flinch cell is HELD (the painted impact burst item one recorded), and
+with the settle band opened on the crouch guard for everyone his impact band
+would have fallen to the same cell and merged into one 11-tick hold. He
+reads the 5.1 track, byte for byte, until the cell is keyed out.
+
+THE STAND-INS, by the 5.1 rule (match when the body plan is the rung's,
+ceiling at the idle otherwise; measured drawn height x fit-restore against
+the unified rung, the commissioner's fold on both sides): the turnaround,
+the two entrances and the crouched flinch MATCH — turnaround commissioner
++8.0%, cyraxx +5.9%, jez +5.1%, deathblow -6.6%, devil -4.9%, factors 0.926
+/ 0.945 / 0.952 / 1.071 / 1.052; entrance A deathblow 1.075, post 1.086, jez
+0.949, benny 0.965, cyraxx 0.945, commissioner 0.957; entrance B deathblow
+1.106, donald 1.111, devil 1.084, post 1.081, alan 1.050, jez 0.958, cyraxx
+0.955, commissioner 0.962; the crouched flinch onto the crouch like the ext3
+guard it hands to — cyraxx +31.4% (the 0.80 clamp floor leaves him 5% over),
+commissioner +23.5% (0.810), ali +16.9% (0.855, moot while held), donald
++13.5% (0.881), the rest 0.914-0.936. The power charge, the victory and the
+taunt are different plans and take the CEILING only: victory donald 0.913,
+cyraxx 0.919, alan 0.945, commissioner 0.947, jez 0.949, benny 0.965; taunt
+jez 0.930, commissioner 0.941; charge cyraxx 0.955, commissioner 0.957,
+benny 0.965. The three dash cells, the seize and the sway take exactly 1: a
+lunge, a lean and a sway are the motion, and each replaces a motion cell
+that never had a reconciliation either. The sway sits 5% over the slump it
+alternates with on jez, cyraxx and the commissioner (head up against head
+down, the same body at the same scale) — that is the bob, not a size pop.
+
+CINEMA 3D needed no code: `renderer/three/fighters.mjs` warms and draws
+whatever bank the resolved pose names through `AUTHORED_BANKS` and the
+host's `fighterAtlasFor` / `fighterBankSheet`, both of which item one taught
+the bank; `tests/cinema-fighters` now pins an ext5 brake drawn from the ext5
+bank on a fighter who owns the sheet and from the descriptor's fallback on
+one who does not. 371 tests green (the one addition). Manifest
+`format.ext5Status` reads `WIRED 5.2 (ground and bookend cells)`.
+
+STILL UNROUTED, for the next item: ext5:4 apex tuck, ext5:5 descent, ext5:6
+air recover, ext5:7 air-hit-upright (the doubled-over fold item one
+recorded) — the jump still crosses `unified:8 -> ext:3 -> motion:5 ->
+motion3:2 -> motion3:3 -> ext3:8 -> ext3:10`. Residuals of this item: the
+merged stretch band on a 16-tick dash sits exactly at the budget, not under
+it; ali's crouched block waits on his flinch cell; the ext5 sheets are still
+lossless on the wire.

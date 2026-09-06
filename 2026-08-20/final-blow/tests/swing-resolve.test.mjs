@@ -17,8 +17,16 @@ import {
   UNIFIED_EXT3_CELLS,
   UNIFIED_EXT4_BANK,
   UNIFIED_EXT4_CELLS,
+  UNIFIED_EXT5_BANK,
+  UNIFIED_EXT5_CELLS,
   WALK_CELL_COUNT,
+  attackAnimationPose,
   attackMotionBeat,
+  crouchBlockstunKeys,
+  dashKeys,
+  getFighterMovement,
+  throwClinchKeys,
+  unifiedExt5Pose,
   bareHandedAttack,
   baseCellRoles,
   beatPoseAt,
@@ -34,7 +42,7 @@ import {
   resolveMotionPose,
   unifiedPose,
 } from "../engine/fighter-kits.mjs";
-import { swingContext, swingResolve } from "../engine/swing-resolve.mjs";
+import { DIZZY_SWAY_TICKS, swingContext, swingResolve } from "../engine/swing-resolve.mjs";
 
 // v5.0 FULL SWING — the resolver between a fighter snapshot and the
 // substitution table: the 7-field context, the crouching-normal override and
@@ -75,8 +83,25 @@ function testContextFromSnapshot() {
   assert.deepEqual(swingContext(snapshot()), {
     limb: "punch", heavy: false, crouching: false, attacking: false, airborne: false,
     victimAirborne: false, falling: false, crouchActive: false,
-    bodyBlow: false, reeling: false, ko: false, blocking: false,
+    bodyBlow: false, reeling: false, ko: false, blocking: false, swayBeat: false,
   });
+  // v5.2: the dizzy loop's beat — 12-tick parity of the ELAPSED dizzy /
+  // guard-crush clock; the reel owns the first beat (the table checks it
+  // first), the slump the even beats, the sway the odd ones.
+  assert.equal(DIZZY_SWAY_TICKS, 12);
+  const beatAt = (dizzyFrames) => swingContext(snapshot({ dizzyFrames, dizzyTotalFrames: 128 })).swayBeat;
+  assert.equal(beatAt(128), false, "elapsed 0");
+  assert.equal(beatAt(117), false, "elapsed 11: the reel's last tick");
+  assert.equal(beatAt(116), true, "elapsed 12: the first sway beat");
+  assert.equal(beatAt(105), true, "elapsed 23");
+  assert.equal(beatAt(104), false, "elapsed 24: the slump again");
+  assert.equal(beatAt(92), true, "elapsed 36");
+  assert.equal(swingContext(snapshot({ dizzyFrames: 116, dizzyTotalFrames: 128 })).reeling, false);
+  assert.equal(swingContext(snapshot({ dizzyFrames: 117, dizzyTotalFrames: 128 })).reeling, true, "the reel and the first sway beat do not overlap");
+  assert.equal(swingContext(snapshot({ guardCrushFrames: 48, guardCrushTotalFrames: 60 })).swayBeat, true, "a guard crush sways on the same clock (elapsed 12)");
+  assert.equal(swingContext(snapshot({ guardCrushFrames: 49, guardCrushTotalFrames: 60 })).swayBeat, false);
+  assert.equal(swingContext(snapshot({ dizzyFrames: 100 })).swayBeat, ((128 - 100) / 12 | 0) % 2 === 1, "the STUN_RULES total when the snapshot has none");
+  assert.equal(swingContext(snapshot()).swayBeat, false, "no dizzy, no beat");
   assert.equal(swingContext(snapshot({ blockstunFrames: 5 })).blocking, true);
   // v5.1 reaction reads.
   assert.equal(swingContext(snapshot({ hitstunFrames: 6, lastHitLevel: "low" })).bodyBlow, true);
@@ -145,9 +170,13 @@ function testSubstitutionAndGate() {
   // Not drawable, no alt: the resolved pose back, the SAME object (timing
   // and identity untouched).
   assert.equal(swingResolve(punchExt, ctx, NONE), punchExt);
-  // Nothing in the table: the same object.
+  // Nothing in the table: the same object. (v5.2 routed the dash, so the
+  // plain jump's tuck on the floor is the example now — and the dash is the
+  // ext5 stretch.)
+  const tuck = motionPose(MOTION_CELLS.tuck, "base", 13);
+  assert.equal(swingResolve(tuck, { ...ctx, attacking: false }, ALL), tuck);
   const dash = motionPose(MOTION_CELLS.dash, "base", 5);
-  assert.equal(swingResolve(dash, ctx, ALL), dash);
+  assert.deepEqual(swingResolve(dash, ctx, ALL), { bank: UNIFIED_EXT5_BANK, frame: UNIFIED_EXT5_CELLS.dashStretch, fallback: dash });
   const idle = { bank: "base", frame: 0 };
   assert.equal(swingResolve(idle, ctx, ALL), idle);
   // Stance and weight pick the extension.
@@ -209,7 +238,7 @@ function testCrouchingNormalOverride() {
   // cell in the window (the recover key arriving) keeps its own drawing.
   const ext2 = { bank: UNIFIED_EXT2_BANK, frame: UNIFIED_EXT2_CELLS.crouchPunchRecover };
   assert.equal(swingResolve(ext2, punch, ALL), ext2);
-  const unrelatedMotion = motionPose(MOTION_CELLS.dash, "base", 5);
+  const unrelatedMotion = motionPose(MOTION_CELLS.tuck, "base", 13);
   assert.equal(swingResolve(unrelatedMotion, punch, ALL), unrelatedMotion);
   // The real context derives crouchActive from the attack window, so the
   // override switches on and off with attackFrame.
@@ -296,6 +325,7 @@ function buildJezGate() {
     [UNIFIED_EXT2_BANK]: buildUnifiedExt2AcceptMasks(unified, main),
     [UNIFIED_EXT3_BANK]: buildSwingAcceptMasks(unified, UNIFIED_EXT3_BANK, main),
     [UNIFIED_EXT4_BANK]: buildSwingAcceptMasks(unified, UNIFIED_EXT4_BANK, main),
+    [UNIFIED_EXT5_BANK]: buildSwingAcceptMasks(unified, UNIFIED_EXT5_BANK, main),
     motion: buildMotionAcceptMasks(readManifest("motion")),
     motion2: buildMotionAcceptMasks(readManifest("motion2")),
     [MOTION3_BANK]: buildMotionAcceptMasks(motion3, 8),
@@ -314,7 +344,7 @@ function buildJezGate() {
   };
 }
 
-const SHORT = { [UNIFIED_BANK]: "unified", [UNIFIED_EXT_BANK]: "ext", [UNIFIED_EXT2_BANK]: "ext2", [UNIFIED_EXT3_BANK]: "ext3", [UNIFIED_EXT4_BANK]: "ext4" };
+const SHORT = { [UNIFIED_BANK]: "unified", [UNIFIED_EXT_BANK]: "ext", [UNIFIED_EXT2_BANK]: "ext2", [UNIFIED_EXT3_BANK]: "ext3", [UNIFIED_EXT4_BANK]: "ext4", [UNIFIED_EXT5_BANK]: "ext5" };
 const cellName = (pose) => `${SHORT[pose.bank] || pose.bank}:${pose.frame}`;
 
 /** Mirror of the kit-less strike branch in fighterPoseDescriptor (game.js); animTime 0 so the idle is the held unified cell. */
@@ -461,6 +491,111 @@ function testGameMirror() {
   assert.match(gameSource, /poseTrace\(count = POSE_TRACE_SIZE, side = null\)/);
 }
 
+// ---------------------------------------------------------------------------
+// v5.2 LOCOMOTION (ext5-ground) — the ground and bookend chains, at node
+// level, with the gate from the shipped manifests. MOTION-ATLAS.md v5.2
+// records the attributions; the trace mirrors the descriptor sites game.js
+// emits directly (the dash branch, the exit tail, the pivot latch, the
+// entrance, the showcase, the crouched block) with the engine's own tracks.
+// ---------------------------------------------------------------------------
+const E5 = UNIFIED_EXT5_CELLS;
+const clamp01 = (v) => Math.min(0.999, Math.max(0, v));
+const runsOf = (cells) => {
+  const runs = [];
+  for (const cell of cells) { if (runs.length && runs.at(-1).cell === cell) runs.at(-1).ticks += 1; else runs.push({ cell, ticks: 1 }); }
+  return runs.map((r) => `${r.cell} x${r.ticks}`);
+};
+const drawJez = (gate, pose, fighter, opts = {}) => cellName(swingResolve(resolveMotionPose(pose, gate, "jez", opts), swingContext(fighter, opts), gate));
+const jezIdle = () => unifiedPose(UNIFIED_CELLS.idle, { bank: "base", frame: baseCellRoles("jez").idle[0] });
+
+function dashChain(gate, back) {
+  const total = back ? getFighterMovement("jez").backDashFrames : getFighterMovement("jez").forwardDashFrames;
+  const cells = [drawJez(gate, jezIdle(), snapshot())];
+  for (let dashFrames = total; dashFrames > 0; dashFrames -= 1) {
+    const pose = beatPoseAt(dashKeys(), clamp01(1 - dashFrames / total), (key) => ({ bank: "base", frame: !key || key.at >= 0.68 ? 12 : 5 }));
+    cells.push(drawJez(gate, pose, snapshot()));
+  }
+  // MOTION_RULES.dashExitFrames ticks of the exit tail, then the idle.
+  for (let exit = 4; exit > 0; exit -= 1) cells.push(drawJez(gate, unifiedExt5Pose(E5.dashBrake, motion2Pose(MOTION2_CELLS.dashBrake, "base", 12)), snapshot()));
+  cells.push(drawJez(gate, jezIdle(), snapshot()));
+  return { runs: runsOf(cells), cells, total };
+}
+
+function testExt5GroundChains() {
+  const gate = buildJezGate();
+  assert.equal(gate(E5.dashLaunch, UNIFIED_EXT5_BANK), true, "jez's ext5 sheet is whole and accepted");
+  // THE DASH: 9 forward ticks + 4 exit ticks, every one on the unified
+  // family, entered from and exited to unified:0. Before: unified:0 ->
+  // motion2:6 -> motion:7 -> motion3:5 -> motion2:6 -> unified:0 (four banks).
+  const forward = dashChain(gate, false);
+  assert.equal(forward.total, 9);
+  assert.deepEqual(forward.runs, ["unified:0 x1", "ext5:0 x2", "ext5:1 x5", "ext5:2 x6", "unified:0 x1"]);
+  assert.deepEqual(dashChain(gate, true).runs, ["unified:0 x1", "ext5:0 x2", "ext5:1 x7", "ext5:2 x7", "unified:0 x1"]);
+  const noExt5 = (cell, bank) => (bank === UNIFIED_EXT5_BANK ? false : gate(cell, bank));
+  assert.deepEqual(dashChain(noExt5, false).runs, ["unified:0 x1", "motion2:6 x2", "motion:7 x2", "motion3:5 x3", "motion2:6 x6", "unified:0 x1"],
+    "without the sheet the 5.1 read, tick for tick: the same hold lengths, a different generation");
+  // THE PIVOT: the three latch ticks between two idles.
+  const pivot = [jezIdle(), ...Array.from({ length: 3 }, () => unifiedExt5Pose(E5.turnaround, motion2Pose(MOTION2_CELLS.turnaround, "base", 0))), jezIdle()]
+    .map((pose) => drawJez(gate, pose, snapshot()));
+  assert.deepEqual(runsOf(pivot), ["unified:0 x1", "ext5:3 x3", "unified:0 x1"]);
+  // THE SUPER CHARGE: the whole charge band on the power charge, then the
+  // smear (ext3:3) the super's startup reserves — the kit path.
+  const superMove = createFighterMove("jez", "super", {});
+  const chargeCells = [];
+  for (let attackFrame = 0; attackFrame < superMove.activeStartFrame; attackFrame += 1) {
+    const pose = attackAnimationPose(superMove, attackFrame, Object.freeze({ extended: true, inbetween: true }));
+    chargeCells.push(drawJez(gate, pose, snapshot({ attacking: superMove, attackFrame }), { bareHanded: bareHandedAttack(superMove) }));
+  }
+  assert.deepEqual(runsOf(chargeCells), ["ext5:8 x4", "ext3:3 x2"]);
+  // THE ENTRANCES, THE WIN AND THE TAUNT: one held cell each, over the
+  // motion signature / the showcase rotation.
+  assert.equal(drawJez(gate, unifiedExt5Pose(E5.entranceA, motionPose(MOTION_CELLS.sig1, "base", 0)), snapshot()), "ext5:9");
+  assert.equal(drawJez(gate, unifiedExt5Pose(E5.entranceB, motionPose(MOTION_CELLS.sig2, "base", 0)), snapshot()), "ext5:10");
+  for (const rotation of [{ bank: "specials", frame: 15 }, motionPose(MOTION_CELLS.victory2, "specials", 15), motionPose(MOTION_CELLS.sig2, "specials", 15)]) {
+    assert.equal(drawJez(gate, unifiedExt5Pose(E5.victory, rotation), snapshot()), "ext5:11");
+    assert.equal(drawJez(gate, unifiedExt5Pose(E5.taunt, rotation), snapshot()), "ext5:12");
+  }
+  // Off the sheet the rotation is what it was: the kit cell, then the two
+  // motion picks — which the table maps onto the same ext5 cells.
+  assert.equal(drawJez(noExt5, unifiedExt5Pose(E5.victory, { bank: "specials", frame: 15 }), snapshot()), "specials:15");
+  assert.equal(drawJez(noExt5, unifiedExt5Pose(E5.victory, motionPose(MOTION_CELLS.victory2, "specials", 15)), snapshot()), "motion:13");
+  assert.equal(drawJez(gate, motionPose(MOTION_CELLS.victory2, "specials", 15), snapshot()), "ext5:11", "the table reaches the win from the motion pick too");
+  assert.equal(drawJez(gate, motionPose(MOTION_CELLS.charge, "specials", 0), snapshot()), "ext5:8");
+  // THE THROW CLINCH: reach (ext2) -> seize (ext5) -> the hurl band's
+  // fallback. Before, the load band drew the unified crouch transition.
+  const throwMove = createFighterMove("jez", "throw", {});
+  const guard = unifiedPose(UNIFIED_CELLS.guard, { bank: "base", frame: baseCellRoles("jez").guard });
+  const clinch = (g) => runsOf(Array.from({ length: 24 }, (_, frame) => drawJez(g, beatPoseAt(throwClinchKeys({ inbetween: true }), clamp01(frame / 24), guard), snapshot({ attacking: throwMove, attackFrame: 4 }))));
+  assert.deepEqual(clinch(gate), ["ext2:12 x9", "ext5:14 x7", "unified:7 x8"]);
+  assert.deepEqual(clinch(noExt5), ["ext2:12 x9", "unified:6 x7", "unified:7 x8"]);
+  // THE DIZZY: the reel, then the slump and the sway alternating every 12
+  // ticks for the rest of the 128. Before: ext4:4 x12 -> ext4:5 x116.
+  const dizzyCells = [];
+  for (let dizzyFrames = 128; dizzyFrames > 0; dizzyFrames -= 1) {
+    dizzyCells.push(drawJez(gate, motion2Pose(MOTION2_CELLS.dizzy, "base", 12), snapshot({ dizzyFrames, dizzyTotalFrames: 128 })));
+  }
+  const dizzyRuns = runsOf(dizzyCells);
+  assert.deepEqual(dizzyRuns.slice(0, 4), ["ext4:4 x12", "ext5:15 x12", "ext4:5 x12", "ext5:15 x12"]);
+  assert.equal(dizzyRuns.length, 11);
+  assert.ok(dizzyRuns.slice(1).every((run, i) => run.startsWith(i % 2 === 0 ? "ext5:15" : "ext4:5")), dizzyRuns.join(" -> "));
+  assert.ok(dizzyRuns.every((run) => Number(run.split(" x")[1]) <= 12), "no drawing owns more than one beat");
+  assert.deepEqual(runsOf(Array.from({ length: 128 }, (_, i) => drawJez(noExt5, motion2Pose(MOTION2_CELLS.dizzy, "base", 12), snapshot({ dizzyFrames: 128 - i, dizzyTotalFrames: 128 })))),
+    ["ext4:4 x12", "ext4:5 x116"], "off the sheet the sway's alt is the slump: the 5.1 loop");
+  // THE CROUCHED BLOCK: impact on the flinch, settle on the crouch guard,
+  // then the crouch — 8 / 3 / 6 over a 17-tick blockstun. Before: ext3:12
+  // x8 -> unified:5 x9.
+  const crouch = unifiedPose(UNIFIED_CELLS.crouch, { bank: "base", frame: baseCellRoles("jez").crouch });
+  const block = (g, flinch) => runsOf(Array.from({ length: 17 }, (_, i) => {
+    const blockstunFrames = 17 - i;
+    return drawJez(g, beatPoseAt(crouchBlockstunKeys({ flinch }), clamp01(1 - blockstunFrames / 17), crouch), snapshot({ crouch: true, blockstunFrames }));
+  }));
+  assert.deepEqual(block(gate, true), ["ext5:13 x8", "ext3:12 x3", "unified:5 x6"]);
+  assert.deepEqual(block(gate, false), ["ext3:12 x8", "unified:5 x9"], "ali's read (flinch held): the 5.1 track");
+  assert.deepEqual(block(noExt5, true), ["ext3:12 x11", "unified:5 x6"], "why the answer is asked per fighter, not left to the gate");
+  // No chain above draws the reaction sheet's inverted cells or an ungated cell.
+  for (const cell of [...forward.cells, ...chargeCells, ...dizzyCells]) assert.ok(!["ext4:7", "ext4:11"].includes(cell));
+}
+
 testContextFromSnapshot();
 testCrouchActiveWindow();
 testSubstitutionAndGate();
@@ -469,5 +604,6 @@ testCrouchingNormalOverride();
 testAirHitNeverReachesTheScreen();
 testFrameChains();
 testGameMirror();
+testExt5GroundChains();
 
 console.log("Final Blow swing resolver tests passed");

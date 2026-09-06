@@ -554,6 +554,29 @@ test("a mid-chain disposal drops the queued steps, and a late bank counts as a f
   assert.equal(lateLayer.bankReport().warmed, 0);
 });
 
+// v5.2 LOCOMOTION (ext5-ground): CINEMA 3D draws whatever bank the resolved
+// pose names, through the shared AUTHORED_BANKS list — an ext5 dash brake on
+// a fighter who owns the sheet is drawn from that sheet, warmed with the
+// family; on a fighter who does not, the descriptor's own fallback draws.
+test("an ext5 pose draws from the ext5 bank when the fighter owns the sheet, and falls back when he does not", () => {
+  const owns = fighterMock({ __pose: { bank: "unified-ext5", frame: 2, fallback: { bank: "motion2", frame: 6, fallback: { bank: "base", frame: 12 } } } });
+  const ownState = stateMock([owns]);
+  const { layer } = layerFor(ownState, { ownBanks: [...OWN_BANKS, "unified-ext5"] });
+  layer.update(ownState, 1 / 60, 0);
+  const rig = layer.rigs[0];
+  assert.ok(rig.banks["unified-ext5"], "warmed with the family from AUTHORED_BANKS");
+  assert.equal(rig.currentBank, "unified-ext5");
+  assert.equal(layer.bankReport().lateFallbacks, 0, "not a late build: the sheet was warmed");
+  // The same pose on a fighter without the sheet: the descriptor's fallback.
+  const lacks = fighterMock({ __pose: { bank: "unified-ext5", frame: 2, fallback: { bank: "motion2", frame: 6, fallback: { bank: "base", frame: 12 } } } });
+  const lackState = stateMock([lacks]);
+  const lackLayer = layerFor(lackState, { ownBanks: ["motion2"] }).layer;
+  lackLayer.host.fighterAtlasFor = (f, bank) => (bank === "motion2" || bank === "base" ? { complete: true, naturalWidth: 1280, naturalHeight: 1280, src: `own:${bank}` } : null);
+  lackLayer.update(lackState, 1 / 60, 0);
+  assert.equal(lackLayer.rigs[0].currentBank, "motion2", "the ext5 descriptor's fallback chain is honoured");
+  assert.equal(lackLayer.rigs[0].banks["unified-ext5"], undefined);
+});
+
 test("sheets shared by both sides survive one side's disposal; idle rigs are evicted after 3 s", () => {
   const a = fighterMock();
   const b = fighterMock({ side: 1, facing: -1, x: 800 });

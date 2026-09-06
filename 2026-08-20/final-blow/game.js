@@ -73,6 +73,8 @@ import {
   UNIFIED_EXT3_BANK,
   UNIFIED_EXT4_BANK,
   UNIFIED_EXT5_BANK,
+  UNIFIED_EXT5_CELLS,
+  unifiedExt5Pose,
   buildSwingAcceptMasks,
   WALK_CELL_COUNT,
   WALK_POSE_MIN_SPEED,
@@ -19233,12 +19235,17 @@ function recordPoseTrace(fighter, pose) {
 // deterministically between the kit victory cell, the motion alternate win
 // pose and the second signature — pure snapshotted sim state, never
 // Math.random, so rollback resimulation and both online peers agree.
-function showcasePoseDescriptor(fighter) {
+// v5.2 LOCOMOTION: the showcase is the fighter's OWN cell first — the ext5
+// victory under the curtain-call spotlight, the ext5 taunt for the taunt —
+// over the exact rotation below, which is what draws when the sheet is not
+// on the fighter (and what the kit's specials:15 read has always been).
+function showcasePoseDescriptor(fighter, ext5Cell = UNIFIED_EXT5_CELLS.victory) {
   const victory = fighter.kit.victory;
   const pick = (((state.matchSeed >>> 0) + state.rounds[0] + state.rounds[1]) >>> 0) % 3;
-  if (pick === 1) return motionPose(MOTION_CELLS.victory2, victory.bank, victory.frame);
-  if (pick === 2) return motionPose(MOTION_CELLS.sig2, victory.bank, victory.frame);
-  return { bank: victory.bank, frame: victory.frame };
+  const rotation = pick === 1 ? motionPose(MOTION_CELLS.victory2, victory.bank, victory.frame)
+    : pick === 2 ? motionPose(MOTION_CELLS.sig2, victory.bank, victory.frame)
+      : { bank: victory.bank, frame: victory.frame };
+  return unifiedExt5Pose(ext5Cell, rotation);
 }
 
 // v4.0: the one options object every ext-aware beat track is handed, frozen so
@@ -19407,14 +19414,18 @@ function fighterPoseDescriptor(fighter) {
   // Release 1.7 wave 11: the taunt holds the fighter's victory pose frame
   // (v2.7: rotated with the motion alternates).
   if (fighter.tauntFrames > 0 && fighter.kit?.victory) {
-    return showcasePoseDescriptor(fighter);
+    return showcasePoseDescriptor(fighter, UNIFIED_EXT5_CELLS.taunt);
   }
   // v2.7 FRAMES: signature intro stance — each side holds its own manifest
   // signature cell through the walk-on, releasing to idle before FIGHT!.
   if (state.phase === "intro" && state.phaseTime > 0.95 && fighter.grounded
     && !fighter.attacking && fighter.kit?.victory) {
     const cell = (((state.matchSeed >>> 0) + fighter.side) % 2) ? MOTION_CELLS.sig2 : MOTION_CELLS.sig1;
-    return motionPose(cell, "base", Math.floor(fighter.animTime * 5) % 4);
+    // v5.2 LOCOMOTION: the entrance is the fighter's own (ext5:9 / ext5:10,
+    // the same seed-and-side pick) over the motion signature, so the walk-on
+    // holds a cell from the sheet family the idle it releases into is on.
+    const entrance = cell === MOTION_CELLS.sig2 ? UNIFIED_EXT5_CELLS.entranceB : UNIFIED_EXT5_CELLS.entranceA;
+    return unifiedExt5Pose(entrance, motionPose(cell, "base", Math.floor(fighter.animTime * 5) % 4));
   }
   // v2.7 FRAMES: round-win pose under the curtain-call spotlight — the winner
   // holds the showcase rotation (same convention the camera settle uses to
@@ -19628,10 +19639,15 @@ function fighterPoseDescriptor(fighter) {
   // same observer clock; the recovery bands are empty and resolve to the
   // crouch read the stance branch draws, so a fighter without the cell is
   // byte-identical and the flinch hands back to exactly the drawing it left.
+  // v5.2 LOCOMOTION: with the fighter's ext5 crouch guard flinch drawable
+  // (`flinch`, the capability answer for this track) the impact band opens
+  // on it and the crouch guard takes the settle — an impact and a settle,
+  // like the standing block. ali's flinch is held, so he reads the 5.1 track.
   if (fighter.blockstunFrames > 0 && fighter.crouch && fighter.grounded) {
     const blockTotal = Math.max(fighter.blockstunFrames, motionObs[fighter.side]?.blockstunTotal || 0);
     const blockPhase = clamp(1 - fighter.blockstunFrames / Math.max(1, blockTotal), 0, 0.999);
-    return beatPoseAt(crouchBlockstunKeys(), blockPhase, uni(UNIFIED_CELLS.crouch, base(roles.crouch)));
+    const flinch = swingCellDrawable(fighter.def.id, UNIFIED_EXT5_CELLS.crouchGuardFlinch, UNIFIED_EXT5_BANK);
+    return beatPoseAt(crouchBlockstunKeys({ flinch }), blockPhase, uni(UNIFIED_CELLS.crouch, base(roles.crouch)));
   }
   if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) {
     // v5.1: a BLOCKED contact's flash keeps the stance. The flash outlives a
@@ -19674,12 +19690,16 @@ function fighterPoseDescriptor(fighter) {
   // missing sheet changes nothing.
   const turnObs = motionObs[fighter.side];
   if (turnObs?.turnFrames > 0 && fighter.grounded && !fighter.attacking) {
-    return motion2Pose(MOTION2_CELLS.turnaround, "base",
+    // v5.2 LOCOMOTION: the pivot is the fighter's own (ext5:3, a mid-turn
+    // body seen from behind) over the exact 2.9 chain, so the three latch
+    // ticks sit between two unified rungs on one sheet family instead of
+    // dropping to the motion2 generation for the turn.
+    return unifiedExt5Pose(UNIFIED_EXT5_CELLS.turnaround, motion2Pose(MOTION2_CELLS.turnaround, "base",
       fighter.crouch ? roles.crouch
         : fighter.block ? roles.guard
           : Math.abs(fighter.vx) > 22
             ? 4 + Math.floor(fighter.walkTime * 10) % 4
-            : Math.floor(fighter.animTime * 5) % 4);
+            : Math.floor(fighter.animTime * 5) % 4));
   }
   // v2.9 FLOW: 2-3 ticks of the authored half-lowered in-between entering
   // crouch (the leave side lives past the movement branches below). The
@@ -19949,9 +19969,15 @@ function fighterPoseDescriptor(fighter) {
   // brake now owns the whole velocity decay, so the upright cell arrives only
   // once the fighter has genuinely stopped. The fallback is the base gather
   // cell the 2.7 bridge used, exactly as the in-dash brake key does.
+  // v5.2 LOCOMOTION: the exit tail wears the fighter's OWN brake (ext5:2),
+  // the same drawing the dash's last band left on, over the exact 2.9 chain.
+  // Emitted directly rather than through the substitution table because the
+  // devil's motion2 brake is rejected: for him the chain below resolves
+  // base:12, which the table never sees, and the dash would leave the family
+  // on its last four ticks.
   if (transObs?.dashExitFrames > 0 && fighter.grounded && !fighter.crouch
     && Math.abs(fighter.vx) > MOTION_RULES.dashBrakeReleaseSpeed) {
-    return motion2Pose(MOTION2_CELLS.dashBrake, "base", 12);
+    return unifiedExt5Pose(UNIFIED_EXT5_CELLS.dashBrake, motion2Pose(MOTION2_CELLS.dashBrake, "base", 12));
   }
   if (Math.abs(fighter.vx) > WALK_POSE_MIN_SPEED && !(transObs?.dashExitFrames > 0)) {
     // v2.10 WALK — the SELF-CONTAINED four-key cycle (assets/walk).
@@ -22135,7 +22161,10 @@ function drawFighter(fighter, time) {
     // descriptor being emitted but falling back through the accept mask (the
     // pivot's own fallback cell). Instrumentation only.
     if (motionObs[fighter.side]?.turnFrames > 0) {
-      if (pose.bank === "motion2" && frame === MOTION2_CELLS.turnaround) {
+      // v5.2: the pivot is the ext5 turnaround on a fighter with the sheet,
+      // the motion2 key underneath it otherwise — both are the pivot drawn.
+      if ((pose.bank === "motion2" && frame === MOTION2_CELLS.turnaround)
+        || (pose.bank === UNIFIED_EXT5_BANK && frame === UNIFIED_EXT5_CELLS.turnaround)) {
         presentationDebug.turnaroundDraws += 1;
       } else {
         const blockedBy = `${pose.bank}:${frame}`;

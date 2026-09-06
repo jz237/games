@@ -263,7 +263,7 @@ function testRegistryAndWiring() {
   assert.match(gameSource, /victim\.lastHitLevel = projectile\.level;/);
   // The crouch blockstun branch draws the ext3 crouch guard over the crouch
   // read, and the flinch-exit bridge rides a crouched block too.
-  assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.crouch && fighter\.grounded\) \{[\s\S]{0,600}beatPoseAt\(crouchBlockstunKeys\(\), blockPhase, uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
+  assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.crouch && fighter\.grounded\) \{[\s\S]{0,700}beatPoseAt\(crouchBlockstunKeys\(\{ flinch \}\), blockPhase, uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
   assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.grounded && !reducedMotion\) \{\s*\n\s*const blockTotal/);
   // The engine's sheet fold mirrors the correction game.js applies to the
   // unified bank, so an on-screen comparison puts it on the right side.
@@ -319,28 +319,44 @@ function testCrouchBlockstunTrack() {
   assert.deepEqual(keys.map((k) => k.at), blockstunKeys().map((k) => k.at), "same band grid as the standing track");
   assert.equal(defaultBeatKeyResolve(keys[0], { swing: true }), `${UNIFIED_EXT3_BANK}:${UNIFIED_EXT3_CELLS.crouchGuard}`);
   assert.equal(defaultBeatKeyResolve(keys[0], { fallback: "crouch" }), "crouch", "a fighter without the sheet reads the crouch on every tick");
+  // v5.2: with the ext5 crouch guard flinch drawable (`flinch`, the caller's
+  // capability answer) the impact band opens on it and the crouch guard
+  // takes the settle band — an impact and a settle, like the standing track.
+  // Same grid; the last band still hands to the crouch.
+  const flinch = crouchBlockstunKeys({ flinch: true });
+  assert.deepEqual(flinch.map((k) => k.at), keys.map((k) => k.at), "the flinch track keeps the 5.1 grid");
+  assert.deepEqual(flinch[0].chain, [{ bank: UNIFIED_EXT5_BANK, cell: UNIFIED_EXT5_CELLS.crouchGuardFlinch }, { bank: UNIFIED_EXT3_BANK, cell: UNIFIED_EXT3_CELLS.crouchGuard }]);
+  assert.deepEqual(flinch[1].chain, [{ bank: UNIFIED_EXT3_BANK, cell: UNIFIED_EXT3_CELLS.crouchGuard }]);
+  assert.deepEqual(flinch[2].chain, []);
+  assert.deepEqual(crouchBlockstunKeys({ flinch: false }), keys, "without the answer the track is the 5.1 one");
+  assert.deepEqual(crouchBlockstunKeys(), keys);
+  // game.js answers per fighter from the per-cell gate, so ali (flinch held)
+  // keeps the 5.1 track while the other nine open on the flinch.
+  assert.match(gameSource, /const flinch = swingCellDrawable\(fighter\.def\.id, UNIFIED_EXT5_CELLS\.crouchGuardFlinch, UNIFIED_EXT5_BANK\);\s*\n\s*return beatPoseAt\(crouchBlockstunKeys\(\{ flinch \}\), blockPhase, uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
+  assert.equal(ext5.ali.accept[UNIFIED_EXT5_CELLS.crouchGuardFlinch], false);
+  assert.ok(ROSTER.filter((id) => id !== "ali").every((id) => ext5[id].accept[UNIFIED_EXT5_CELLS.crouchGuardFlinch]));
 }
 
 
 // ---------------------------------------------------------------------------
-// v5.2 LOCOMOTION, item one — THE SIXTH SHEET IS REGISTERED AND NOTHING
-// DRAWS DIFFERENTLY. The ext5 sheet (dash launch/stretch/brake, turnaround,
-// apex tuck, descent, air recover, upright air hit, power charge, the two
-// entrances, victory, taunt, crouch guard flinch, throw grab, dizzy sway)
-// ships for all ten fighters with its gate, its measured tables and both
-// loaders wired, and NO track or substitution names a cell yet. The routing
-// item builds on this commit; until it lands every ext5 cell is pinned
-// unreachable below, in a list that item is expected to shrink.
+// v5.2 LOCOMOTION — THE SIXTH SHEET. Item one registered it (gate, measured
+// tables, both loaders) with nothing routed and all sixteen cells pinned
+// unreachable. Item two (ext5-ground) routes the GROUND and BOOKEND cells:
+// the dash in three drawings, the turnaround, the power charge, the two
+// entrances, the victory, the taunt, the crouch guard flinch, the throw grab
+// and the dizzy sway. The AIR cells — apex tuck, descent, air recover, the
+// upright air hit — are the next item's, and stay pinned below.
 // ---------------------------------------------------------------------------
 const E5 = UNIFIED_EXT5_CELLS;
-/** ROUTING ITEM: remove each cell from this list as it is routed. */
-const EXT5_UNROUTED_FOR_NOW = Object.freeze(Object.keys(E5).map((name) => `${UNIFIED_EXT5_BANK}:${E5[name]}`));
+/** AIR ROUTING ITEM: remove each cell from this list as it is routed. */
+const EXT5_UNROUTED_FOR_NOW = Object.freeze([E5.apexTuck, E5.descent, E5.airRecover, E5.airHitUpright].map((cell) => `${UNIFIED_EXT5_BANK}:${cell}`));
 
 function testExt5Manifest() {
   const spec = SWING_BANKS[UNIFIED_EXT5_BANK];
   assert.deepEqual(spec, { base: 72, count: 16, sheetKey: "ext5Sheet", cellsKey: "ext5Cells" });
   assert.deepEqual(manifest.format.ext5PoseIds, UNIFIED_EXT5_BEATS);
-  assert.match(manifest.format.ext5Status, /^REGISTERED 5\.2/);
+  assert.match(manifest.format.ext5Status, /^WIRED 5\.2 \(ground and bookend cells\)/);
+  assert.match(manifest.format.ext5Status, /AIR cells 4-7 .* routed by the next item/);
   assert.match(manifest.format.ext5Sheet, /grammar cells 72-87/);
   assert.deepEqual(Object.keys(E5), [
     "dashLaunch", "dashStretch", "dashBrake", "turnaround", "apexTuck", "descent", "airRecover", "airHitUpright",
@@ -395,10 +411,13 @@ function testExt5MeasuredTables() {
       const adjust = baseCellDrawAdjust(id, UNIFIED_EXT5_BANK, frame);
       assert.ok(adjust >= 1 && adjust <= 1.3, `${id} ext5:${frame} adjust ${adjust}`);
       if (id === "commissioner") assert.ok(adjust >= 1.033, `commissioner ext5:${frame} carries the sheet fold`);
-      // Nothing is a routed stand-in, so the reconciliation is 1 everywhere
-      // and cellDrawAdjust is the fit-restore alone.
-      assert.equal(swingStandInAdjust(id, UNIFIED_EXT5_BANK, frame), 1);
-      assert.equal(cellDrawAdjust(id, UNIFIED_EXT5_BANK, frame, { unified: true }), adjust);
+      // The routing item made seven cells stand-ins (turnaround, charge, the
+      // entrances, victory, taunt, crouch guard flinch — see
+      // testExt5StandInHeights); every other cell's reconciliation is 1 and
+      // cellDrawAdjust is the fit-restore alone.
+      const standIn = swingStandInAdjust(id, UNIFIED_EXT5_BANK, frame);
+      if (!SWING_STAND_IN_TARGET[UNIFIED_EXT5_BANK][frame]) assert.equal(standIn, 1, `${id} ext5:${frame} is not a stand-in`);
+      assert.equal(cellDrawAdjust(id, UNIFIED_EXT5_BANK, frame, { unified: true }), adjust * standIn);
       assert.equal(swingDrawnHeight(id, UNIFIED_EXT5_BANK, frame), heights[frame] * adjust);
     }
   }
@@ -412,14 +431,39 @@ function testExt5MeasuredTables() {
   assert.deepEqual([...CELL_BODY_CENTRE.jez[UNIFIED_EXT5_BANK]], [189, 222, 222, 169, 214, 172, 168, 196, 175, 168, 170, 168, 166, 198, 170, 168]);
 }
 
-function testExt5NothingRoutedYet() {
-  // 1. The substitution table never produces an ext5 cell, for any resolved
-  //    bank x cell x context.
+function testExt5GroundRouted() {
+  const E4 = UNIFIED_EXT4_CELLS;
+  const x5 = (cell) => ({ bank: UNIFIED_EXT5_BANK, frame: cell });
+  // 1. THE TABLE. The motion cells the tracks and descriptors resolve map
+  //    onto the sheet, context-free; the dizzy loop alternates on swayBeat.
+  const sub = (bank, frame, ctx = {}) => swingSubstitute(bank, frame, ctx);
+  assert.deepEqual(sub("motion", MOTION_CELLS.dash), x5(E5.dashStretch));
+  assert.deepEqual(sub("motion", MOTION_CELLS.charge), x5(E5.powerCharge));
+  assert.deepEqual(sub("motion", MOTION_CELLS.victory2), x5(E5.victory));
+  assert.deepEqual(sub("motion", MOTION_CELLS.sig1), x5(E5.entranceA));
+  assert.deepEqual(sub("motion", MOTION_CELLS.sig2), x5(E5.entranceB));
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.turnaround), x5(E5.turnaround));
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.dashBrake), x5(E5.dashBrake));
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.throwGrab), x5(E5.throwGrab));
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, { swayBeat: false }), { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy });
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, { swayBeat: true }), { ...x5(E5.dizzySway), alt: { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy } },
+    "the odd beats wear the sway, with the slump as the alt so a held sheet never leaves the family");
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, { swayBeat: true, reeling: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.stagger }, "the onset reel wins");
+  // Context-free: every context gives the same answer for the ground cells.
   const ctxs = [];
   for (const limb of ["punch", "kick"]) for (const heavy of [false, true]) for (const crouching of [false, true])
     for (const attacking of [false, true]) for (const airborne of [false, true]) for (const victimAirborne of [false, true])
       for (const falling of [false, true]) for (const bodyBlow of [false, true]) for (const reeling of [false, true]) for (const ko of [false, true])
-        for (const blocking of [false, true]) ctxs.push({ limb, heavy, crouching, attacking, airborne, victimAirborne, falling, bodyBlow, reeling, ko, blocking });
+        for (const blocking of [false, true]) for (const swayBeat of [false, true])
+          ctxs.push({ limb, heavy, crouching, attacking, airborne, victimAirborne, falling, bodyBlow, reeling, ko, blocking, swayBeat });
+  for (const ctx of ctxs) {
+    assert.equal(sub("motion", MOTION_CELLS.dash, ctx).frame, E5.dashStretch);
+    assert.equal(sub("motion2", MOTION2_CELLS.turnaround, ctx).frame, E5.turnaround);
+    assert.equal(sub("motion", MOTION_CELLS.charge, ctx).frame, E5.powerCharge);
+  }
+  // 2. REACHABILITY: every ground and bookend cell is reached — through the
+  //    table, a key track with the `swing` answer, or a descriptor site in
+  //    game.js — and the four AIR cells are not, by anything.
   const reached = new Set();
   for (const bank of ["base", "motion", "motion2", "motion3", "walk", UNIFIED_BANK, "unified-ext", "unified-ext2", UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK]) {
     for (let frame = 0; frame < 24; frame += 1) for (const ctx of ctxs) {
@@ -428,15 +472,13 @@ function testExt5NothingRoutedYet() {
       if (out?.alt?.bank === UNIFIED_EXT5_BANK) reached.add(`${out.alt.bank}:${out.alt.frame}`);
     }
   }
-  for (const key of EXT5_UNROUTED_FOR_NOW) assert.ok(!reached.has(key), `${key} is not routed by this item`);
-  for (let frame = 0; frame < 16; frame += 1) {
-    const key = `${UNIFIED_EXT5_BANK}:${frame}`;
-    if (!EXT5_UNROUTED_FOR_NOW.includes(key)) assert.ok(reached.has(key), `${key} was routed: it must be reachable`);
-  }
-  // 2. No key track carries an ext5 link (a new same-generation cell replaces
-  //    a drawing, it never changes timing — and this item changes neither).
+  const tableReached = [...reached].sort();
+  assert.deepEqual(tableReached, [1, 2, 3, 8, 9, 10, 11, 14, 15].map((c) => `${UNIFIED_EXT5_BANK}:${c}`).sort(), "the table's ext5 cells");
   const tracks = {
     dash: dashKeys(),
+    crouchBlock: crouchBlockstunKeys({ flinch: true }),
+    clinch: throwClinchKeys({ inbetween: true }),
+    // Tracks this item does NOT touch: no ext5 link.
     jump: jumpArcKeys(0.22, { extended: true, descend: true }),
     jumpPlain: jumpArcKeys(0.22, {}),
     lightPunch: lightWindupKeys("punch", { inbetween: true }),
@@ -444,28 +486,131 @@ function testExt5NothingRoutedYet() {
     recovery: attackRecoveryKeys({ inbetween: true }, { limb: "kick", heavy: true }),
     air: airNormalKeys(0.3, 0.7),
     block: blockstunKeys(),
-    crouchBlock: crouchBlockstunKeys(),
     reactionLight: reactionTrackKeys(false),
     reactionHeavy: reactionTrackKeys(true),
-    clinch: throwClinchKeys({ inbetween: true }),
     throwRecover: throwRecoveryKeys({ inbetween: true }),
     wakeup: wakeupKeys(),
   };
+  const trackReached = {};
   for (const [name, keys] of Object.entries(tracks)) {
-    for (const key of keys) for (const link of key.chain) assert.notEqual(link.bank, UNIFIED_EXT5_BANK, `${name} track names no ext5 cell`);
+    trackReached[name] = [];
+    for (const key of keys) for (const link of key.chain) {
+      if (link.bank !== UNIFIED_EXT5_BANK) continue;
+      trackReached[name].push(link.cell);
+      reached.add(`${UNIFIED_EXT5_BANK}:${link.cell}`);
+    }
   }
-  // 3. The resolver module and the substitution source do not know the bank.
+  assert.deepEqual(trackReached.dash, [E5.dashLaunch, E5.dashStretch, E5.dashStretch, E5.dashBrake], "launch -> stretch -> stretch -> brake, one link per band");
+  assert.deepEqual(trackReached.crouchBlock, [E5.crouchGuardFlinch]);
+  assert.deepEqual(trackReached.clinch, [E5.throwGrab]);
+  for (const name of Object.keys(tracks)) if (!["dash", "crouchBlock", "clinch"].includes(name)) assert.deepEqual(trackReached[name], [], `${name} track names no ext5 cell`);
+  // Every ext5 link sits AHEAD of its band's motion links, so the band grid
+  // (and every hold budget) is the one the motion links set.
+  for (const keys of [tracks.dash, tracks.crouchBlock, tracks.clinch]) {
+    for (const key of keys) {
+      const first = key.chain.findIndex((l) => l.bank === UNIFIED_EXT5_BANK);
+      if (first >= 0) assert.equal(first, 0, `an ext5 link leads its chain (${key.at})`);
+    }
+  }
+  // The descriptor sites game.js emits directly: the exit brake, the pivot,
+  // the entrance, the win and the taunt.
+  assert.match(gameSource, /return unifiedExt5Pose\(UNIFIED_EXT5_CELLS\.dashBrake, motion2Pose\(MOTION2_CELLS\.dashBrake, "base", 12\)\);/);
+  assert.match(gameSource, /return unifiedExt5Pose\(UNIFIED_EXT5_CELLS\.turnaround, motion2Pose\(MOTION2_CELLS\.turnaround, "base",/);
+  assert.match(gameSource, /const entrance = cell === MOTION_CELLS\.sig2 \? UNIFIED_EXT5_CELLS\.entranceB : UNIFIED_EXT5_CELLS\.entranceA;\s*\n\s*return unifiedExt5Pose\(entrance, motionPose\(cell, "base", Math\.floor\(fighter\.animTime \* 5\) % 4\)\);/);
+  assert.match(gameSource, /function showcasePoseDescriptor\(fighter, ext5Cell = UNIFIED_EXT5_CELLS\.victory\) \{[\s\S]{0,700}return unifiedExt5Pose\(ext5Cell, rotation\);/);
+  assert.match(gameSource, /return showcasePoseDescriptor\(fighter, UNIFIED_EXT5_CELLS\.taunt\);/);
+  assert.match(gameSource, /if \(winner\) return showcasePoseDescriptor\(fighter\);/);
+  for (const cell of [E5.dashBrake, E5.turnaround, E5.entranceA, E5.entranceB, E5.victory, E5.taunt]) reached.add(`${UNIFIED_EXT5_BANK}:${cell}`);
+  for (const key of EXT5_UNROUTED_FOR_NOW) assert.ok(!reached.has(key), `${key} is the air item's`);
+  for (let frame = 0; frame < 16; frame += 1) {
+    const key = `${UNIFIED_EXT5_BANK}:${frame}`;
+    if (!EXT5_UNROUTED_FOR_NOW.includes(key)) assert.ok(reached.has(key), `${key} must be reachable`);
+  }
+  // The draw-site pivot audit counts the ext5 turnaround as the pivot drawn.
+  assert.match(gameSource, /\|\| \(pose\.bank === UNIFIED_EXT5_BANK && frame === UNIFIED_EXT5_CELLS\.turnaround\)\) \{\s*\n\s*presentationDebug\.turnaroundDraws \+= 1;/);
+  // 3. The resolver's beat: the dizzy / guard-crush clock in 12-tick beats.
   const resolverSource = readFileSync(join(testDir, "..", "engine", "swing-resolve.mjs"), "utf8");
-  assert.ok(!resolverSource.includes("EXT5"), "swing-resolve.mjs does not name ext5");
-  const kits = readFileSync(join(testDir, "..", "engine", "fighter-kits.mjs"), "utf8");
-  const subBody = kits.slice(kits.indexOf("export function swingSubstitute("), kits.indexOf("\nexport function", kits.indexOf("export function swingSubstitute(") + 10));
-  assert.ok(!subBody.includes("EXT5") && !subBody.includes("E5"), "swingSubstitute names no ext5 cell");
-  assert.ok(!kits.includes("x5key(") || kits.indexOf("x5key(") === kits.lastIndexOf("x5key("), "no chain constructor uses x5key yet");
-  // 4. The engine's chain resolver does know the bank, so the routing item can
-  //    audit its budgets with the same `swing` answer ext3/ext4 use.
+  assert.match(resolverSource, /export const DIZZY_SWAY_TICKS = REEL_ONSET_TICKS;/);
+  assert.match(resolverSource, /swayBeat: dizzySwayBeat\(fighter\),/);
+  // 4. The chain resolver answers ext5 links with the same `swing` answer.
   const key = { at: 0, chain: [x5key(E5.dashLaunch)] };
   assert.equal(defaultBeatKeyResolve(key, { swing: true }), `${UNIFIED_EXT5_BANK}:${E5.dashLaunch}`);
   assert.equal(defaultBeatKeyResolve(key, { fallback: "base:5" }), "base:5", "skipped like any swing link without the sheet");
+  // 5. THE HOLD BUDGETS STAND. A same-generation cell replaces a drawing and
+  //    never changes timing: with the `swing` answer the dash's worst hold at
+  //    the 16-tick audit span is the budget (the one stretch drawing owns two
+  //    bands), the crouched block 7 / 4 / 6, and no track's worst hold grew.
+  const swing = (key) => defaultBeatKeyResolve(key, { swing: true, ext2: true, unified: true, fallback: "fallback" });
+  const shipping = (key) => defaultBeatKeyResolve(key, { ext2: true, unified: true, fallback: "fallback" });
+  const runsOf = (keys, span, resolve) => {
+    const cells = [];
+    for (let tick = 0; tick < span; tick += 1) {
+      let chosen = keys[0];
+      for (const k of keys) if (tick / span >= k.at) chosen = k;
+      cells.push(resolve(chosen));
+    }
+    const runs = [];
+    for (const cell of cells) { if (runs.length && runs.at(-1).cell === cell) runs.at(-1).ticks += 1; else runs.push({ cell, ticks: 1 }); }
+    return runs;
+  };
+  const dash16 = runsOf(dashKeys(), 16, swing);
+  assert.deepEqual(dash16.map((r) => `${r.cell}x${r.ticks}`), [`${UNIFIED_EXT5_BANK}:0x3`, `${UNIFIED_EXT5_BANK}:1x8`, `${UNIFIED_EXT5_BANK}:2x5`]);
+  assert.deepEqual(runsOf(dashKeys(), 13, swing).map((r) => r.ticks), [3, 6, 4], "a 13-tick dash: launch 3, stretch 6, brake 4");
+  const block17 = runsOf(crouchBlockstunKeys({ flinch: true }), 17, swing);
+  assert.deepEqual(block17.map((r) => `${r.cell}x${r.ticks}`), [`${UNIFIED_EXT5_BANK}:13x8`, `${UNIFIED_EXT3_BANK}:12x3`, "fallbackx6"]);
+  // Off the swing sheets a crouched block is the crouch read on every tick
+  // (the 5.1 statement); the 5.1 track's own read is flinch x8 -> crouch x9.
+  assert.deepEqual(runsOf(crouchBlockstunKeys({ flinch: true }), 17, shipping).map((r) => r.ticks), [17]);
+  assert.deepEqual(runsOf(crouchBlockstunKeys(), 17, swing).map((r) => `${r.cell}x${r.ticks}`), [`${UNIFIED_EXT3_BANK}:12x8`, "fallbackx9"]);
+  for (const [name, keys, span] of [["dash", dashKeys(), 16], ["clinch", throwClinchKeys({ inbetween: true }), 24]]) {
+    const before = Math.max(...runsOf(keys, span, shipping).map((r) => r.ticks));
+    const after = Math.max(...runsOf(keys, span, swing).map((r) => r.ticks));
+    assert.ok(after <= before, `${name}: worst hold ${before} -> ${after}`);
+    assert.equal(runsOf(keys, span, swing).length, runsOf(keys, span, shipping).length, `${name}: the same number of drawings`);
+  }
+  assert.deepEqual(runsOf(throwClinchKeys({ inbetween: true }), 24, swing).map((r) => `${r.cell}x${r.ticks}`),
+    ["unified-ext2:12x9", `${UNIFIED_EXT5_BANK}:14x7`, "fallbackx8"], "reach -> seize -> hurl");
+}
+
+/**
+ * v5.2 — the ext5 stand-ins land on their rungs by the 5.1 rule: match for
+ * the standing pivot, the entrances and the crouched flinch; ceiling for the
+ * charge, the victory and the taunt. Nothing else on the sheet moves.
+ */
+function testExt5StandInHeights() {
+  const screen = (id, frame) => swingDrawnHeight(id, UNIFIED_EXT5_BANK, frame) * swingStandInAdjust(id, UNIFIED_EXT5_BANK, frame);
+  const targets = SWING_STAND_IN_TARGET[UNIFIED_EXT5_BANK];
+  // The rule's deadband is on goal/drawn; on screen (drawn/goal) that is 1/0.97.
+  const TOL = 1 / (1 - SWING_STAND_IN_DEADBAND) - 1 + 1e-9;
+  assert.deepEqual(Object.keys(targets).map(Number), [E5.turnaround, E5.powerCharge, E5.entranceA, E5.entranceB, E5.victory, E5.taunt, E5.crouchGuardFlinch]);
+  for (const id of ROSTER) {
+    for (const frame of [E5.turnaround, E5.entranceA, E5.entranceB]) {
+      const ratio = screen(id, frame) / unifiedScreenHeight(id, UNIFIED_CELLS.idle);
+      assert.ok(Math.abs(ratio - 1) <= TOL, `${id} ext5:${frame} lands on the idle (${ratio.toFixed(3)})`);
+    }
+    for (const frame of [E5.powerCharge, E5.victory, E5.taunt]) {
+      const ratio = screen(id, frame) / unifiedScreenHeight(id, UNIFIED_CELLS.idle);
+      assert.ok(ratio <= 1 + TOL, `${id} ext5:${frame} never taller than the idle (${ratio.toFixed(3)})`);
+      assert.ok(swingStandInAdjust(id, UNIFIED_EXT5_BANK, frame) <= 1, "a ceiling never enlarges");
+    }
+    // The crouched flinch onto the crouch, like the ext3 crouch guard it
+    // hands to; cyraxx's +31% is the one the 0.80 clamp floor leaves 5% over.
+    const flinch = screen(id, E5.crouchGuardFlinch) / unifiedScreenHeight(id, UNIFIED_CELLS.crouch);
+    const limit = swingStandInAdjust(id, UNIFIED_EXT5_BANK, E5.crouchGuardFlinch) === SWING_STAND_IN_CLAMP.min ? 0.06 : TOL;
+    assert.ok(Math.abs(flinch - 1) <= limit, `${id} ext5:13 lands on the crouch (${flinch.toFixed(3)})`);
+    for (const frame of [E5.dashLaunch, E5.dashStretch, E5.dashBrake, E5.throwGrab, E5.dizzySway, E5.apexTuck, E5.descent, E5.airRecover, E5.airHitUpright]) {
+      assert.equal(swingStandInAdjust(id, UNIFIED_EXT5_BANK, frame), 1, `${id} ext5:${frame} untouched`);
+    }
+  }
+  // The measured pops this closes: cyraxx's crouched flinch +31% over his
+  // crouch, the commissioner's +23%, his pivot +8%; donald's victory +9.6%.
+  assert.ok(swingDrawnHeight("cyraxx", UNIFIED_EXT5_BANK, E5.crouchGuardFlinch) / unifiedScreenHeight("cyraxx", UNIFIED_CELLS.crouch) > 1.3);
+  assert.equal(swingStandInAdjust("cyraxx", UNIFIED_EXT5_BANK, E5.crouchGuardFlinch), SWING_STAND_IN_CLAMP.min);
+  assert.ok(swingDrawnHeight("commissioner", UNIFIED_EXT5_BANK, E5.turnaround) / unifiedScreenHeight("commissioner", UNIFIED_CELLS.idle) > 1.07);
+  assert.ok(swingStandInAdjust("commissioner", UNIFIED_EXT5_BANK, E5.turnaround) < 0.94);
+  assert.ok(swingStandInAdjust("donald", UNIFIED_EXT5_BANK, E5.victory) < 0.93);
+  assert.ok(swingStandInAdjust("deathblow", UNIFIED_EXT5_BANK, E5.entranceB) > 1.09, "a match enlarges an under-drawn entrance");
+  assert.equal(swingStandInAdjust("deathblow", UNIFIED_EXT5_BANK, E5.powerCharge), 1, "a ceiling leaves a short charge alone");
 }
 
 function testExt5Wiring() {
@@ -499,7 +644,8 @@ testStandInHeights();
 testCrouchBlockstunTrack();
 testExt5Manifest();
 testExt5MeasuredTables();
-testExt5NothingRoutedYet();
+testExt5GroundRouted();
+testExt5StandInHeights();
 testExt5Wiring();
 
 console.log("Final Blow swing bank tests passed");
