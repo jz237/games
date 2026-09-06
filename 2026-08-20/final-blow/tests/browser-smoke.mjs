@@ -3828,7 +3828,8 @@ probe('demo-mode', async () => {
     assert.match(demoDecision.banner, /WINS\|DECISION/);
     const demoAfterDecision = await evaluate(client, `window.__finalBlowQa.step(6.4); ({ snapshot: window.__finalBlowEngine.snapshot(), timer: document.querySelector('#timer').textContent })`);
     assert.equal(demoAfterDecision.snapshot.phase, 'fight');
-    assert.equal(demoAfterDecision.snapshot.fighters[0].ai.difficulty, 'demo', 'once the decision is on the board the card returns to the standard brain');
+    // (5.4 personas: the standard brain is the seat's own archetype persona.)
+    assert.match(demoAfterDecision.snapshot.fighters[0].ai.difficulty, /^demo-(?!clock$)/, 'once the decision is on the board the card returns to the standard brain (the seat persona)');
     assert.ok(Number(demoAfterDecision.timer) >= 96, `...and the 99 s clock (read ${demoAfterDecision.timer})`);
     await evaluate(client, `window.__finalBlowQa.demoNextShow(null)`);
 
@@ -3906,7 +3907,9 @@ probe('demo-seed-url', async () => {
     assert.match(opened.cycleText, /^CYCLE 1 · .+ · SEED 237$/);
     const loadA = await stepTo(TARGET_TICK);
     assert.equal(loadA.tick, TARGET_TICK);
-    assert.equal(loadA.ledger.length, 3, 'seed 237 card 1 settles three rounds inside 100 s');
+    // (5.4 closer/personas: rounds run longer than the 5.3 ~17 s ceremony;
+    // seed 237 card 1 settles two rounds inside 100 s, three at the old pace.)
+    assert.ok(loadA.ledger.length >= 2, `seed 237 card 1 settles at least two rounds inside 100 s (got ${loadA.ledger.length})`);
     assert.ok(loadA.ledger.every((entry) => entry.cycle === 1));
     assert.equal(loadA.demo.shareUrl, `${gameUrl.replace('?debug=1', '')}?demo=237`, 'the link drops ?debug and carries the seed');
 
@@ -3998,6 +4001,10 @@ probe('demo-hud', async () => {
         skipHidden: document.querySelector('#flowSkipHint').hidden,
       };
       qa.step(4.5);
+      // 5.4 closer: a first-round KO with a healthy winner is a PLAIN knockout
+      // (no FINISH THEM window). A winner on the brink takes the Final Blow,
+      // which is the window this probe reads the demo-worded sub-line from.
+      qa.fighter(0, { health: 20 });
       qa.demoKnockout(0);
       const finish = {
         phase: window.__finalBlowEngine.snapshot().phase,

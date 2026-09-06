@@ -34333,8 +34333,6 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       demoSession.showOverride = show ? { show: { ...show }, sticky: Boolean(sticky) } : null;
       return demoSession.showOverride;
     },
-    demo(seed = 237) {
-      startDemo({ qa: true, seed });
     // 5.4 #30: qa.demo(seed, cycle) and the ?demo=<seed>&cycle=<n> boot router
     // are the SAME call into startDemo — only the clock differs (manual here,
     // wall clock from a link). See demoRounds()/demoShareUrl() below.
