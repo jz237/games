@@ -249,7 +249,12 @@ function testRegistryAndWiring() {
   // Engineering pass: the resolver moved to engine/swing-resolve.mjs (tested
   // in tests/swing-resolve.test.mjs); game.js applies it at the single
   // resolution choke point with the bank-routed gate. The pin follows.
-  assert.match(gameSource, /const pose = swingResolve\(resolvedPose, swingContext\(fighter, \{ roundDecided: [^}]+\}\), \(cell, bank\) => motionBankCellDrawable\(fighter\.def\.id, cell, bank\)\);/);
+  // v5.3: the swing result is bound to `swung` because the specials
+  // generation redirect (the kit bank's per-cell fallback) runs after it and
+  // `pose` is now the FINAL resolved cell. The pin still asserts the swing
+  // resolution happens exactly once, at this choke point, with the same gate.
+  assert.match(gameSource, /const swung = swingResolve\(resolvedPose, swingContext\(fighter, \{ roundDecided: [^}]+\}\), \(cell, bank\) => motionBankCellDrawable\(fighter\.def\.id, cell, bank\)\);/);
+  assert.match(gameSource, /const pose = specialsGenerationPose\(fighter\.def\.id, swung\);\n  recordPoseTrace\(fighter, pose\);/);
   assert.match(gameSource, /import \{ swingContext, swingResolve \} from "\.\/engine\/swing-resolve\.mjs";/);
   assert.ok(!/^function swingResolve\(/m.test(gameSource), "no second resolver in game.js");
   assert.match(gameSource, /if \(bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK \|\| bank === UNIFIED_EXT5_BANK\) return swingCellDrawable\(fighterId, cell, bank\);/);

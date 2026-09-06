@@ -144,6 +144,43 @@ a run at another clone. A root without a `game.js` is refused.
 
 6. `node --test tests/*.test.mjs` — the manifest shape, the per-cell gate and
    the measured tables are pinned.
+
+## Regenerating the SPECIALS bank (v5.3)
+
+`assets/moves/<id>-specials.webp` is the KIT bank — four rows of four
+(wind-up / strike / second strike / recover), row 3 the super, cell 15 the
+victory pose — and since 5.3 it is generated the same way as the ext banks,
+with one difference: it is drawn from TWO references, the fighter's unified
+sheet for identity and his shipped specials sheet for the poses.
+
+```sh
+$PY tools/swing/gen_specials.py            # all nine (the Commissioner has no sheet)
+$PY tools/swing/gen_specials.py devil,post
+$PY tools/swing/install_specials.py --src tools/swing/out-specials [--dry-run]
+$PY tools/swing/encode_sheets.py --src assets/moves --quality 92 --threshold 1.7
+```
+
+Three things are specific to this bank:
+
+* **Scale.** Its only STANDING cell is the victory pose, so `--scale` is passed
+  explicitly (the fighter's unified sheet scale) and the per-fighter
+  `MOVE_SHEET_ADJUST` is *measured against the sheet being replaced*: the same
+  16 actions redrawn, so the median of `shipped height / new height` over the
+  sixteen is that sheet's scale relative to the shipped one.
+  `install_specials.py` does the measurement and prints both engine tables.
+* **The pink-safe key.** `build_sheet.py` grew `--keyLow / --keySpan`
+  (the alpha ramp over distance from the key), `--hueSafe` (the widest |R-B| a
+  pixel may have and still be called key spill) and `--matchShift` (the
+  per-cluster colour-match cap). Post's paint IS magenta and the defaults ate
+  it; his slice is `--keyLow 25 --keySpan 55 --hueSafe 60 --matchShift 5`.
+* **Accept per cell** in `assets/moves/MANIFEST.json`. A cell whose ACTION
+  drifted is `accept: false` with a `reject` reason, and the shipped sheet —
+  kept whole under `assets/moves/legacy/` — draws that frame instead
+  (bank `specials-legacy`). Never delete a legacy sheet: it is the fallback.
+
+There are no HD specials sheets any more; regenerating `renderer/hd/` for this
+bank would have to start from the new SD masters.
+
 ## Audio manifest
 
 ```sh

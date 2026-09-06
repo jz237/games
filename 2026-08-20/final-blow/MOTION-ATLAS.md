@@ -4273,3 +4273,196 @@ generated sheets; post's spray-can keys stay base cells). Details and
 attributions in the per-item sections above (ext5 install, ext5 ground,
 ext5 air, bookends, ext8 install) and in tests/swing-resolve.test.mjs, which
 now runs every chain at node level with the gate from the shipped manifests.
+
+## v5.3 — SPECTACLE, ITEM SEVEN: THE KIT BANK JOINS THE FAMILY, AND A SPECIAL STOPS CHANGING GENERATION TWICE
+
+`assets/moves/<id>-specials.webp` is the sheet every special, EX, super and
+throw release draws from — `anim(row)` in `engine/fighter-kits.mjs`, four rows
+of four (wind-up / strike / second strike / recover), row 0 the main special
+and its EX, row 1 the throw release and the back special, row 2 the launcher,
+row 3 the super, cell 15 the victory pose. It was built by the base-atlas
+pipeline, so after 5.0 put the swing and the reactions on the unified family
+and 5.2 put locomotion and the bookends there, the KIT bank was the last thing
+on the roster still wearing the generation unified replaced. A special was the
+one beat that still went unified -> base -> unified with the camera on it.
+
+Ten kits, 100 animated moves, one bank each: regenerated image-to-image
+(`tools/swing/gen_specials.py`, openai/gpt-image-2 edit via fal) with IMAGE 1
+the fighter's unified sheet — the identity — and IMAGE 2 his shipped specials
+sheet — the poses — then sliced by `tools/swing/build_sheet.py --bank specials`
+at that fighter's own unified scale, feet on row 314, torso band on column 160,
+colours pulled onto the unified sheet by `color_match.py`. Nine fighters have a
+sheet; the Commissioner has none and never did (his kit poses address his combat
+atlas), so he is absent from `assets/moves/MANIFEST.json` and his 1.02 sheet
+adjust is untouched. No kit changed: same file, same path, same 4x4 grammar.
+
+### THE SHEET SCALE, which is again the finding of the install
+
+A unified or ext sheet normalises on its tallest STANDING drawing. A specials
+sheet has exactly ONE standing cell — the victory pose — so it has no standing
+reference to normalise against, and forcing the unified scale onto the raw does
+not help: the generation draws the figure at whatever size it draws it, and
+measured on the raws that was ±14% across the nine.
+
+It is measured against the sheet it replaces instead. The regeneration redraws
+the SAME 16 actions, so per cell `shipped drawn height / new drawn height` is
+this sheet's scale relative to the shipped one, and the MEDIAN over the sixteen
+is robust to the two or three poses whose height genuinely changed. Times the
+shipped `MOVE_SHEET_ADJUST` — the correction that bank has carried since 2.x —
+every special keeps the world size it ships at today, on the new drawing.
+
+| | shipped | median ratio | IQR of the 16 | new MOVE_SHEET_ADJUST |
+| --- | --- | --- | --- | --- |
+| deathblow | 1.14 | 1.0131 | 17.3% | **1.155** |
+| jez | 1.03 | 0.9823 | 5.2% | **1.012** |
+| alan | 1.06 | 0.9486 | 6.2% | **1.005** |
+| post | 1.02 | 1.0041 | 5.4% | **1.024** |
+| donald | 1.04 | 1.0398 | 10.3% | **1.081** |
+| devil | 1.04 | 0.9664 | 4.5% | **1.005** |
+| ali | 1.04 | 0.9228 | 4.5% | **0.960** |
+| benny | 1.02 | 0.8453 | 9.2% | **0.862** |
+| cyraxx | 1.05 | 0.9103 | 6.4% | **0.956** |
+
+The obvious objection to a height ratio on THIS bank is that a specials cell's
+height is part effect — a taller rubble burst inflates the cell without the
+figure moving. Cross-checked by re-deriving the same median over the eight
+BOOKEND cells only (columns 0 and 3 of every row: the wind-up and the recover,
+the two beats with the least effect on them), the two estimators agree to
+within 3% on all nine: deathblow -2.3%, post -3.1%, cyraxx +1.9%, jez/donald
+-1.3%, alan -0.5%, ali -0.2%, benny -0.3%, devil 0.0%. The all-sixteen median
+ships, for the sample size.
+
+The per-cell half is the slicer's fit restore, the same term `UNIFIED_EXT2..5_CELL_ADJUST`
+carry: a pose whose limbs would leave the 320px cell is fit-scaled about its
+torso column and drawn back up. It is `SPECIALS_CELL_ADJUST` in
+`engine/fighter-kits.mjs`, read through `baseCellDrawAdjust` so BOTH renderers
+get it from the one rule, and a unit test asserts every entry equals the
+manifest's `drawAdjust` for that cell — the table cannot drift from the art.
+Post's cell 6 is the widest at 1.6875 (his ground splash), donald's 6 at 1.5756.
+
+### THE FLOOR, which nobody had measured on this bank
+
+The shipped specials sheets were never registered to a common floor row. Content
+bottoms, measured at alpha >= 24: alan 280–298, benny 287–296, ali 292–296, post
+298–315, donald 303–307, cyraxx/devil/jez 313–315, deathblow 315–319. Cells are
+floor-anchored — `drawAtlasFrame` lands the CELL's bottom edge on the street —
+so an empty band under the feet IS the fighter leaving the ground: alan's
+specials drew his boots up to 36 cell px (~37 world px) above the pavement, and
+five fighters levitated through every special they have. The new sheets bottom
+on row 314 on all 144 cells, the unified family's row, which the manifest
+records per cell and `tests/specials-bank.test.mjs` asserts. This is the part
+that is visibly obvious without a side-by-side.
+
+### THE ACCEPT REVIEW: 143 of 144, and the one that failed
+
+Every cell was compared against the shipped cell it replaces, previews side by
+side at 1:1. One was rejected: **devil:8**, the wind-up of his launcher. The
+shipped cell is his four-legged crouched gather (content height 178); the
+regeneration reared him upright onto one leg (313) — a different action, and a
+foot off the street on a grounded wind-up, which 4.6 exists to refuse.
+
+A rejected cell does not break a move. The shipped generation is kept whole
+under `assets/moves/legacy/<id>-specials.webp` as bank `specials-legacy`, and
+`specialsGenerationPose` in game.js redirects a cell the manifest rejects to it
+at the single pose-resolution choke point — after `swingResolve`, because it is
+the only rule that reads the KIT bank and every chain above it can still land
+on a specials cell as its terminal fallback. The fallback bank keeps the
+SHIPPED sheet adjust (`MOVE_SHEET_LEGACY_ADJUST`), so a rejected cell draws
+exactly as it does today, at the size it does today, in both renderers.
+Deliberately NOT in `AUTHORED_BANKS`: that list is what CINEMA 3D walks to warm
+textures at idle, and this is one cell on one fighter — the sheet is requested
+only for a fighter whose manifest block actually rejects something, and the 3D
+bank is built the first time that cell resolves. A fighter with no manifest
+entry is never gated at all, which is what keeps the Commissioner and the boss
+on their combat atlas.
+
+### THE COLOUR, and the pipeline fix Post forced
+
+dE against each fighter's own unified sheet (`measure_de.py`), whole sheet and
+with EFFECT pixels excluded — a pixel further than 25 dE from every unified
+costume cluster, i.e. lightning, paint, a blade arc, fire, which the unified
+sheets contain none of and so can never match:
+
+| | shipped whole / costume | 5.3 whole / costume | effect px |
+| --- | --- | --- | --- |
+| deathblow | 5.60 / 5.31 | **1.54 / 1.45** | 3.2% |
+| jez | 8.71 / 4.59 | **4.43 / 2.79** | 20.2% |
+| alan | 15.11 / 8.79 | **1.69 / 1.56** | 4.4% |
+| post | 7.80 / 3.56 | **6.35 / 2.14** | 18.9% |
+| donald | 8.39 / 7.62 | **1.74 / 1.78** | 12.3% |
+| devil | 2.74 / 2.71 | **2.08 / 2.06** | 3.2% |
+| ali | 5.00 / 3.83 | **1.73 / 2.84** | 6.1% |
+| benny | 15.33 / 3.56 | **9.85 / 3.27** | 28.3% |
+| cyraxx | 4.49 / 4.55 | **1.74 / 1.96** | 3.9% |
+
+Costume dE 1.45–3.27 where the shipped sheets ran 2.71–8.79, and every
+remaining whole-sheet number is carried by the effect clusters: benny's
+lightning is 28% of his sheet, jez's blade arcs 20%, post's paint 19%.
+
+Post is the reason `build_sheet.py` grew four options. The 4.9 key band treats
+anything within 170 dE of pure magenta as partly background, and the 5.2
+despill calls every magenta-hued pixel key spill — both true until a fighter's
+own EFFECT is pink. His paint measures 110–150 dE from the key, so the default
+slice handed his spray 45–80% alpha and the despill refilled what survived: his
+whole vocabulary came off the sheet as dust. Measured on his raw, the key's own
+cluster is 0–20 dE, the valley runs to ~60 and his paint starts at 60, so his
+sheet is sliced `--keyLow 25 --keySpan 55 --hueSafe 60 --matchShift 5` — a tight
+band on the key, a despill that exempts a genuinely pink pixel (`|R-B| >= 60`;
+key spill is the key's own near-neutral magenta), and a shorter colour-match
+leash so the cluster the unified sheet has no counterpart for is not dragged
+toward a costume colour. The other eight are stock defaults. Sheets ship lossy
+WebP q92 with byte-exact alpha (`encode_sheets.py --src assets/moves --quality 92
+--threshold 1.7`, wdE 0.66–1.65; the 0.7 gate is fitted to the effect-free
+unified sheets and this bank has always shipped lossy per tools/README.md):
+9.52 MB of masters to 3.60 MB on the wire, and the alpha plane is unchanged so
+every cell metric in the manifest is measured on the shipped bytes.
+
+### THE HD VARIANTS ARE RETIRED
+
+`renderer/hd/<id>-specials.webp` (eight sheets, 9,037,480 bytes) were 2x
+upscales of the art this wave replaced. Left in place they would have run the
+CINEMA 3D rig's WHOLE specials bank and the super-portrait close-up on the old
+generation while the 2D canvas ran the new one — the same fault as the seam
+being removed, with an extra download. They are deleted, `HD_SHEETS` lists no
+`-specials` key, `hdSheetPath` answers for the base bank only, and
+`renderer/hd/MANIFEST.json` records what went and why. Regenerating them from
+the new SD masters is a separate job; until then the specials bank is SD in
+both renderers, which is what every other authored bank already does.
+
+### WHAT THE ENGINE DID NOT NEED, written down
+
+No `CELL_BODY_CENTRE` row for either bank. The airborne body-centre anchor is
+ramped by height above the floor, and no animated kit move leaves the ground —
+the roster's air normals and the shared/devil air specials carry no `animation`,
+so the bank is only ever drawn by a grounded fighter and a measured row would be
+dead weight that a future airborne special would inherit unexamined. No
+`CELL_FLOOR_OFFSET` row either: 314 on every cell is the family's own row.
+
+### Verified
+
+Node: all 100 animated kit moves across the ten kits resolve to the bank, all
+sixteen cells of every fighter are reachable (cell 12, the super wind-up, only
+through the charge stance's fallback), and the victory pose is `specials:15` on
+all ten — asserted in `tests/specials-bank.test.mjs`, which also holds the
+manifest shape, the floor row, the two derived tables against the manifest, the
+`AUTHORED_BANKS` exclusion, the game.js and CINEMA 3D wiring and the HD
+retirement. Browser (own headless Chrome, own port, both renderers, zero console
+errors and zero exceptions): jez / benny / donald supers screenshotted mid-move
+in 2D and CINEMA 3D on `specials:13` and `specials:14`, their plain specials on
+`specials:1`, and the devil's launcher held ON the rejected cell — pose
+`specials-legacy:8` in both renderers, the shipped four-legged gather, planted
+and the right size beside alan.
+
+Residuals, for the next wave: post's paint keeps small green flecks on the
+effect edges where the colour match meets the key fringe; the eight HD specials
+sheets are gone rather than regenerated; the Commissioner still has no specials
+sheet of his own, so his kit poses remain his combat atlas — the one place on
+the roster where a special is still drawn by the base generation; and
+`assets/moves` is still requested EAGERLY for the whole roster at module load
+(game.js, unchanged since 1.x), which is 3.60 MB on the wire before a matchup
+is even known, where the unified family goes through `PRELOAD_PLAN` for the two
+fighters actually picked. Seven of the 143 accepted cells move more than 15%
+from the drawn height they ship at today (benny 8/11, deathblow 7/8/9,
+cyraxx 14, post 5) — all of them cells whose new pose or effect extent is
+genuinely a different height, not a scale error; each is a bank-internal
+difference, not a step inside one move.

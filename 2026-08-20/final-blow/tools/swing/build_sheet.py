@@ -1,12 +1,15 @@
-"""Build assets/unified/<id>-<bank>.webp (ext2 in-betweens, ext3 strikes or ext4
-reactions) from a raw 1024px magenta-keyed generation, normalised to the
-unified bank's convention: 320px cells, the tallest STANDING figure scaled to
-targetH (306) with its feet on floorRow (315), figure centred on its
-silhouette, colours pulled onto the fighter's own unified sheet (color_match;
---ref for another reference), lossless WebP with exact alpha.
+"""Build assets/unified/<id>-<bank>.webp (ext2 in-betweens, ext3 strikes, ext4
+reactions, ext5 locomotion, ext8) or assets/moves/<id>-specials.webp (v5.3, the
+kit bank) from a raw 1024px magenta-keyed generation, normalised to the unified
+bank's convention: 320px cells, the tallest STANDING figure scaled to targetH
+(306) with its feet on floorRow (315), figure centred on its silhouette, colours
+pulled onto the fighter's own unified sheet (color_match; --ref for another
+reference), lossless WebP with exact alpha.
 
-Usage: build_sheet.py <fighter> <raw png> [--bank ext2|ext3|ext4] [--ref sheet]
-                      [--targetH 306] [--floorRow 315] [--scale S] [--out path]
+Usage: build_sheet.py <fighter> <raw png> [--bank ext2|ext3|ext4|ext5|ext8|specials]
+                      [--ref sheet] [--targetH 306] [--floorRow 315] [--scale S]
+                      [--keyLow 60] [--keySpan 110] [--hueSafe 0] [--matchShift 12]
+                      [--out path]
 Writes the sheet, a JSON sidecar with per-cell boxes/heights, and a preview.
 """
 import argparse, json, os, subprocess, sys
@@ -17,6 +20,26 @@ from measure_de import load, to_lab, clusters
 A = os.path.dirname(os.path.abspath(__file__))
 from repo_root import G  # the checkout this file lives in (FINAL_BLOW_ROOT overrides)
 KEY = np.array([255.0, 0.0, 255.0])
+# v5.3 KEY BAND. The alpha ramp over distance-from-key. The 4.9 defaults
+# (60..170) were fitted to figures on a flat key and treat anything within
+# 170 dE of pure magenta as partly background — which is fine until a fighter's
+# own EFFECT is pink. Post's paint measures 110-150 from the key, so the
+# default band handed his spray 45-80% alpha and the despill then refilled what
+# survived: his whole magenta vocabulary came off the sheet. `--keyLow/--keySpan`
+# tighten the band onto the key's own cluster (measured on his raw: background
+# is 0-20 dE, the valley runs to ~60, the paint starts at 60).
+KEY_LOW = 60.0
+KEY_SPAN = 110.0
+# Widest |R-B| a pixel may have and still be called key spill. 0 keeps the
+# 5.2 rule (every magenta-hued pixel is spill). A real spill rim is the key's
+# own near-neutral magenta (R and B within a few tens); a hot pink EFFECT has
+# red well ahead of blue, so a nonzero value protects it.
+HUE_SAFE = 0.0
+# Cap, in dE, on the colour-match shift per cluster. The default pulls a whole
+# sheet onto the unified sheet's clusters; a sheet carrying a colour the
+# unified sheet does not have (again: Post's paint) needs a shorter leash or
+# that cluster is dragged toward a costume colour it is not.
+MATCH_SHIFT = 12.0
 CELL_OUT = 320
 CELL_IN = 256
 BANKS = {
@@ -54,6 +77,13 @@ BANKS = {
         "idle-breathe-b", "walk-down-a-b", "walk-down-b-b", "jump-ascent-b",
         "jump-descend-b", "punch-windup-b", "kick-windup-b", "mid-reaction-b",
     ], {0, 1, 2, 5, 6, 7, 8, 9, 10, 13, 14, 15}),
+    # v5.3 SPECIALS: the kit bank, addressed by the fighter kits as four rows of
+    # four (windup / strike / second strike / recover) with cell 15 the victory
+    # pose. The only STANDING cell is that victory pose, so a specials build is
+    # always run with an explicit --scale (the fighter's unified sheet scale):
+    # deriving one global scale from a single crouched victory drawing would
+    # size the whole bank off one pose.
+    "specials": ([f"special-r{r}-f{c}" for r in range(4) for c in range(4)], {15}),
 }
 IDS = None
 STANDING = None
@@ -64,7 +94,7 @@ def key_unmultiply(rgb):
     """Alpha from key distance, then solve fg = (obs - (1-a)*key) / a on the
     soft edge so the magenta spill leaves the fringe instead of being clamped."""
     d = np.sqrt(((rgb - KEY) ** 2).sum(-1))
-    alpha = np.clip((d - 60.0) / 110.0, 0.0, 1.0)
+    alpha = np.clip((d - KEY_LOW) / KEY_SPAN, 0.0, 1.0)
     a = alpha[..., None]
     fg = np.where(a > 0.02, (rgb - (1 - a) * KEY) / np.maximum(a, 0.02), rgb)
     fg = np.clip(fg, 0, 255)
@@ -83,6 +113,11 @@ def inpaint_magenta(fg, alpha, iterations=6):
     nearest non-magenta neighbours (iterative dilation) and keep its alpha."""
     r, g, b = fg[..., 0], fg[..., 1], fg[..., 2]
     spill = (alpha > 0.02) & (r > g + 40) & (b > g + 40) & (np.minimum(r, b) > 80)
+    # v5.3: ...unless the pixel is genuinely PINK. "No costume on the roster is
+    # magenta" was true; no EFFECT on the roster being magenta was not — Post
+    # sprays hot pink paint, and this test called every drop of it spill.
+    if HUE_SAFE > 0:
+        spill = spill & (np.abs(r - b) < HUE_SAFE)
     if not spill.any():
         return fg, 0
     out = fg.copy()
@@ -171,6 +206,7 @@ def cell_bbox(alpha):
 
 
 def main():
+    global IDS, STANDING, KEY_LOW, KEY_SPAN, HUE_SAFE, MATCH_SHIFT
     ap = argparse.ArgumentParser()
     ap.add_argument("fighter")
     ap.add_argument("raw")
@@ -180,9 +216,13 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--bank", default="ext2")
     ap.add_argument("--ref", default=None, help="reference sheet for the colour match (default: the fighter's unified sheet)")
+    ap.add_argument("--keyLow", type=float, default=KEY_LOW, help="dE from the key at which alpha starts to rise")
+    ap.add_argument("--keySpan", type=float, default=KEY_SPAN, help="dE over which alpha rises to 1")
+    ap.add_argument("--hueSafe", type=float, default=HUE_SAFE, help="widest |R-B| still called key spill (0 = the 5.2 rule)")
+    ap.add_argument("--matchShift", type=float, default=MATCH_SHIFT, help="cap in dE on the per-cluster colour-match shift")
     args = ap.parse_args()
-    global IDS, STANDING
     IDS, STANDING = BANKS[args.bank]
+    KEY_LOW, KEY_SPAN, HUE_SAFE, MATCH_SHIFT = args.keyLow, args.keySpan, args.hueSafe, args.matchShift
 
     raw = np.asarray(Image.open(args.raw).convert("RGB")).astype(np.float32)
     assert raw.shape[:2] == (1024, 1024), raw.shape
@@ -207,7 +247,8 @@ def main():
     # Colour transfer onto the fighter's own unified sheet.
     matched_path = os.path.join(A, f"matched-{args.fighter}-{args.bank}.png")
     subprocess.run([sys.executable, os.path.join(A, "color_match.py"),
-                    args.ref or f"{G}/assets/unified/{args.fighter}.webp", keyed_path, matched_path], check=True)
+                    args.ref or f"{G}/assets/unified/{args.fighter}.webp", keyed_path, matched_path,
+                    str(MATCH_SHIFT)], check=True)
     sheet = Image.open(matched_path).convert("RGBA")
     arr = np.asarray(sheet)
 
