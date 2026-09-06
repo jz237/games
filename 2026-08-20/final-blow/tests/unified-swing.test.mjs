@@ -380,7 +380,12 @@ function testExt5Manifest() {
   for (const id of ROSTER) {
     const entry = manifest.fighters[id];
     assert.equal(entry.ext5Sheet, `${id}-ext5.webp`);
-    assert.ok(statSync(join(assetDir, entry.ext5Sheet)).size > 700000, `${id} ext5 ships (lossless)`);
+    // Size floor only: the 5.1 encode gate (tools/swing/encode_sheets.py,
+    // weighted dE < 0.7 against the lossless master) decides per sheet whether
+    // it ships VP8L or VP8, and records it in format.encoding.
+    assert.ok(statSync(join(assetDir, entry.ext5Sheet)).size > 200000, `${id} ext5 ships`);
+    const encoding = manifest.format.encoding?.sheets?.[entry.ext5Sheet];
+    assert.ok(encoding && ["VP8", "VP8L"].includes(encoding.codec), `${id} ext5 has an encoding record`);
     assert.equal(entry.ext5Cells.length, 16);
     entry.ext5Cells.forEach((cell, index) => {
       assert.equal(cell.frame, 72 + index);

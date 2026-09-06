@@ -4243,3 +4243,33 @@ unified-ext4:4 x7 -> unified-ext:7 x7 -> unified:7 x8 -> idle`.
   `encode_sheets.py --only`.
 * The devil's ext8 masters carry a few green energy specks around the
   wings and tail, inherited from the generation; nothing was retouched.
+
+## v5.2 — LOCOMOTION: THE WAVE IN ONE PLACE
+
+The dash, the turnaround, the jump arc, the air normals' trail, the intro,
+the win pose, the fatality and the four fighters who never had an ext sheet:
+one generated sheet per fighter (`<id>-ext5.webp`, bank `unified-ext5`,
+cells 72-87 — dash launch / stretch / brake, turnaround, apex tuck, descent,
+air recover, upright air hit, power charge, entrance A / B, victory, taunt,
+crouch guard flinch, throw grab, dizzy sway; 0.96-1.92 dE to each fighter's
+unified sheet) and a two-take in-between sheet composed into `<id>-ext.webp`
+for deathblow, post, donald and the devil (their breathing idle, walk
+in-betweens, take-off, feet-first descent, wind-up cocks and mid-reaction;
+the devil's heavy wind-up finally compresses on his own crouch transition
+instead of his airborne claw lunge). Every routed beat keeps its hold budget
+— an ext5 link sits one link ahead of the motion link it replaces, in the
+same band grid — so timing is byte-identical to 5.1 and only the drawing
+changes: the dash reads `unified:0 -> ext5:0 -> ext5:1 -> ext5:2 -> unified:0`
+on every fighter (13 of 13 ticks on the unified family, where 5.1 crossed
+four banks), the plain jump `unified:8 -> ext:3 -> unified:9 -> ext5:4/ext:4
+-> ext5:5 -> ext5:6 -> ext3:10 -> unified:6`, the air kick draws its chamber
+once (`ext3:8 -> ext3:7 -> motion3:4 -> ext5:6 -> ext3:10`; the motion3
+second strike body is the one crossing left on that arc), the intro walks on
+as `ext5:9 -> ext5:10 -> idle`, the round win holds `ext5:11` with the taunt
+`ext5:12` as the second beat, and the Final Blow scripts draw the attacker
+through unified / ext2 / ext3 / ext5 cells and the victim through ext4
+(residuals: donald's club and the commissioner's cane are absent from their
+generated sheets; post's spray-can keys stay base cells). Details and
+attributions in the per-item sections above (ext5 install, ext5 ground,
+ext5 air, bookends, ext8 install) and in tests/swing-resolve.test.mjs, which
+now runs every chain at node level with the gate from the shipped manifests.

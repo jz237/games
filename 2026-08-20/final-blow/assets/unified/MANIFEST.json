@@ -173,7 +173,7 @@
       0.955
      ],
      "pixelDe": 2.933,
-     "losslessBytes": 1076922
+     "losslessBytes": null
     },
     "alan-ext3.webp": {
      "codec": "VP8",
@@ -190,7 +190,7 @@
       0.396
      ],
      "pixelDe": 3.279,
-     "losslessBytes": 830348
+     "losslessBytes": null
     },
     "alan-ext4.webp": {
      "codec": "VP8",
@@ -207,7 +207,24 @@
       7.027
      ],
      "pixelDe": 3.121,
-     "losslessBytes": 949720
+     "losslessBytes": null
+    },
+    "alan-ext5.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 286742,
+     "quality": 90,
+     "weightedDe": 0.418,
+     "perCluster": [
+      0.348,
+      0.315,
+      0.252,
+      0.241,
+      0.554,
+      0.971
+     ],
+     "pixelDe": 3.094,
+     "losslessBytes": 908096
     },
     "alan.webp": {
      "codec": "VP8",
@@ -238,6 +255,12 @@
      "bytes": 1094478,
      "losslessBytes": 1094478
     },
+    "ali-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1113040,
+     "losslessBytes": 1113040
+    },
     "ali.webp": {
      "codec": "VP8L",
      "action": "kept-lossless",
@@ -267,6 +290,12 @@
      "bytes": 866896,
      "losslessBytes": 866896
     },
+    "benny-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 834604,
+     "losslessBytes": 834604
+    },
     "benny.webp": {
      "codec": "VP8",
      "action": "kept-lossy",
@@ -292,7 +321,7 @@
       1.723
      ],
      "pixelDe": 2.515,
-     "losslessBytes": 833634
+     "losslessBytes": null
     },
     "commissioner-ext3.webp": {
      "codec": "VP8",
@@ -309,7 +338,7 @@
       4.142
      ],
      "pixelDe": 2.631,
-     "losslessBytes": 774410
+     "losslessBytes": null
     },
     "commissioner-ext4.webp": {
      "codec": "VP8",
@@ -326,7 +355,24 @@
       4.421
      ],
      "pixelDe": 2.619,
-     "losslessBytes": 859330
+     "losslessBytes": null
+    },
+    "commissioner-ext5.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 308998,
+     "quality": 90,
+     "weightedDe": 0.627,
+     "perCluster": [
+      0.117,
+      0.703,
+      0.14,
+      1.316,
+      0.354,
+      4.524
+     ],
+     "pixelDe": 2.647,
+     "losslessBytes": 979148
     },
     "commissioner.webp": {
      "codec": "VP8",
@@ -359,7 +405,7 @@
       0.534
      ],
      "pixelDe": 3.439,
-     "losslessBytes": 775490
+     "losslessBytes": null
     },
     "cyraxx-ext4.webp": {
      "codec": "VP8L",
@@ -367,10 +413,22 @@
      "bytes": 932584,
      "losslessBytes": 932584
     },
+    "cyraxx-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 926058,
+     "losslessBytes": 926058
+    },
     "cyraxx.webp": {
      "codec": "VP8",
      "action": "kept-lossy",
      "bytes": 306710
+    },
+    "deathblow-ext.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 487306,
+     "losslessBytes": 487306
     },
     "deathblow-ext2.webp": {
      "codec": "VP8L",
@@ -390,22 +448,22 @@
      "bytes": 827180,
      "losslessBytes": 827180
     },
+    "deathblow-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 800316,
+     "losslessBytes": 800316
+    },
     "deathblow.webp": {
      "codec": "VP8",
-     "action": "encoded",
-     "bytes": 248192,
-     "quality": 90,
-     "weightedDe": 0.442,
-     "perCluster": [
-      0.2,
-      0.609,
-      0.552,
-      1.059,
-      0.469,
-      0.918
-     ],
-     "pixelDe": 2.466,
-     "losslessBytes": 718802
+     "action": "kept-lossy",
+     "bytes": 248192
+    },
+    "devil-ext.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 586192,
+     "losslessBytes": 586192
     },
     "devil-ext2.webp": {
      "codec": "VP8L",
@@ -425,22 +483,22 @@
      "bytes": 1000194,
      "losslessBytes": 1000194
     },
+    "devil-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1047876,
+     "losslessBytes": 1047876
+    },
     "devil.webp": {
      "codec": "VP8",
-     "action": "encoded",
-     "bytes": 362620,
-     "quality": 90,
-     "weightedDe": 0.602,
-     "perCluster": [
-      0.06,
-      0.609,
-      0.774,
-      1.305,
-      1.054,
-      1.155
-     ],
-     "pixelDe": 2.823,
-     "losslessBytes": 915012
+     "action": "kept-lossy",
+     "bytes": 362620
+    },
+    "donald-ext.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 411140,
+     "losslessBytes": 411140
     },
     "donald-ext2.webp": {
      "codec": "VP8L",
@@ -460,22 +518,16 @@
      "bytes": 806154,
      "losslessBytes": 806154
     },
+    "donald-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 809300,
+     "losslessBytes": 809300
+    },
     "donald.webp": {
      "codec": "VP8",
-     "action": "encoded",
-     "bytes": 243126,
-     "quality": 90,
-     "weightedDe": 0.345,
-     "perCluster": [
-      0.241,
-      0.129,
-      0.247,
-      0.36,
-      1.092,
-      0.851
-     ],
-     "pixelDe": 2.508,
-     "losslessBytes": 862942
+     "action": "kept-lossy",
+     "bytes": 243126
     },
     "jez-ext.webp": {
      "codec": "VP8",
@@ -497,7 +549,7 @@
       0.537
      ],
      "pixelDe": 3.692,
-     "losslessBytes": 979948
+     "losslessBytes": null
     },
     "jez-ext3.webp": {
      "codec": "VP8",
@@ -514,7 +566,7 @@
       0.907
      ],
      "pixelDe": 3.872,
-     "losslessBytes": 792150
+     "losslessBytes": null
     },
     "jez-ext4.webp": {
      "codec": "VP8",
@@ -531,12 +583,24 @@
       0.432
      ],
      "pixelDe": 3.859,
-     "losslessBytes": 873464
+     "losslessBytes": null
+    },
+    "jez-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 900768,
+     "losslessBytes": 900768
     },
     "jez.webp": {
      "codec": "VP8",
      "action": "kept-lossy",
      "bytes": 284572
+    },
+    "post-ext.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 465242,
+     "losslessBytes": 465242
     },
     "post-ext2.webp": {
      "codec": "VP8L",
@@ -556,22 +620,16 @@
      "bytes": 974896,
      "losslessBytes": 974896
     },
+    "post-ext5.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 906568,
+     "losslessBytes": 906568
+    },
     "post.webp": {
      "codec": "VP8",
-     "action": "encoded",
-     "bytes": 287618,
-     "quality": 90,
-     "weightedDe": 0.604,
-     "perCluster": [
-      0.994,
-      0.072,
-      0.758,
-      0.206,
-      0.982,
-      0.804
-     ],
-     "pixelDe": 3.137,
-     "losslessBytes": 813668
+     "action": "kept-lossy",
+     "bytes": 287618
     }
    }
   },
