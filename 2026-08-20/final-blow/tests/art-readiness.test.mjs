@@ -20,6 +20,7 @@ import {
   shiftedAnnouncementDelay,
   unifiedFamilyFor,
 } from "../engine/art-readiness.mjs";
+import { SWING_BANK_LIST, bankPreloadPlan, swingSheetPath } from "../engine/banks.mjs";
 
 const gameRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -130,16 +131,29 @@ test("game.js wiring: family-first preload, select-screen warm, the hold and the
   for (const bank of ["motion", "motion2", "motion3", "walk", "unified", "ext", "ext2"]) {
     assert.ok(game.includes(`authoredSheetImage("${bank}", `), `${bank} sheet goes through authoredSheetImage`);
   }
-  assert.ok(game.includes("authoredSheetImage(swingSuffix[bank], "), "ext3/ext4/ext5 sheets go through authoredSheetImage");
+  // v5.3 (sweep #52): the swing family's suffix and path are engine/banks.mjs.
+  assert.ok(game.includes("authoredSheetImage(SWING_SUFFIX[bank], swingSheetPath(fighterId, bank))"),
+    "ext3/ext4/ext5 sheets go through authoredSheetImage");
+  for (const bank of SWING_BANK_LIST) {
+    assert.match(swingSheetPath("jez", bank), /^assets\/unified\/jez-ext[345]\.webp$/);
+  }
   assert.doesNotMatch(game, /new Image\(\);\n\s*atlas\.src = `assets\/(motion|motion2|motion3|walk|unified)\//);
   // The manifest is kicked at boot and the whole preload runs behind it, the
   // unified sheet requested before the motion banks.
   assert.match(game, /\nensureUnifiedManifest\(\);\n/);
   const preload = game.slice(game.indexOf("function preloadAuthoredBanks("), game.indexOf("const preloadedFighterIds"));
-  assert.ok(preload.indexOf("ensureUnifiedAtlas(id)") < preload.indexOf("ensureMotionAtlas(id)"), "unified before motion");
-  assert.ok(preload.indexOf("ensureMotionAtlas(id)") < preload.indexOf("ensureMotion3Atlas(id)"), "motion before the bonus banks");
+  assert.ok(preload.indexOf("ensureUnifiedAtlas(step.id)") < preload.indexOf("ensureMotionAtlas(step.id)"), "unified before motion");
+  assert.ok(preload.indexOf("ensureMotionAtlas(step.id)") < preload.indexOf("ensureMotion3Atlas(step.id)"), "motion before the bonus banks");
   assert.ok(preload.includes("motion3BankState.masks?.[id]?.accept.some(Boolean)"), "motion3 request is manifest-gated");
   assert.ok(preload.includes("walkBankState.masks?.[id]"), "walk request is manifest-gated");
+  // ...and the order itself is the plan's, not the shape of a loop: the whole
+  // unified family for a fighter goes out before the per-beat motion banks.
+  const plan = bankPreloadPlan(["jez"], {
+    unifiedWhole: () => true, extWhole: () => true, ext2Whole: () => true, swingWhole: () => true,
+  });
+  assert.deepEqual(plan.unified.map((step) => step.key),
+    ["jez:unified", "jez:ext", "jez:ext2", "jez:ext3", "jez:ext4", "jez:ext5"]);
+  assert.deepEqual(plan.motion.map((step) => step.key), ["jez:motion", "jez:motion2"]);
   // The select screens warm the matchup; the stage screen warms voice too.
   assert.match(game, /selectBothLocked = bothLocked;[\s\S]{0,400}preloadSelectMatchup\(\{ immediate: bothLocked, voice: bothLocked \}\)/);
   assert.match(game, /function showStageSelect\(\) \{[\s\S]{0,400}preloadSelectMatchup\(\{ immediate: true, voice: true \}\)/);

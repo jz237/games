@@ -7,13 +7,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  BANNER_CUES,
   CLOCK_CALLOUT_SECONDS,
   CLOCK_TICK_SECONDS,
   FIGHTER_CALL_DELAY_MS,
   ROUND_END_CAUSES,
+  bannerAnnouncerPlan,
   clockTickPlan,
   dizzyRingPlan,
   drawFromBag,
+  roundBannerCue,
   roundEndAnnouncerPlan,
   roundEndBannerSub,
   roundEndCause,
@@ -203,4 +206,70 @@ test("qa.setTimer forces the round clock, and only inside a QA fight", () => {
   for (const marker of ["  state.qaManualMode = false;"]) {
     assert.ok(gameSource.includes(marker), "a played match must not be a QA fight");
   }
+});
+// v5.3 SPECTACLE (sweep item #52) — the rest of announcerSpeakBanner's ladder.
+// w51 moved the round-END call into the engine and left the banner -> cue map
+// inline in game.js, where nothing tested it: the two facts below were only
+// ever asserted by the fact that the characters were still there.
+test("the banner -> cue map speaks the right bank, and knows what it does not know", () => {
+  const plan = (text, lookup) => bannerAnnouncerPlan(text, lookup).plan;
+  // The one-cue banners.
+  assert.deepEqual(plan("FIGHT!"), [{ cue: "fight", delay: 0 }]);
+  assert.deepEqual(plan("FINISH THEM"), [{ cue: "finishthem", delay: 0 }]);
+  assert.deepEqual(plan("GUARD CRUSH"), [{ cue: "guardcrush", delay: 0 }]);
+  assert.deepEqual(plan("FINAL BLOW"), [{ cue: "ko", delay: 0 }]);
+  // FIGHT! is the one that also releases the fighter voice budget — the
+  // sheets had the intro to themselves until then.
+  assert.equal(bannerAnnouncerPlan("FIGHT!").warmFighterVoices, true);
+  for (const text of ["FINISH THEM", "GUARD CRUSH", "FINAL BLOW", "ROUND 1", "JEZ WINS", ""]) {
+    assert.equal(bannerAnnouncerPlan(text).warmFighterVoices, false, text);
+  }
+  // ROUND n, online or off. Round 3 and beyond is the FINAL ROUND bank —
+  // there is no "round3" cue, so a naive `round${n}` would speak nothing.
+  assert.deepEqual(plan("ROUND 1"), [{ cue: "round1", delay: 0 }]);
+  assert.deepEqual(plan("ONLINE ROUND 2"), [{ cue: "round2", delay: 0 }]);
+  assert.deepEqual(plan("ROUND 3"), [{ cue: "finalround", delay: 0 }]);
+  assert.deepEqual(plan("ONLINE ROUND 9"), [{ cue: "finalround", delay: 0 }]);
+  assert.equal(roundBannerCue(1), "round1");
+  assert.equal(roundBannerCue(2), "round2");
+  assert.equal(roundBannerCue(5), "finalround");
+  // A ROUND banner with anything else around it is not a round banner.
+  assert.deepEqual(plan("ROUND 1 OF 3"), []);
+  assert.deepEqual(plan("BONUS ROUND 1"), []);
+  // The text-only " WINS" fallback books the fighter's NAME bank, never
+  // "-wins": without the round/match facts it cannot honestly claim he won
+  // the match, so it says the KO and then his name.
+  const lookup = { fighterIdForName: (name) => (name === "BENNY" ? "benny" : "") };
+  assert.deepEqual(plan("BENNY WINS", lookup), [
+    { cue: "ko", delay: 0 },
+    { cue: "benny-name", delay: FIGHTER_CALL_DELAY_MS },
+  ]);
+  // An unknown name still calls the KO — it is the half it can be sure of.
+  assert.deepEqual(plan("NOBODY WINS", lookup), [{ cue: "ko", delay: 0 }]);
+  assert.deepEqual(plan(" WINS", lookup), [{ cue: "ko", delay: 0 }]);
+  assert.deepEqual(plan("WINS", lookup), [], "the suffix is \" WINS\", so a bare WINS is not a win banner");
+  // Every other banner (titles, toasts, mode headers) books nothing.
+  for (const text of ["SPECTATING", "REPLAY", "SET POINT", "CHAMPION", "", null, undefined, 7]) {
+    assert.deepEqual(bannerAnnouncerPlan(text), { plan: [], warmFighterVoices: false });
+  }
+  // Every cue the map can produce must be a bank game.js actually has lines
+  // for, or the banner speaks nothing and the caption is blank.
+  const lines = slice("const ANNOUNCER_LINES = (() => {", "const announcerBankCache");
+  for (const cue of [...Object.values(BANNER_CUES), "round1", "round2", "finalround", "timeover"]) {
+    assert.ok(new RegExp(`\\b${cue}: \\[`).test(lines), `ANNOUNCER_LINES must carry ${cue}`);
+  }
+});
+
+test("game.js speaks the plan and keeps only the side effects", () => {
+  const banner = slice("function announcerSpeakBanner(text, plan = null) {", "// --- Wave 9: reactive fighter cues");
+  // The explicit plan (finishRound's) still wins over the text map.
+  assert.match(banner, /if \(Array\.isArray\(plan\)\) \{/);
+  assert.match(banner, /if \(plan\[0\]\?\.cue === "timeover"\) voiceFxDebug\.decisionCalls \+= 1;/);
+  // ...and the text map is the engine's, driven by the roster lookup.
+  assert.match(banner, /bannerAnnouncerPlan\(text, \{\s*\n\s*fighterIdForName: \(name\) => roster\.find\(\(entry\) => entry\.name === name\)\?\.id \|\| "",\s*\n\s*\}\);/);
+  assert.match(banner, /for \(const \{ cue, delay = 0 \} of banner\.plan\) announcerSay\(cue, \{ delay \}\);/);
+  assert.match(banner, /if \(banner\.warmFighterVoices\) topUpFighterAudio\(\);/);
+  // No copy of the ladder left behind.
+  assert.doesNotMatch(banner, /text === "FINISH THEM"/);
+  assert.doesNotMatch(banner, /round === 1 \? "round1"/);
 });

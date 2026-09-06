@@ -95,6 +95,7 @@ import {
   walkCycleFrameExt,
   walkCyclePose,
 } from "../engine/fighter-kits.mjs";
+import { altAtlasKey, bankPreloadPlan } from "../engine/banks.mjs";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const assetDir = join(testDir, "..", "assets", "unified");
@@ -876,11 +877,19 @@ function testRegistration() {
   // fighter with no ext block never requests a sheet that is not there.
   const preloadStart = gameSource.indexOf("function preloadAuthoredBanks");
   const preload = gameSource.slice(preloadStart, gameSource.indexOf("\nfunction ", preloadStart + 1));
-  assert.ok(preload.includes("unifiedFighterExtWhole(id)"),
+  // v5.3 (sweep #52): the manifest gate is passed to bankPreloadPlan, which
+  // decides who gets asked for what; the padded-canvas half stays here.
+  assert.ok(preload.includes("extWhole: unifiedFighterExtWhole"),
     "the ext sheet must be warmed behind the manifest gate inside preloadAuthoredBanks");
+  assert.ok(preload.includes("trackSheetDecode(step.key, source).then(() => ensureUnifiedExtAtlas(step.id))"),
+    "the padded canvas is built on the decode callback, out of a frame budget");
+  const plan = bankPreloadPlan(["jez", "post"], { unifiedWhole: () => true, extWhole: (id) => id === "jez" });
+  assert.deepEqual(plan.unified.map((step) => step.key), ["jez:unified", "jez:ext", "post:unified"],
+    "a fighter with no ext block never has the sheet requested, and the main sheet is asked for first");
   // Registered in both palette paths, or an alt-palette side draws the primary.
-  assert.ok(gameSource.includes(`${"`"}\${fighterId}:unified-ext${"`"}`),
+  assert.equal(altAtlasKey("jez", UNIFIED_EXT_BANK), "jez:unified-ext",
     "the ext atlas needs its own alt-palette cache key");
+  assert.match(gameSource, /\n\s*ext: fighterUnifiedExtAtlases,/);
 }
 
 test("X-A the ext manifest is the 8-cell grammar the routing addresses", testManifestShape);

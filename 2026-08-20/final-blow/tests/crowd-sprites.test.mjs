@@ -18,6 +18,7 @@ import {
   crowdSheetVariant,
   crowdSnapshot,
 } from "../engine/crowd.mjs";
+import { stirCrowdReaction } from "../engine/crowd-reaction.mjs";
 
 // v4.7 BYSTANDERS — painted crowd sheets: the manifest contract and the
 // seeded character deal that rides beside (never inside) the crowd stream.
@@ -285,7 +286,15 @@ function testRenderersAgree() {
   assert.match(gameSource, /function applyViolenceResponse\(kind, \{[^}]*side = -1, splatX = null[^}]*\} = \{\}\) \{/);
   assert.match(gameSource, /stirCrowd\(profile\.crowd \* counterScale, "", \{ side, splatX \}\);/);
   assert.match(gameSource, /function stirCrowd\(amount = 1, kind = "", \{ side = -1, splatX = null \} = \{\}\)/);
-  assert.match(gameSource, /if \(side === 0 \|\| side === 1\) state\.crowdStirSide = side;/);
+  // v5.3 (sweep #52): the stir's own bookkeeping — who it was for, where it
+  // landed, the ceiling — is engine/crowd-reaction.mjs, so "a named stir
+  // sticks and an authorless one does not clear it" is asserted rather than
+  // grepped. (tests/crowd-reaction.test.mjs carries the rest.)
+  const stirred = { crowdReaction: 0, crowdStirSide: -1, crowdSplatX: 0, crowdSplatTick: -1e9 };
+  stirCrowdReaction(stirred, 0.6, { side: 1, splatX: 480, tick: 300 });
+  assert.deepEqual(stirred, { crowdReaction: 0.6, crowdStirSide: 1, crowdSplatX: 480, crowdSplatTick: 300 });
+  stirCrowdReaction(stirred, 0.2);
+  assert.equal(stirred.crowdStirSide, 1, "an authorless stir keeps the last author");
   // ... and the mood is resolved once, in the engine, for both renderers.
   const frame = gameSource.slice(gameSource.indexOf("function crowdSpriteFrame("), gameSource.indexOf("function crowdFightCentre("));
   assert.match(frame, /crowdFlinchLevel\(x, state\.crowdSplatX, frame - state\.crowdSplatTick\)/);

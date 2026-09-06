@@ -20,6 +20,7 @@ import {
   pulseAmbientLatch,
   stirPulseKind,
 } from "../engine/ambient.mjs";
+import { stirCrowdReaction } from "../engine/crowd-reaction.mjs";
 
 // v5.0 AMBIENT REACTIONS — the pulse state machine that makes the Vet's
 // floodlights flare on a big hit and a KO. These are the numbers the shipped
@@ -144,7 +145,12 @@ function testGameWiring() {
   // stage draw; the arithmetic lives here and nowhere else.
   assert.match(gameSource, /const ambientObs = createAmbientObs\(\);/);
   assert.match(gameSource, /if \(rollbackResimulating\) return;\n\s*pulseAmbientLatch\(ambientObs, kind, amount, state\.simulationTick\);/);
-  assert.match(gameSource, /const pulseKind = stirPulseKind\(amount\);\n\s*if \(pulseKind\) pulseAmbient\(pulseKind, amount\);/);
+  // v5.3 (sweep #52): the stir's threshold read moved into
+  // engine/crowd-reaction.mjs, which reports the pulse kind rather than
+  // latching it. The THRESHOLD is asserted there (stirCrowdReaction ->
+  // stirPulseKind); this side must still be the only thing that latches.
+  assert.match(gameSource, /const \{ pulseKind, swell \} = stirCrowdReaction\(state, amount, \{ side, splatX, tick: state\.simulationTick \}\);\n\s*if \(pulseKind\) pulseAmbient\(pulseKind, amount\);/);
+  assert.equal(stirCrowdReaction({ crowdReaction: 0, crowdStirSide: -1, crowdSplatX: 0, crowdSplatTick: 0 }, AMBIENT_STIR_THRESHOLD).pulseKind, "splat");
   assert.match(gameSource, /const koPulse = ambientPhaseChange\(ambientObs, state\.phase, state\.screen\);\n\s*if \(koPulse\) pulseAmbient\(koPulse\.kind, koPulse\.amount\);/);
   assert.match(gameSource, /const \{ pulseAge, pulse, ko \} = ambientPulseLevel\(ambientObs, frame, reduced\);/);
   assert.ok(!/pulseAge \/ 48/.test(gameSource), "no second copy of the decay in game.js");

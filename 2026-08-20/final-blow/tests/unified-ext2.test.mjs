@@ -33,6 +33,7 @@ import {
   unifiedExt2Frame,
   isAuthoredBank,
 } from "../engine/fighter-kits.mjs";
+import { altAtlasKey, bankGateKind } from "../engine/banks.mjs";
 
 // v4.9 IN-BETWEENS — the third sheet: attack anticipation and recovery keys.
 
@@ -224,13 +225,16 @@ function testMeasuredTables() {
 function testRegistryAndWiring() {
   assert.deepEqual(AUTHORED_BANKS.slice(-5), [UNIFIED_EXT_BANK, UNIFIED_EXT2_BANK, "unified-ext3", "unified-ext4", "unified-ext5"], "the sheets are registered in the order they were added");
   assert.ok(isAuthoredBank(UNIFIED_EXT2_BANK));
-  assert.match(gameSource, /if \(bank === UNIFIED_EXT2_BANK\) return unifiedExt2CellDrawable\(fighterId, cell\);/);
+  // v5.3 (sweep #52): the routing table, asserted rather than grepped.
+  assert.equal(bankGateKind(UNIFIED_EXT2_BANK), "ext2");
+  assert.match(gameSource, /\n\s*ext2: unifiedExt2CellDrawable,/);
   assert.match(gameSource, /const ext2 = unifiedFighterExt2Ready\(fighter\.def\.id\);/);
   assert.match(gameSource, /attackMotionBeat\(attack, fighter\.attackFrame, beatOpt\)/);
   assert.match(gameSource, /throwClinchKeys\(beatOpt\)/);
   assert.match(gameSource, /throwRecoveryKeys\(beatOpt\)/);
   assert.match(gameSource, /if \(beat\?\.beat === "cock"\)/);
-  assert.match(gameSource, /\$\{fighterId\}:unified-ext2/);
+  assert.equal(altAtlasKey("jez", UNIFIED_EXT2_BANK), "jez:unified-ext2");
+  assert.match(gameSource, /\n\s*ext2: fighterUnifiedExt2Atlases,/);
   // bankSheetAdjust must not branch on the new bank: its sheet correction is
   // folded per cell, exactly like the ext sheet's.
   const adjustBody = gameSource.slice(gameSource.indexOf("function bankSheetAdjust("), gameSource.indexOf("function bankSheetAdjust(") + 1400);

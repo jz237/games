@@ -305,6 +305,7 @@ import {
 import {
   CLOCK_CALLOUT_SECONDS,
   ROUND_END_CAUSES,
+  bannerAnnouncerPlan,
   clockTickPlan,
   dizzyRingPlan,
   drawFromBag,
@@ -402,6 +403,36 @@ import {
 // the inverted ext4 air-hit cell off screen and the 48-tick pulse decay are
 // unit-tested under Node. game.js keeps the DOM gates and the state reads.
 import { swingContext, swingResolve } from "./engine/swing-resolve.mjs";
+// v5.3 SPECTACLE (sweep #52): the bank plumbing that used to be pinned by
+// regex over this file — the drawable-gate routing table, the swing family's
+// mask keys and suffixes, the alt-palette atlas resolution and the preload
+// order — now lives in engine/banks.mjs and is asserted directly.
+import {
+  SWING_BANK_LIST,
+  SWING_MASK_KEY,
+  SWING_SUFFIX,
+  altAtlasSource as resolveAltAtlasSource,
+  bankCellDrawable,
+  bankPreloadPlan,
+  swingSheetPath,
+} from "./engine/banks.mjs";
+// v5.3 SPECTACLE (sweep #52): the crowd reaction state machine (stir, decay,
+// reset, KO-hold latch) as pure functions over the live state object.
+import {
+  createCrowdKoHold,
+  crowdDrawReaction as crowdHoldReaction,
+  crowdKoHoldAge as koHoldAge,
+  crowdKoHoldLive,
+  crowdReactionDefaults,
+  decayCrowdReaction,
+  resetCrowdReaction,
+  stirCrowdReaction,
+  updateCrowdKoHoldLatch as latchCrowdKoHold,
+} from "./engine/crowd-reaction.mjs";
+// v5.3 SPECTACLE (sweep #52): the contact pose precedence (standing/crouch
+// blockstun, the flash on a guard, the flash on a hit) as a pure function
+// over a fighter snapshot.
+import { POSE_BRANCHES, blockstunPhase, contactPoseBranch } from "./engine/pose-precedence.mjs";
 import {
   INTRO_ART_HOLD_MS,
   PRELOAD_PLAN,
@@ -422,7 +453,6 @@ import {
   createAmbientObs,
   pickKoHorn,
   pulseAmbientLatch,
-  stirPulseKind,
 } from "./engine/ambient.mjs";
 // v5.1 TEMPO TELLS: the whiff-tax / re-arm tell phases, the lab's frame
 // phase and its frame-data line — pure, shared with the CINEMA 3D fighter
@@ -509,7 +539,6 @@ import {
   CROWD_VOICE_CUES,
   createCrowdVoiceBag,
   crowdKoHoldColumn,
-  crowdKoHoldReaction,
   crowdVoiceBagDraw,
   crowdVoiceCueFor,
   crowdVoiceFiles,
@@ -1451,19 +1480,20 @@ function unifiedFighterExt2Ready(fighterId) {
 // rides the same loader, gate and atlas table. Registered here; routed by the
 // locomotion pass (no track or substitution names an ext5 cell yet).
 // ---------------------------------------------------------------------------
-const swingBankList = Object.freeze([UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK]);
+// The list, the mask keys and the file suffixes are engine/banks.mjs
+// (SWING_BANK_LIST / SWING_MASK_KEY / SWING_SUFFIX), so the three tables that
+// say what distinguishes ext3 from ext4 from ext5 are one tested fact rather
+// than three object literals here. The ATLASES stay: an Image is a DOM thing.
 const fighterSwingAtlases = { [UNIFIED_EXT3_BANK]: {}, [UNIFIED_EXT4_BANK]: {}, [UNIFIED_EXT5_BANK]: {} };
-const swingMaskKey = { [UNIFIED_EXT3_BANK]: "ext3Masks", [UNIFIED_EXT4_BANK]: "ext4Masks", [UNIFIED_EXT5_BANK]: "ext5Masks" };
-const swingSuffix = { [UNIFIED_EXT3_BANK]: "ext3", [UNIFIED_EXT4_BANK]: "ext4", [UNIFIED_EXT5_BANK]: "ext5" };
 
 function swingFighterWhole(fighterId, bank) {
-  return Boolean(unifiedBankState[swingMaskKey[bank]]?.[fighterId]?.whole);
+  return Boolean(unifiedBankState[SWING_MASK_KEY[bank]]?.[fighterId]?.whole);
 }
 
 function ensureSwingAtlas(fighterId, bank) {
   let atlas = fighterSwingAtlases[bank][fighterId];
   if (!atlas) {
-    atlas = authoredSheetImage(swingSuffix[bank], `assets/unified/${fighterId}-${swingSuffix[bank]}.webp`);
+    atlas = authoredSheetImage(SWING_SUFFIX[bank], swingSheetPath(fighterId, bank));
     fighterSwingAtlases[bank][fighterId] = atlas;
   }
   return atlas;
@@ -1472,7 +1502,7 @@ function ensureSwingAtlas(fighterId, bank) {
 /** `cell` is a SHEET FRAME (0-15). */
 function swingCellDrawable(fighterId, cell, bank) {
   ensureUnifiedManifest();
-  const mask = unifiedBankState[swingMaskKey[bank]]?.[fighterId];
+  const mask = unifiedBankState[SWING_MASK_KEY[bank]]?.[fighterId];
   if (!mask?.whole || !mask.accept[cell]) return false;
   const atlas = ensureSwingAtlas(fighterId, bank);
   return Boolean(atlas.complete && atlas.naturalWidth);
@@ -1511,17 +1541,28 @@ function unifiedFighterAirReady(fighterId) {
     && swingCellDrawable(fighterId, UNIFIED_EXT5_CELLS.airRecover, UNIFIED_EXT5_BANK);
 }
 
-/** Bank-routed drawable gate for resolveMotionPose (all six authored banks). */
+/**
+ * Bank-routed drawable gate for resolveMotionPose (all eight authored banks).
+ *
+ * The ROUTING — which bank asks which gate — is engine/banks.mjs's table
+ * (BANK_GATE_KIND); the gates themselves stay here because every one of them
+ * ends in "and has the sheet decoded", which is an Image. One table, so a new
+ * bank is a row rather than a branch inserted in exactly the right place, and
+ * the test asserts the whole mapping instead of one line of its text.
+ */
+const MOTION_BANK_GATES = Object.freeze({
+  motion3: motion3KeyDrawable,
+  ext2: unifiedExt2CellDrawable,
+  swing: swingCellDrawable,
+  ext: unifiedExtCellDrawable,
+  unified: unifiedCellDrawable,
+  walk: walkCellDrawable,
+  motion2: motion2CellDrawable,
+  motion: motionCellDrawable,
+});
+
 function motionBankCellDrawable(fighterId, cell, bank) {
-  if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
-  if (bank === UNIFIED_EXT2_BANK) return unifiedExt2CellDrawable(fighterId, cell);
-  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK) return swingCellDrawable(fighterId, cell, bank);
-  if (bank === UNIFIED_EXT_BANK) return unifiedExtCellDrawable(fighterId, cell);
-  if (bank === UNIFIED_BANK) return unifiedCellDrawable(fighterId, cell);
-  if (bank === "walk") return walkCellDrawable(fighterId, cell);
-  return bank === "motion2"
-    ? motion2CellDrawable(fighterId, cell)
-    : motionCellDrawable(fighterId, cell);
+  return bankCellDrawable(fighterId, cell, bank, MOTION_BANK_GATES);
 }
 
 // ---------------------------------------------------------------------------
@@ -1576,34 +1617,46 @@ function preloadAuthoredBanks(fighterIds) {
   // per-beat motion banks follow, and the bonus banks go last at low priority
   // and only when their manifest says the fighter has a sheet.
   ensureUnifiedManifest()?.then(() => {
-    for (const id of ids) {
-      // v3.0: the unified sheet is warmed only once the manifest has confirmed
-      // the fighter is 16/16 — an incomplete sheet can never draw a cell, so
-      // requesting it would be pure waste, and a fighter with no sheet in the
-      // repo must never 404 (the manifest-BEFORE-sheet order).
-      //
-      // Warming this one matters MORE than the others, not less. The other
-      // banks fall back per beat, so a late sheet costs one beat; this bank's
-      // gate is all-or-nothing, so a late sheet flips the fighter's ENTIRE
-      // core vocabulary in a single tick. Decoding it before FIGHT! is what
-      // keeps that flip off the screen.
-      if (!unifiedFighterWhole(id)) continue;
-      decodeTracked(`${id}:unified`, ensureUnifiedAtlas(id));
-      // v4.0: the ext sheet flips a fighter's CADENCE — the walk goes from a
-      // four-key cycle at 10 keys/s to a six-key cycle at 15 and the jump
-      // swaps key arrays. The first call starts the request and returns null;
-      // the decode then calls back to build the padded canvas, so the canvas
-      // build stays out of a frame budget.
-      if (unifiedFighterExtWhole(id) && !ensureUnifiedExtAtlas(id)) {
-        const source = fighterUnifiedExtSources[id];
-        if (source) trackSheetDecode(`${id}:ext`, source).then(() => ensureUnifiedExtAtlas(id));
-      }
-      // v4.9: the in-between sheet — its first use is the first jab.
-      if (unifiedFighterExt2Whole(id)) decodeTracked(`${id}:ext2`, ensureUnifiedExt2Atlas(id));
-      // v5.0: strikes and reactions. v5.2: and the locomotion sheet.
-      for (const swingBank of swingBankList) {
-        if (!swingFighterWhole(id, swingBank)) continue;
-        decodeTracked(`${id}:${swingSuffix[swingBank]}`, ensureSwingAtlas(id, swingBank));
+    // v5.3 (sweep #52): the ORDER — which sheets are asked for, for whom, and
+    // in what sequence — is engine/banks.mjs's bankPreloadPlan, so the request
+    // order that fix was about is a tested fact rather than the shape of a
+    // loop. This side keeps the DOM half: the Image, the decode tracking and
+    // the ext sheet's padded canvas.
+    //
+    // v3.0: the unified sheet is warmed only once the manifest has confirmed
+    // the fighter is 16/16 — an incomplete sheet can never draw a cell, so
+    // requesting it would be pure waste, and a fighter with no sheet in the
+    // repo must never 404 (the manifest-BEFORE-sheet order). Warming it
+    // matters MORE than the others, not less: the other banks fall back per
+    // beat, so a late sheet costs one beat; this bank's gate is
+    // all-or-nothing, so a late sheet flips the fighter's ENTIRE core
+    // vocabulary in a single tick. The plan therefore drops a fighter who is
+    // not whole, ext sheets and all.
+    const plan = bankPreloadPlan(ids, {
+      unifiedWhole: unifiedFighterWhole,
+      extWhole: unifiedFighterExtWhole,
+      ext2Whole: unifiedFighterExt2Whole,
+      swingWhole: swingFighterWhole,
+    });
+    for (const step of plan.unified) {
+      if (step.kind === "unified") {
+        decodeTracked(step.key, ensureUnifiedAtlas(step.id));
+      } else if (step.kind === "ext") {
+        // v4.0: the ext sheet flips a fighter's CADENCE — the walk goes from a
+        // four-key cycle at 10 keys/s to a six-key cycle at 15 and the jump
+        // swaps key arrays. The first call starts the request and returns
+        // null; the decode then calls back to build the padded canvas, so the
+        // canvas build stays out of a frame budget.
+        if (!ensureUnifiedExtAtlas(step.id)) {
+          const source = fighterUnifiedExtSources[step.id];
+          if (source) trackSheetDecode(step.key, source).then(() => ensureUnifiedExtAtlas(step.id));
+        }
+      } else if (step.kind === "ext2") {
+        // v4.9: the in-between sheet — its first use is the first jab.
+        decodeTracked(step.key, ensureUnifiedExt2Atlas(step.id));
+      } else {
+        // v5.0: strikes and reactions. v5.2: and the locomotion sheet.
+        decodeTracked(step.key, ensureSwingAtlas(step.id, step.bank));
       }
     }
     // Both motion sheets are requested — and DECODED, which is the half that
@@ -1611,22 +1664,21 @@ function preloadAuthoredBanks(fighterIds) {
     // first blit — as soon as a matchup is known (v2.9 B3). Failure stays
     // silent by design: this is the on-demand media policy, and the fallback
     // chain remains the safety net.
-    for (const id of ids) {
-      decodeTracked(`${id}:motion`, ensureMotionAtlas(id));
-      decodeTracked(`${id}:motion2`, ensureMotion2Atlas(id));
+    for (const step of plan.motion) {
+      decodeTracked(step.key, step.kind === "motion" ? ensureMotionAtlas(step.id) : ensureMotion2Atlas(step.id));
     }
     // The bonus banks gate the REQUEST on their manifests (the walk sheet
     // exists for two fighters; motion3 has fighters with 0/8 accepted), so
-    // a speculative request cannot 404 on the eight who have none.
+    // a speculative request cannot 404 on the eight who have none. Their
+    // manifests land later than the unified one, so each plan is drawn inside
+    // its own settle rather than up there with the rest.
     ensureMotion3Manifest()?.then(() => {
-      for (const id of ids) {
-        if (motion3BankState.masks?.[id]?.accept.some(Boolean)) decodeTracked(`${id}:motion3`, ensureMotion3Atlas(id));
-      }
+      const bonus = bankPreloadPlan(ids, { motion3Any: (id) => motion3BankState.masks?.[id]?.accept.some(Boolean) });
+      for (const step of bonus.bonus.motion3) decodeTracked(step.key, ensureMotion3Atlas(step.id));
     });
     ensureWalkManifest()?.then(() => {
-      for (const id of ids) {
-        if (walkBankState.masks?.[id]) decodeTracked(`${id}:walk`, ensureWalkAtlas(id));
-      }
+      const bonus = bankPreloadPlan(ids, { walkHas: (id) => Boolean(walkBankState.masks?.[id]) });
+      for (const step of bonus.bonus.walk) decodeTracked(step.key, ensureWalkAtlas(step.id));
     });
   });
 }
@@ -1879,37 +1931,35 @@ let matchPalettes = [0, 0];
 // ...and which palettes the select screen has staged for the next match.
 let pendingPalettes = [0, 0];
 
+// v5.3 (sweep #52): WHICH table a bank remaps from and WHAT key it caches
+// under is engine/banks.mjs (ALT_ATLAS_TABLE / altAtlasSource) — a wrong
+// answer here is invisible until somebody picks palette 2, because the cache
+// would serve the wrong sheet under the right key, so it is worth a test that
+// checks every bank rather than a regex that checks the spelling of one.
+// The tables themselves stay here; they hold Images and canvases.
+//
+// Notes the table carries: the unified sheet is physically identical to every
+// other bank (1280x1280, 4x4, 320px cells), so the palette remap, the
+// silhouette cache, the crossfade ghost, the damage compositor and the 3D
+// bank builder all read it with no change at all (v3.0); the ext atlas is
+// already a canvas and remapImageBytes reads it the same way it reads an
+// Image, because the padding put it on the standard grid (v4.0); and the
+// shipped generation kept as the specials bank's per-cell fallback remaps,
+// silhouettes and builds a 3D texture like any other sheet (v5.3).
 function altAtlasSource(fighterId, bank) {
-  // v2.7 FRAMES: the motion bank remaps like any other sheet (2.9: motion2 too).
-  if (bank === "motion") return { image: fighterMotionAtlases[fighterId], key: `${fighterId}:motion` };
-  if (bank === "motion2") return { image: fighterMotion2Atlases[fighterId], key: `${fighterId}:motion2` };
-  if (bank === "motion3") return { image: fighterMotion3Atlases[fighterId], key: `${fighterId}:motion3` };
-  if (bank === "walk") return { image: fighterWalkAtlases[fighterId], key: `${fighterId}:walk` };
-  // v3.0: the unified sheet is physically identical to every other bank
-  // (1280x1280, 4x4, 320px cells), so the palette remap, the silhouette cache,
-  // the crossfade ghost, the damage compositor and the 3D bank builder all
-  // read it with no change at all.
-  if (bank === UNIFIED_BANK) return { image: fighterUnifiedAtlases[fighterId], key: `${fighterId}:unified` };
-  // v4.0: the ext atlas is already a canvas, and remapImageBytes reads it the
-  // same way it reads an Image — the padding put it on the standard grid.
-  if (bank === UNIFIED_EXT_BANK) {
-    return { image: fighterUnifiedExtAtlases[fighterId], key: `${fighterId}:unified-ext` };
-  }
-  if (bank === UNIFIED_EXT2_BANK) {
-    return { image: fighterUnifiedExt2Atlases[fighterId], key: `${fighterId}:unified-ext2` };
-  }
-  if (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK) {
-    return { image: fighterSwingAtlases[bank][fighterId], key: `${fighterId}:${bank}` };
-  }
-  // v5.3: the shipped generation kept as the specials bank's per-cell
-  // fallback remaps, silhouettes and builds a 3D texture like any other sheet.
-  if (bank === SPECIALS_LEGACY_BANK) {
-    return { image: fighterMoveLegacyAtlases[fighterId], key: `${fighterId}:${SPECIALS_LEGACY_BANK}` };
-  }
-  const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
-  // The boss shares one sheet across banks — collapse to one cache entry.
-  if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
-  return { image: fighterAtlases[fighterId], key: `${fighterId}:base` };
+  return resolveAltAtlasSource(fighterId, bank, {
+    motion: fighterMotionAtlases,
+    motion2: fighterMotion2Atlases,
+    motion3: fighterMotion3Atlases,
+    walk: fighterWalkAtlases,
+    unified: fighterUnifiedAtlases,
+    ext: fighterUnifiedExtAtlases,
+    ext2: fighterUnifiedExt2Atlases,
+    swing: fighterSwingAtlases,
+    specialsLegacy: fighterMoveLegacyAtlases,
+    specials: fighterMoveAtlases,
+    base: fighterAtlases,
+  });
 }
 
 function ensureAltAtlas(fighterId, bank = "base") {
@@ -2369,16 +2419,15 @@ const state = {
   stageWeaponsEnabled: localStorage.getItem("final-blow-stage-weapons") !== "0",
   stageWeapon: null,
   crowd: null,
-  // Brief crowd reaction to a big moment, decaying back to normal routes.
-  crowdReaction: 0,
-  // v5.3 CROWD DEPTH: WHO the stir was for, and WHERE it landed. The side
+  // Brief crowd reaction to a big moment, decaying back to normal routes —
+  // and (v5.3 CROWD DEPTH) WHO the stir was for and WHERE it landed: the side
   // that threw the last stirring hit (-1 = authorless: a taunt, a stage beat),
   // and the sim x of a wall splat / near-KO blow the nearby crowd flinches
-  // from. Sim-path and deterministic like crowdReaction, and like it never
-  // part of a rollback snapshot — nothing in the fight reads them back.
-  crowdStirSide: -1,
-  crowdSplatX: 0,
-  crowdSplatTick: -1e9,
+  // from. Sim-path and deterministic, and never part of a rollback snapshot —
+  // nothing in the fight reads them back. The four fields and their starting
+  // values are engine/crowd-reaction.mjs, which is also what resetCrowd puts
+  // back, so a new round and a new session start the room the same way.
+  ...crowdReactionDefaults(),
   offlineReady: false,
   accessibility: {
     reducedMotion: localStorage.getItem("final-blow-reduced-motion") === "1",
@@ -8071,10 +8120,11 @@ function fighterMotionTransform(fighter) {
   // crouchBlockstunKeys) and hands back to the crouch on the same
   // BLOCK_EXIT_AT tick, so the bridge rides the crouch stance as well — the
   // same lift/pitch/squash, unwinding out of the crouched cover.
+  // v5.3 (sweep #52): the phase is the SAME helper the two pose branches use
+  // (engine/pose-precedence.mjs), off the same observer clock, so the bridge
+  // and the drawing under it can never fall out of step.
   if (fighter.blockstunFrames > 0 && fighter.grounded && !reducedMotion) {
-    const blockTotal = Math.max(fighter.blockstunFrames, obs.blockstunTotal || 0);
-    const blockPhase = clamp(1 - fighter.blockstunFrames / Math.max(1, blockTotal), 0, 0.999);
-    const bridge = blockRecoverTransform(blockPhase);
+    const bridge = blockRecoverTransform(blockstunPhase(fighter.blockstunFrames, obs.blockstunTotal));
     if (bridge) {
       scratch.offsetY += bridge.lift;
       scratch.rotation += fighter.facing * bridge.pitch;
@@ -10312,28 +10362,21 @@ function roundWinBeatLevel(frame) {
 // this on 20 seeds: a heavy-hit KO put 6-10% of the painted people on the
 // cheer cell for 2.5 ticks of the 294-tick hold. Never sim state, never
 // resimulated; the latch is idempotent so every consumer may poke it.
-const crowdKoHold = { startTick: -1, cheerFired: false };
+// v5.3 (sweep #52): the latch, the age and the hold-vs-stir read are
+// engine/crowd-reaction.mjs. This side supplies the two facts only game.js
+// has — the live phase and the simulation tick.
+const crowdKoHold = createCrowdKoHold();
 
 function updateCrowdKoHoldLatch() {
-  const live = state.screen === "fight" && state.phase === "roundover"
-    && (!state.finisher || (state.finisher.slowMotionHits || 0) > 0);
-  if (live) {
-    if (crowdKoHold.startTick < 0) {
-      crowdKoHold.startTick = state.simulationTick;
-      crowdKoHold.cheerFired = false;
-    }
-  } else if (crowdKoHold.startTick >= 0) {
-    crowdKoHold.startTick = -1;
-    crowdKoHold.cheerFired = false;
-  }
+  latchCrowdKoHold(crowdKoHold, crowdKoHoldLive(state), state.simulationTick);
 }
 
 function crowdKoHoldAge() {
-  return crowdKoHold.startTick < 0 ? -1 : state.simulationTick - crowdKoHold.startTick;
+  return koHoldAge(crowdKoHold, state.simulationTick);
 }
 
 function crowdDrawReaction() {
-  return Math.max(state.crowdReaction, crowdKoHoldReaction(crowdKoHoldAge()));
+  return crowdHoldReaction(state.crowdReaction, crowdKoHoldAge());
 }
 
 const ROUND_WIN_BEATS = Object.freeze({
@@ -17945,10 +17988,10 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     }
     if (gritHudDirty) updateHud();
   }
-  state.crowdReaction = Math.max(0, state.crowdReaction - 0.016);
-  // v5.3: once the room has settled nobody is reacting to anybody, so the
-  // next authorless stir cannot inherit the last hit's author.
-  if (state.crowdReaction <= 0) state.crowdStirSide = -1;
+  // v5.3: one fixed step of the crowd's decay, and — once the room has
+  // settled — the author with it, so the next authorless stir cannot inherit
+  // the last hit's side (engine/crowd-reaction.mjs).
+  decayCrowdReaction(state);
   const superActive = state.fighters.some((fighter) => fighter.attacking?.superMove);
   superDimLevel = clamp(superDimLevel + (superActive ? 0.09 : -0.055), 0, 1);
   // Wave 6 win-pose curtain call, eased beside superDimLevel on the same
@@ -18428,9 +18471,7 @@ const POSTURE_BY_ID = Object.fromEntries(
 function resetCrowd() {
   state.crowd = createCrowd(state.stage, { seed: hashSeed(state.matchSeed, state.round) });
   if (state.crowd.people.some((person) => person.sprite)) ensureCrowdMedia();
-  state.crowdReaction = 0;
-  state.crowdStirSide = -1;
-  state.crowdSplatTick = -1e9;
+  resetCrowdReaction(state);
 }
 
 // Big moments ripple through the crowd, then it goes back to its routes.
@@ -18492,18 +18533,15 @@ function ambientBand(x, y, width, height, rgb, alpha) {
 // past threshold cheers). `splatX` marks a wall splat / near-KO blow the
 // people standing near it flinch away from, whoever they are here for.
 function stirCrowd(amount = 1, kind = "", { side = -1, splatX = null } = {}) {
-  state.crowdReaction = Math.min(1.4, state.crowdReaction + amount);
-  if (side === 0 || side === 1) state.crowdStirSide = side;
-  if (splatX !== null) {
-    state.crowdSplatX = splatX;
-    state.crowdSplatTick = state.simulationTick;
-  }
-  const pulseKind = stirPulseKind(amount);
+  // v5.3 (sweep #52): the state machine — the 1.4 ceiling, the author, the
+  // splat mark, the 0.7 ambient threshold and the 0.5 swell threshold — is
+  // engine/crowd-reaction.mjs. It returns what still needs a side effect.
+  const { pulseKind, swell } = stirCrowdReaction(state, amount, { side, splatX, tick: state.simulationTick });
   if (pulseKind) pulseAmbient(pulseKind, amount);
   // Release 1.6 LOUD: big stirs also latch a one-shot crowd swell/gasp for
   // the render-side crowd bus (guarded + tick-deduped inside the latch).
   // v5.1: the kind rides along so a "ko" stir gets the KO swell and roar.
-  if (amount >= 0.5) latchCrowdSwell(amount, kind);
+  if (swell) latchCrowdSwell(amount, kind);
 }
 
 // v4.7 BYSTANDERS: painted crowd sheets (assets/crowd/, built by
@@ -20373,7 +20411,13 @@ function fighterPoseDescriptor(fighter) {
   // squat on ali / benny / deathblow / donald / post, so a blocked hit
   // (block-hit is a standing flinch) made them stand UP ~80px INTO the punch
   // and drop back down after. Both reads resolve through the map's `guard`.
-  if (fighter.blockstunFrames > 0 && !fighter.crouch) {
+  // v5.3 (sweep #52): the ORDER of the four contact branches — standing
+  // blockstun, crouch blockstun, the flash on a guard, the flash on a hit —
+  // is engine/pose-precedence.mjs, asserted exhaustively over the snapshot
+  // space instead of pinned by a regex over the shape of this ladder. The
+  // DRAWINGS stay here, one per branch.
+  const contact = contactPoseBranch(fighter);
+  if (contact === POSE_BRANCHES.blockstunStanding) {
     // v2.9 critic round 2 (B1/M4): the flinch owned all 17 ticks of blockstun.
     // It now owns the IMPACT and the stance recovers behind it, which is what
     // blockstun actually looks like — and it is the drawing whose 15% height
@@ -20381,13 +20425,13 @@ function fighterPoseDescriptor(fighter) {
     // the shorter it is held the smaller that seam is. The fallbacks track the
     // exact pre-fix read: the hit cell while the contact flash decays, then
     // the guard cell.
-    const blockTotal = Math.max(fighter.blockstunFrames, motionObs[fighter.side]?.blockstunTotal || 0);
-    const blockPhase = clamp(1 - fighter.blockstunFrames / Math.max(1, blockTotal), 0, 0.999);
+    //
     // The flinch key owns the impact now, so the fallback is the STANCE for
     // the whole window — round 1's read borrowed the clean-hit cell while the
     // contact flash decayed, which put a 2-tick hit pose in the middle of a
     // block once the flinch stopped owning the whole thing.
-    return beatPoseAt(blockstunKeys(), blockPhase, uni(UNIFIED_CELLS.guard, base(roles.guard)));
+    return beatPoseAt(blockstunKeys(), blockstunPhase(fighter.blockstunFrames, motionObs[fighter.side]?.blockstunTotal),
+      uni(UNIFIED_CELLS.guard, base(roles.guard)));
   }
   // v5.1 EXT4 ROUTING — CROUCH BLOCKSTUN. The branch above is gated on
   // `!crouch` because the authored flinch is a standing cover, and the crouch
@@ -20401,23 +20445,20 @@ function fighterPoseDescriptor(fighter) {
   // (`flinch`, the capability answer for this track) the impact band opens
   // on it and the crouch guard takes the settle — an impact and a settle,
   // like the standing block. ali's flinch is held, so he reads the 5.1 track.
-  if (fighter.blockstunFrames > 0 && fighter.crouch && fighter.grounded) {
-    const blockTotal = Math.max(fighter.blockstunFrames, motionObs[fighter.side]?.blockstunTotal || 0);
-    const blockPhase = clamp(1 - fighter.blockstunFrames / Math.max(1, blockTotal), 0, 0.999);
+  if (contact === POSE_BRANCHES.blockstunCrouch) {
     const flinch = swingCellDrawable(fighter.def.id, UNIFIED_EXT5_CELLS.crouchGuardFlinch, UNIFIED_EXT5_BANK);
-    return beatPoseAt(crouchBlockstunKeys({ flinch }), blockPhase, uni(UNIFIED_CELLS.crouch, base(roles.crouch)));
+    return beatPoseAt(crouchBlockstunKeys({ flinch }),
+      blockstunPhase(fighter.blockstunFrames, motionObs[fighter.side]?.blockstunTotal),
+      uni(UNIFIED_CELLS.crouch, base(roles.crouch)));
   }
-  if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) {
-    // v5.1: a BLOCKED contact's flash keeps the stance. The flash outlives a
-    // jab's 4-tick blockstun, and this read then borrowed the clean-hit cell
-    // for the flash's remaining ticks — a 4-tick hit read on a block (measured:
-    // unified:12 / ext4:1 at ticks 63-66 after a blocked jab, blockstun 0,
-    // guarding). No hitstun and a guard up is a block, not a hit.
-    if (fighter.hitstunFrames === 0 && (fighter.guarding || fighter.block)) {
-      return fighter.crouch ? uni(UNIFIED_CELLS.crouch, base(roles.crouch)) : uni(UNIFIED_CELLS.guard, base(roles.guard));
-    }
-    return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
-  }
+  // v5.1: a BLOCKED contact's flash keeps the stance. The flash outlives a
+  // jab's 4-tick blockstun, and this read used to borrow the clean-hit cell
+  // for the flash's remaining ticks — a 4-tick hit read on a block (measured:
+  // unified:12 / ext4:1 at ticks 63-66 after a blocked jab, blockstun 0,
+  // guarding). No hitstun and a guard up is a block, not a hit.
+  if (contact === POSE_BRANCHES.flashGuardCrouch) return uni(UNIFIED_CELLS.crouch, base(roles.crouch));
+  if (contact === POSE_BRANCHES.flashGuardStand) return uni(UNIFIED_CELLS.guard, base(roles.guard));
+  if (contact === POSE_BRANCHES.flashHit) return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
   // v2.9 FLOW: sequenced wake-up — getup-a (knee up, hand pushing off) into
   // getup-b (half-risen crouch) across the recovery countdown, ending the
   // teleport-to-feet. Pure helper in fighter-kits.mjs; fallbacks exact.
@@ -30315,38 +30356,18 @@ function announcerSpeakBanner(text, plan = null) {
     for (const { cue, delay = 0 } of plan) announcerSay(cue, { delay });
     return;
   }
-  if (text === "FIGHT!") {
-    announcerSay("fight");
-    // The sheets had the intro to themselves; from here the fighters' voice
-    // takes may pull their remaining bytes (see warmFighterAudio).
-    topUpFighterAudio();
-    return;
-  }
-  const roundMatch = text.match(/^(?:ONLINE )?ROUND (\d+)$/);
-  if (roundMatch) {
-    const round = Number(roundMatch[1]);
-    announcerSay(round === 1 ? "round1" : round === 2 ? "round2" : "finalround");
-    return;
-  }
-  if (text === "FINISH THEM") {
-    announcerSay("finishthem");
-    return;
-  }
-  if (text === "GUARD CRUSH") {
-    announcerSay("guardcrush");
-    return;
-  }
-  if (text === "FINAL BLOW") {
-    announcerSay("ko");
-    return;
-  }
-  if (text.endsWith(" WINS")) {
-    // Text-only fallback (no caller uses it since w51 — finishRound always
-    // passes a plan). Without the round/match facts it can only be honest
-    // about the KO call, so it books the name bank, never "-wins".
-    const fighter = roster.find(({ name }) => text === `${name} WINS`);
-    for (const { cue, delay } of roundEndAnnouncerPlan({ fighterId: fighter?.id || "" })) announcerSay(cue, { delay });
-  }
+  // v5.3 (sweep #52): the banner -> cue ladder is engine/announcer.mjs
+  // (bannerAnnouncerPlan), so "ROUND 3 speaks finalround" and "a text-only
+  // WINS books the NAME bank, never -wins" are asserted facts rather than
+  // lines of an if-chain nothing tests. The roster lookup is passed in; this
+  // file keeps the speech itself and the one non-speech side effect.
+  const banner = bannerAnnouncerPlan(text, {
+    fighterIdForName: (name) => roster.find((entry) => entry.name === name)?.id || "",
+  });
+  for (const { cue, delay = 0 } of banner.plan) announcerSay(cue, { delay });
+  // The sheets had the intro to themselves; from FIGHT! the fighters' voice
+  // takes may pull their remaining bytes (see warmFighterAudio).
+  if (banner.warmFighterVoices) topUpFighterAudio();
 }
 
 // --- Wave 9: reactive fighter cues + match-story callouts ------------------
@@ -32257,7 +32278,7 @@ window.__finalBlowEngine = {
       })),
       crowd: crowdSnapshot(state.crowd, state.simulationTick, { viewLeft: 0, viewRight: W }),
       inbetweens: state.fighters.map((fighter) => unifiedFighterExt2Ready(fighter.def.id)),
-      swing: state.fighters.map((fighter) => swingBankList.map((bank) => swingCellDrawable(fighter.def.id, 0, bank))),
+      swing: state.fighters.map((fighter) => SWING_BANK_LIST.map((bank) => swingCellDrawable(fighter.def.id, 0, bank))),
       crowdSprites: {
         manifest: Boolean(crowdSheets.manifest),
         ready: Boolean(state.crowd?.people?.some((person) => person.sprite && crowdSpriteCharacter(person))),

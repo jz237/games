@@ -54,6 +54,16 @@ import {
   wakeupKeys,
   x5key,
 } from "../engine/fighter-kits.mjs";
+import {
+  SWING_BANK_LIST,
+  SWING_MASK_KEY,
+  SWING_SUFFIX,
+  altAtlasKey,
+  bankGateKind,
+  bankPreloadPlan,
+  swingSheetPath,
+} from "../engine/banks.mjs";
+import { POSE_BRANCHES, contactPoseBranch } from "../engine/pose-precedence.mjs";
 
 // v5.0 FULL SWING — the strike and reaction sheets, consumed by substitution
 // at pose resolution rather than by new beats.
@@ -257,8 +267,16 @@ function testRegistryAndWiring() {
   assert.match(gameSource, /const pose = specialsGenerationPose\(fighter\.def\.id, swung\);\n  recordPoseTrace\(fighter, pose\);/);
   assert.match(gameSource, /import \{ swingContext, swingResolve \} from "\.\/engine\/swing-resolve\.mjs";/);
   assert.ok(!/^function swingResolve\(/m.test(gameSource), "no second resolver in game.js");
-  assert.match(gameSource, /if \(bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK \|\| bank === UNIFIED_EXT5_BANK\) return swingCellDrawable\(fighterId, cell, bank\);/);
-  assert.match(gameSource, /\$\{fighterId\}:\$\{bank\}/);
+  // v5.3 (sweep #52): the routing and the alt-palette keys are
+  // engine/banks.mjs, so these are direct assertions now — the three sheets
+  // share ONE gate (which is why it is the only gate told the bank name) and
+  // three DISTINCT cache keys (which is why they key on the bank name).
+  for (const bank of SWING_BANK_LIST) assert.equal(bankGateKind(bank), "swing");
+  assert.match(gameSource, /\n\s*swing: swingCellDrawable,/);
+  const swingKeys = SWING_BANK_LIST.map((bank) => altAtlasKey("jez", bank));
+  assert.deepEqual(swingKeys, ["jez:unified-ext3", "jez:unified-ext4", "jez:unified-ext5"]);
+  assert.equal(new Set(swingKeys).size, 3, "the three sheets share a table and must not share a key");
+  assert.match(gameSource, /\n\s*swing: fighterSwingAtlases,/);
   const adjustBody = gameSource.slice(gameSource.indexOf("function bankSheetAdjust("), gameSource.indexOf("function bankSheetAdjust(") + 1600);
   assert.ok(!adjustBody.includes("UNIFIED_EXT3_BANK") && !adjustBody.includes("UNIFIED_EXT4_BANK") && !adjustBody.includes("UNIFIED_EXT5_BANK"));
   assert.ok(!/hdSheetPath\([^)]*ext[345]/.test(gameSource));
@@ -278,8 +296,15 @@ function testRegistryAndWiring() {
   assert.match(gameSource, /victim\.lastHitLevel = projectile\.level;/);
   // The crouch blockstun branch draws the ext3 crouch guard over the crouch
   // read, and the flinch-exit bridge rides a crouched block too.
-  assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.crouch && fighter\.grounded\) \{[\s\S]{0,700}beatPoseAt\(crouchBlockstunKeys\(\{ flinch \}\), blockPhase, uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
-  assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.grounded && !reducedMotion\) \{\s*\n\s*const blockTotal/);
+  // v5.3 (sweep #52): WHICH branch owns a blocked or flashing fighter is
+  // engine/pose-precedence.mjs (asserted exhaustively in
+  // tests/pose-precedence.test.mjs); game.js keeps the drawings. A crouched
+  // block is its own branch because the authored flinch is a standing cover.
+  assert.equal(contactPoseBranch({ blockstunFrames: 8, crouch: true, grounded: true }), POSE_BRANCHES.blockstunCrouch);
+  assert.equal(contactPoseBranch({ blockstunFrames: 8, crouch: false, grounded: true }), POSE_BRANCHES.blockstunStanding);
+  assert.match(gameSource, /if \(contact === POSE_BRANCHES\.blockstunCrouch\) \{[\s\S]{0,700}beatPoseAt\(crouchBlockstunKeys\(\{ flinch \}\),[\s\S]{0,200}uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
+  // The flinch-exit bridge rides a crouched block too, off the SAME clock.
+  assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.grounded && !reducedMotion\) \{\s*\n\s*const bridge = blockRecoverTransform\(blockstunPhase\(fighter\.blockstunFrames, obs\.blockstunTotal\)\);/);
   // The engine's sheet fold mirrors the correction game.js applies to the
   // unified bank, so an on-screen comparison puts it on the right side.
   assert.match(gameSource, /const UNIFIED_SHEET_ADJUST = Object\.freeze\(\{ commissioner: 1\.033 \}\);/);
@@ -347,7 +372,7 @@ function testCrouchBlockstunTrack() {
   assert.deepEqual(crouchBlockstunKeys(), keys);
   // game.js answers per fighter from the per-cell gate, so ali (flinch held)
   // keeps the 5.1 track while the other nine open on the flinch.
-  assert.match(gameSource, /const flinch = swingCellDrawable\(fighter\.def\.id, UNIFIED_EXT5_CELLS\.crouchGuardFlinch, UNIFIED_EXT5_BANK\);\s*\n\s*return beatPoseAt\(crouchBlockstunKeys\(\{ flinch \}\), blockPhase, uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
+  assert.match(gameSource, /const flinch = swingCellDrawable\(fighter\.def\.id, UNIFIED_EXT5_CELLS\.crouchGuardFlinch, UNIFIED_EXT5_BANK\);\s*\n\s*return beatPoseAt\(crouchBlockstunKeys\(\{ flinch \}\),\s*\n\s*blockstunPhase\(fighter\.blockstunFrames, motionObs\[fighter\.side\]\?\.blockstunTotal\),\s*\n\s*uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
   assert.equal(ext5.ali.accept[UNIFIED_EXT5_CELLS.crouchGuardFlinch], false);
   assert.ok(ROSTER.filter((id) => id !== "ali").every((id) => ext5[id].accept[UNIFIED_EXT5_CELLS.crouchGuardFlinch]));
 }
@@ -680,13 +705,22 @@ function testExt5Wiring() {
   // drawable-now switch, the palette source and the snapshot all know the bank.
   assert.match(gameSource, /ext4Masks: null, ext5Masks: null,/);
   assert.match(gameSource, /unifiedBankState\.ext5Masks = manifest \? buildSwingAcceptMasks\(manifest, UNIFIED_EXT5_BANK, unifiedBankState\.masks\) : \{\};/);
-  assert.match(gameSource, /const swingBankList = Object\.freeze\(\[UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK, UNIFIED_EXT5_BANK\]\);/);
-  assert.match(gameSource, /\[UNIFIED_EXT5_BANK\]: "ext5Masks"/);
-  assert.match(gameSource, /\[UNIFIED_EXT5_BANK\]: "ext5"/);
+  // v5.3 (sweep #52): the list, the mask keys and the suffixes are
+  // engine/banks.mjs — one tested fact, and the file the loader, the gate and
+  // the preload all read, so they cannot drift from each other.
+  assert.equal(SWING_BANK_LIST.at(-1), UNIFIED_EXT5_BANK, "the locomotion sheet is last in ship order");
+  assert.equal(SWING_MASK_KEY[UNIFIED_EXT5_BANK], "ext5Masks");
+  assert.equal(SWING_SUFFIX[UNIFIED_EXT5_BANK], "ext5");
+  assert.equal(swingSheetPath("jez", UNIFIED_EXT5_BANK), "assets/unified/jez-ext5.webp");
+  assert.match(gameSource, /authoredSheetImage\(SWING_SUFFIX\[bank\], swingSheetPath\(fighterId, bank\)\)/);
+  assert.match(gameSource, /unifiedBankState\[SWING_MASK_KEY\[bank\]\]\?\.\[fighterId\]/);
   assert.match(gameSource, /ext5: swingFighterWhole\(fighterId, UNIFIED_EXT5_BANK\),/);
   assert.match(gameSource, /case "ext5": return live\(fighterSwingAtlases\[UNIFIED_EXT5_BANK\]\[fighterId\]\);/);
-  assert.match(gameSource, /for \(const swingBank of swingBankList\) \{/);
-  assert.match(gameSource, /swing: state\.fighters\.map\(\(fighter\) => swingBankList\.map\(/);
+  // The preload asks for all three, per fighter, in ship order.
+  const whole = bankPreloadPlan(["jez"], { unifiedWhole: () => true, swingWhole: () => true });
+  assert.deepEqual(whole.unified.map((step) => step.key), ["jez:unified", "jez:ext3", "jez:ext4", "jez:ext5"]);
+  assert.match(gameSource, /decodeTracked\(step\.key, ensureSwingAtlas\(step\.id, step\.bank\)\);/);
+  assert.match(gameSource, /swing: state\.fighters\.map\(\(fighter\) => SWING_BANK_LIST\.map\(/);
   assert.match(gameSource, /bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK \|\| bank === UNIFIED_EXT5_BANK\n\s*\? fighterSwingAtlases\[bank\]\[fighterId\]/);
   // The preload plan carries the sheet with the family (art-readiness), and
   // the 3D layer enumerates AUTHORED_BANKS, so it needs no bank-specific code.

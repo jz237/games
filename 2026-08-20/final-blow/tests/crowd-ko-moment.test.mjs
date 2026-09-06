@@ -19,6 +19,7 @@ import {
   crowdVoiceLevel,
   crowdVoicePath,
 } from "../engine/crowd-voice.mjs";
+import { crowdDrawReaction, crowdKoHoldLive } from "../engine/crowd-reaction.mjs";
 
 // v5.1 KO MOMENT — the crowd celebrates the KO and sounds like people.
 // Sweep items #14 (the roundover hold played to a crowd already back on its
@@ -222,8 +223,17 @@ test("game.js latches the hold render-side, stirs the KO in the sim and voices t
   assert.match(finish, /state\.phase = "roundover";[\s\S]*?stirCrowd\(1\.4, "ko", \{ side: winner, splatX: state\.fighters\[1 - winner\]\?\.x \?\? null \}\);[\s\S]*?if \(type >= 0\)/);
   // The hold latch is a render-side observer of the phase edge, like the
   // round-win beat, and every crowd consumer reads crowdDrawReaction().
-  assert.match(gameSource, /function updateCrowdKoHoldLatch\(\)[\s\S]*?state\.phase === "roundover"[\s\S]*?slowMotionHits/);
-  assert.match(gameSource, /function crowdDrawReaction\(\) \{\s*return Math\.max\(state\.crowdReaction, crowdKoHoldReaction\(crowdKoHoldAge\(\)\)\);/);
+  // v5.3 (sweep #52): the latch, the age and the hold-vs-stir read are
+  // engine/crowd-reaction.mjs; game.js supplies the phase and the tick. The
+  // curve itself is asserted directly rather than through the shape of the
+  // expression that reads it.
+  assert.match(gameSource, /function updateCrowdKoHoldLatch\(\) \{\s*\n\s*latchCrowdKoHold\(crowdKoHold, crowdKoHoldLive\(state\), state\.simulationTick\);/);
+  assert.equal(crowdKoHoldLive({ screen: "fight", phase: "roundover" }), true);
+  assert.equal(crowdKoHoldLive({ screen: "fight", phase: "roundover", finisher: { slowMotionHits: 0 } }), false,
+    "hushed through the pre-kill cinematic");
+  assert.match(gameSource, /function crowdDrawReaction\(\) \{\s*\n\s*return crowdHoldReaction\(state\.crowdReaction, crowdKoHoldAge\(\)\);/);
+  assert.equal(crowdDrawReaction(0, 40), CROWD_KO_HOLD.peak, "the hold owns the room once the stir has decayed");
+  assert.equal(crowdDrawReaction(1.4, 0), 1.4, "and never dips below the stir that latched it");
   const drawCrowd = gameSource.slice(gameSource.indexOf("function drawCrowd("), gameSource.indexOf("function drawCrowd(") + 1600);
   assert.match(drawCrowd, /updateCrowdKoHoldLatch\(\);\s*const reaction = crowdDrawReaction\(\);/);
   const billboards = gameSource.slice(gameSource.indexOf("function crowdBillboards("), gameSource.indexOf("function drawTailgateProps("));

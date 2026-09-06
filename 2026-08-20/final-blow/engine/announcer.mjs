@@ -140,3 +140,59 @@ export function dizzyRingPlan(variant = 0) {
     vibratoDepth: 26 + index * 8,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// v5.3 SPECTACLE (sweep item #52) — THE BANNER -> SPEECH MAP.
+//
+// w51 moved the round-END call in here (roundEndAnnouncerPlan, above) but left
+// the rest of announcerSpeakBanner's ladder inline in game.js: a chain of
+// string equalities and one regex over the banner text, deciding which cue
+// each banner books. It is pure — text in, cues out — and it carries two
+// facts that are easy to break silently and impossible to see in a test that
+// only greps the source: ROUND 3 and up speak "finalround" (not "round3",
+// which has no bank), and the text-only " WINS" fallback books the fighter's
+// NAME bank rather than his "-wins" bank, because without the round/match
+// facts it cannot honestly claim he won the match.
+//
+// `fighterIdForName` is the caller's roster lookup (name -> id) so this file
+// still knows nothing about the roster. `warmFighterVoices` is the one side
+// effect the ladder had that is not speech: FIGHT! is the moment the sheets
+// stop competing for bytes and the fighters' voice takes may pull theirs.
+// ---------------------------------------------------------------------------
+
+/** Banners that book exactly one cue, by exact text. */
+export const BANNER_CUES = Object.freeze({
+  "FIGHT!": "fight",
+  "FINISH THEM": "finishthem",
+  "GUARD CRUSH": "guardcrush",
+  "FINAL BLOW": "ko",
+});
+
+/** ROUND n -> cue. Round 3 and beyond is the FINAL ROUND bank. */
+export function roundBannerCue(round) {
+  return round === 1 ? "round1" : round === 2 ? "round2" : "finalround";
+}
+
+const ROUND_BANNER = /^(?:ONLINE )?ROUND (\d+)$/;
+
+/**
+ * The cues a banner books, in order, plus whether it is the FIGHT! banner
+ * (the caller tops up the fighter voice budget on that one). An unrecognised
+ * banner books nothing, which is what every title/toast banner does today.
+ */
+export function bannerAnnouncerPlan(text, { fighterIdForName = () => "" } = {}) {
+  const quiet = { plan: [], warmFighterVoices: false };
+  if (typeof text !== "string" || !text) return quiet;
+  const direct = BANNER_CUES[text];
+  if (direct) return { plan: [{ cue: direct, delay: 0 }], warmFighterVoices: text === "FIGHT!" };
+  const round = ROUND_BANNER.exec(text);
+  if (round) return { plan: [{ cue: roundBannerCue(Number(round[1])), delay: 0 }], warmFighterVoices: false };
+  if (text.endsWith(" WINS")) {
+    // Text-only fallback (no caller uses it since w51 — finishRound always
+    // passes an explicit plan). Without the round/match facts it can only be
+    // honest about the KO call, so it books the name bank, never "-wins".
+    const fighterId = fighterIdForName(text.slice(0, -" WINS".length)) || "";
+    return { plan: roundEndAnnouncerPlan({ fighterId }), warmFighterVoices: false };
+  }
+  return quiet;
+}

@@ -4722,3 +4722,163 @@ self-contained for that reason, but the 69 inherited ones are not; and the
 2D/3D pose parity assert from sweep #54's proposal is not written — the 3D
 fighter layer does not report the bank/frame it used, so there is nothing to
 compare `qa.pose()` against yet.
+## v5.3 — SPECTACLE: THE PINS BECOME IMPORTS, OR WHAT 27 REGEXES OVER game.js WERE NOT CHECKING
+
+No art, no routing, nothing on screen. This is the half of sweep item #52
+that pays now: the pieces of `game.js` the unit suite was pinning by REGEX
+OVER ITS SOURCE TEXT, moved into engine modules and asserted directly.
+
+The reason it is worth an install of its own is the failure mode. A pin like
+
+    assert.match(gameSource, /if \(bank === UNIFIED_EXT3_BANK \|\| bank === UNIFIED_EXT4_BANK \|\| bank === UNIFIED_EXT5_BANK\) return swingCellDrawable\(fighterId, cell, bank\);/);
+
+passes when those characters are present. It passes if the ladder above it
+has been reordered so the line is unreachable. It passes if `swingCellDrawable`
+now reads the wrong mask. It FAILS if somebody wraps the line at 100 columns.
+It is a test of the spelling and not of the behaviour, and the v5.0 gate — the
+one thing standing between a player and the inverted ext4 air-hit cell — had
+no other test at all (sweep #50). There were **27 such assert lines** across
+nine test files; all 27 are gone, replaced by assertions on the extracted
+functions plus the small wiring pins that are all a source pin is honestly
+good for ("game.js hands this gate to that table").
+
+### What moved, and what deliberately did not
+
+Four extractions. Every one of them is a DECISION — a table lookup, a string,
+an ordering, a precedence — and everything that touches the DOM (the `Image`
+constructor, the manifest `fetch`, the padded ext canvas, the decode tracker,
+the drawings themselves) stayed exactly where it was and is handed in.
+
+**`engine/banks.mjs` (236 lines)** — the bank plumbing:
+
+  * `BANK_GATE_KIND` / `bankCellDrawable`, the drawable-gate ROUTING that was
+    an if-ladder. A new bank is a row now rather than a branch inserted in
+    the right place. The trailing ternary's behaviour is preserved as the
+    table's default: an unknown bank name degrades to bank 1's gate, which
+    answers honestly (no mask, no draw) instead of drawing an unmasked cell.
+    One trap the extraction found and the test now pins: motion3 is addressed
+    by POSE NAME and answers with the resolved FRAME INDEX, so a `Boolean()`
+    on this path would have retired frame 0 of every motion3 sheet. The gate's
+    answer is passed through verbatim.
+  * `SWING_BANK_LIST` / `SWING_MASK_KEY` / `SWING_SUFFIX` / `swingSheetPath` —
+    the three tables that are the entire difference between ext3, ext4 and
+    ext5. The loader, the gate, the readiness switch, the palette source and
+    the preload all read the same three now, so they cannot drift apart.
+  * `ALT_ATLAS_TABLE` / `altAtlasKey` / `altAtlasSource` — which atlas table a
+    palette remap reads and what key it caches under. This is the one where a
+    wrong answer is INVISIBLE until a player picks palette 2: the cache would
+    serve the wrong sheet under the right key. The test asserts that every
+    bank resolves to its own table, that the three swing sheets (which share
+    one table) cannot share a key, and that the boss's specials still
+    collapses onto the base key rather than caching the same pixels twice.
+  * `bankPreloadPlan` — the v5.1 #35 request order, which was previously the
+    SHAPE OF A LOOP. It is a list now: the unified family first and in family
+    order (main -> ext -> ext2 -> ext3 -> ext4 -> ext5) per fighter, the
+    per-beat motion banks after, the bonus banks last and only for a fighter
+    whose manifest says he has one. A fighter who is not 16/16 contributes
+    nothing at all, ext sheets included — the manifest-BEFORE-sheet order that
+    keeps a fighter with no sheet in the repo from 404ing.
+
+**`engine/crowd-reaction.mjs` (139 lines)** — the crowd's reaction machine.
+Four rules that were four places in `game.js` (the stir at one end of the
+file, the decay line inside the fixed step, `resetCrowd` beside the crowd
+builder, the KO-hold latch a thousand lines away beside the round-win beat)
+and are one machine: `stirCrowdReaction` (the 1.4 ceiling, the author, the
+splat mark; it REPORTS the ambient pulse kind and the swell rather than
+latching either), `decayCrowdReaction` (0.016 a tick — 1.4 to 0 in **88
+ticks / 1.47 s**, and the author goes with it so the next authorless stir
+cannot inherit the last hit's side), `resetCrowdReaction`, and the KO hold
+(`crowdKoHoldLive` / `updateCrowdKoHoldLatch` / `crowdKoHoldAge` /
+`crowdDrawReaction`). The FIELD NAMES are unchanged and the functions take
+the live `state` object: `state.crowdReaction`, `state.crowdStirSide`,
+`state.crowdSplatX` and `state.crowdSplatTick` are read by the 2D crowd draw,
+the CINEMA 3D billboards, the crowd audio bus, the QA snapshot and the browser
+smoke probe, and renaming them for tidiness would have been a user-visible
+change dressed as a refactor.
+
+**`engine/pose-precedence.mjs` (93 lines)** — the contact pose ladder as a
+pure function over a fighter snapshot. Four branches whose ORDER is the whole
+behaviour: standing blockstun, crouch blockstun, the flash on a held guard,
+the flash on a hit. Written as an if-chain they read as four independent
+tests; they are not — blockstun outranks the flash because blockstun is the
+fact and the flash is the decoration (both are set on the tick a hit is
+blocked), and the crouch case is a separate branch rather than a flag because
+the authored flinch is a STANDING cover. `blockstunPhase` came out with it,
+and that turned up a THIRD copy of the same arithmetic: the guard-flinch exit
+bridge in `fighterMotionTransform` was recomputing it inline, so the transform
+and the drawing under it were two expressions that merely happened to agree.
+They read one helper now.
+
+**`engine/announcer.mjs` (+56 lines)** — `bannerAnnouncerPlan`, the rest of
+`announcerSpeakBanner`'s ladder. w51 moved the round-END call into the engine
+and left the banner -> cue map inline, where nothing tested two facts that
+are silent when broken: **ROUND 3 and up speak `finalround`** (there is no
+`round3` bank, so a naive `round${n}` would speak nothing at all), and the
+text-only " WINS" fallback books the fighter's NAME bank and never `-wins`,
+because without the round/match facts it cannot honestly claim he won the
+match. The roster lookup is passed in, so the file still knows nothing about
+the roster.
+
+Not moved, on purpose: the ext sheet's padded canvas, `hdSheetPath`,
+`bankSheetAdjust`, `specialsGenerationPose` and every atlas table. They are
+either DOM or already tested.
+
+### Proof, which for a no-op wave is the whole deliverable
+
+**The unit suite: 411 -> 434 tests, all green.** 23 new (8 banks, 7 crowd
+reaction, 6 pose precedence, 2 announcer) and 27 source-regex asserts retired.
+
+**Node trace of the shipped chains, before and after.** The v5.0 acceptance
+evidence in this file is a set of frame chains read off real play. They are
+resolved here through the beat tracks, `resolveMotionPose` and `swingResolve`
+with a gate built from the shipped manifests — and, on the after side, routed
+ENTIRELY through the extracted table. Ten fighters x eight chains (jab, heavy
+kick, crouch jab, sweep, air kick, air punch, standing block, crouch block),
+**80 lines, byte-identical, tick counts included**. Jez's, for the record:
+
+    jab           ext2:0 x4 -> ext3:0 x5 -> ext3:2 x2 -> ext2:1 x2 -> unified:7 x2 -> unified:0 x2
+    heavy kick    ext:6 x4 -> ext2:6 x3 -> unified:6 x5 -> ext3:14 x6 -> ext3:11 x8 -> ext2:7 x5 -> unified:7 x5 -> unified:0 x7
+    crouch jab    ext2:8 x4 -> ext3:4 x5 -> ext2:9 x5 -> unified:7 -> unified:0 x3
+    sweep         ext2:10 x11 -> ext3:5 x5 -> ext3:15 x9 -> ext2:11 x6 -> unified:7 x6 -> unified:0 x9
+    air kick      ext3:8 x5 -> ext3:7 x4 -> motion3:4 x4 -> ext5:6 x5 -> ext3:10 x4
+    air punch     ext3:8 x5 -> ext3:6 x5 -> motion3:4 x3 -> ext5:6 x5 -> ext3:10 x3
+    block stand   ext4:0 x8 -> unified:7 x9
+    block crouch  ext5:13 x8 -> ext3:12 x3 -> unified:5 x6
+
+`tests/banks.test.mjs` carries five of those chains as a permanent assertion,
+so the routing table is now checked BY the doc's own evidence.
+
+**Node trace of the four decisions, before and after.** The pre-extraction
+code was transcribed literally from `4baa18d`'s `game.js` — and each
+transcription is checked against that file's source text, so it cannot have
+drifted — and compared against the modules over the whole input space: every
+bank x cell x gate answer for the routing (including the frame-index and
+frame-0 cases), every bank x boss-share x missing-sheet combination for the
+alt-palette source, 64 gate maskings x 2-5 fighters for the preload order,
+all 1,440 snapshots of the contact ladder, twelve scripted 400-tick rounds of
+the crowd machine (stir, decay, hold latch and drawn reaction compared every
+tick), and 25 banner strings. **11,871 comparisons, 0 mismatches.**
+
+**One deliberate difference, written down.** `resetCrowd` cleared the
+reaction, the author and the splat TICK and left `crowdSplatX` holding the
+previous round's impact point; `resetCrowdReaction` clears all four. Nothing
+could read the stale value — `crowdFlinchLevel` is 0 past 26 ticks and the
+tick was `-1e9` — so the only place it ever showed was the debug snapshot's
+`splat.x`, beside an age of a billion. A machine that resets three of its
+four fields is a bug waiting for a fourth reader. Everything else in the
+11,871 comparisons is identical.
+
+`game.js` is 33 lines of code shorter and 54 lines of comment longer, which
+is the honest trade: the decisions left, and a note saying where they went
+stayed. The point was never the line count.
+
+### Left for the next pass, written down
+
+The sweep item's other half is untouched: crowd + ambient (`resetCrowd`
+through `drawCrowd`) and the voice/soundstage block are still inline, and the
+`assert.match(gameSource, ...)` count over the whole suite is still in the
+hundreds — most of it legitimate wiring pins, some of it not. The three new
+modules are also NOT in `sw.js`'s `SHELL` list, exactly like `engine/crowd.mjs`
+and `engine/modes.mjs` before them; the list is a curated subset with a
+32-entry cap in `tests/service-worker-guard.test.mjs`, so widening it is its
+own decision rather than a side effect of this one.

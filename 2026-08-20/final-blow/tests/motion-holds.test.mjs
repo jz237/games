@@ -45,6 +45,7 @@ import {
   wakeupKeys,
   reactionBandCells,
 } from "../engine/fighter-kits.mjs";
+import { bankPreloadPlan } from "../engine/banks.mjs";
 
 // ---------------------------------------------------------------------------
 // v2.9 critic round 2. Four contracts, one per blocker class:
@@ -496,13 +497,19 @@ function testPreloadPath() {
   // complete-but-undecoded image still stalls the first blit.
   const body = gameSource.slice(gameSource.indexOf("function preloadAuthoredBanks("));
   const preload = body.slice(0, body.indexOf("\n}\n") + 2);
-  assert.match(preload, /ensureMotionAtlas\(id\)/);
-  assert.match(preload, /ensureMotion2Atlas\(id\)/);
-  // v5.1 #35 changed this pin: the decode now runs through trackSheetDecode
-  // (one call per sheet, and it records the outcome for the readiness hold)
-  // instead of an inline atlas.decode() per bank — same decode, bookkept.
-  assert.match(preload, /decodeTracked\(`\$\{id\}:motion`, ensureMotionAtlas\(id\)\)/);
+  // v5.1 #35 changed this pin: the decode runs through trackSheetDecode (one
+  // call per sheet, and it records the outcome for the readiness hold) rather
+  // than an inline atlas.decode() per bank — same decode, bookkept.
+  // v5.3 (sweep #52) changed it again: WHICH sheets are asked for and in what
+  // order is engine/banks.mjs's bankPreloadPlan, so the fact is asserted
+  // there and here only the two motion banks' wiring is pinned.
+  assert.match(preload, /decodeTracked\(step\.key, step\.kind === "motion" \? ensureMotionAtlas\(step\.id\) : ensureMotion2Atlas\(step\.id\)\)/);
+  assert.deepEqual(bankPreloadPlan(["jez", "post"]).motion.map((step) => [step.key, step.kind]), [
+    ["jez:motion", "motion"], ["jez:motion2", "motion2"],
+    ["post:motion", "motion"], ["post:motion2", "motion2"],
+  ], "BOTH index-addressed banks are warmed for every fighter in the matchup");
   assert.match(preload, /ensureMotion3Manifest\(\)/);
+  assert.deepEqual(bankPreloadPlan(["jez"], { motion3Any: () => true }).bonus.motion3.map((step) => step.key), ["jez:motion3"]);
   const tracker = gameSource.slice(gameSource.indexOf("function trackSheetDecode("));
   assert.match(tracker.slice(0, tracker.indexOf("\n}\n") + 2), /image\.decode\(\)/,
     "the preload must DECODE, not just request");

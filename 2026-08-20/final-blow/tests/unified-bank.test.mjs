@@ -66,6 +66,7 @@ import {
   walkCyclePose,
   walkCycleFrame,
 } from "../engine/fighter-kits.mjs";
+import { altAtlasKey, bankGateKind, bankPreloadPlan } from "../engine/banks.mjs";
 
 // ---------------------------------------------------------------------------
 // v3.0 — THE UNIFIED BANK. TWO RULES, and they answer different questions.
@@ -886,14 +887,22 @@ function testBankRegistryAndWiring() {
     "unifiedCellDrawable must gate on the whole-sheet mask BEFORE touching an Image");
   // The all-or-nothing gate is asked once per resolution and answers for the
   // whole sheet, so a fighter cannot be half on the bank at any instant.
-  assert.match(gameSource, /if \(bank === UNIFIED_BANK\) return unifiedCellDrawable\(fighterId, cell\);/);
+  // v5.3 (sweep #52): the ROUTING is engine/banks.mjs's table, so "the bank
+  // asks its own gate and nobody else's" is a direct assertion.
+  assert.equal(bankGateKind(UNIFIED_BANK), "unified");
+  assert.match(gameSource, /\n\s*unified: unifiedCellDrawable,/, "game.js supplies the unified gate");
   // Warmed through the existing preload choke point, decode included. (v5.1
   // #35 changed this pin: the whole preload now runs behind the manifest with
   // the unified sheet FIRST, and the decode is bookkept by trackSheetDecode.)
-  assert.match(gameSource, /ensureUnifiedManifest\(\)\?\.then\(\(\) => \{[\s\S]{0,1200}?if \(!unifiedFighterWhole\(id\)\) continue;\s*\n\s*decodeTracked\(`\$\{id\}:unified`, ensureUnifiedAtlas\(id\)\)/,
+  assert.match(gameSource, /ensureUnifiedManifest\(\)\?\.then\(\(\) => \{[\s\S]{0,2400}?if \(step\.kind === "unified"\) \{\s*\n\s*decodeTracked\(step\.key, ensureUnifiedAtlas\(step\.id\)\);/,
     "the unified sheet must be warmed and DECODED from preloadAuthoredBanks");
+  // ...and it is asked FIRST, and only for a fighter the manifest calls whole
+  // (the manifest-BEFORE-sheet order: a fighter with no sheet must not 404).
+  const warmed = bankPreloadPlan(["jez", "cyraxx"], { unifiedWhole: (id) => id === "jez" }).unified;
+  assert.deepEqual(warmed.map((step) => step.key), ["jez:unified"]);
   // Palette remap, world-size correction and the crossfade all know the bank.
-  assert.match(gameSource, /if \(bank === UNIFIED_BANK\) return \{ image: fighterUnifiedAtlases\[fighterId\]/);
+  assert.equal(altAtlasKey("jez", UNIFIED_BANK), "jez:unified");
+  assert.match(gameSource, /\n\s*unified: fighterUnifiedAtlases,/, "the palette remap reads the unified atlas table");
   assert.match(gameSource, /if \(bank === UNIFIED_BANK\) return UNIFIED_SHEET_ADJUST\[fighterId\] \|\| 1;/);
   assert.match(gameSource, /const UNIFIED_SHEET_ADJUST = Object\.freeze\(\{ commissioner: 1\.033 \}\);/,
     "the Commissioner's older base atlas normalises to the full cell on this bank too");
