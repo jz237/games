@@ -10,7 +10,10 @@ Final Blow 1.0E can run a complete CPU-vs-CPU exhibition from the title screen.
 - Every card tells a seeded STORY — GRUDGE MATCH, ROOKIE VS VETERAN, SHOWBOAT, ZONING WAR or THE CLOCK — which names its opener (walk-in super, throw, dash-in heavy, a footsies feel-out, or none), which side leads it, how each side is allowed to yield and which per-seat tier plays over the archetype persona; the story and the bout are on the broadcast bug (see 5.4 below).
 - A session ledger carries wins, losses, streaks and round scores across bouts; the standings board persists in localStorage per build, and the result hold is a NEXT UP panel (score, tonight's records, the standings band, the next matchup, a sign-off line).
 - Rounds end four ways — Final Blow A, Final Blow B, a plain knockout with the collapse and curtain call, or a decision at the buzzer — chosen per round by a seeded closer (5.4).
-- Results remain on screen for five seconds before the next exhibition begins; the countdown is real, and the announcer reads the next pair's names from their reviewed name takes.
+- Results remain on screen for 2.4 s (the countdown is real, and the announcer
+  reads the next pair's names from their reviewed name takes), then the next
+  pair is introduced on a versus card over a 2.6 s clock stop before ROUND 1
+  (5.4 Fight Night, below).
 - Keyboard, pointer/touch, or gamepad input exits to the title immediately.
 - `IDLE WATCH DEMO · 45 SECONDS` in Options enables or disables automatic attract mode. It is enabled by default and never tries to bypass browser audio-autoplay rules.
 
@@ -1425,3 +1428,107 @@ across the six runs (deathblow's airHeavy on seed 237 lands at 3600 ticks).
 `node tests/browser-smoke.mjs --only=fighter-framing-desktop,demo-mode,demo-seed-url,demo-hud,demo-hold`
 passes unchanged: the seed-url probe's tick-for-tick pin holds because every
 draw is the choreographer's own rng in sim order.
+
+## The versus card and the ring introduction (5.4 Fight Night, sweep #8 / #20, on #16's budget)
+
+Between two exhibitions the attract show spent 8.0 s of wall clock and told
+the couch almost nothing in it. Measured on the 5.3 head in headless Chrome
+(`?demo=237` on the wall clock, exhibition 1 forced to its result the way the
+`demo-hold` probe does): result screen at 5.23 s, next intro at 10.18 s (the
+5 s hold, static `NEXT RANDOM FIGHT IN 5 SECONDS`), then one banner —
+`WATCH DEMO · CYCLE 2 / PINELANDS DEVIL VS DEATHBLOW` — with the big type
+spent on the words WATCH DEMO and the names on the 20 px amber sub-line;
+`FIGHT!` at 11.33 s; the bell at 13.24 s. `ROUND 1 / <stage>` never survived a
+frame: `startNextDemoMatch` announced the WATCH DEMO card straight after
+`startMatch` had announced ROUND 1, and `announce()` rebuilds the box, so the
+screen said WATCH DEMO while `round1-1.mp3` said ROUND ONE. The announcer
+never named either fighter or the stage in a demo, although every fighter has
+three recorded `<id>-name` takes (the manifest), the roster carries a title
+(`SOUTH JERSEY CRYPTID`), the kit an archetype (`WINGED BARRENS PREDATOR /
+HIT-AND-RUN`) and the arcade's dialogue-card DOM sat unused outside a rival
+bout.
+
+**The budget is repartitioned, not lengthened.** The 8.0 s stays 8.0 s: the
+result hold drops from 5 s to 2.4 s (`DEMO_RESULT_HOLD_MS`, engine/demo.mjs)
+and the 2.6 s it gives back is spent on the fight screen as a VERSUS hold
+(`DEMO_VERSUS_HOLD_MS`, engine/demo-versus.mjs) — a demo-only *floor* under
+the intro art hold (`holdDecision` gained `floorMs`; zero outside the demo, so
+its answer for a played match is byte-identical, pinned in
+`tests/demo-versus.test.mjs`). The sim clock stands still under the card the
+way it does for a cold sheet, the FIGHT! timer is shifted by the release as it
+always was, and the tick stream is untouched: `qa.aiFight('deathblow','jez',
+'pro')` hashed per tick over 20 s (`8991723d`), `qa.demo(237)` over 45 s
+(`bc53f9e5`, ledger `1:1:0:1718`) and `qa.demo(237, 3)` over 30 s
+(`235802ce`) are identical on the base tree and this one, and the
+`demo-seed-url` probe still matches a link boot to `qa.demo(237)` tick for
+tick. After: result screen at 5.13 s, the card at 7.55 s (a 2.42 s hold),
+ROUND 1 at 10.20 s, FIGHT! at 11.35 s, the bell at 13.23 s — 8.1 s, the same
+seam to within a frame, and at the 0.75x demo rate exactly (the old 3.0 s
+intro is unchanged; only the wall clock ahead of it moved).
+
+**The card** rides `#introDialogue` / `.speech-card` with a `versus` modifier
+(no second panel): a full-frame scrim under the announcer, then a row at a
+fifth of the frame's height — the left corner card, the VS mark with `TONIGHT
+AT · <stage>` and `WATCH DEMO · CYCLE n[ · ON THE CLOCK]`, the right corner
+card. Each corner card is the portrait (`assets/fighters/<id>.webp`), `IN THE
+LEFT/RIGHT CORNER`, the name in the announcer's Impact at 2.9vw (42 px at
+1440 wide, 40+ pinned by the `demo-versus` probe; the old matchup line was
+20 px), the roster title, the kit archetype and the night's record —
+`FIRST BOUT TONIGHT`, then `2-1 TONIGHT` from `demoSession.standings`, a
+per-fighter fold of every settled exhibition (`demoStandingsAfterMatch`,
+written at `showResult` on the demo path; the round ledger is bounded at 64
+and a cabinet runs for hours). Unrevealed cards keep their box (visibility,
+not display) so nothing shifts as the introduction fills in; cards reveal by
+their own `data-card` index, not DOM position, because the row is laid out
+left / stage / right and the stage row is last. On 844x390 the row measures
+inside the viewport with the name at 24 px and the stage line ellipsised
+rather than wrapped.
+
+**The ring introduction** is a plan (`demoRingIntroPlan`), in broadcast
+order, that the `demo-versus` probe and the unit test both pin:
+
+    at (ms)   beat     shows                                     speaks
+    0         corner   left card + "<NAME> / IN THE LEFT CORNER · <title>"   <left>-name
+    1000      corner   right card + the same for the right corner         <right>-name
+    1900      stage    VS row + "<STAGE> / WATCH DEMO · CYCLE n"             (nothing: no stage cue is recorded)
+    2600      round    ROUND 1 / <stage> — at the hold's release            round1
+    3750      fight    FIGHT! — startMatch's own timer, shifted by the hold  fight
+
+No voice was generated: the corner calls are the reviewed `<id>-name` takes
+(679-2847 ms; the announcer's busy window pushes the right corner behind a
+long left take rather than stacking them) through `announce()`'s explicit
+`speak` plan, ROUND 1 and FIGHT! keep their banks. The corner and stage beats
+fire from the card's own wall clock in the dialogue reveal loop
+(`updateIntroDialogue`, kind `versus`), the ROUND card at the hold's release
+(`releaseDemoVersusCard`, from `releaseIntroArtHold`) — the same release that
+shifts FIGHT! — and a release because the sim already *left* the intro (the
+QA manual clock stepping through it) announces nothing, so `qa.demo(seed)`
+plus `qa.step()` reads exactly what it did. The attract audio gate still opens
+on `demoRoundCard()` at the top of the intro, which is now the card, so the
+first sound an armed show makes is the left corner's name. Measured order on
+the wall clock (`qa.demoRingIntro().log`, ms from the card): corner 0, corner
+1034, stage 1915, round 2638 (release reason `floor`), fight 3837. While the
+card is up the announcer sits at 63% instead of 44% (`.game-frame:has(...)`)
+so the corner and stage slams land over the dimmed fighters, never on the
+cards; ROUND 1 goes up after the box is cleared and lands where it always
+has. Reduced motion drops the slides but keeps the beat order (the arcade
+exchange still collapses to both cards at once, as shipped).
+
+Rounds 2 and 3 are untouched (`DEMO_ROUND_INTRO_SECONDS` 1.15 s, ROUND n /
+SETTLE IT); a `&cycle=n` link and `qa.demo(seed, n)` open on card n's versus
+card. Known interplay, unchanged in kind from the art hold: the card's clock
+is wall time, so a tab hidden *during* the 2.6 s comes back with the missed
+beats fired in order and the ROUND card up at once (`demoRingIntroDue` walks
+the plan; the hidden-tab hold freezes the result countdown and FIGHT! as
+before).
+
+Verification: `node --test tests/demo-versus.test.mjs` (the card copy, the
+record line and standings fold, the plan's order / cues / times against the
+manifest's take lengths, the due-beat walk, the hold floor and its
+byte-identical no-floor path, the 2.4 + 2.6 = 5 s budget, and the game.js
+gates from source — every entry point behind `state.mode === "demo" &&
+demoSession.active`, round 1 only, never on a resimulation, and the WATCH DEMO
+slam gone); `tests/demo-hud.test.mjs` re-pins the prompt at 2 SECONDS; `node
+tests/browser-smoke.mjs --only=fighter-framing-desktop,demo-mode,demo-seed-url,demo-hud,demo-hold,demo-versus,mobile-landscape`
+(`demo-versus` reads the card, its sizes and the announcer plan order on a
+link boot, then round 2's plain card; `demo-hold` pins the 2.4 s remaining).

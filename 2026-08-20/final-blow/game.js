@@ -542,6 +542,17 @@ import {
   finishThemSubline,
   flowSkipHintVisible,
 } from "./engine/demo-hud.mjs";
+// 5.4 FIGHT NIGHT (sweep #8/#20): the VERSUS card and the ring introduction
+// between exhibitions — pure copy, beat plan and standings fold.
+import {
+  DEMO_VERSUS_HOLD_MS,
+  demoRingIntroDue,
+  demoRingIntroPlan,
+  demoStandingsAfterMatch,
+  demoVersusAnnouncesRound,
+  demoVersusCard,
+  demoVersusCardTimes,
+} from "./engine/demo-versus.mjs";
 import {
   auditGraphicFatalities,
   getGraphicFatality,
@@ -1761,6 +1772,10 @@ const introArtHold = {
   ids: [],
   startedAt: 0,
   heldMs: 0,
+  // 5.4 FIGHT NIGHT (sweep #8/#20): the demo's VERSUS floor — a minimum
+  // hold under the round-1 intro (engine/demo-versus.mjs); 0 in every
+  // played match, so holdDecision answers exactly what it always has.
+  floorMs: 0,
   lastReason: "",
   lastPending: [],
   holds: 0,
@@ -1855,7 +1870,9 @@ function renderArtHoldCurtain(pending) {
   const demo = state.mode === "demo";
   const chip = $("#demoHudLoading");
   curtain.hidden = demo || !introArtHold.active;
-  if (chip) chip.hidden = !demo || !introArtHold.active;
+  // 5.4 (sweep #8/#20): under the VERSUS floor the chip only shows while a
+  // sheet is actually pending — the card, not a LOADING tag, is the cover.
+  if (chip) chip.hidden = !demo || !introArtHold.active || !pending.length;
   if (!introArtHold.active) return;
   const total = introArtHold.ids.reduce((sum, id) => sum + (fighterArtReadiness(id).family?.length || 0), 0);
   const progress = total ? `${Math.max(0, total - pending.length)} / ${total} SHEETS` : "MANIFEST";
@@ -1877,7 +1894,11 @@ function armIntroArtHold(ids) {
   const holdable = introArtHold.enabled && state.mode !== "online" && !replayPlayback.active;
   preloadAuthoredBanks(ids);
   const pending = holdable ? matchupArtPending(ids) : [];
-  if (!pending.length) {
+  // 5.4 FIGHT NIGHT (sweep #8/#20): a demo round 1 with a VERSUS card armed
+  // holds for the card's floor even with every sheet decoded — the ring
+  // introduction runs over the stopped clock (planDemoVersusCard).
+  const floorMs = holdable && demoVersus.planned ? DEMO_VERSUS_HOLD_MS : 0;
+  if (!pending.length && !floorMs) {
     introArtHold.skipped += 1;
     introArtHold.lastReason = holdable ? "ready" : "ineligible";
     introArtHold.lastPending = [];
@@ -1886,6 +1907,7 @@ function armIntroArtHold(ids) {
   introArtHold.active = true;
   introArtHold.ids = [...ids];
   introArtHold.startedAt = performance.now();
+  introArtHold.floorMs = floorMs;
   introArtHold.heldMs = 0;
   introArtHold.lastReason = "holding";
   introArtHold.lastPending = pending;
@@ -1902,9 +1924,13 @@ function releaseIntroArtHold(reason, now) {
   if (reason === "capped") introArtHold.capped += 1;
   else if (reason === "ready") introArtHold.released += 1;
   renderArtHoldCurtain([]);
+  introArtHold.floorMs = 0;
   // The FIGHT! call was armed against the wall clock at the top of the intro;
   // the sim stood still for heldMs, so the call moves by the same amount.
   shiftFightAnnouncement(introArtHold.heldMs, now);
+  // 5.4 (sweep #8/#20): the demo's ROUND card is owed at THIS moment — it
+  // follows the ring introduction instead of being buried under it.
+  releaseDemoVersusCard(reason, now);
 }
 
 /** Called once per rendered frame; true while the sim clock must stand still. */
@@ -1918,6 +1944,7 @@ function updateIntroArtHold(now) {
     capMs: INTRO_ART_HOLD_MS,
     pendingCount: pending.length,
     inIntro,
+    floorMs: introArtHold.floorMs,
   });
   if (decision.hold) {
     introArtHold.lastPending = pending;
@@ -2651,6 +2678,11 @@ const demoSession = {
   // ?demo= link can be compared at a tick the SIM chose, not at whatever
   // frame a probe happened to sample.
   rounds: [],
+  // 5.4 FIGHT NIGHT (sweep #8/#20): the night's standings, fighterId ->
+  // { wins, losses } per settled EXHIBITION (the ledger above is per round
+  // and bounded; a cabinet runs for hours). Folded at showResult on the demo
+  // path, read by the versus card's record line and qa.demoCoverage().
+  standings: {},
   shareNoteTimer: 0,
   // 5.4 #31: the result hold's wall-clock bookkeeping, so a hidden tab can
   // freeze the 5 s countdown and a returning one re-arms exactly what was
@@ -3647,6 +3679,8 @@ const modeFxDebug = {
   // R2.0 FAMILY wave 16 one-shot totals.
   commissionerUnlocks: 0,
   dialogueExchanges: 0,
+  // 5.4 (sweep #8/#20): demo versus cards mounted.
+  versusCards: 0,
   dialogueCardsShown: 0,
   winQuoteSelections: 0,
 };
@@ -4502,6 +4536,10 @@ function demoSnapshot() {
       ...demoHold.snapshot(),
       resultRemainingMs: demoSession.resultRemainingMs,
     },
+    // 5.4 (sweep #8/#20): the night's standings and the versus card / ring
+    // introduction state for the current card.
+    standings: Object.fromEntries(Object.entries(demoSession.standings).map(([id, record]) => [id, { ...record }])),
+    versus: demoVersusSnapshot(),
     presence: {
       cursorIdle: demoPresence.cursorIdle,
       hudIdle: demoPresence.hudIdle,
@@ -4934,7 +4972,7 @@ function updateDemoUi() {
   $("#demoHudCycle").textContent = `${text.cycle}${onTheClock}${seedLabel}`;
   // 5.4 (prewarm): the intro art hold wears a LOADING chip here, not the curtain.
   const loadingChip = $("#demoHudLoading");
-  if (loadingChip) loadingChip.hidden = !(activeFight && introArtHold.active);
+  if (loadingChip) loadingChip.hidden = !(activeFight && introArtHold.active && introArtHold.lastPending.length);
   const share = $("#demoShareButton");
   share.hidden = demoSession.seed === null;
   if (!demoSession.shareNoteTimer) share.textContent = "COPY LINK";
@@ -4979,6 +5017,8 @@ function endDemoSession() {
   demoSession.lastBout = null;
   demoSession.nextUp = null;
   restoreAttractScoresMarkup();
+  demoSession.standings = {};
+  resetDemoVersusCard();
   window.clearTimeout(demoSession.shareNoteTimer);
   demoSession.shareNoteTimer = 0;
   attractAudio.endShow();
@@ -5160,15 +5200,10 @@ function startNextDemoMatch() {
   demoSession.resultRemainingMs = null;
   syncDemoPresence(demoPresence.matchStartedAt);
   updateDemoUi();
-  // 5.4 SESSION LAYER (sweep #16): the round-1 card is the FIGHT CARD — the
-  // bout's place on tonight's card and its story — instead of a counter.
-  // startMatch already booked the ROUND ONE call; this banner speaks nothing.
-  const bout = demoSession.show.bout;
-  announce(
-    bout ? `BOUT ${bout.slot} · ${bout.label}` : `WATCH DEMO · CYCLE ${cycle.cycle}`,
-    `${state.fighters[0].def.name} VS ${state.fighters[1].def.name} · ${demoSession.story?.label || ""} · ${stages[state.stage].name}`,
-    1.2,
-  );
+  // 5.4 (sweep #8/#20): the WATCH DEMO · CYCLE n slam that used to go up here
+  // CLOBBERED the ROUND 1 / stage card startMatch had just announced. The
+  // matchup is now the versus card and the ring introduction (startMatch ->
+  // planDemoVersusCard), and the show name lives on the bug and the card.
   return true;
 }
 
@@ -5329,8 +5364,9 @@ function scheduleNextDemoMatch() {
     for (const id of demoSession.nextUp.pair) announcerSay(`${id}-name`, { delay: 1500 });
   }
   // 5.4 (sweep #26/#27): a bout that never reached round 2 (a QA
-  // demoResult, a double-perfect) still gets the result hold's five seconds
-  // of warm-up; a no-op when round 2 already started it.
+  // demoResult, a double-perfect) still gets the result hold's warm-up —
+  // 2.4 s here plus the 2.6 s versus hold, under which the art hold itself
+  // decodes (sweep #8/#20); a no-op when round 2 already started it.
   demoPrewarmNextPair("result");
   // 5.4 #31: a result that lands while the tab is hidden waits for the
   // screen; the settle re-arms the full hold once a frame has been seen.
@@ -5579,6 +5615,234 @@ function demoRoundCard() {
 function demoBell() {
   if (rollbackResimulating || !demoSession.attract) return;
   attractAudio.bell();
+}
+
+// ---------------------------------------------------------------------------
+// 5.4 FIGHT NIGHT (sweep #8/#20) — THE VERSUS CARD AND THE RING INTRODUCTION.
+// Presentation only, on the demoSession pattern: never snapshotted, never
+// read by the sim, and every entry point is gated on a demo round 1. The
+// card rides the arcade dialogue-card DOM (#introDialogue / .speech-card) and
+// the intro art hold's clock stop (floored at DEMO_VERSUS_HOLD_MS), so the
+// tick stream of a seeded show is what it was; only the wall clock between
+// two exhibitions is spent differently (see engine/demo-versus.mjs).
+// ---------------------------------------------------------------------------
+const demoVersus = {
+  planned: false,
+  active: false,
+  startedAt: 0,
+  cycle: 0,
+  card: null,
+  plan: null,
+  fired: 0,
+  roundCard: null,
+  // The beats as they fired: { at (wall ms from the hold's start), kind,
+  // text, cue, tick } — the ring introduction's order, for qa.demoRingIntro.
+  log: [],
+  // Wall time of the last release, and its reason (QA readout).
+  releasedAt: 0,
+  releaseReason: "",
+};
+
+function resetDemoVersusCard() {
+  demoVersus.planned = false;
+  demoVersus.active = false;
+  demoVersus.startedAt = 0;
+  demoVersus.cycle = 0;
+  demoVersus.card = null;
+  demoVersus.plan = null;
+  demoVersus.fired = 0;
+  demoVersus.roundCard = null;
+  demoVersus.log = [];
+  demoVersus.releasedAt = 0;
+  demoVersus.releaseReason = "";
+}
+
+/** Is a versus card owed for the match startMatch is opening? Demo round 1 only. */
+function demoVersusWanted(resetSet) {
+  return state.mode === "demo" && demoSession.active && Boolean(demoSession.cycle)
+    && resetSet && state.round === 1 && !rollbackResimulating
+    && state.fighters.length === 2;
+}
+
+/**
+ * Plan the card for the match being started (before the art hold is armed,
+ * so it can floor the clock stop). Returns the plan or null.
+ */
+function planDemoVersusCard(resetSet) {
+  resetDemoVersusCard();
+  if (!demoVersusWanted(resetSet)) return null;
+  const corners = state.fighters.map((fighter) => {
+    const def = fighter.def;
+    const kit = getFighterKit(def.kitId || def.id);
+    return {
+      id: def.id, name: def.name, title: def.title, archetype: kit?.archetype || "",
+      color: def.color, portrait: `assets/fighters/${def.id}.webp`,
+    };
+  });
+  demoVersus.card = demoVersusCard({
+    corners,
+    stageName: stages[state.stage]?.name || "",
+    cycle: demoSession.cycle.cycle,
+    format: demoSession.show?.format || "standard",
+    // The corner records read the SESSION LAYER's ledger (the build-keyed
+    // standings the band shows), so the card and the band agree; the fold is
+    // the fallback before the ledger opens.
+    standings: demoSession.ledger?.fighters || demoSession.standings,
+    boutLabel: demoSession.show?.bout ? `BOUT ${demoSession.show.bout.slot} · ${demoSession.show.bout.label}` : "",
+    storyLabel: demoSession.story?.label || "",
+  });
+  demoVersus.plan = demoRingIntroPlan({
+    card: demoVersus.card,
+    stageName: stages[state.stage]?.name || "",
+    round: state.round,
+    holdMs: DEMO_VERSUS_HOLD_MS,
+  });
+  demoVersus.planned = true;
+  demoVersus.cycle = demoSession.cycle.cycle;
+  return demoVersus.plan;
+}
+
+/** Mount the planned card into the dialogue box and start its clock. */
+function mountDemoVersusCard() {
+  if (!demoVersus.planned || !demoVersus.card) return false;
+  cancelIntroDialogue();
+  const { cards, stage } = demoVersus.card;
+  introDialogue.active = true;
+  introDialogue.kind = "versus";
+  introDialogue.clock = "versus";
+  introDialogue.cardTimes = demoVersusCardTimes();
+  introDialogue.total = 0;
+  introDialogue.revealed = 0;
+  introDialogue.lines = cards.map((card) => ({ id: card.id, name: card.name, line: card.title, side: card.side }));
+  const box = $("#introDialogue");
+  if (box) {
+    const escape = (text) => String(text).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+    const cornerHtml = (card) => `
+      <div class="speech-card versus ${card.side === 0 ? "from-left" : "from-right"}" data-card="${card.side}" hidden>
+        <img class="versus-portrait" src="${escape(card.portrait)}" alt="" draggable="false">
+        <div class="versus-copy">
+          <b style="--speaker:${escape(card.color)}">${escape(card.eyebrow)}</b>
+          <strong>${escape(card.name)}</strong>
+          <p>${escape(card.title)}</p>
+          <em>${escape(card.archetype)}</em>
+          <small>${escape(card.record)}</small>
+        </div>
+      </div>`;
+    box.innerHTML = `${cornerHtml(cards[0])}
+      <div class="versus-stage" data-card="2" hidden>
+        <b>VS</b>
+        <i>TONIGHT AT</i>
+        <span>${escape(stage.name)}</span>
+        <small>${escape(stage.show)}</small>
+      </div>${cornerHtml(cards[1])}`;
+    box.classList.add("versus");
+    box.hidden = false;
+  }
+  demoVersus.active = true;
+  demoVersus.startedAt = performance.now();
+  demoVersus.fired = 0;
+  demoVersus.log = [];
+  modeFxDebug.versusCards += 1;
+  // Beat 0 (the left corner) is due at 0 ms: fire it with the card so the
+  // first sound of the show is the corner call, not a frame later.
+  fireDemoVersusBeats();
+  return true;
+}
+
+function demoVersusElapsedMs(now = performance.now()) {
+  if (!demoVersus.active) return 0;
+  return Math.max(0, now - demoVersus.startedAt);
+}
+
+/** Fire every corner/stage beat that is due (render-side, idempotent). */
+function fireDemoVersusBeats(now = performance.now()) {
+  if (!demoVersus.active || !demoVersus.plan) return;
+  if (state.screen !== "fight" || state.phase !== "intro") return;
+  const due = demoRingIntroDue(demoVersus.plan, demoVersusElapsedMs(now), demoVersus.fired);
+  for (const beat of due) {
+    demoVersus.fired += 1;
+    if (beat.kind === "corner") {
+      const card = demoVersus.card.cards[beat.side];
+      announce(card.name, `${card.eyebrow} · ${card.title}`, 1.05, { speak: beat.cue ? [{ cue: beat.cue, delay: 0 }] : [] });
+    } else if (beat.kind === "stage" && beat.banner?.main) {
+      announce(beat.banner.main, beat.banner.sub, 0.85);
+    }
+    noteDemoVersusBeat(beat, now);
+  }
+}
+
+function noteDemoVersusBeat(beat, now) {
+  demoVersus.log.push({
+    at: Math.round(demoVersusElapsedMs(now)),
+    kind: beat.kind,
+    text: beat.text,
+    cue: beat.cue || "",
+    tick: state.simulationTick,
+  });
+}
+
+/**
+ * The art hold released: the ring introduction is over and the ROUND card
+ * is owed NOW, ahead of the FIGHT! call the release just shifted. A release
+ * because the sim already left the intro (the QA manual clock) announces
+ * nothing — the fight is on.
+ */
+function releaseDemoVersusCard(reason, now = performance.now()) {
+  if (!demoVersus.active) return false;
+  demoVersus.releasedAt = now;
+  demoVersus.releaseReason = reason;
+  // Any corner/stage beat the clock ran past (a hidden tab) still fires, in
+  // order, before the ROUND card.
+  fireDemoVersusBeats(now);
+  const roundBeat = demoVersus.plan?.find((beat) => beat.kind === "round") || null;
+  const owed = demoVersusAnnouncesRound({ reason, phase: state.phase, screen: state.screen });
+  if (owed && demoVersus.roundCard) {
+    announce(demoVersus.roundCard.main, demoVersus.roundCard.sub, 1.2);
+    if (roundBeat) noteDemoVersusBeat(roundBeat, now);
+  }
+  demoVersus.active = false;
+  demoVersus.planned = false;
+  // The card leaves with the ROUND banner; the walk-on has the screen.
+  if (introDialogue.kind === "versus") cancelIntroDialogue();
+  return owed;
+}
+
+/** The FIGHT! banner fired on a versus round: complete the order log. */
+function noteDemoVersusFight() {
+  if (state.mode !== "demo" || !demoVersus.plan || demoVersus.active) return;
+  if (demoVersus.log.some((entry) => entry.kind === "fight")) return;
+  const beat = demoVersus.plan.find((entry) => entry.kind === "fight");
+  if (!beat || !demoVersus.log.some((entry) => entry.kind === "round")) return;
+  demoVersus.log.push({
+    at: Math.round(performance.now() - demoVersus.startedAt),
+    kind: "fight", text: beat.text, cue: beat.cue, tick: state.simulationTick,
+  });
+}
+
+/** Fold a settled exhibition into the night's standings (demo path only). */
+function noteDemoMatchResult(winner) {
+  if (state.mode !== "demo" || !demoSession.active || rollbackResimulating) return;
+  if (state.fighters.length !== 2) return;
+  const winnerId = state.fighters[winner]?.def.id || "";
+  const loserId = state.fighters[1 - winner]?.def.id || "";
+  demoSession.standings = demoStandingsAfterMatch(demoSession.standings, winnerId, loserId);
+}
+
+function demoVersusSnapshot() {
+  return {
+    planned: demoVersus.planned,
+    active: demoVersus.active,
+    cycle: demoVersus.cycle,
+    fired: demoVersus.fired,
+    elapsedMs: Math.round(demoVersusElapsedMs()),
+    releaseReason: demoVersus.releaseReason,
+    plan: demoVersus.plan ? demoVersus.plan.map((beat) => ({ at: beat.at, kind: beat.kind, cue: beat.cue, text: beat.text })) : null,
+    log: demoVersus.log.map((entry) => ({ ...entry })),
+    card: demoVersus.card ? {
+      cards: demoVersus.card.cards.map((card) => ({ ...card })),
+      stage: { ...demoVersus.card.stage },
+    } : null,
+  };
 }
 
 function setOnlineStatus(kind, detail) {
@@ -12878,6 +13142,10 @@ function startMatch(resetSet = true) {
     demoSession.pendingDirectorSeed = null;
     clearDemoPrewarm(true);
   }
+  // 5.4 FIGHT NIGHT (sweep #8/#20): a demo round 1 opens on the VERSUS card
+  // — planned here so the art hold below knows to floor its clock stop at the
+  // card's length; mounted after beginIntroDialogue (which clears the box).
+  const versus = planDemoVersusCard(resetSet);
   // v5.1 #35: hold the intro clock (offline only, capped) until both
   // fighters' unified family has decoded — see armIntroArtHold. Armed BEFORE
   // the FIGHT! timer below so a release can shift it.
@@ -12915,12 +13183,17 @@ function startMatch(resetSet = true) {
   if (state.mutators.length) introLabel = `${introLabel} · ${mutatorLabel(state.mutators)}`;
   // 5.4 (sweep #19): the demo's ROUND card — the attract gate's release
   // point, booked BEFORE the announce so the ROUND call itself is heard.
+  // (Sweep #8/#20: on a versus card the gate opens on the CARD, so the
+  // corner calls are the first sound; the ROUND 1 banner itself is deferred
+  // to the hold's release — releaseDemoVersusCard — after the ring intro.)
   demoRoundCard();
-  announce(introMain, introLabel, 1.2);
+  if (versus) demoVersus.roundCard = { main: introMain, sub: introLabel };
+  else announce(introMain, introLabel, 1.2);
   // Wave 16: rival and FINAL BOUT intros open with a spoken-card exchange —
   // the intro window stretches to fit the read, and the FIGHT call waits.
   const dialogueSeconds = beginIntroDialogue(arcadeMatch);
   if (dialogueSeconds > 0) state.phaseTime = dialogueSeconds;
+  if (versus) mountDemoVersusCard();
   // Wave 9: the arcade final boss bout gets its own announcer intro, queued
   // behind ROUND 1 / FIGHT via the announcer busy window.
   if (arcadeMatch?.kind === "boss") {
@@ -12928,7 +13201,10 @@ function startMatch(resetSet = true) {
     announcerSay("boss-intro", { delay: 2100 });
   }
   scheduleFightAnnouncement(() => {
-    if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "NO MERCY ON THESE STREETS", 0.8);
+    if (state.screen === "fight" && state.phase === "intro") {
+      announce("FIGHT!", "NO MERCY ON THESE STREETS", 0.8);
+      noteDemoVersusFight();
+    }
   }, dialogueSeconds > 0 ? Math.round(dialogueSeconds * 1000) - 650 : 1150);
   // R2.1 STREETS: arm the replay recorder once the match config is FINAL
   // (mutators, palettes, stage and the dialogue-stretched intro clock). Only
@@ -13191,6 +13467,11 @@ const introDialogue = {
   lines: [],
   total: 0,
   revealed: 0,
+  // 5.4 (sweep #8/#20): the versus kind reveals off the VERSUS hold's wall
+  // clock (the phase clock is stopped under it) on its own card times;
+  // both null for the arcade exchange, which keeps the phase-clock reveal.
+  clock: null,
+  cardTimes: null,
 };
 // Last variant shown per pairing, so back-to-back runs never repeat while an
 // alternative exists. visualRandom only — presentation stream.
@@ -13214,9 +13495,12 @@ function cancelIntroDialogue() {
   introDialogue.active = false;
   introDialogue.lines = [];
   introDialogue.revealed = 0;
+  introDialogue.clock = null;
+  introDialogue.cardTimes = null;
   const box = $("#introDialogue");
   if (box) {
     box.hidden = true;
+    box.classList.remove("versus");
     box.innerHTML = "";
   }
 }
@@ -13284,9 +13568,17 @@ function updateIntroDialogue() {
     return;
   }
   const reduced = state.accessibility.reducedMotion;
-  const elapsed = introDialogue.total - state.phaseTime;
-  box.querySelectorAll(".speech-card").forEach((cardEl, index) => {
-    const show = reduced || elapsed >= (INTRO_DIALOGUE_CARD_TIMES[index] ?? 0);
+  // 5.4 (sweep #8/#20): the versus card reveals off the hold's wall clock
+  // and keeps its beat order under reduced motion (the slide is dropped, the
+  // ring introduction is not collapsed into one frame).
+  const versus = introDialogue.clock === "versus";
+  const elapsed = versus ? demoVersusElapsedMs() / 1000 : introDialogue.total - state.phaseTime;
+  const times = introDialogue.cardTimes || INTRO_DIALOGUE_CARD_TIMES;
+  box.querySelectorAll("[data-card]").forEach((cardEl, position) => {
+    // The card's own index, not its DOM position: the versus row is laid out
+    // left card / stage row / right card, and the stage row reveals last.
+    const index = Number.isFinite(Number(cardEl.dataset.card)) ? Number(cardEl.dataset.card) : position;
+    const show = (reduced && !versus) || elapsed >= (times[index] ?? 0);
     if (show && cardEl.hidden) {
       cardEl.hidden = false;
       cardEl.classList.toggle("instant", reduced);
@@ -13294,6 +13586,7 @@ function updateIntroDialogue() {
       introDialogue.revealed = Math.max(introDialogue.revealed, index + 1);
     }
   });
+  if (versus) fireDemoVersusBeats();
 }
 
 // Release 1.8 GRIND: only HUMAN inputs may skip the intro/round-over flow. A
@@ -14425,9 +14718,13 @@ function showResult(winner) {
   restartCssAnimation($(".result-copy"), "sweep");
   hudFxDebug.victoryEntrances += 1;
   // 5.4 SESSION LAYER: bank the bout on the session ledger FIRST — the
-  // standings band, the sign-off and the NEXT UP tease all read it.
-  if (state.mode === "demo") demoRecordBout(winner);
-  if (state.mode === "demo") scheduleNextDemoMatch();
+  // standings band, the sign-off, the NEXT UP tease and the versus card's
+  // corner records all read it.
+  if (state.mode === "demo") {
+    demoRecordBout(winner);
+    noteDemoMatchResult(winner);
+    scheduleNextDemoMatch();
+  }
   else $("#demoResultStatus").hidden = true;
   // R2.1 STREETS: winner-stays scoreboard card (online rooms + offline versus
   // sets) and the CHANGE FIGHTERS path back to a QoL-speaking lobby.
@@ -33747,6 +34044,7 @@ window.__finalBlowEngine = {
         // R2.0 FAMILY wave 16 counters.
         dialogueExchanges: modeFxDebug.dialogueExchanges,
         dialogueCardsShown: modeFxDebug.dialogueCardsShown,
+        versusCards: modeFxDebug.versusCards,
         winQuoteSelections: modeFxDebug.winQuoteSelections,
         altPalettesBuilt: paletteFxDebug.built,
         altPaletteSides: [...matchPalettes],
@@ -34651,6 +34949,18 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     // demo), and the boot request a query string would parse to.
     demoShareUrl() {
       return demoShareUrl();
+    },
+    // 5.4 (sweep #8/#20): the versus card and ring introduction of the
+    // current card — the plan, the beats as they fired (in order, with the
+    // wall ms from the hold's start and the sim tick), the card copy and
+    // the night's standings. Pure read.
+    demoRingIntro() {
+      return {
+        ...demoVersusSnapshot(),
+        holdMs: DEMO_VERSUS_HOLD_MS,
+        artHold: { active: introArtHold.active, floorMs: introArtHold.floorMs, lastReason: introArtHold.lastReason, heldMs: Math.round(introArtHold.heldMs) },
+        standings: Object.fromEntries(Object.entries(demoSession.standings).map(([id, record]) => [id, { ...record }])),
+      };
     },
     demoBootRequest(search = location.search) {
       return parseDemoBootRequest(search);

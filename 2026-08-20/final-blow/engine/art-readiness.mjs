@@ -91,12 +91,23 @@ export function readinessSummary(entries) {
  * Releases the moment nothing is pending, at the cap, or when the intro is
  * gone (a skip, a pause-to-select, a screen change) — the hold can never
  * outlive the thing it was holding for.
+ *
+ * 5.4 FIGHT NIGHT (demo sweep #8/#20): `floorMs` is a MINIMUM hold — the
+ * attract demo's VERSUS card rides the same clock stop for its ring
+ * introduction (engine/demo-versus.mjs), so a demo round 1 holds for the
+ * floor even with every sheet decoded, and a sheet still pending past the
+ * floor is capped exactly as before. Zero everywhere but the demo, so a
+ * played match's decision is byte-identical. Leaving the intro still wins:
+ * the QA manual clock steps through a held intro and the hold lets go.
  */
-export function holdDecision({ startedAt = 0, now = 0, capMs = INTRO_ART_HOLD_MS, pendingCount = 0, inIntro = true } = {}) {
+export function holdDecision({
+  startedAt = 0, now = 0, capMs = INTRO_ART_HOLD_MS, pendingCount = 0, inIntro = true, floorMs = 0,
+} = {}) {
   const elapsed = Math.max(0, now - startedAt);
   if (!inIntro) return { hold: false, reason: "left", elapsed };
-  if (pendingCount <= 0) return { hold: false, reason: "ready", elapsed };
-  if (elapsed >= capMs) return { hold: false, reason: "capped", elapsed };
+  if (elapsed < Math.max(0, floorMs)) return { hold: true, reason: "holding", elapsed };
+  if (pendingCount <= 0) return { hold: false, reason: floorMs > 0 ? "floor" : "ready", elapsed };
+  if (elapsed >= Math.max(capMs, floorMs)) return { hold: false, reason: "capped", elapsed };
   return { hold: true, reason: "holding", elapsed };
 }
 

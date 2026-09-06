@@ -5,7 +5,7 @@
 // Everything in here is PRESENTATION LOGIC for the CPU-vs-CPU exhibition and
 // nothing else: what the corner bug says, when the operator legend is allowed
 // on screen, when the static chrome dims and the pointer hides, and how the
-// wall-clock timers that pace the loop (the 5 s result hold, the FIGHT! call)
+// wall-clock timers that pace the loop (the result hold, the FIGHT! call)
 // are frozen while the tab is hidden and re-armed when it returns. None of it
 // reads sim state, none of it is snapshotted, and every game.js call site is
 // gated on the demo session — a played match never consults this module, so

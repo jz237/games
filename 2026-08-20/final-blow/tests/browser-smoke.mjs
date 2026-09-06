@@ -4098,8 +4098,8 @@ probe('demo-hud', async () => {
     assert.equal(demoHudBug.bodyClasses.includes('demo-active'), true);
 });
 
-// 5.4 FIGHT NIGHT (demo sweep #31): a hidden tab holds the demo — the 5 s
-// result countdown freezes, the tab comes back to a RESUMING beat, and only
+// 5.4 FIGHT NIGHT (demo sweep #31): a hidden tab holds the demo — the result
+// countdown (2.4 s since the versus card, sweep #8/#20) freezes, the tab comes back to a RESUMING beat, and only
 // then does the countdown pick up what was left.
 probe('demo-hold', async () => {
     const demoHoldProbe = await evaluate(client, `(async () => {
@@ -4135,7 +4135,9 @@ probe('demo-hold', async () => {
     assert.equal(demoHoldProbe.before.resultScheduled, true);
     assert.equal(demoHoldProbe.atHide.hold.phase, 'held');
     assert.equal(demoHoldProbe.atHide.resultScheduled, false, 'the wall-clock timer is frozen, not left running');
-    assert.ok(demoHoldProbe.atHide.hold.resultRemainingMs > 4000 && demoHoldProbe.atHide.hold.resultRemainingMs <= 5000, `remaining ${demoHoldProbe.atHide.hold.resultRemainingMs}`);
+    // 5.4 versus card (sweep #8/#20): the result hold is 2.4 s (the other
+    // 2.6 s of the old 5 s moved onto the fight screen as the versus card).
+    assert.ok(demoHoldProbe.atHide.hold.resultRemainingMs > 1400 && demoHoldProbe.atHide.hold.resultRemainingMs <= 2400, `remaining ${demoHoldProbe.atHide.hold.resultRemainingMs}`);
     assert.equal(demoHoldProbe.atHide.status, 'NEXT FIGHT WAITS FOR THE SCREEN');
     assert.equal(demoHoldProbe.atHide.speed, 'HELD');
     assert.equal(demoHoldProbe.stillHidden.matches, 1, 'no new exhibition may start while hidden');
@@ -4148,6 +4150,97 @@ probe('demo-hold', async () => {
     assert.ok(demoHoldProbe.afterBeat.hold.heldMs >= 6000, `held ${demoHoldProbe.afterBeat.hold.heldMs} ms`);
     assert.equal(demoHoldProbe.afterHold.matches, 2, 'the next exhibition starts once the remaining hold runs out');
     assert.equal(demoHoldProbe.afterHold.screen, 'fight');
+});
+
+// 5.4 FIGHT NIGHT (demo sweep #8/#20): the VERSUS card and the ring
+// introduction between exhibitions. A link boot opens on the card (both
+// corners, the stage row, the announcer's corner slams) over a 2.6 s clock
+// stop, and the announcer plan runs left corner -> right corner -> stage ->
+// ROUND 1 -> FIGHT! in that order — the ROUND 1 card is no longer clobbered
+// by a WATCH DEMO slam. The card's name line is TV-sized.
+probe('demo-versus', async () => {
+    await navigate(client, `${gameUrl}&demo=237`);
+    const opened = await evaluate(client, `(() => {
+      const box = document.querySelector('#introDialogue');
+      const s = window.__finalBlowEngine.snapshot();
+      const ring = window.__finalBlowQa.demoRingIntro();
+      const cards = [...box.querySelectorAll('.speech-card.versus')];
+      const left = cards[0];
+      return {
+        phase: s.phase, tick: s.tick, hidden: box.hidden, versus: box.classList.contains('versus'),
+        cards: cards.length, portraits: cards.filter((c) => c.querySelector('img.versus-portrait')?.getAttribute('src')).length,
+        leftRevealed: !left.hidden, rightHidden: cards[1].hidden, stageHidden: box.querySelector('.versus-stage').hidden,
+        eyebrow: left.querySelector('b').textContent, name: left.querySelector('strong').textContent,
+        title: left.querySelector('p').textContent, archetype: left.querySelector('em').textContent, record: left.querySelector('small').textContent,
+        nameSize: parseFloat(getComputedStyle(left.querySelector('strong')).fontSize),
+        banner: document.querySelector('#announcer strong').getAttribute('aria-label') + '|' + document.querySelector('#announcer span').textContent,
+        artHold: ring.artHold, planKinds: ring.plan.map((b) => b.kind), planCues: ring.plan.map((b) => b.cue), fired: ring.log.map((b) => b.kind),
+        pair: s.demo.cycle.picks, elapsedMs: ring.elapsedMs,
+      };
+    })()`);
+    assert.equal(opened.phase, 'intro');
+    // navigate() returns some way into the card (load + its settle delay), so
+    // the reveal state is asserted against the card's own clock.
+    assert.ok(opened.elapsedMs < 1900, `read under the card before the stage beat, got ${opened.elapsedMs} ms`);
+    // Reveals land on rendered frames, so a read within one frame (150 ms) of
+    // a beat may see either side of it.
+    const beatsBy = (ms) => [0, 1000, 1900].filter((at) => at <= ms).length;
+    const firedLower = beatsBy(opened.elapsedMs - 150);
+    const firedUpper = beatsBy(opened.elapsedMs);
+    assert.equal(opened.tick, 0, 'the clock stands still under the card');
+    assert.equal(opened.hidden, false);
+    assert.equal(opened.versus, true, 'the card rides the dialogue box');
+    assert.equal(opened.cards, 2);
+    assert.equal(opened.portraits, 2);
+    assert.equal(opened.leftRevealed, true);
+    if (opened.elapsedMs < 850) assert.equal(opened.rightHidden, true, 'the right corner waits for its 1.0 s beat');
+    if (opened.elapsedMs > 1150) assert.equal(opened.rightHidden, false, 'the right corner is up after its beat');
+    assert.equal(opened.stageHidden, true, 'the stage row waits for its 1.9 s beat');
+    assert.equal(opened.eyebrow, 'IN THE LEFT CORNER');
+    assert.ok(opened.name.length > 1 && opened.name === opened.name.toUpperCase());
+    assert.ok(opened.title.length > 3, 'roster title');
+    assert.ok(opened.archetype.length > 3, 'kit archetype');
+    assert.equal(opened.record, 'FIRST BOUT TONIGHT');
+    assert.ok(opened.nameSize >= 38, `the corner name reads from the couch at 1440 wide, got ${opened.nameSize}px`);
+    assert.match(opened.banner, /^[A-Z0-9 .'-]+\|IN THE (LEFT|RIGHT) CORNER · /, 'a corner slam is up');
+    assert.deepEqual(opened.planKinds, ['corner', 'corner', 'stage', 'round', 'fight']);
+    assert.equal(opened.planCues[0], `${opened.pair[0]}-name`);
+    assert.equal(opened.planCues[1], `${opened.pair[1]}-name`);
+    assert.deepEqual(opened.planCues.slice(2), ['', 'round1', 'fight'], 'no stage cue is invented; ROUND 1 and FIGHT! keep their banks');
+    assert.equal(opened.artHold.active, true);
+    assert.equal(opened.artHold.floorMs, 2600);
+    assert.ok(opened.fired.length >= firedLower && opened.fired.length <= firedUpper, `fired ${opened.fired.join(',')} at ${opened.elapsedMs} ms`);
+    assert.deepEqual(opened.fired, ['corner', 'corner', 'stage'].slice(0, opened.fired.length), 'beats fire in order');
+    // The reads below are timed from the card's own clock (the boot landed
+    // some way into the left corner's beat before navigate() returned).
+    await delay(Math.max(0, 2250 - opened.elapsedMs));
+    const midCard = await evaluate(client, `(() => {
+      const box = document.querySelector('#introDialogue');
+      const s = window.__finalBlowEngine.snapshot();
+      return { phase: s.phase, tick: s.tick, hidden: box.hidden, revealed: [...box.querySelectorAll('[data-card]')].map((c) => !c.hidden), fired: window.__finalBlowQa.demoRingIntro().log.map((b) => b.kind), stageRow: box.querySelector('.versus-stage span').textContent };
+    })()`);
+    assert.equal(midCard.tick, 0, 'still held at 2.2 s');
+    assert.deepEqual(midCard.revealed, [true, true, true], 'both corners and the stage row are up by the stage beat');
+    assert.deepEqual(midCard.fired, ['corner', 'corner', 'stage']);
+    assert.ok(midCard.stageRow.length > 3);
+    await delay(2000);
+    const released = await evaluate(client, `(() => {
+      const s = window.__finalBlowEngine.snapshot();
+      const ring = window.__finalBlowQa.demoRingIntro();
+      return { phase: s.phase, tick: s.tick, hidden: document.querySelector('#introDialogue').hidden, log: ring.log.map((b) => ({ kind: b.kind, at: b.at })), release: ring.releaseReason, banner: document.querySelector('#announcer strong').getAttribute('aria-label') };
+    })()`);
+    assert.ok(released.tick > 0, 'the clock runs after the release');
+    assert.equal(released.hidden, true, 'the card leaves with the ROUND card');
+    assert.ok(['floor', 'capped'].includes(released.release), `release ${released.release}`);
+    assert.deepEqual(released.log.map((b) => b.kind), ['corner', 'corner', 'stage', 'round', 'fight'], 'the announcer plan order');
+    assert.ok(released.log[3].at >= 2600 && released.log[3].at < 3200, `ROUND 1 at the 2.6 s release, got ${released.log[3].at}`);
+    assert.ok(released.log[4].at - released.log[3].at >= 1100 && released.log[4].at - released.log[3].at <= 1500, `FIGHT! 1150 ms after ROUND 1, got ${released.log[4].at - released.log[3].at}`);
+    assert.equal(released.banner, 'FIGHT!');
+    // Round 2 keeps its plain card: no versus card outside round 1.
+    const roundTwo = await evaluate(client, `(() => { const qa = window.__finalBlowQa; qa.demoPause(true); qa.step(3); qa.demoKnockout(0); qa.step(6.5); const s = window.__finalBlowEngine.snapshot(); return { roundLabel: document.querySelector('#roundLabel').textContent, phase: s.phase, versus: document.querySelector('#introDialogue').classList.contains('versus'), planned: qa.demoRingIntro().planned }; })()`);
+    assert.equal(roundTwo.roundLabel, 'DEMO · ROUND 2', 'round 1 settled, round 2 open');
+    assert.equal(roundTwo.versus, false);
+    assert.equal(roundTwo.planned, false);
 });
 
 probe('offline-cache', async () => {

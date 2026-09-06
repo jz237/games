@@ -1,7 +1,12 @@
 import { DeterministicRng, hashSeed } from "./foundation.mjs";
 
 export const DEMO_IDLE_DELAY_MS = 45_000;
-export const DEMO_RESULT_HOLD_MS = 5_000;
+// 5.4 FIGHT NIGHT (sweep #8/#16/#20): the result hold was 5 s of static text.
+// The seam between two exhibitions keeps its 8.0 s of wall clock (at the 0.75x
+// demo rate: 5.0 s hold + 3.0 s round-1 intro before; 2.4 s hold + the 2.6 s
+// VERSUS hold + 3.0 s intro after) — the 2.6 s moved onto the fight screen as
+// the versus card and ring introduction (engine/demo-versus.mjs).
+export const DEMO_RESULT_HOLD_MS = 2_400;
 import { registerAiDifficulty, resolveAiSettings } from "./ai.mjs";
 import { getFighterKit } from "./fighter-kits.mjs";
 import { DEMO_SIGN_OFF_VARIANTS, demoBoutPlan } from "./demo-session.mjs";

@@ -47,8 +47,12 @@ test("the bug names the matchup, the cycle and the stage, and words the prompt f
 });
 
 test("the result countdown follows the pointer and says so while held", () => {
-  assert.equal(demoResultPrompt({ holdMs: DEMO_RESULT_HOLD_MS }), "NEXT RANDOM FIGHT IN 5 SECONDS · PRESS ANY BUTTON TO PLAY");
-  assert.equal(demoResultPrompt({ holdMs: DEMO_RESULT_HOLD_MS, coarsePointer: true }), "NEXT RANDOM FIGHT IN 5 SECONDS · TAP TO PLAY");
+  // 5.4 versus card (sweep #8/#20): the result hold is 2.4 s now — the other
+  // 2.6 s of the old 5 s hold moved onto the fight screen as the versus card
+  // (tests/demo-versus.test.mjs pins the budget), so the prompt reads 2.
+  assert.equal(demoResultPrompt({ holdMs: DEMO_RESULT_HOLD_MS }), "NEXT RANDOM FIGHT IN 2 SECONDS · PRESS ANY BUTTON TO PLAY");
+  assert.equal(demoResultPrompt({ holdMs: DEMO_RESULT_HOLD_MS, coarsePointer: true }), "NEXT RANDOM FIGHT IN 2 SECONDS · TAP TO PLAY");
+  assert.equal(demoResultPrompt({ holdMs: 5000 }), "NEXT RANDOM FIGHT IN 5 SECONDS · PRESS ANY BUTTON TO PLAY");
   assert.equal(demoResultPrompt({ holdMs: 1000 }), "NEXT RANDOM FIGHT IN 1 SECOND · PRESS ANY BUTTON TO PLAY");
   assert.equal(demoResultPrompt({ held: true }), "NEXT FIGHT WAITS FOR THE SCREEN");
 });
