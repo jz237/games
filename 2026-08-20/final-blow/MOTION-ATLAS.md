@@ -4882,3 +4882,49 @@ modules are also NOT in `sw.js`'s `SHELL` list, exactly like `engine/crowd.mjs`
 and `engine/modes.mjs` before them; the list is a curated subset with a
 32-entry cap in `tests/service-worker-guard.test.mjs`, so widening it is its
 own decision rather than a side effect of this one.
+
+## v5.3 — SPECTACLE: THE WAVE IN ONE PLACE
+
+Ten items, the last of the post-5.0 sweep:
+
+SPECIALS ON THE FIGHTER'S OWN GENERATION. Every special, EX, super, throw
+release and victory pose for the nine fighters who own a specials sheet is
+redrawn in the unified generation (image-to-image from the fighter's own
+unified sheet with the shipped specials sheet as the pose reference), at the
+same 4x4 grammar the kits address, so no kit changed. The shipped generation
+is kept whole as `specials-legacy` and a per-cell manifest gate falls back to
+it (143 of 144 cells accepted; the devil's launcher wind-up rejected).
+Costume-only dE fell from 8.13 to 3.44 mean. A defect nobody had measured:
+the shipped specials sheets were never floor-registered — five fighters
+levitated up to ~37 px through every special; all 144 new cells bottom on
+row 314. The eight 2x HD specials sheets were retired rather than left
+running the old generation under CINEMA 3D.
+
+CINEMA 3D STOPS BEING A DEAD CARD. The five generic 3D stages had an empty
+`update()` and the KO pulse never even latched with the toggle on. Now the
+same plate-coordinate practicals the 2D layer paints (the Vet's two
+floodlights at [125,88] and [1230,232], the buffet's five pendants, Somerset's
+ten lights) answer the pulse in 3D with real spill lights, fireworks fire on
+the same two shots, and the element flipbooks, charge glow, dash afterimages,
+the 2D particle pool and the battle-damage decals all reach the 3D sprites.
+Measured live on the Vet: practical peak 1.94 against a rest level of 0.
+
+THE REST. The crowd has two halves that react differently (a seeded favourite
+per round, a wince for a rival's hit, flinches near a wall splat, flashbulbs
+only from painted people who actually hold a phone) and Somerset finally has
+a living crowd. Janney gets a loose brick, every stage its own arrival
+choreography, and the scars come in flavours and reach the 3D floor as decals.
+Two missing stage beds are composed (wildwood, cruise), with round/match/
+decision stingers and a low-health stem. The wake-up keeps a crouch hurtbox
+for its last six frames and the 40-frame throw immunity is reserved for
+throws, so okizeme and command grabs exist; a whiffed throw has real recovery
+and a tech window. The title is PLAY / LEARN / MORE with a coach card that
+reads the last fight's damage digest and names one lesson. And the browser
+smoke is a registry of 75 named probes with `--only` / `--skip`,
+continue-on-failure and a CINEMA 3D probe; four blocks of game.js became
+tested engine modules.
+
+A plain KO now puts the loser on the boards: the Final Blow window used to
+expire with the loser standing, drawing a hit cell through the whole 4.9 s
+curtain call. He crumples, lands with a thud and lies flat until the round
+ends.
