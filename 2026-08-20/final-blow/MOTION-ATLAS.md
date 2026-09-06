@@ -3289,7 +3289,9 @@ generated from that sheet — so RULE 2's connected-region objection does not
 apply; idle, walk, guard and crouch are never substituted):
 
     unified:12 light hit   -> ext4:2 body blow when the last contact was
-                              MID/LOW or the victim is crouching, else
+                              LOW or the victim is crouching (MID is the
+                              level nearly every normal carries — a jab is
+                              a face hit — so it snaps the head), else
                               ext4:1 head snap
     unified:13 big hit     -> ext4:6 launched while carried, else ext4:3
     unified:14 stagger     -> ext4:4 (a backward reel)
@@ -3316,7 +3318,7 @@ draws ext3:12 over unified:5, and the R6 flinch-exit bridge rides the crouch
 too. Byte-identical for a fighter without the cell.
 
 Traced chains (jez, every sheet whole, hold ticks): light
-`ext4:1 x7 -> ext4:4 x7 -> ext:7 x7 -> unified:7 x8 -> idle`; light MID/LOW
+`ext4:1 x7 -> ext4:4 x7 -> ext:7 x7 -> unified:7 x8 -> idle`; light LOW
 `ext4:2 x7 -> ext4:4 x7 -> ext:7 x7 -> unified:7 x8 -> idle`; heavy
 `ext4:3 x7 -> ext:7 x7 -> ext4:4 x7 -> unified:7 x8 -> idle`; heavy airborne
 opener `ext4:6`; standing block `ext4:0 x8 -> unified:7 x9`; crouched block
