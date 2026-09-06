@@ -6642,6 +6642,11 @@ const presentationDebug = {
   bloomPasses: 0, rgbSplits: 0,
   // Release 1.8C REALITY BREAK steady render-only passes.
   realisticBackdrops: 0, realisticLighting: 0, realisticPortraits: 0, filmGrainPasses: 0,
+  // CINEMA 3D gameplay reads drawn by the 2D overlay pass while the 3D world
+  // is live (dizzy/crush markers, rhythm rings, combat text, weapon tag), so a
+  // probe can prove a read reached the screen in 3D rather than trusting the
+  // sim field alone.
+  cinema3dOverlayReads: 0,
 };
 
 // Release 1.7A CLEAN HITS: preserve the fighter palette during hit feedback.
@@ -19755,37 +19760,9 @@ function drawAttackVfx(fighter, time, activePower) {
 
 function drawPaintTraps(time) {
   for (const trap of state.traps) {
-    const armed = trap.armFrames <= 0;
-    const life = clamp(trap.lifeFrames / trap.maxLifeFrames, 0, 1);
-    const pulse = 1 + Math.sin(time * 0.009 + trap.x * 0.02) * 0.08;
     ctx.save();
     ctx.translate(trap.x, trap.y);
-    ctx.globalAlpha = Math.min(1, life * 1.8) * (armed ? 0.9 : 0.58);
-    ctx.fillStyle = trap.color;
-    ctx.shadowColor = trap.color;
-    ctx.shadowBlur = armed ? 21 : 9;
-    ctx.beginPath();
-    ctx.ellipse(0, 1, trap.radius * 0.86 * pulse, 14 * pulse, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha *= 0.55;
-    ctx.fillStyle = "#fff2c6";
-    for (let spot = 0; spot < 6; spot += 1) {
-      const angle = spot * 2.4;
-      ctx.beginPath();
-      ctx.ellipse(Math.cos(angle) * trap.radius * 0.52, -3 + Math.sin(angle) * 7, 6 + spot % 3 * 2, 3, angle, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = Math.min(1, life * 1.8);
-    ctx.fillStyle = "#d9d9d9";
-    ctx.fillRect(-7, -23, 14, 25);
-    ctx.fillStyle = trap.color;
-    ctx.fillRect(-7, -18, 14, 10);
-    ctx.strokeStyle = armed ? "#fff" : trap.color;
-    ctx.lineWidth = armed ? 3 : 2;
-    ctx.globalAlpha *= armed ? 0.75 : 0.35;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, trap.radius * pulse, 20 * pulse, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    drawPaintTrapWith(ctx, trap, time);
     if (state.debug) {
       ctx.globalAlpha = 0.82;
       ctx.strokeStyle = "#ffef5a";
@@ -19797,14 +19774,59 @@ function drawPaintTraps(time) {
   }
 }
 
+// The trap drawing itself, origin at the trap's floor point, on ANY 2D
+// context: the 2D world pass hands it the game canvas; CINEMA 3D paints it
+// into an impostor canvas over the host bridge (world-objects.mjs), so both
+// renderers draw Post's hazard from one function. Presentation-only reads.
+function drawPaintTrapWith(c, trap, time) {
+  const armed = trap.armFrames <= 0;
+  const life = clamp(trap.lifeFrames / trap.maxLifeFrames, 0, 1);
+  const pulse = 1 + Math.sin(time * 0.009 + trap.x * 0.02) * 0.08;
+  c.globalAlpha = Math.min(1, life * 1.8) * (armed ? 0.9 : 0.58);
+  c.fillStyle = trap.color;
+  c.shadowColor = trap.color;
+  c.shadowBlur = armed ? 21 : 9;
+  c.beginPath();
+  c.ellipse(0, 1, trap.radius * 0.86 * pulse, 14 * pulse, 0, 0, Math.PI * 2);
+  c.fill();
+  c.globalAlpha *= 0.55;
+  c.fillStyle = "#fff2c6";
+  for (let spot = 0; spot < 6; spot += 1) {
+    const angle = spot * 2.4;
+    c.beginPath();
+    c.ellipse(Math.cos(angle) * trap.radius * 0.52, -3 + Math.sin(angle) * 7, 6 + spot % 3 * 2, 3, angle, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.globalAlpha = Math.min(1, life * 1.8);
+  c.fillStyle = "#d9d9d9";
+  c.fillRect(-7, -23, 14, 25);
+  c.fillStyle = trap.color;
+  c.fillRect(-7, -18, 14, 10);
+  c.strokeStyle = armed ? "#fff" : trap.color;
+  c.lineWidth = armed ? 3 : 2;
+  c.globalAlpha *= armed ? 0.75 : 0.35;
+  c.beginPath();
+  c.ellipse(0, 0, trap.radius * pulse, 20 * pulse, 0, 0, Math.PI * 2);
+  c.stroke();
+}
+
 // Each personal object is drawn as a recognisable physical thing rather than a
 // recoloured orb, so its flight path and weight read at a glance.
 function drawThrowable(projectile, time, life) {
+  drawThrowableWith(ctx, projectile, time, life);
+}
+
+// Same drawing on ANY 2D context. CINEMA 3D paints each live object through
+// this into a per-object impostor canvas (renderer/three/world-objects.mjs),
+// so the painted pizza wheel, cane, needle... are the SAME drawings in both
+// renderers. `options.cable === false` skips the mouse's trailing cable
+// (world-space geometry the 3D layer draws as its own line).
+function drawThrowableWith(c, projectile, time, life, options = {}) {
   const w = projectile.width;
   const h = projectile.height;
   const angle = projectile.spinAngle || 0;
   const wobble = projectile.wobble ? Math.sin(time * 0.02) * projectile.wobble * 0.01 : 0;
-  ctx.globalAlpha = Math.min(1, life * 2.2);
+  c.globalAlpha = Math.min(1, life * 2.2);
   switch (projectile.style) {
     case "pizza": {
       if (cinema3dDressingActive()) {
@@ -19814,177 +19836,177 @@ function drawThrowable(projectile, time, life) {
         // classic 2D primitives below stay byte-identical with 3D off.
         const hd = fatalityPizzaCanvas();
         const rim = fatalityPizzaRimCanvas();
-        ctx.rotate(angle + wobble);
+        c.rotate(angle + wobble);
         const d = w * 1.04;
-        ctx.drawImage(hd, -d / 2, -d / 2, d, d);
+        c.drawImage(hd, -d / 2, -d / 2, d, d);
         // trailing RIM ghosts: the motion blur lives on the spinning edge —
         // the face detail stays printed once (no doubled pepperoni).
-        ctx.save();
-        ctx.globalAlpha *= 0.3;
-        ctx.rotate(-0.1);
-        ctx.drawImage(rim, -d / 2, -d / 2, d, d);
-        ctx.rotate(-0.12);
-        ctx.globalAlpha *= 0.55;
-        ctx.drawImage(rim, -d / 2, -d / 2, d, d);
-        ctx.restore();
+        c.save();
+        c.globalAlpha *= 0.3;
+        c.rotate(-0.1);
+        c.drawImage(rim, -d / 2, -d / 2, d, d);
+        c.rotate(-0.12);
+        c.globalAlpha *= 0.55;
+        c.drawImage(rim, -d / 2, -d / 2, d, d);
+        c.restore();
         // rim speed smears: short bright arcs whipping off the cutting edge
-        ctx.strokeStyle = "rgba(255,244,225,0.55)";
-        ctx.lineCap = "round";
-        ctx.lineWidth = Math.max(1.5, w * 0.02);
+        c.strokeStyle = "rgba(255,244,225,0.55)";
+        c.lineCap = "round";
+        c.lineWidth = Math.max(1.5, w * 0.02);
         for (let s = 0; s < 3; s += 1) {
           const a0 = s * 2.1 + 0.4;
-          ctx.beginPath();
-          ctx.arc(0, 0, w * 0.52, a0, a0 + 0.5);
-          ctx.stroke();
+          c.beginPath();
+          c.arc(0, 0, w * 0.52, a0, a0 + 0.5);
+          c.stroke();
         }
         break;
       }
-      ctx.rotate(angle + wobble);
-      ctx.fillStyle = "#e8b23a";
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#c9812a";
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.42, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#f2e2b4";
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.36, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#c4402a";
+      c.rotate(angle + wobble);
+      c.fillStyle = "#e8b23a";
+      c.beginPath();
+      c.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#c9812a";
+      c.beginPath();
+      c.arc(0, 0, w * 0.42, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#f2e2b4";
+      c.beginPath();
+      c.arc(0, 0, w * 0.36, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#c4402a";
       for (let i = 0; i < 6; i += 1) {
         const a = (i / 6) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.arc(Math.cos(a) * w * 0.2, Math.sin(a) * w * 0.2, w * 0.06, 0, Math.PI * 2);
-        ctx.fill();
+        c.beginPath();
+        c.arc(Math.cos(a) * w * 0.2, Math.sin(a) * w * 0.2, w * 0.06, 0, Math.PI * 2);
+        c.fill();
       }
-      ctx.strokeStyle = "rgba(120,70,20,.5)";
-      ctx.lineWidth = 2;
+      c.strokeStyle = "rgba(120,70,20,.5)";
+      c.lineWidth = 2;
       for (let i = 0; i < 8; i += 1) {
         const a = (i / 8) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(Math.cos(a) * w * 0.5, Math.sin(a) * w * 0.5);
-        ctx.stroke();
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.lineTo(Math.cos(a) * w * 0.5, Math.sin(a) * w * 0.5);
+        c.stroke();
       }
       break;
     }
     case "mouse": {
       // Cable trailing back toward the thrower.
       const owner = state.fighters[projectile.ownerSide];
-      if (owner) {
+      if (owner && options.cable !== false) {
         const back = (owner.x - projectile.x) * (Math.sign(projectile.vx) || 1);
-        ctx.strokeStyle = "#8a93a5";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
+        c.strokeStyle = "#8a93a5";
+        c.lineWidth = 3;
+        c.beginPath();
+        c.moveTo(0, 0);
         for (let i = 1; i <= 8; i += 1) {
           const t = i / 8;
-          ctx.lineTo(back * t, Math.sin(t * Math.PI * 2 + time * 0.02) * 9 * (1 - t));
+          c.lineTo(back * t, Math.sin(t * Math.PI * 2 + time * 0.02) * 9 * (1 - t));
         }
-        ctx.stroke();
+        c.stroke();
       }
-      ctx.rotate(Math.sin(angle) * 0.2);
-      ctx.fillStyle = "#e3e8f0";
-      ctx.beginPath();
-      ctx.ellipse(0, 0, w * 0.5, h * 0.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#5b6474";
-      ctx.fillRect(-w * 0.06, -h * 0.5, w * 0.12, h * 0.42);
-      ctx.fillStyle = "#7fe9ff";
-      ctx.beginPath();
-      ctx.arc(w * 0.18, 0, h * 0.14, 0, Math.PI * 2);
-      ctx.fill();
+      c.rotate(Math.sin(angle) * 0.2);
+      c.fillStyle = "#e3e8f0";
+      c.beginPath();
+      c.ellipse(0, 0, w * 0.5, h * 0.5, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#5b6474";
+      c.fillRect(-w * 0.06, -h * 0.5, w * 0.12, h * 0.42);
+      c.fillStyle = "#7fe9ff";
+      c.beginPath();
+      c.arc(w * 0.18, 0, h * 0.14, 0, Math.PI * 2);
+      c.fill();
       break;
     }
     case "loogie": {
-      ctx.fillStyle = "#b9e37a";
-      ctx.beginPath();
-      ctx.ellipse(0, 0, w * 0.5, h * 0.42, Math.atan2(projectile.vy, projectile.vx) * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(223,243,184,.75)";
-      ctx.beginPath();
-      ctx.ellipse(-w * 0.12, -h * 0.12, w * 0.18, h * 0.16, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(137,184,79,.7)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.5, h * 0.1);
-      ctx.quadraticCurveTo(-w * 0.9, 0, -w * 1.2, h * 0.2);
-      ctx.stroke();
+      c.fillStyle = "#b9e37a";
+      c.beginPath();
+      c.ellipse(0, 0, w * 0.5, h * 0.42, Math.atan2(projectile.vy, projectile.vx) * 0.35, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "rgba(223,243,184,.75)";
+      c.beginPath();
+      c.ellipse(-w * 0.12, -h * 0.12, w * 0.18, h * 0.16, 0, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "rgba(137,184,79,.7)";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(-w * 0.5, h * 0.1);
+      c.quadraticCurveTo(-w * 0.9, 0, -w * 1.2, h * 0.2);
+      c.stroke();
       break;
     }
     case "wires": {
       const uncoiled = projectile.hazard;
-      ctx.strokeStyle = "#4f5b70";
-      ctx.lineWidth = 4;
+      c.strokeStyle = "#4f5b70";
+      c.lineWidth = 4;
       const coils = uncoiled ? 5 : 7;
       for (let i = 0; i < coils; i += 1) {
         const spread = uncoiled ? w * 0.5 : w * 0.3;
-        ctx.strokeStyle = i % 2 ? "#4f5b70" : "#7b3fa0";
-        ctx.beginPath();
+        c.strokeStyle = i % 2 ? "#4f5b70" : "#7b3fa0";
+        c.beginPath();
         if (uncoiled) {
-          ctx.moveTo(-spread + (i / coils) * spread * 2, h * 0.2);
-          ctx.quadraticCurveTo(
+          c.moveTo(-spread + (i / coils) * spread * 2, h * 0.2);
+          c.quadraticCurveTo(
             -spread + ((i + 0.5) / coils) * spread * 2,
             h * 0.2 - 16 - Math.sin(time * 0.01 + i) * 5,
             -spread + ((i + 1) / coils) * spread * 2,
             h * 0.2,
           );
         } else {
-          ctx.arc(0, 0, w * 0.2 + i * 3, angle + i, angle + i + 4.2);
+          c.arc(0, 0, w * 0.2 + i * 3, angle + i, angle + i + 4.2);
         }
-        ctx.stroke();
+        c.stroke();
       }
       break;
     }
     case "xacto": {
-      ctx.save();
-      ctx.globalCompositeOperation = "screen";
-      ctx.globalAlpha = 0.35 + Math.abs(Math.sin(time * 0.022)) * 0.55;
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(-w * 0.85, 0); ctx.lineTo(-w * 0.2, 0); ctx.stroke();
-      ctx.restore();
-      ctx.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx)));
-      ctx.fillStyle = "#2b3038";
-      ctx.fillRect(-w * 0.5, -h * 0.5, w * 0.45, h);
-      ctx.fillStyle = "#dfe6f0";
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.05, -h * 0.5);
-      ctx.lineTo(w * 0.5, 0);
-      ctx.lineTo(-w * 0.05, h * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,.7)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.05, 0);
-      ctx.lineTo(w * 0.5, 0);
-      ctx.stroke();
+      c.save();
+      c.globalCompositeOperation = "screen";
+      c.globalAlpha = 0.35 + Math.abs(Math.sin(time * 0.022)) * 0.55;
+      c.strokeStyle = "#ffffff";
+      c.lineWidth = 2;
+      c.beginPath(); c.moveTo(-w * 0.85, 0); c.lineTo(-w * 0.2, 0); c.stroke();
+      c.restore();
+      c.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx)));
+      c.fillStyle = "#2b3038";
+      c.fillRect(-w * 0.5, -h * 0.5, w * 0.45, h);
+      c.fillStyle = "#dfe6f0";
+      c.beginPath();
+      c.moveTo(-w * 0.05, -h * 0.5);
+      c.lineTo(w * 0.5, 0);
+      c.lineTo(-w * 0.05, h * 0.5);
+      c.closePath();
+      c.fill();
+      c.strokeStyle = "rgba(255,255,255,.7)";
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(-w * 0.05, 0);
+      c.lineTo(w * 0.5, 0);
+      c.stroke();
       break;
     }
     case "golfball": {
-      ctx.globalAlpha *= 0.52;
-      ctx.fillStyle = "#ffffff";
+      c.globalAlpha *= 0.52;
+      c.fillStyle = "#ffffff";
       for (let trail = 1; trail <= 3; trail += 1) {
-        ctx.beginPath();
-        ctx.arc(-w * (0.55 + trail * 0.32), 0, Math.max(2, w * (0.15 - trail * 0.025)), 0, Math.PI * 2);
-        ctx.fill();
+        c.beginPath();
+        c.arc(-w * (0.55 + trail * 0.32), 0, Math.max(2, w * (0.15 - trail * 0.025)), 0, Math.PI * 2);
+        c.fill();
       }
-      ctx.globalAlpha = Math.min(1, life * 2.2);
-      ctx.rotate(angle);
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(150,165,185,.55)";
+      c.globalAlpha = Math.min(1, life * 2.2);
+      c.rotate(angle);
+      c.fillStyle = "#ffffff";
+      c.beginPath();
+      c.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "rgba(150,165,185,.55)";
       for (let i = 0; i < 7; i += 1) {
         const a = (i / 7) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.arc(Math.cos(a) * w * 0.24, Math.sin(a) * w * 0.24, w * 0.06, 0, Math.PI * 2);
-        ctx.fill();
+        c.beginPath();
+        c.arc(Math.cos(a) * w * 0.24, Math.sin(a) * w * 0.24, w * 0.06, 0, Math.PI * 2);
+        c.fill();
       }
       break;
     }
@@ -19994,178 +20016,178 @@ function drawThrowable(projectile, time, life) {
         const phase = time * 0.01 + i * 1.7;
         const bx = Math.cos(phase) * w * (projectile.hazard ? 0.45 : 0.28);
         const by = Math.sin(phase * 1.4) * h * 0.3;
-        ctx.fillStyle = i % 3 ? "#7a3a2c" : "#c4552f";
-        ctx.beginPath();
-        ctx.ellipse(bx, by, 6, 4.4, phase, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(40,20,14,.8)";
-        ctx.lineWidth = 1.2;
+        c.fillStyle = i % 3 ? "#7a3a2c" : "#c4552f";
+        c.beginPath();
+        c.ellipse(bx, by, 6, 4.4, phase, 0, Math.PI * 2);
+        c.fill();
+        c.strokeStyle = "rgba(40,20,14,.8)";
+        c.lineWidth = 1.2;
         for (let leg = -1; leg <= 1; leg += 2) {
-          ctx.beginPath();
-          ctx.moveTo(bx, by);
-          ctx.lineTo(bx + leg * 6, by + Math.sin(phase * 3) * 4);
-          ctx.stroke();
+          c.beginPath();
+          c.moveTo(bx, by);
+          c.lineTo(bx + leg * 6, by + Math.sin(phase * 3) * 4);
+          c.stroke();
         }
       }
       break;
     }
     case "vinyl": {
-      ctx.save();
-      ctx.globalAlpha = 0.22 + Math.abs(Math.sin(time * 0.018)) * 0.2;
-      ctx.strokeStyle = "#ff4fb9";
-      ctx.lineWidth = 2;
+      c.save();
+      c.globalAlpha = 0.22 + Math.abs(Math.sin(time * 0.018)) * 0.2;
+      c.strokeStyle = "#ff4fb9";
+      c.lineWidth = 2;
       for (let ring = 1; ring <= 2; ring += 1) {
-        ctx.beginPath();
-        ctx.ellipse(0, 0, w * (0.5 + ring * 0.22), h * (0.32 + ring * 0.12), 0, 0, Math.PI * 2);
-        ctx.stroke();
+        c.beginPath();
+        c.ellipse(0, 0, w * (0.5 + ring * 0.22), h * (0.32 + ring * 0.12), 0, 0, Math.PI * 2);
+        c.stroke();
       }
-      ctx.restore();
-      ctx.rotate(angle);
-      ctx.fillStyle = "#16161a";
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(216,216,210,.28)";
-      ctx.lineWidth = 1.4;
+      c.restore();
+      c.rotate(angle);
+      c.fillStyle = "#16161a";
+      c.beginPath();
+      c.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "rgba(216,216,210,.28)";
+      c.lineWidth = 1.4;
       for (let r = 3; r < 5; r += 1) {
-        ctx.beginPath();
-        ctx.arc(0, 0, w * 0.5 * (r / 6), 0, Math.PI * 2);
-        ctx.stroke();
+        c.beginPath();
+        c.arc(0, 0, w * 0.5 * (r / 6), 0, Math.PI * 2);
+        c.stroke();
       }
-      ctx.fillStyle = "#ff4fb9";
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.17, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#16161a";
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.04, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = "#ff4fb9";
+      c.beginPath();
+      c.arc(0, 0, w * 0.17, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#16161a";
+      c.beginPath();
+      c.arc(0, 0, w * 0.04, 0, Math.PI * 2);
+      c.fill();
       break;
     }
     // Wave 16 — the Commissioner's steel cane: a hard end-over-end steel shaft
     // with a gold crook and ferrule, so the flat authority throw reads at a
     // glance against every other object in the set.
     case "cane": {
-      ctx.rotate(angle);
+      c.rotate(angle);
       const shaft = w * 0.94;
       // steel shaft with a cold top highlight
-      ctx.fillStyle = "#3b4150";
-      ctx.fillRect(-shaft * 0.5, -h * 0.18, shaft, h * 0.36);
-      ctx.fillStyle = "rgba(214,222,236,.5)";
-      ctx.fillRect(-shaft * 0.5, -h * 0.18, shaft, h * 0.12);
+      c.fillStyle = "#3b4150";
+      c.fillRect(-shaft * 0.5, -h * 0.18, shaft, h * 0.36);
+      c.fillStyle = "rgba(214,222,236,.5)";
+      c.fillRect(-shaft * 0.5, -h * 0.18, shaft, h * 0.12);
       // gold crook handle
-      ctx.strokeStyle = "#d6b56b";
-      ctx.lineWidth = h * 0.3;
-      ctx.beginPath();
-      ctx.arc(-shaft * 0.5, -h * 0.5, h * 0.42, Math.PI * 0.15, Math.PI * 1.2);
-      ctx.stroke();
+      c.strokeStyle = "#d6b56b";
+      c.lineWidth = h * 0.3;
+      c.beginPath();
+      c.arc(-shaft * 0.5, -h * 0.5, h * 0.42, Math.PI * 0.15, Math.PI * 1.2);
+      c.stroke();
       // gold ferrule tip
-      ctx.fillStyle = "#d6b56b";
-      ctx.fillRect(shaft * 0.5 - w * 0.08, -h * 0.22, w * 0.08, h * 0.44);
+      c.fillStyle = "#d6b56b";
+      c.fillRect(shaft * 0.5 - w * 0.08, -h * 0.22, w * 0.08, h * 0.44);
       break;
     }
     case "needle": {
-      ctx.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx) || 1));
-      ctx.fillStyle = "#cfd6e2";
-      ctx.fillRect(-w * 0.5, -h * 0.35, w * 0.7, h * 0.7);
-      ctx.fillStyle = "#e9edf5";
-      ctx.beginPath();
-      ctx.moveTo(w * 0.2, -h * 0.2);
-      ctx.lineTo(w * 0.5, 0);
-      ctx.lineTo(w * 0.2, h * 0.2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#ff6b5a";
-      ctx.fillRect(-w * 0.5, -h * 0.5, w * 0.16, h);
+      c.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx) || 1));
+      c.fillStyle = "#cfd6e2";
+      c.fillRect(-w * 0.5, -h * 0.35, w * 0.7, h * 0.7);
+      c.fillStyle = "#e9edf5";
+      c.beginPath();
+      c.moveTo(w * 0.2, -h * 0.2);
+      c.lineTo(w * 0.5, 0);
+      c.lineTo(w * 0.2, h * 0.2);
+      c.closePath();
+      c.fill();
+      c.fillStyle = "#ff6b5a";
+      c.fillRect(-w * 0.5, -h * 0.5, w * 0.16, h);
       break;
     }
     case "bottle": {
-      ctx.rotate(angle);
-      ctx.fillStyle = "rgba(96,148,72,.92)";
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.32, h * 0.5);
-      ctx.lineTo(w * 0.32, h * 0.5);
-      ctx.lineTo(w * 0.32, -h * 0.05);
-      ctx.lineTo(w * 0.14, -h * 0.3);
-      ctx.lineTo(w * 0.14, -h * 0.5);
-      ctx.lineTo(-w * 0.14, -h * 0.5);
-      ctx.lineTo(-w * 0.14, -h * 0.3);
-      ctx.lineTo(-w * 0.32, -h * 0.05);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "rgba(240,248,220,.55)";
-      ctx.fillRect(-w * 0.2, -h * 0.02, w * 0.1, h * 0.42);
-      ctx.fillStyle = "#d8b24a";
-      ctx.fillRect(-w * 0.3, h * 0.06, w * 0.6, h * 0.2);
+      c.rotate(angle);
+      c.fillStyle = "rgba(96,148,72,.92)";
+      c.beginPath();
+      c.moveTo(-w * 0.32, h * 0.5);
+      c.lineTo(w * 0.32, h * 0.5);
+      c.lineTo(w * 0.32, -h * 0.05);
+      c.lineTo(w * 0.14, -h * 0.3);
+      c.lineTo(w * 0.14, -h * 0.5);
+      c.lineTo(-w * 0.14, -h * 0.5);
+      c.lineTo(-w * 0.14, -h * 0.3);
+      c.lineTo(-w * 0.32, -h * 0.05);
+      c.closePath();
+      c.fill();
+      c.fillStyle = "rgba(240,248,220,.55)";
+      c.fillRect(-w * 0.2, -h * 0.02, w * 0.1, h * 0.42);
+      c.fillStyle = "#d8b24a";
+      c.fillRect(-w * 0.3, h * 0.06, w * 0.6, h * 0.2);
       break;
     }
     case "pigeon": {
-      ctx.rotate(angle * 0.6);
-      ctx.fillStyle = "#6f7684";
-      ctx.beginPath();
-      ctx.ellipse(0, 0, w * 0.42, h * 0.32, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#8c93a3";
-      ctx.beginPath();
-      ctx.ellipse(-w * 0.28, -h * 0.1, w * 0.16, h * 0.2, 0.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#585f6c";
-      ctx.beginPath();
-      ctx.ellipse(w * 0.3, -h * 0.16, w * 0.14, h * 0.16, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#ff9a4a";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.1, h * 0.28);
-      ctx.lineTo(-w * 0.24, h * 0.5);
-      ctx.stroke();
+      c.rotate(angle * 0.6);
+      c.fillStyle = "#6f7684";
+      c.beginPath();
+      c.ellipse(0, 0, w * 0.42, h * 0.32, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#8c93a3";
+      c.beginPath();
+      c.ellipse(-w * 0.28, -h * 0.1, w * 0.16, h * 0.2, 0.4, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#585f6c";
+      c.beginPath();
+      c.ellipse(w * 0.3, -h * 0.16, w * 0.14, h * 0.16, 0, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "#ff9a4a";
+      c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(-w * 0.1, h * 0.28);
+      c.lineTo(-w * 0.24, h * 0.5);
+      c.stroke();
       break;
     }
     case "tongs": {
-      ctx.rotate(angle);
-      ctx.strokeStyle = "#d5dce8";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.5, -h * 0.4);
-      ctx.lineTo(w * 0.5, 0);
-      ctx.moveTo(-w * 0.5, h * 0.4);
-      ctx.lineTo(w * 0.5, 0);
-      ctx.stroke();
-      ctx.strokeStyle = "#9fb0c6";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(-w * 0.5, 0, h * 0.4, -1.4, 1.4);
-      ctx.stroke();
+      c.rotate(angle);
+      c.strokeStyle = "#d5dce8";
+      c.lineWidth = 4;
+      c.beginPath();
+      c.moveTo(-w * 0.5, -h * 0.4);
+      c.lineTo(w * 0.5, 0);
+      c.moveTo(-w * 0.5, h * 0.4);
+      c.lineTo(w * 0.5, 0);
+      c.stroke();
+      c.strokeStyle = "#9fb0c6";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(-w * 0.5, 0, h * 0.4, -1.4, 1.4);
+      c.stroke();
       break;
     }
     case "cup": {
-      ctx.rotate(angle * 0.5);
-      ctx.fillStyle = "#ff5aa8";
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.34, -h * 0.5);
-      ctx.lineTo(w * 0.34, -h * 0.5);
-      ctx.lineTo(w * 0.22, h * 0.5);
-      ctx.lineTo(-w * 0.22, h * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.55)";
-      ctx.fillRect(-w * 0.3, -h * 0.44, w * 0.6, h * 0.12);
-      ctx.strokeStyle = "#7fe9ff";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(w * 0.1, -h * 0.5);
-      ctx.lineTo(w * 0.34, -h * 0.9);
-      ctx.stroke();
+      c.rotate(angle * 0.5);
+      c.fillStyle = "#ff5aa8";
+      c.beginPath();
+      c.moveTo(-w * 0.34, -h * 0.5);
+      c.lineTo(w * 0.34, -h * 0.5);
+      c.lineTo(w * 0.22, h * 0.5);
+      c.lineTo(-w * 0.22, h * 0.5);
+      c.closePath();
+      c.fill();
+      c.fillStyle = "rgba(255,255,255,.55)";
+      c.fillRect(-w * 0.3, -h * 0.44, w * 0.6, h * 0.12);
+      c.strokeStyle = "#7fe9ff";
+      c.lineWidth = 4;
+      c.beginPath();
+      c.moveTo(w * 0.1, -h * 0.5);
+      c.lineTo(w * 0.34, -h * 0.9);
+      c.stroke();
       break;
     }
     default: {
-      ctx.fillStyle = projectile.color;
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = projectile.color;
+      c.beginPath();
+      c.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      c.fill();
     }
   }
-  ctx.globalAlpha = 1;
+  c.globalAlpha = 1;
 }
 
 // The grounded weapon and its arrival telegraph. Both fighters can see exactly
@@ -20365,78 +20387,85 @@ function drawProjectiles(time) {
       ctx.restore();
       continue;
     }
-    if (projectile.style === "feedback") {
-      const armed = projectile.armFrames <= 0;
-      const charge = projectile.maxArmFrames
-        ? 1 - clamp(projectile.armFrames / projectile.maxArmFrames, 0, 1)
-        : 1;
-      ctx.globalCompositeOperation = "screen";
-      ctx.globalAlpha = Math.min(0.95, life * 1.6) * (0.38 + charge * 0.62);
-      ctx.shadowColor = projectile.color;
-      ctx.shadowBlur = armed ? 30 : 17;
-      ctx.strokeStyle = projectile.color;
-      ctx.lineWidth = armed ? 6 : 3;
-      if (!armed) ctx.setLineDash([9, 7]);
-      for (let ring = 0; ring < 3; ring += 1) {
-        const phase = (time * 0.004 + ring * 0.29) % 1;
-        const radiusX = projectile.width * (0.2 + phase * 0.34) * pulse;
-        const radiusY = projectile.height * (0.23 + phase * 0.28) * pulse;
-        ctx.globalAlpha *= 0.82;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, radiusX, radiusY, Math.sin(time * 0.002 + ring) * 0.13, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-      ctx.globalAlpha = armed ? 0.9 : 0.48;
-      ctx.fillStyle = armed ? "#efffe8" : projectile.color;
-      for (let slice = -2; slice <= 2; slice += 1) {
-        const jitter = Math.sin(time * 0.03 + slice * 2.1) * 9;
-        ctx.fillRect(-projectile.width * 0.38 + jitter, slice * projectile.height * 0.16 - 3, projectile.width * (0.7 - Math.abs(slice) * 0.08), armed ? 5 : 3);
-      }
-      if (state.debug) {
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 0.85;
-        ctx.strokeStyle = "#ffef5a";
-        ctx.strokeRect(-projectile.width * 0.5, -projectile.height * 0.5, projectile.width, projectile.height);
-      }
-      ctx.restore();
-      continue;
-    }
-    ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = Math.min(1, life * 2);
-    const trail = ctx.createLinearGradient(-105, 0, 20, 0);
-    trail.addColorStop(0, `${projectile.color}00`);
-    trail.addColorStop(0.55, `${projectile.color}78`);
-    trail.addColorStop(1, projectile.color);
-    ctx.fillStyle = trail;
-    ctx.beginPath();
-    ctx.moveTo(-112, 0);
-    ctx.quadraticCurveTo(-32, -projectile.height * 0.5, 15, 0);
-    ctx.quadraticCurveTo(-32, projectile.height * 0.5, -112, 0);
-    ctx.fill();
-    ctx.shadowColor = projectile.color;
-    ctx.shadowBlur = 24;
-    ctx.fillStyle = "#fff5b8";
-    ctx.beginPath();
-    ctx.ellipse(0, 0, projectile.width * 0.34 * pulse, projectile.height * 0.4 * pulse, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = projectile.color;
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(0, 0, projectile.height * 0.48 * pulse, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(255,255,255,.82)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(-4, -4, projectile.height * 0.18, -2.7, -0.3);
-    ctx.stroke();
-    if (state.debug) {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 0.85;
-      ctx.strokeStyle = "#ffef5a";
-      ctx.strokeRect(-projectile.width * 0.5, -projectile.height * 0.5, projectile.width, projectile.height);
-    }
+    drawProjectileBodyWith(ctx, projectile, time, life, pulse);
     ctx.restore();
+  }
+}
+
+// The non-throwable projectile body (feedback rings / the default orb + trail)
+// in the projectile's own frame — origin at its centre, x already mirrored to
+// its direction — on ANY 2D context, for the same reason drawThrowableWith
+// exists: CINEMA 3D paints it into an impostor over the host bridge.
+function drawProjectileBodyWith(c, projectile, time, life, pulse) {
+  if (projectile.style === "feedback") {
+    const armed = projectile.armFrames <= 0;
+    const charge = projectile.maxArmFrames
+      ? 1 - clamp(projectile.armFrames / projectile.maxArmFrames, 0, 1)
+      : 1;
+    c.globalCompositeOperation = "screen";
+    c.globalAlpha = Math.min(0.95, life * 1.6) * (0.38 + charge * 0.62);
+    c.shadowColor = projectile.color;
+    c.shadowBlur = armed ? 30 : 17;
+    c.strokeStyle = projectile.color;
+    c.lineWidth = armed ? 6 : 3;
+    if (!armed) c.setLineDash([9, 7]);
+    for (let ring = 0; ring < 3; ring += 1) {
+      const phase = (time * 0.004 + ring * 0.29) % 1;
+      const radiusX = projectile.width * (0.2 + phase * 0.34) * pulse;
+      const radiusY = projectile.height * (0.23 + phase * 0.28) * pulse;
+      c.globalAlpha *= 0.82;
+      c.beginPath();
+      c.ellipse(0, 0, radiusX, radiusY, Math.sin(time * 0.002 + ring) * 0.13, 0, Math.PI * 2);
+      c.stroke();
+    }
+    c.setLineDash([]);
+    c.globalAlpha = armed ? 0.9 : 0.48;
+    c.fillStyle = armed ? "#efffe8" : projectile.color;
+    for (let slice = -2; slice <= 2; slice += 1) {
+      const jitter = Math.sin(time * 0.03 + slice * 2.1) * 9;
+      c.fillRect(-projectile.width * 0.38 + jitter, slice * projectile.height * 0.16 - 3, projectile.width * (0.7 - Math.abs(slice) * 0.08), armed ? 5 : 3);
+    }
+    if (state.debug) {
+      c.globalCompositeOperation = "source-over";
+      c.globalAlpha = 0.85;
+      c.strokeStyle = "#ffef5a";
+      c.strokeRect(-projectile.width * 0.5, -projectile.height * 0.5, projectile.width, projectile.height);
+    }
+    return;
+  }
+  c.globalCompositeOperation = "screen";
+  c.globalAlpha = Math.min(1, life * 2);
+  const trail = c.createLinearGradient(-105, 0, 20, 0);
+  trail.addColorStop(0, `${projectile.color}00`);
+  trail.addColorStop(0.55, `${projectile.color}78`);
+  trail.addColorStop(1, projectile.color);
+  c.fillStyle = trail;
+  c.beginPath();
+  c.moveTo(-112, 0);
+  c.quadraticCurveTo(-32, -projectile.height * 0.5, 15, 0);
+  c.quadraticCurveTo(-32, projectile.height * 0.5, -112, 0);
+  c.fill();
+  c.shadowColor = projectile.color;
+  c.shadowBlur = 24;
+  c.fillStyle = "#fff5b8";
+  c.beginPath();
+  c.ellipse(0, 0, projectile.width * 0.34 * pulse, projectile.height * 0.4 * pulse, 0, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = projectile.color;
+  c.lineWidth = 5;
+  c.beginPath();
+  c.arc(0, 0, projectile.height * 0.48 * pulse, 0, Math.PI * 2);
+  c.stroke();
+  c.strokeStyle = "rgba(255,255,255,.82)";
+  c.lineWidth = 2;
+  c.beginPath();
+  c.arc(-4, -4, projectile.height * 0.18, -2.7, -0.3);
+  c.stroke();
+  if (state.debug) {
+    c.globalCompositeOperation = "source-over";
+    c.globalAlpha = 0.85;
+    c.strokeStyle = "#ffef5a";
+    c.strokeRect(-projectile.width * 0.5, -projectile.height * 0.5, projectile.width, projectile.height);
   }
 }
 
@@ -20637,6 +20666,28 @@ function drawContactShadow(fighter, jump, renderSize, lunge) {
   if (!reflectionPassActive) presentationDebug.contactShadows += 1;
 }
 
+// Ali's rhythm-stack rings, origin at the fighter's FEET (pre-mirror, so the
+// arc always opens screen-right the way it always has). Split out of
+// drawFighter so the CINEMA 3D overlay pass can draw the same rings at the
+// projected feet: FLOW 1/2/3 is his mechanic, not decoration.
+function drawRhythmRings(fighter, time) {
+  if (fighter.def.id !== "ali" || fighter.rhythmStacks <= 0) return;
+  ctx.save();
+  ctx.translate(0, -112);
+  ctx.globalCompositeOperation = "screen";
+  ctx.strokeStyle = fighter.rhythmStacks === 3 ? "#ff4fb9" : fighter.def.accent;
+  ctx.shadowColor = fighter.def.accent;
+  ctx.shadowBlur = 17 + fighter.rhythmStacks * 4;
+  for (let ring = 0; ring < fighter.rhythmStacks; ring += 1) {
+    ctx.globalAlpha = 0.24 + ring * 0.07;
+    ctx.lineWidth = 3 + ring;
+    ctx.beginPath();
+    ctx.arc(0, 0, 72 + ring * 22 + Math.sin(time * 0.01 + ring) * 6, -1.12, 1.12);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawFighter(fighter, time) {
   const jump = FLOOR - fighter.y;
   const attack = fighter.attacking;
@@ -20727,22 +20778,7 @@ function drawFighter(fighter, time) {
   ctx.translate(fighter.x, fighter.y);
   drawContactShadow(fighter, jump, renderSize, lunge);
 
-  if (fighter.def.id === "ali" && fighter.rhythmStacks > 0) {
-    ctx.save();
-    ctx.translate(0, -112);
-    ctx.globalCompositeOperation = "screen";
-    ctx.strokeStyle = fighter.rhythmStacks === 3 ? "#ff4fb9" : fighter.def.accent;
-    ctx.shadowColor = fighter.def.accent;
-    ctx.shadowBlur = 17 + fighter.rhythmStacks * 4;
-    for (let ring = 0; ring < fighter.rhythmStacks; ring += 1) {
-      ctx.globalAlpha = 0.24 + ring * 0.07;
-      ctx.lineWidth = 3 + ring;
-      ctx.beginPath();
-      ctx.arc(0, 0, 72 + ring * 22 + Math.sin(time * 0.01 + ring) * 6, -1.12, 1.12);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
+  drawRhythmRings(fighter, time);
 
   if (fighter.cinematicRotation) ctx.rotate(fighter.cinematicRotation);
   if (finisherHoldWinner) ctx.rotate(Math.sin(time * 0.0012 + 0.8) * 0.011);
@@ -23365,6 +23401,23 @@ function drawFinisherRealityComposite() {
   ctx.restore();
 }
 
+// One combat-text label ("COUNTER", "WET PAINT!", the weapon cue), origin at
+// the effect's own point with the caller's shadow already set. The 2D world
+// pass calls it from drawParticles; the CINEMA 3D overlay pass calls it at
+// the projected point, so the same label reads in both renderers.
+function drawCombatTextBody(effect, alpha) {
+  ctx.globalAlpha = Math.min(1, alpha * 1.7);
+  ctx.translate(0, -(1 - alpha) * 42);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "900 24px Arial Narrow, Arial, sans-serif";
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = "rgba(0,0,0,.88)";
+  ctx.strokeText(effect.label, 0, 0);
+  ctx.fillStyle = effect.color;
+  ctx.fillText(effect.label, 0, 0);
+}
+
 function drawParticles() {
   for (const particle of state.particles) {
     const alpha = clamp(particle.life / particle.max, 0, 1);
@@ -23487,16 +23540,7 @@ function drawParticles() {
     ctx.shadowBlur = 25;
     ctx.shadowColor = effect.color;
     if (effect.kind === "combatText") {
-      ctx.globalAlpha = Math.min(1, alpha * 1.7);
-      ctx.translate(0, -(1 - alpha) * 42);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = "900 24px Arial Narrow, Arial, sans-serif";
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = "rgba(0,0,0,.88)";
-      ctx.strokeText(effect.label, 0, 0);
-      ctx.fillStyle = effect.color;
-      ctx.fillText(effect.label, 0, 0);
+      drawCombatTextBody(effect, alpha);
     } else if (effect.kind === "finisherImpact") {
       drawFinisherImpact(effect, alpha);
     } else if (effect.kind === "fatalityProjectile") {
@@ -25432,6 +25476,11 @@ function draw(time) {
   // ring can project its world-space origin after the restore.
   if (distortionRing) worldScreenTransform = ctx.getTransform();
   ctx.restore();
+  // CINEMA 3D gameplay reads: the pure-2D screen art the world pass above
+  // skipped (dizzy / guard-crush markers with their drain bars, Ali's rhythm
+  // rings, combat text, the stage-weapon name tag) drawn at the projected sim
+  // points on the overlay canvas — exactly the CRT-punch pattern.
+  if (cinema3dWorld && state.screen === "fight") drawCinema3dOverlayReads(time);
   // CINEMA 3D handles grade/bloom/grain in its own post stack; the 2D
   // frame-capture composites would smear a transparent canvas, so they are
   // skipped while the 3D world is live. UI-readability overlays (letterbox,
@@ -31102,6 +31151,96 @@ function updateCinema3dHudFade(active, dtMs) {
   hud.style.opacity = opacity >= 0.999 ? "" : opacity.toFixed(3);
 }
 
+// CINEMA 3D gameplay reads (overlay pass). Runs after the world ctx.restore()
+// while the 3D world is live, on the transparent 2D canvas that sits ON TOP
+// of the 3D one. Every marker here is pure 2D screen art the world pass skips
+// in 3D (it never ran: drawDizzyStars / drawGuardCrushMarker / the combatText
+// branch of drawParticles all live inside `if (!cinema3dWorld)`), so a 3D
+// player was getting dizzied, crushed and countered without a single tell.
+// Each marker is drawn by the SAME function the 2D path uses, re-anchored:
+// the sim point it draws about is projected through the live framing camera
+// (renderer.projectSim, the CRT-punch pattern) and the drawing is scaled by
+// the projected size of 100 sim px at that point, so a punch-in or the
+// corner-vs-corner pull-back scales the read with the fighter it belongs to.
+// Render-only reads of snapshotted state; nothing here touches the sim.
+function cinema3dOverlayAnchor(simX, simY) {
+  const project = cinema3dBridge.renderer?.projectSim;
+  if (!project) return null;
+  const at = project(simX, simY);
+  const above = project(simX, simY - 100);
+  if (!at || !above) return null;
+  const scale = clamp((at.y - above.y) / 100, 0.35, 2.5);
+  return { x: at.x, y: at.y, scale };
+}
+
+function drawCinema3dOverlayReads(time) {
+  if (!cinema3dBridge.renderer?.projectSim) return;
+  let drawn = 0;
+  // A drawing authored about (originX, originY) in sim space, replayed about
+  // the projected point at the projected scale.
+  const replay = (originX, originY, paint) => {
+    const anchor = cinema3dOverlayAnchor(originX, originY);
+    if (!anchor) return;
+    ctx.save();
+    ctx.translate(anchor.x, anchor.y);
+    ctx.scale(anchor.scale, anchor.scale);
+    ctx.translate(-originX, -originY);
+    paint();
+    ctx.restore();
+    drawn += 1;
+  };
+  for (const fighter of state.fighters) {
+    // Rhythm rings are authored about the feet (drawFighter translates to
+    // fighter.x/y before drawing them).
+    if (fighter.def.id === "ali" && fighter.rhythmStacks > 0) {
+      replay(fighter.x, fighter.y, () => {
+        ctx.translate(fighter.x, fighter.y);
+        drawRhythmRings(fighter, time);
+      });
+    }
+    // The markers anchor themselves above the DRAWN sprite height; replaying
+    // about that same point keeps the drain bar over the head in 3D too.
+    const markerY = fighter.y - fighterRenderSize(fighter.def.id) * 0.956 - 26;
+    if (fighter.dizzyFrames > 0) {
+      replay(fighter.x, markerY, () => drawDizzyStars(fighter, time));
+    } else if (fighter.guardCrushFrames > 0) {
+      replay(fighter.x, markerY, () => drawGuardCrushMarker(fighter, time));
+    }
+  }
+  const weapon = state.stageWeapon;
+  const profile = weapon && (weapon.phase === "telegraph" || weapon.phase === "ground")
+    ? stageWeaponProfile() : null;
+  if (profile) {
+    // Name tag: the object is identifiable without knowing the stage (the
+    // world-objects layer draws the object itself; text stays on this pass).
+    const telegraphing = weapon.phase === "telegraph";
+    const progress = telegraphing ? clamp(weapon.frames / Math.max(1, profile.telegraphFrames), 0, 1) : 1;
+    const remaining = telegraphing ? 1 : 1 - clamp(weapon.frames / Math.max(1, profile.groundFrames), 0, 1);
+    const tagY = FLOOR - profile.height * FIGHTER_SCALE - 26;
+    replay(weapon.x, tagY, () => {
+      ctx.globalAlpha = telegraphing ? progress : 0.55 + remaining * 0.45;
+      ctx.font = "900 15px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ffd54a";
+      ctx.strokeStyle = "rgba(0,0,0,.75)";
+      ctx.lineWidth = 4;
+      ctx.strokeText(profile.name, weapon.x, tagY);
+      ctx.fillText(profile.name, weapon.x, tagY);
+    });
+  }
+  for (const effect of state.effects) {
+    if (effect.kind !== "combatText") continue;
+    const alpha = clamp(effect.life / (effect.max || 0.9), 0, 1);
+    replay(effect.x, effect.y, () => {
+      ctx.translate(effect.x, effect.y);
+      ctx.shadowBlur = 25;
+      ctx.shadowColor = effect.color;
+      drawCombatTextBody(effect, alpha);
+    });
+  }
+  presentationDebug.cinema3dOverlayReads += drawn;
+}
+
 function ensureCinema3d() {
   if (!state.cinema3d || !cinema3dAllowed()) {
     cinema3dBridge.renderer?.setVisible(false);
@@ -31153,6 +31292,27 @@ function ensureCinema3d() {
       cellFloorOffset,
       cellVerticalOffset,
       gritSuperCost: GRIT_RULES.superCost,
+      // CINEMA 3D gameplay reads (world-objects layer): the SAME 2D painters
+      // that draw projectiles, thrown objects, the stage weapon and Post's
+      // wire traps, handed a foreign 2D context so the 3D layer can print
+      // each live object into an impostor canvas — one drawing per object in
+      // both renderers, never a second art set. Presentation-only reads.
+      paintProjectile: (context, projectile, timeMs, options) => {
+        const life = projectile.maxLifeFrames
+          ? clamp(projectile.lifeFrames / projectile.maxLifeFrames, 0, 1) : 1;
+        // `throwable` is the sim's own split (drawProjectiles keys on it);
+        // the 3D layer marks its synthetic stage-weapon descriptors the same
+        // way the 2D drawStageWeapon call would.
+        if (projectile.throwable) {
+          drawThrowableWith(context, projectile, timeMs, life, options);
+          return;
+        }
+        const pulse = 1 + Math.sin(timeMs * 0.018 + projectile.x * 0.03) * 0.11;
+        drawProjectileBodyWith(context, projectile, timeMs, life, pulse);
+      },
+      paintTrap: (context, trap, timeMs) => drawPaintTrapWith(context, trap, timeMs),
+      stageWeaponProfile,
+      fighterScale: FIGHTER_SCALE,
       gameCanvas: canvas,
       isRollbackResimulating: () => rollbackResimulating,
       // 4.3 MESH FIGHTERS switch (options panel / ?fighters=3d), read per frame.

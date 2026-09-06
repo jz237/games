@@ -58,6 +58,55 @@ fall) and a fatality probe (dilation fires, spray sustains past 10 concurrent
 droplets, stains land, cap holds). Spark/ring lifetimes are ≤0.28s — sample
 per-frame peaks, never a single late snapshot.
 
+## CINEMA 3D gameplay reads (5.1)
+
+Until 5.0 the only world pass that drew projectiles, thrown objects, the stage
+weapon, Post's wire traps, the dizzy / guard-crush markers and combat text sat
+inside `if (!cinema3dWorld)` in `draw()`, so with CINEMA 3D on a player was
+hit by pizzas he could not see and never saw the weapon he was meant to
+contest. The reads now exist in both renderers, from ONE set of drawings:
+
+- **Painters take a context.** `drawThrowableWith(c, …)`,
+  `drawProjectileBodyWith(c, …)` and `drawPaintTrapWith(c, …)` are the old
+  bodies with the canvas passed in; `drawThrowable` / `drawProjectiles` /
+  `drawPaintTraps` call them with the game `ctx` (verified byte-identical: 84
+  recorded call logs, old vs new, every style × 3D-dressing × debug, 0
+  mismatches). The host bridge exposes them as `paintProjectile` / `paintTrap`
+  plus `stageWeaponProfile` and `fighterScale`.
+- **`renderer/three/world-objects.mjs`** paints each live object about its
+  centre into a per-object canvas every frame (1 canvas px = 1 sim px at 2×)
+  and shows it as a quad the same size in world units, so the spinning pizza
+  wheel, the cane, the needle glint are the same drawings. `paintExtent()`
+  budgets the canvas per style from measured painter reach (cup straw 73 px
+  on 64×78, cane crook 49 on 90×16, orb trail 112 + 24 blur). World-space
+  parts are rebuilt in 3D: throwable ground shadow as a floor disc, the
+  travelling light pool as an additive floor disc + a real `PointLight` (the
+  object lights the boards and the near fighter), the mouse cable and the hex
+  charm's ballistic mist tail as line strips, the stage-weapon telegraph as
+  the scorch decal + drop streak. Objects sit at z=+0.1 (a read never hides
+  behind a body); the carried weapon at z=−0.03 like the 2D draw order (the
+  hand covers it). `__finalBlowThree.stats().objects` / `.objectKinds` count
+  what reached the frame.
+- **Overlay pass** `drawCinema3dOverlayReads(time)` runs after the world
+  `ctx.restore()` while the 3D world is live: dizzy stars / CRUSHED shards
+  with their drain bars, Ali's rhythm rings, combat text and the weapon name
+  tag are drawn by the SAME 2D functions, re-anchored through
+  `renderer.projectSim` and scaled by the projected size of 100 sim px (the
+  CRT-punch pattern), so a punch-in scales the read with its fighter.
+  `presentationDebug.cinema3dOverlayReads` counts them.
+- **Super-ready in 3D** was a 0.14–0.30 emissive lift nobody could read. Now:
+  `uFbReadyRim` (pulsing accent silhouette stroke on the existing edge term,
+  program cache key v11), an additive accent aura at hip height behind the
+  body, and the seven shoulder embers from the 2D formula verbatim (hashed
+  from the sim tick — nothing to rewind). Gated like 2D: reduced motion holds
+  the pulse, battery `trailScale` drops the embers.
+- **Host contract is explicit**: `renderer/three/host-contract.mjs` lists
+  every member (16 required, 18 optional); `createRenderer` asserts it first
+  and the loader's catch reports a missing member by name instead of a black
+  world. `tests/cinema-host.test.mjs` pins the list against both ends of the
+  bridge (every `host.<x>` read in `renderer/three/*.mjs` is declared; every
+  declared member is a key of the literal `game.js` passes).
+
 ## Traps
 
 - `ctx.filter` is also used by `drawFighter` for hit flashes; the reflection

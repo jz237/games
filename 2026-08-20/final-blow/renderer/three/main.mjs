@@ -22,8 +22,13 @@ import { FighterLayer } from "./fighters.mjs";
 import { MeshFighterLayer } from "./mesh-fighters.mjs";
 import { ImpactVfxLayer } from "./vfx.mjs";
 import { CrowdLayer } from "./crowd-layer.mjs";
+import { WorldObjectsLayer } from "./world-objects.mjs";
 import { buildSomersetStage } from "./stage-somerset.mjs";
 import { buildGenericStage } from "./stage-generic.mjs";
+// 5.1: the explicit list of everything this renderer reads off `host`, pinned
+// by tests/cinema-host.test.mjs against the literal game.js passes in.
+import { assertHostContract, CINEMA_HOST_MEMBERS } from "./host-contract.mjs";
+export { CINEMA_HOST_MEMBERS };
 
 const stageBuilders = new Map();
 export function registerStage(id, builder) {
@@ -35,6 +40,9 @@ for (const id of ["vet", "wildwood", "buffet", "cruise", "janney"]) {
 }
 
 export function createRenderer(host) {
+  // Loud, early, and caught by the game.js loader: a renamed bridge member
+  // used to surface only as a black world when a player toggled 3D.
+  assertHostContract(host);
   const renderer3d = {
     ready: false,
     unavailable: false,
@@ -171,6 +179,13 @@ export function createRenderer(host) {
       layers.set("crowd", crowd);
       renderer3d.crowd = crowd;
       host.crowdMediaRequest?.();
+      // 5.1 CINEMA 3D GAMEPLAY READS: projectiles, thrown objects, the stage
+      // weapon (telegraph / ground / carried) and Post's wire traps as
+      // impostors painted by the 2D game's own painters over the bridge.
+      const worldObjects = new WorldObjectsLayer(host);
+      scene.add(worldObjects.group);
+      layers.set("worldObjects", worldObjects);
+      renderer3d.worldObjects = worldObjects;
       // Silhouette guard: fighter sprites darken their edges while an impact
       // flash is live, so bursts never erase the characters.
       fighters.getFlashLevel = () => vfx.flashLevel();
@@ -377,6 +392,10 @@ export function createRenderer(host) {
   renderer3d.stats = () => ({
     drawcalls: lastStatsFrame.calls,
     crowd: renderer3d.crowd?.visibleCount ?? 0,
+    // 5.1: impostors drawn this frame + what the sim held (QA: prove a thrown
+    // pizza / grounded weapon / wire trap actually reached the 3D frame).
+    objects: renderer3d.worldObjects?.visibleCount ?? 0,
+    objectKinds: renderer3d.worldObjects?.lastKinds ?? null,
     tris: lastStatsFrame.triangles,
     fps: Math.round(fpsEstimate),
     quality,

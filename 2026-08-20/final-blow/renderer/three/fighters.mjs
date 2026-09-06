@@ -22,7 +22,7 @@
 //     through the burst (SF6-style silhouette preservation).
 // Reads the exact same sim fields drawFighter reads; writes nothing back.
 import * as THREE from "three";
-import { PX, worldX, worldY, SIM_FLOOR } from "./shared.mjs";
+import { PX, worldX, worldY, SIM_FLOOR, hash01 } from "./shared.mjs";
 import { normalMapForAtlas, softDotTexture, hardShadowTexture, smearedAtlasTexture, bleedAtlasCanvas, hdComposedCanvas, atlasFootMetrics } from "./textures.mjs";
 import { FIGHTER_MASK_LAYER } from "./post.mjs";
 // v2.10 WALK: the authored-bank list is shared with the sim so 3D can never
@@ -66,6 +66,9 @@ const CYAN_RIM = new THREE.Color(0x3fd6ff);
 // Green overhead lamp the contact shadows stretch away from.
 const LAMP_X = 0.4;
 const LAMP_Z = -4;
+// 5.1 SUPER-READY: the 2D aura's ember count at trailScale 1 (7; the balanced
+// tier rounds down to its share, never below 3).
+const AURA_EMBERS = 7;
 
 function applyAtlasFrame(texture, frame) {
   const column = frame % ATLAS_COLUMNS;
@@ -134,6 +137,12 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     // fighter crosses the stage) + overall specular budget.
     lampDx: { value: 0 },
     specStrength: { value: 0.6 },
+    // 5.1 SUPER-READY RIM: 0..1 pulsing accent-coloured silhouette stroke the
+    // moment the meter can pay for a super (the KI/SF3 max-meter read). The
+    // 2D path draws an enlarged accent silhouette behind the sprite; here the
+    // same read is the edge term itself, so it wraps every pose exactly.
+    readyRim: { value: 0 },
+    readyColor: new THREE.Color(0xffffff),
     texel: new THREE.Vector2(1 / atlasWidth, 1 / atlasHeight),
   };
   material.userData.fb = fb;
@@ -157,6 +166,8 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     shader.uniforms.uFbSuperVictim = fb.superVictim;
     shader.uniforms.uFbLampDx = fb.lampDx;
     shader.uniforms.uFbSpecStrength = fb.specStrength;
+    shader.uniforms.uFbReadyRim = fb.readyRim;
+    shader.uniforms.uFbReadyColor = { value: fb.readyColor };
     shader.uniforms.uFbTexel = { value: fb.texel };
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vFbWorld;\nvarying vec2 vFbLocal;")
@@ -185,6 +196,8 @@ uniform float uFbSuperDim;
 uniform float uFbSuperVictim;
 uniform float uFbLampDx;
 uniform float uFbSpecStrength;
+uniform float uFbReadyRim;
+uniform vec3 uFbReadyColor;
 uniform vec2 uFbTexel;`)
       // 1px-ERODED matte + derivative-smoothed cut at 0.5: the alpha is taken
       // as the MIN of this texel and its 4 neighbours, which shrinks the matte
@@ -379,6 +392,11 @@ totalEmissiveRadiance += (uFbTopColor * 0.85 + vec3(0.15))
 // fighters is what fused their legs into the "doubled ghost legs" read).
 totalEmissiveRadiance += vec3(1.0, 0.56, 0.2)
   * (uFbSuperDim * (fbEdgeAny * 0.7 + 0.08) * (1.0 - uFbSuperVictim * 0.88));
+// 5.1 SUPER-READY: the whole silhouette wears a pulsing stroke in the
+// fighter's accent, plus a whisper of body lift, while the meter can pay for
+// a super — gameplay information (the opponent can cash a super NOW), so it
+// rides above the flash guard and the freeze dim rather than under them.
+totalEmissiveRadiance += uFbReadyColor * (uFbReadyRim * (fbEdgeAny * 1.35 + 0.05));
 // --- Flash guard (SF6 Drive-Impact discipline): while a burst is live the
 // interior keeps its OWN contrast (deepened S-curve, not a flat wash) and
 // the silhouette carries a hot high-contrast rim — the character must stay
@@ -410,7 +428,7 @@ if (uFbHitTone > 0.001) {
 }`);
   };
   // Distinct program per patched material (uniforms differ per bank).
-  material.customProgramCacheKey = () => "fb-sprite-grade-v10";
+  material.customProgramCacheKey = () => "fb-sprite-grade-v11";
   return fb;
 }
 
@@ -475,6 +493,8 @@ export class FighterLayer {
     this.rigs = [null, null];
     this.blobTexture = softDotTexture(128, "rgba(0,0,0,1)", "rgba(0,0,0,0)");
     this.hardBlobTexture = hardShadowTexture(128);
+    // 5.1 SUPER-READY aura + ember sprite (white; tinted per fighter accent).
+    this.auraTexture = softDotTexture(128);
     // Wired by main.mjs to the impact-VFX layer once both layers exist.
     this.getFlashLevel = () => 0;
     // Wired by main.mjs: { x, color, level } of the latest impact, so the
@@ -639,11 +659,49 @@ export class FighterLayer {
     footA.renderOrder = footB.renderOrder = 6; // sole ellipses read over the stretch
     coreA.renderOrder = coreB.renderOrder = 6;
 
+    // 5.1 SUPER-READY aura (2D parity, and VISIBLE): a soft additive accent
+    // glow behind the body at hip height + the seven shoulder embers, both
+    // children of the feet-anchored root so they ride the lunge and the flip.
+    // Ember positions are the 2D formula exactly (hashed from the sim tick,
+    // never simulated), so a rollback has nothing to rewind and both
+    // renderers put the same ember in the same place on the same tick.
+    const aura = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
+      map: this.auraTexture,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      opacity: 0,
+      color: new THREE.Color(0xffffff),
+    }));
+    aura.position.z = -0.04;
+    aura.renderOrder = 3;
+    aura.visible = false;
+    root.add(aura);
+    const emberPositions = new Float32Array(AURA_EMBERS * 3);
+    const emberColors = new Float32Array(AURA_EMBERS * 3);
+    const emberGeometry = new THREE.BufferGeometry();
+    emberGeometry.setAttribute("position", new THREE.BufferAttribute(emberPositions, 3));
+    emberGeometry.setAttribute("color", new THREE.BufferAttribute(emberColors, 3));
+    const embers = new THREE.Points(emberGeometry, new THREE.PointsMaterial({
+      size: 0.04,
+      map: this.auraTexture,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true,
+      sizeAttenuation: true,
+    }));
+    embers.frustumCulled = false;
+    embers.renderOrder = 6;
+    embers.visible = false;
+    root.add(embers);
+
     this.group.add(shadow);
     this.group.add(reflRoot);
     this.group.add(root);
     return {
       id, paletteKey, banks, mesh, root, reflMesh, reflRoot, shadow, footA, footB, coreA, coreB, penumbra,
+      aura, embers,
       currentBank: "base", lastHitFlash: 0, hitWhiteTtl: 0, hitToneTtl: 0,
     };
   }
@@ -663,6 +721,14 @@ export class FighterLayer {
     }
     rig.mesh.geometry.dispose();
     rig.reflMesh.geometry.dispose();
+    if (rig.aura) {
+      rig.aura.geometry.dispose();
+      rig.aura.material.dispose();
+    }
+    if (rig.embers) {
+      rig.embers.geometry.dispose();
+      rig.embers.material.dispose();
+    }
     for (const blob of [rig.footA, rig.footB, rig.coreA, rig.coreB, rig.penumbra]) {
       blob.geometry.dispose();
       blob.material.dispose();
@@ -920,6 +986,64 @@ export class FighterLayer {
       material.emissiveIntensity = glow;
     } else {
       material.emissiveIntensity = 0;
+    }
+    // 5.1 SUPER-READY (VISIBLE parity with the 2D aura + outline + embers):
+    // the emissive lift above was the only 3D tell and it never read as
+    // "he can super NOW". Same pulse clock as the 2D path (time*0.006 per
+    // ms = 6 rad/s), reduced motion holds the pulse at its mid-point.
+    const reducedMotion = Boolean(state.accessibility?.reducedMotion);
+    const readyPulse = reducedMotion ? 0.5 : 0.5 + Math.sin(timeSec * 6 + fighter.side * 2.4) * 0.5;
+    const accent = fighter.def.accent || "#ff8040";
+    bank.fb.readyColor.set(accent);
+    bank.fb.readyRim.value = superReady ? 0.55 + readyPulse * 0.45 : 0;
+    if (rig.aura) {
+      if (superReady) {
+        const auraReach = renderSize * 0.6;
+        rig.aura.material.color.set(accent);
+        rig.aura.material.opacity = (0.5 + readyPulse * 0.3) * 0.38;
+        rig.aura.position.set(0, renderSize * 0.32, -0.04);
+        rig.aura.scale.set(auraReach * 2, auraReach * 2, 1);
+        rig.aura.visible = true;
+      } else {
+        rig.aura.visible = false;
+      }
+    }
+    if (rig.embers) {
+      const trailScale = state.performance?.trailScale ?? 1;
+      const showEmbers = superReady && !reducedMotion && trailScale > 0;
+      rig.embers.visible = showEmbers;
+      if (showEmbers) {
+        const emberCount = Math.min(AURA_EMBERS, Math.max(3, Math.round(AURA_EMBERS * trailScale)));
+        const positions = rig.embers.geometry.attributes.position;
+        const colors = rig.embers.geometry.attributes.color;
+        const accentColor = rig.embers.material.userData.accent
+          || (rig.embers.material.userData.accent = new THREE.Color());
+        accentColor.set(accent);
+        const sizePx = host.fighterRenderSize(fighter.def.id) * sizeAdjust;
+        const tick = state.simulationTick || 0;
+        for (let ember = 0; ember < AURA_EMBERS; ember += 1) {
+          if (ember >= emberCount) {
+            positions.setXYZ(ember, 0, -10, 0);
+            colors.setXYZ(ember, 0, 0, 0);
+            continue;
+          }
+          // The 2D formula, verbatim, in sim px about the feet.
+          const cycleFrames = 66 + (ember % 3) * 14;
+          const clock = tick + ember * 31;
+          const progress = (clock % cycleFrames) / cycleFrames;
+          const jitter = hash01(Math.floor(clock / cycleFrames) * 13 + ember * 7 + fighter.side * 101);
+          const emberX = (jitter - 0.5) * sizePx * 0.44 + Math.sin((progress + jitter) * Math.PI * 2) * 5;
+          const emberY = sizePx * (0.66 + progress * 0.32);
+          positions.setXYZ(ember, emberX * PX * facing, emberY * PX, 0.05);
+          const alpha = (1 - progress) * 0.85;
+          // Hot enough to bloom at birth, alternating accent / warm white
+          // like the 2D pass; brightness carries the fade.
+          if (ember % 2) colors.setXYZ(ember, accentColor.r * 1.8 * alpha, accentColor.g * 1.8 * alpha, accentColor.b * 1.8 * alpha);
+          else colors.setXYZ(ember, 1.6 * alpha, 1.52 * alpha, 1.35 * alpha);
+        }
+        positions.needsUpdate = true;
+        colors.needsUpdate = true;
+      }
     }
 
     // --- Scene-matched sprite lighting + flash guard ------------------------
