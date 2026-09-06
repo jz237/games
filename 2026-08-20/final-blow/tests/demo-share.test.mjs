@@ -172,7 +172,7 @@ test("a press on the share bug is the one pointer that does not end the demo", (
   // The capture-phase pointerdown listener is the any-input-exits rule; it
   // must consult the share guard FIRST, and the guard must be demo-scoped.
   assert.match(gameSource,
-    /document\.addEventListener\("pointerdown", \(event\) => \{\s*if \(isDemoShareTarget\(event\)\) return;\s*noteUserActivity\(\);\s*\}, true\);/);
+    /document\.addEventListener\("pointerdown", \(event\) => \{\s*if \(attractSoundChipPress\(event\)\) return;\s*armAttractAudio\(event\);\s*if \(isDemoShareTarget\(event\)\) return;\s*noteUserActivity\(\);\s*\}, true\);/);
   assert.match(gameSource, /function isDemoShareTarget\(event\) \{[\s\S]*?demoSession\.active && target[\s\S]*?target\.closest\("#demoShareButton"\)/);
   // The click handler stops its own propagation so nothing downstream reads
   // it as menu input, and share/clipboard/fallback are all handled.

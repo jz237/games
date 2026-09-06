@@ -277,13 +277,13 @@ test("the card hook runs BEFORE both ROUND announces and the bell closes the win
 test("the listeners arm on the gesture: exit key, any press, the chip, and a touch release", () => {
   const keydown = slice('window.addEventListener("keydown", (event) => {', "\n});");
   assert.ok(keydown.indexOf("armAttractAudio(event);") < keydown.indexOf("handleDemoSpeedKey(event)"), "arm before the transport claims keys");
-  assert.match(gameSource, /document\.addEventListener\("pointerdown", \(event\) => \{\n\s+if \(attractSoundChipPress\(event\)\) return;\n\s+armAttractAudio\(event\);\n\s+noteUserActivity\(\);\n\}, true\);/);
+  assert.match(gameSource, /document\.addEventListener\("pointerdown", \(event\) => \{\n\s+if \(attractSoundChipPress\(event\)\) return;\n\s+armAttractAudio\(event\);\n\s+if \(isDemoShareTarget\(event\)\) return;\n\s+noteUserActivity\(\);\n\}, true\);/);
   assert.match(gameSource, /document\.addEventListener\("pointerup", \(event\) => \{ armAttractAudio\(event\); \}, true\);/);
   assert.match(functionBody("attractSoundChipPress"), /closest\?\.\("#demoHudSound"\)/);
   // The chip lives on the demo HUD, is the one thing on it that takes a pointer, and survives the phone layout.
   assert.match(indexSource, /<button type="button" id="demoHudSound" class="demo-hud-sound" hidden>TAP FOR SOUND<\/button>/);
   assert.match(stylesSource, /\.demo-hud-sound \{[^}]*pointer-events: auto;/);
-  assert.match(stylesSource, /\.demo-hud small \{ display: none; \}\n[^\n]*\n\s+\.demo-hud-sound \{ font-size/);
+  assert.match(stylesSource, /\.demo-hud small \{ display: none; \}\n(?:[^\n]*\n){1,3}\s+\.demo-hud-sound \{ font-size/);
   // gestureArmsAudio reads the sticky flag; play() is never attempted on a synthetic event.
   assert.match(functionBody("armAttractAudio"), /navigator\.userActivation\?\.hasBeenActive/);
   assert.match(functionBody("armAttractAudio"), /trusted: Boolean\(event\?\.isTrusted\)/);
