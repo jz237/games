@@ -346,7 +346,48 @@ export const TOUCH_PAD_RULES = Object.freeze({
   // resting spot over the centre cell.
   deadZoneRatio: 0.17,
   sectorDegrees: 45,
+  // 5.x phone flick-to-dash (sweep #41). A flick is horizontal travel of at
+  // least this fraction of the pad radius inside flickWindowMs (6 frames at
+  // 60 Hz — the same 100 ms a keyboard double-tap comfortably fits in), that
+  // LANDS at least flickLandRatio from the centre in the flick's direction.
+  // The landing test is what keeps the thumb's return swing honest: coming
+  // back from the pad edge to rest overshoots the centre by a cell at most,
+  // never by 0.45R, so a snappy return does not read as a backdash. On the
+  // 844x390 target the pad radius is ~75 px, so a flick is ~45 px of travel.
+  flickDistanceRatio: 0.6,
+  flickLandRatio: 0.45,
+  flickWindowMs: 100,
 });
+
+// Pure flick read over the pointer's recent horizontal samples
+// ([{ t: ms, x: offset-from-centre }] in arrival order, newest last). Returns
+// +1 (flick toward screen right), -1 (toward screen left) or 0. The game layer
+// clears the sample history once a flick lands, so the same sweep can never
+// fire twice; a fresh flick needs fresh travel.
+export function touchPadFlick(samples, radius, rules = TOUCH_PAD_RULES) {
+  if (!Array.isArray(samples) || samples.length < 2 || !(radius > 0)) return 0;
+  const latest = samples[samples.length - 1];
+  if (!latest || !Number.isFinite(latest.x) || !Number.isFinite(latest.t)) return 0;
+  const minTravel = radius * rules.flickDistanceRatio;
+  const minLanding = radius * rules.flickLandRatio;
+  for (let index = samples.length - 2; index >= 0; index -= 1) {
+    const sample = samples[index];
+    if (!sample || !Number.isFinite(sample.x) || !Number.isFinite(sample.t)) continue;
+    if (latest.t - sample.t > rules.flickWindowMs) break;
+    const travel = latest.x - sample.x;
+    if (Math.abs(travel) < minTravel) continue;
+    const direction = travel > 0 ? 1 : -1;
+    if (latest.x * direction >= minLanding) return direction;
+  }
+  return 0;
+}
+
+// Drops samples that have aged out of the flick window so a thumb resting on
+// the pad for a whole round does not accumulate a history.
+export function pruneFlickSamples(samples, now, rules = TOUCH_PAD_RULES) {
+  while (samples.length && now - samples[0].t > rules.flickWindowMs) samples.shift();
+  return samples;
+}
 
 // Octant index 0 is due east (screen +x), winding clockwise in y-down screen
 // space, each sector 45 degrees wide and centred on its cardinal/diagonal.

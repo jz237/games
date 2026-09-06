@@ -230,6 +230,8 @@ import {
   remapKeyBinding,
   remapPadBinding,
   resolveFourButtonInput,
+  pruneFlickSamples,
+  touchPadFlick,
   touchPadTokens,
 } from "./engine/controls.mjs";
 import {
@@ -264,10 +266,15 @@ import {
   auditFighterBalance,
   auditTournamentBalance,
   createPerformanceGovernor,
+  forgetGovernorMemory,
+  governorMemoryKey,
+  governorMemorySignature,
   hapticPatternFor,
   normalizeVisualQuality,
+  readGovernorMemory,
   resolvePerformanceProfile,
   trimVisualBudget,
+  writeGovernorMemory,
 } from "./engine/polish.mjs";
 import {
   CLOCK_CALLOUT_SECONDS,
@@ -10993,6 +11000,9 @@ function startMatch(resetSet = true) {
   commandHistory[1].length = 0;
   updateHud();
   showScreen("fight");
+  // After showScreen: the touch HUD only exists (display: flex) once the
+  // fight screen has marked it .playing, and the coach checks exactly that.
+  maybeCoachTouchFlick();
   updateTrainingUi();
   const arcadeMatch = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
   let introLabel = arcadeMatch?.kind === "boss" ? "FINAL BOUT · THE COMMISSIONER"
@@ -12878,16 +12888,59 @@ function updateHud() {
   setTouchPrompt(finishing ? "final" : superReady ? "super" : "");
 }
 
+// 5.x phone flick-to-dash discoverability (sweep #41): a transient coaching
+// line on the touch prompt. The super and finish labels always outrank it —
+// the hint only fills the prompt while it would otherwise be empty, and it
+// expires on its own timer so the HUD refresh cadence never matters.
+const touchHint = { text: "", until: 0, timer: 0 };
+let touchPromptKind = "";
+
+function showTouchHint(text, ms = 3200) {
+  touchHint.text = text;
+  touchHint.until = performance.now() + ms;
+  window.clearTimeout(touchHint.timer);
+  touchHint.timer = window.setTimeout(() => setTouchPrompt(touchPromptKind), ms + 16);
+  setTouchPrompt(touchPromptKind);
+}
+
+// The first three touch-controlled fights open with the flick tip; after that
+// the player has either found it or the prompt would be nagging. Counted in
+// storage so it is per install, not per page load.
+const TOUCH_FLICK_COACH_KEY = "final-blow-touch-flick-coach";
+const TOUCH_FLICK_COACH_LIMIT = 3;
+
+function maybeCoachTouchFlick() {
+  if (state.mode === "demo" || replayPlayback.active) return;
+  if (getComputedStyle($("#touchControls")).display === "none") return;
+  let shown = 0;
+  try {
+    shown = Number(localStorage.getItem(TOUCH_FLICK_COACH_KEY)) || 0;
+  } catch {
+    // Storage refused: coach once for this page load and move on.
+  }
+  if (shown >= TOUCH_FLICK_COACH_LIMIT) return;
+  try {
+    localStorage.setItem(TOUCH_FLICK_COACH_KEY, String(shown + 1));
+  } catch {
+    // Same: nothing to persist means the tip simply shows again next time.
+  }
+  showTouchHint("FLICK THE PAD TO DASH · DOUBLE-TAP WORKS TOO", 4200);
+}
+
 function setTouchPrompt(kind = "") {
+  touchPromptKind = kind;
   const prompt = $("#touchPrompt");
   const actions = $(".touch-action");
+  const hintActive = !kind && Boolean(touchHint.text) && performance.now() < touchHint.until;
   const label = kind === "final" ? "FINISH HIM · LP = A · LK = B · ANY DISTANCE"
     : kind === "super" ? "SUPER READY · \u2193 \u2192 \u2193 \u2192 + PUNCH"
-      : "";
+      : hintActive ? touchHint.text
+        : "";
   prompt.textContent = label;
   prompt.hidden = !label;
   prompt.classList.toggle("ready", kind === "final");
   prompt.classList.toggle("super-ready", kind === "super");
+  prompt.classList.toggle("hint", hintActive);
   actions.classList.toggle("ready", kind === "final");
   actions.classList.toggle("super-ready", kind === "super");
 }
@@ -25475,6 +25528,9 @@ function clearLatchedInputEdges() {
 
 function runSimulationStep(dt, tick) {
   if (!(state.mode === "online" && onlineSession.rollback)) state.simulationTick = tick;
+  // 5.x flick-to-dash: a queued flick plays its lift/tap/lift/tap on the
+  // touch Set one real sim tick at a time, ahead of this tick's readInput.
+  pumpTouchFlicks();
   simulateGameTick(dt);
 }
 
@@ -25562,16 +25618,79 @@ function applyAccessibilitySettings() {
 // in CABINET MODE (which pins high), and only while a fight or demo is
 // actually rendering. state.performance is render-only and un-checksummed,
 // so every decision is rollback-safe by construction.
+//
+// 5.x memory (sweep #37): the machine used to be nulled the moment a screen
+// other than fight/demo rendered, so every fight re-baselined at the static
+// tier and a boundary phone stuttered through one 120-frame window (2 s) or
+// two steps across a 360-frame cooldown (~8 s) before it landed where the
+// previous fight had already landed. Now the machine is RETAINED across the
+// result/select/title screens (frozen, not fed — a menu's frame times are not
+// fight evidence either way), only dropped when a static gate closes (forced
+// profile, cabinet, online), and the landed tier is written to localStorage
+// keyed by build + device signature so the first fight of the next session
+// starts there too. The seeded start is silent: no COOLING toast for a tier
+// the player already lived through.
 // ---------------------------------------------------------------------------
-const performanceGovernor = { machine: null, steps: 0, lastChange: "" };
+const performanceGovernor = { machine: null, steps: 0, lastChange: "", seededFrom: "", remembered: "" };
 let governorToastTimer = 0;
 
-function governorEligible() {
+// Static gates: closing any of these drops the machine (the old behaviour).
+function governorAllowed() {
   return state.visualQuality === "auto"
     && !state.cabinetMode
-    && state.mode !== "online"
+    && state.mode !== "online";
+}
+
+// Feeding gate: the machine only observes frames while a fight or demo is
+// actually rendering; elsewhere it is kept alive, untouched.
+function governorEligible() {
+  return governorAllowed()
     && !document.hidden
     && (state.screen === "fight" || demoSession.active);
+}
+
+function governorMemoryStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function governorMemoryContext() {
+  const environment = performanceEnvironment(state.accessibility.reducedMotion);
+  const baselineId = resolvePerformanceProfile("auto", environment).id;
+  return {
+    baselineId,
+    key: governorMemoryKey(GAME_VERSION),
+    signature: governorMemorySignature({
+      userAgent: navigator.userAgent,
+      hardwareConcurrency: environment.hardwareConcurrency,
+      deviceMemory: environment.deviceMemory,
+      baselineId,
+    }),
+  };
+}
+
+function rememberGovernorTier(profileId) {
+  const memory = governorMemoryContext();
+  performanceGovernor.remembered = writeGovernorMemory(governorMemoryStorage(), memory.key, {
+    signature: memory.signature,
+    profileId,
+  }) ? profileId : "";
+}
+
+function createGovernorMachine() {
+  const memory = governorMemoryContext();
+  const remembered = readGovernorMemory(governorMemoryStorage(), memory.key, memory.signature);
+  performanceGovernor.seededFrom = remembered ? "memory" : "static";
+  performanceGovernor.remembered = remembered?.profileId || "";
+  // createPerformanceGovernor clamps the seed to the baseline, so a stale
+  // 'high' memory on a device whose static resolution says balanced is inert.
+  return createPerformanceGovernor({
+    profileId: remembered?.profileId || state.performance.id,
+    baselineId: memory.baselineId,
+  });
 }
 
 // One-line HUD toast on a tier change, on the sound-caption channel's element
@@ -25591,25 +25710,32 @@ function applyGovernorChange(change) {
   performanceGovernor.steps += 1;
   performanceGovernor.lastChange = `${change.action}:${change.from}->${change.to}`;
   applyPerformanceSettings();
+  rememberGovernorTier(change.to);
   governorToast(change.action === "down"
     ? `AUTO PERFORMANCE · COOLING TO ${change.to.toUpperCase()}`
     : `AUTO PERFORMANCE · RESTORED TO ${change.to.toUpperCase()}`);
 }
 
 function feedPerformanceGovernor(frameMs) {
-  if (!governorEligible()) {
-    // Leaving eligibility (online match, forced profile, cabinet) drops the
-    // machine entirely so the static resolution rules the profile again and a
-    // later return to AUTO re-baselines from scratch.
+  if (!governorAllowed()) {
+    // A static gate closed (online match, forced profile, cabinet): drop the
+    // machine so the static resolution rules the profile again. The memory
+    // survives, so a later return to AUTO re-seeds from the landed tier
+    // instead of re-baselining from scratch.
     if (performanceGovernor.machine) {
       performanceGovernor.machine = null;
       applyPerformanceSettings();
     }
     return;
   }
+  // Menus, the result screen, a hidden tab: keep the machine and its
+  // cooldown/recovery counters exactly where the last fight left them.
+  if (!governorEligible()) return;
   if (!performanceGovernor.machine) {
-    const baseline = resolvePerformanceProfile("auto", performanceEnvironment(state.accessibility.reducedMotion)).id;
-    performanceGovernor.machine = createPerformanceGovernor({ profileId: state.performance.id, baselineId: baseline });
+    performanceGovernor.machine = createGovernorMachine();
+    // A remembered tier below the static baseline applies from this frame —
+    // that is the whole point: no window of misses, no toast.
+    applyPerformanceSettings();
   }
   applyGovernorChange(performanceGovernor.machine.observe(frameMs));
 }
@@ -28846,7 +28972,52 @@ document.addEventListener("webkitfullscreenchange", syncOrientationGate);
 // Everything still flows through the same touch tokens into readInput's
 // action vocabulary: no new inputs, no new net bits, no timing changes.
 // ---------------------------------------------------------------------------
-const touchFxDebug = { padSlides: 0, clusterRolls: 0 };
+const touchFxDebug = { padSlides: 0, clusterRolls: 0, flicks: 0 };
+
+// ---------------------------------------------------------------------------
+// 5.x flick-to-dash (sweep #41). Until now the only phone dash was lifting
+// the thumb and re-landing in the same sector inside the 12-frame double-tap
+// window (engine/defense.mjs dashTapWindowFrames) — a re-press the sector
+// pad never signalled and QA never drove. A flick (touchPadFlick,
+// engine/controls.mjs: >= 0.6R of horizontal travel inside 100 ms, landing
+// >= 0.45R out) is now translated into exactly the input the sim already
+// understands: two direction presses two ticks apart. The pulse plays
+// lift / tap / lift / tap / settle on the touch Set, one real sim tick per
+// stage, from runSimulationStep — so DirectionTapTracker sees press #2 two
+// frames after press #1 (well inside its 12), readInput is untouched, and no
+// new net bit exists. Four stages is the price of not knowing how long the
+// thumb has already been in that sector: a thumb resting at the sector edge
+// that then flicks outward has an ancient first press, so the pulse always
+// authors both. The settle stage reconciles with whatever the thumb has done
+// meanwhile (lifted, or slid to another sector) so no token is ever left
+// stuck in the Set.
+// ---------------------------------------------------------------------------
+const TOUCH_FLICK_PULSE = Object.freeze(["lift", "tap", "lift", "tap", "settle"]);
+const touchFlickPulses = new Map(); // token -> { entry, stage }
+
+function queueTouchFlick(entry, token) {
+  if (touchFlickPulses.has(token)) return false;
+  touchFlickPulses.set(token, { entry, stage: 0 });
+  return true;
+}
+
+function pumpTouchFlicks() {
+  if (!touchFlickPulses.size) return;
+  for (const [token, pulse] of touchFlickPulses) {
+    const stage = TOUCH_FLICK_PULSE[pulse.stage];
+    if (stage === "lift") {
+      touch.delete(token);
+    } else if (stage === "tap") {
+      pressTouchTokens([token]);
+    } else {
+      const stillHeld = pulse.entry.active && pulse.entry.tokens.includes(token);
+      if (!stillHeld) touch.delete(token);
+      touchFlickPulses.delete(token);
+      continue;
+    }
+    pulse.stage += 1;
+  }
+}
 
 function pressTouchTokens(tokens) {
   for (const token of tokens) {
@@ -28880,15 +29051,17 @@ function capturePointer(element, pointerId) {
   for (const button of pad.querySelectorAll("[data-touch]")) {
     cellButtons.set(touchTokenKey(button.dataset.touch.split(/\s+/).filter(Boolean)), button);
   }
-  const pointers = new Map(); // pointerId -> { tokens, rect }
+  const pointers = new Map(); // pointerId -> { tokens, rect, samples, active }
   const setHighlight = () => {
     const activeKeys = new Set([...pointers.values()].map((entry) => touchTokenKey(entry.tokens)));
     for (const [key, button] of cellButtons) button.classList.toggle("active", activeKeys.has(key));
   };
+  const padRadius = (entry) => Math.min(entry.rect.width, entry.rect.height) / 2;
+  const offsetX = (entry, event) => event.clientX - (entry.rect.left + entry.rect.width / 2);
   const tokensAt = (entry, event) => {
-    const dx = event.clientX - (entry.rect.left + entry.rect.width / 2);
+    const dx = offsetX(entry, event);
     const dy = event.clientY - (entry.rect.top + entry.rect.height / 2);
-    return touchPadTokens(dx, dy, Math.min(entry.rect.width, entry.rect.height) / 2);
+    return touchPadTokens(dx, dy, padRadius(entry));
   };
   const applyTokens = (entry, nextTokens) => {
     if (touchTokenKey(entry.tokens) === touchTokenKey(nextTokens)) return;
@@ -28898,12 +29071,34 @@ function capturePointer(element, pointerId) {
     entry.tokens = nextTokens;
     setHighlight();
   };
+  // Flick read, after the sector swap so the landing sector's token is
+  // already in entry.tokens. performance.now() rather than event.timeStamp:
+  // synthetic QA PointerEvents carry creation-time stamps that are not
+  // comparable across a dispatch, and the wall clock is what the 100 ms
+  // window means anyway.
+  const sampleFlick = (entry, event) => {
+    const now = performance.now();
+    entry.samples.push({ t: now, x: offsetX(entry, event) });
+    pruneFlickSamples(entry.samples, now);
+    const direction = touchPadFlick(entry.samples, padRadius(entry));
+    if (!direction) return;
+    const token = direction > 0 ? "right" : "left";
+    if (!entry.tokens.includes(token)) return;
+    // One sweep, one dash: the next flick needs fresh travel.
+    entry.samples.length = 0;
+    if (!queueTouchFlick(entry, token)) return;
+    touchFxDebug.flicks += 1;
+    // The first three landed flicks of a session get a beat of confirmation
+    // on the prompt (screen direction, like the pad itself).
+    if (touchFxDebug.flicks <= 3) showTouchHint(direction > 0 ? "DASH ▶▶" : "◀◀ DASH", 700);
+  };
   pad.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     capturePointer(pad, event.pointerId);
-    const entry = { tokens: [], rect: pad.getBoundingClientRect() };
+    const entry = { tokens: [], rect: pad.getBoundingClientRect(), samples: [], active: true };
     pointers.set(event.pointerId, entry);
     applyTokens(entry, tokensAt(entry, event));
+    sampleFlick(entry, event);
     if (state.touchSettings.haptics && event.isTrusted) navigator.vibrate?.(12);
     unlockAudio();
   });
@@ -28912,11 +29107,13 @@ function capturePointer(element, pointerId) {
     if (!entry) return;
     event.preventDefault();
     applyTokens(entry, tokensAt(entry, event));
+    sampleFlick(entry, event);
   });
   const end = (event) => {
     const entry = pointers.get(event.pointerId);
     if (!entry) return;
     event.preventDefault();
+    entry.active = false;
     releaseTouchTokens(entry.tokens);
     pointers.delete(event.pointerId);
     setHighlight();
@@ -29050,9 +29247,13 @@ window.__finalBlowEngine = {
       governor: {
         eligible: governorEligible(),
         active: Boolean(performanceGovernor.machine),
+        // 5.x: alive but frozen on a non-fight screen.
+        retained: Boolean(performanceGovernor.machine) && !governorEligible(),
         profile: state.performance.id,
         steps: performanceGovernor.steps,
         lastChange: performanceGovernor.lastChange,
+        seededFrom: performanceGovernor.seededFrom,
+        remembered: performanceGovernor.remembered,
       },
       wakeLock: {
         supported: Boolean(navigator.wakeLock),
@@ -30374,7 +30575,30 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     },
     // --- R1.9 wave 15 platform probes -------------------------------------
     touchDebug() {
-      return { ...touchFxDebug, tokens: [...touch] };
+      return { ...touchFxDebug, tokens: [...touch], flickPulses: touchFlickPulses.size };
+    },
+    // 5.x flick-to-dash probe: lands a thumb at the pad centre and sweeps it
+    // to the pad edge in one synthetic move (0 ms elapsed, well inside the
+    // 100 ms window), then hands back the queued pulse so the caller can step
+    // the sim and watch the dash start. The thumb stays down until
+    // touchFlick(direction, false) lifts it — mirrors a real flick-and-hold.
+    touchFlick(direction = 1, hold = true) {
+      const pad = $(".touch-move");
+      const rect = pad.getBoundingClientRect();
+      const centreX = rect.left + rect.width / 2;
+      const centreY = rect.top + rect.height / 2;
+      const radius = Math.min(rect.width, rect.height) / 2;
+      const pointerId = 41;
+      const dispatch = (type, x) => pad.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, pointerType: "touch", pointerId, clientX: x, clientY: centreY,
+      }));
+      if (hold) {
+        dispatch("pointerdown", centreX);
+        dispatch("pointermove", centreX + Math.sign(direction || 1) * radius * 0.9);
+      } else {
+        dispatch("pointerup", centreX + Math.sign(direction || 1) * radius * 0.9);
+      }
+      return this.touchDebug();
     },
     haptics(enabled = null) {
       if (enabled !== null) state.touchSettings.haptics = Boolean(enabled);
@@ -30406,19 +30630,43 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     },
     governorInject(frameMs = 25, frames = 130) {
       if (!performanceGovernor.machine) {
-        const baseline = resolvePerformanceProfile("auto", performanceEnvironment(state.accessibility.reducedMotion)).id;
-        performanceGovernor.machine = createPerformanceGovernor({ profileId: state.performance.id, baselineId: baseline });
+        performanceGovernor.machine = createGovernorMachine();
+        applyPerformanceSettings();
       }
       for (let frame = 0; frame < Math.max(1, Math.floor(frames)); frame += 1) {
         applyGovernorChange(performanceGovernor.machine.observe(frameMs));
       }
+      return this.governorMemory();
+    },
+    // 5.x: what the governor remembers for this build + device, and whether
+    // the live machine was seeded from it.
+    governorMemory() {
+      const memory = governorMemoryContext();
+      const remembered = readGovernorMemory(governorMemoryStorage(), memory.key, memory.signature);
       return {
         eligible: governorEligible(),
+        active: Boolean(performanceGovernor.machine),
+        retained: Boolean(performanceGovernor.machine) && !governorEligible(),
         profile: state.performance.id,
         machineProfile: performanceGovernor.machine?.profile() || null,
         steps: performanceGovernor.steps,
         lastChange: performanceGovernor.lastChange,
+        seededFrom: performanceGovernor.seededFrom,
+        key: memory.key,
+        baseline: memory.baselineId,
+        remembered: remembered?.profileId || null,
       };
+    },
+    // Wipes the memory AND the live machine so a probe that stepped the
+    // governor down leaves the page at the static resolution for whatever
+    // runs next; a fresh machine will then seed from 'static'.
+    governorForget() {
+      forgetGovernorMemory(governorMemoryStorage(), governorMemoryContext().key);
+      performanceGovernor.machine = null;
+      performanceGovernor.seededFrom = "";
+      performanceGovernor.remembered = "";
+      applyPerformanceSettings();
+      return this.governorMemory();
     },
     wakeLock() {
       syncWakeLock();

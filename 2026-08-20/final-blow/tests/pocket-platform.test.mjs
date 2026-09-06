@@ -1,13 +1,140 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TOUCH_PAD_RULES, touchPadTokens } from "../engine/controls.mjs";
+import { TOUCH_PAD_RULES, pruneFlickSamples, touchPadFlick, touchPadTokens } from "../engine/controls.mjs";
 import {
   GOVERNOR_RULES,
   GOVERNOR_TIERS,
   createPerformanceGovernor,
+  forgetGovernorMemory,
+  governorMemoryKey,
+  governorMemorySignature,
   HAPTIC_KINDS,
   hapticPatternFor,
+  readGovernorMemory,
+  writeGovernorMemory,
 } from "../engine/polish.mjs";
+
+// ---------------------------------------------------------------------------
+// 5.x sweep #41 — flick-to-dash read over the pad's horizontal samples.
+// ---------------------------------------------------------------------------
+test("a fast sweep to the pad edge reads as a flick in that direction", () => {
+  const radius = 75; // the 844x390 target's pad radius
+  const travel = radius * TOUCH_PAD_RULES.flickDistanceRatio;
+  // Centre to the edge in 60 ms: a flick right.
+  assert.equal(touchPadFlick([{ t: 0, x: 0 }, { t: 30, x: radius * 0.3 }, { t: 60, x: radius * 0.9 }], radius), 1);
+  // Mirrored: a flick left.
+  assert.equal(touchPadFlick([{ t: 0, x: 0 }, { t: 60, x: -radius * 0.9 }], radius), -1);
+  // Exactly the minimum travel, landing exactly at the landing line, counts.
+  assert.equal(touchPadFlick([{ t: 0, x: -(travel - radius * TOUCH_PAD_RULES.flickLandRatio) }, { t: 90, x: radius * TOUCH_PAD_RULES.flickLandRatio }], radius), 1);
+  // Too slow: the same travel over 140 ms is a walk, not a flick.
+  assert.equal(touchPadFlick([{ t: 0, x: 0 }, { t: 140, x: radius * 0.9 }], radius), 0);
+  // Too short: a wobble inside the sector never dashes.
+  assert.equal(touchPadFlick([{ t: 0, x: radius * 0.3 }, { t: 40, x: radius * 0.7 }], radius), 0);
+  // Fewer than two samples, or a bad radius, is no flick.
+  assert.equal(touchPadFlick([{ t: 0, x: radius }], radius), 0);
+  assert.equal(touchPadFlick([{ t: 0, x: 0 }, { t: 10, x: radius }], 0), 0);
+  assert.equal(touchPadFlick(null, radius), 0);
+});
+
+test("the thumb's return swing to the centre is not a backdash", () => {
+  const radius = 75;
+  // Resting at the right edge, snapping back to rest — even overshooting the
+  // centre by a cell (the dead zone is 0.17R) — lands short of 0.45R, so the
+  // 0.8R+ of leftward travel is rejected by the landing test.
+  assert.equal(touchPadFlick([{ t: 0, x: radius * 0.9 }, { t: 50, x: 0 }], radius), 0);
+  assert.equal(touchPadFlick([{ t: 0, x: radius * 0.9 }, { t: 50, x: -radius * 0.25 }], radius), 0);
+  // A deliberate right-then-hard-left across the whole pad IS a backdash.
+  assert.equal(touchPadFlick([{ t: 0, x: radius * 0.9 }, { t: 60, x: -radius * 0.6 }], radius), -1);
+  // Only samples inside the window are considered: an old sample at the far
+  // side (1.2R of travel over 260 ms) must not stitch a slow drift into a
+  // flick when the last 60 ms only covered 0.4R.
+  const drift = [{ t: 0, x: -radius * 0.9 }, { t: 200, x: -radius * 0.1 }, { t: 260, x: radius * 0.3 }];
+  assert.equal(touchPadFlick(drift, radius), 0);
+  // pruneFlickSamples keeps the history bounded to the window.
+  const samples = [{ t: 0, x: 0 }, { t: 90, x: 10 }, { t: 150, x: 20 }, { t: 200, x: 30 }];
+  pruneFlickSamples(samples, 200);
+  assert.deepEqual(samples.map((sample) => sample.t), [150, 200]);
+});
+
+// ---------------------------------------------------------------------------
+// 5.x sweep #37 — governor memory: the landed tier survives an ineligible gap
+// and the next session, keyed by build and fenced by a device signature.
+// ---------------------------------------------------------------------------
+function memoryStorage(initial = {}) {
+  const store = new Map(Object.entries(initial));
+  return {
+    store,
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: (key) => { store.delete(key); },
+  };
+}
+
+test("governor memory round-trips the landed tier and refuses foreign records", () => {
+  const storage = memoryStorage();
+  const key = governorMemoryKey("5.0");
+  assert.equal(key, "final-blow-governor-tier:5.0");
+  const signature = governorMemorySignature({ userAgent: "phone", hardwareConcurrency: 8, deviceMemory: 4, baselineId: "high" });
+  assert.equal(readGovernorMemory(storage, key, signature), null, "nothing remembered yet");
+  assert.equal(writeGovernorMemory(storage, key, { signature, profileId: "balanced", savedAt: 1 }), true);
+  assert.deepEqual(readGovernorMemory(storage, key, signature), { profileId: "balanced", savedAt: 1 });
+  // Different build: different key, nothing remembered.
+  assert.equal(readGovernorMemory(storage, governorMemoryKey("5.1"), signature), null);
+  // Different device signature (new phone, or a baseline change): refused.
+  const otherSignature = governorMemorySignature({ userAgent: "phone", hardwareConcurrency: 4, deviceMemory: 4, baselineId: "balanced" });
+  assert.equal(readGovernorMemory(storage, key, otherSignature), null);
+  // Corrupt or invented tiers are refused, and never throw.
+  storage.setItem(key, "{not json");
+  assert.equal(readGovernorMemory(storage, key, signature), null);
+  storage.setItem(key, JSON.stringify({ signature, profileId: "ultra" }));
+  assert.equal(readGovernorMemory(storage, key, signature), null);
+  assert.equal(writeGovernorMemory(storage, key, { signature, profileId: "ultra" }), false);
+  // Missing or refusing storage is a quiet no-op.
+  assert.equal(readGovernorMemory(null, key, signature), null);
+  assert.equal(writeGovernorMemory({ setItem() { throw new Error("quota"); } }, key, { signature, profileId: "battery" }), false);
+  forgetGovernorMemory(storage, key);
+  assert.equal(readGovernorMemory(storage, key, signature), null);
+  forgetGovernorMemory(null, key);
+});
+
+test("seeded tier survives an ineligible gap and never climbs past the static baseline", () => {
+  const storage = memoryStorage();
+  const key = governorMemoryKey("5.0");
+  const signature = governorMemorySignature({ userAgent: "phone", hardwareConcurrency: 8, deviceMemory: 8, baselineId: "high" });
+  // Fight 1 on a boundary phone: one window of misses lands balanced and the
+  // game layer remembers it.
+  const first = createPerformanceGovernor({ profileId: "high", baselineId: "high" });
+  let change = null;
+  for (let frame = 0; frame < GOVERNOR_RULES.windowFrames; frame += 1) change = first.observe(25) || change;
+  assert.deepEqual(change, { action: "down", from: "high", to: "balanced" });
+  writeGovernorMemory(storage, key, { signature, profileId: first.profile() });
+  // The ineligible gap (result screen, character select): the game layer
+  // retains the machine and simply stops feeding it, so its counters are
+  // exactly where the fight left them — the cooldown resumes from the parked
+  // value on the first fed frame of the next fight, it does not restart.
+  assert.equal(first.cooldown, GOVERNOR_RULES.cooldownFrames);
+  first.observe(16);
+  assert.equal(first.cooldown, GOVERNOR_RULES.cooldownFrames - 1, "a retained machine resumes its cooldown where it parked");
+  assert.equal(first.profile(), "balanced");
+  // Next session: a fresh machine seeded from memory starts on balanced with
+  // no window of misses at all, and a stable phone stays there.
+  const remembered = readGovernorMemory(storage, key, signature);
+  const second = createPerformanceGovernor({ profileId: remembered.profileId, baselineId: "high" });
+  assert.equal(second.profile(), "balanced", "the next fight must start where the last one landed");
+  for (let frame = 0; frame < GOVERNOR_RULES.windowFrames; frame += 1) assert.equal(second.observe(16), null);
+  assert.equal(second.profile(), "balanced");
+  assert.equal(second.steps, 0, "no step, so no COOLING toast");
+  // Recovery still works from a seeded start and rewrites the memory.
+  let up = null;
+  for (let frame = 0; frame < GOVERNOR_RULES.recoveryFrames + 1 && !up; frame += 1) up = second.observe(10);
+  assert.deepEqual(up, { action: "up", from: "balanced", to: "high" });
+  writeGovernorMemory(storage, key, { signature, profileId: second.profile() });
+  assert.equal(readGovernorMemory(storage, key, signature).profileId, "high");
+  // A stale 'high' memory on a device whose static resolution now says
+  // balanced is clamped at creation: memory never seeds above the baseline.
+  const clamped = createPerformanceGovernor({ profileId: "high", baselineId: "balanced" });
+  assert.equal(clamped.profile(), "balanced");
+});
 
 // ---------------------------------------------------------------------------
 // R1.9 wave 15 — thumb-slide sector math for the 3x3 touch movement pad.

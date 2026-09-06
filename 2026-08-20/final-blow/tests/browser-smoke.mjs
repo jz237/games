@@ -3412,6 +3412,44 @@ try {
   })()`);
   assert.equal(touchGuard.fighters[0].guarding, true);
   assert.equal(touchGuard.fighters[0].guardHeight, "low");
+
+  // 5.x sweep #41: a fast horizontal sweep on the movement pad must start a
+  // dash through the existing double-tap detector — no new input bits. The
+  // pulse plays lift/tap/lift/tap/settle over five sim ticks, so 0.1 s (6
+  // ticks) is enough for the second press to land and startDash to run.
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.step(0.1)`);
+  const flickQueued = await evaluate(client, `window.__finalBlowQa.touchFlick(1)`);
+  assert.equal(flickQueued.flickPulses, 1, "a centre-to-edge sweep must queue exactly one flick pulse");
+  assert.ok(flickQueued.flicks >= 1, "touchDebug().flicks must count the landed flick");
+  assert.ok(flickQueued.tokens.includes("right"), "the thumb lands in the right sector");
+  await evaluate(client, `window.__finalBlowQa.step(0.1)`);
+  const flickDash = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  const flickSettled = await evaluate(client, `window.__finalBlowQa.touchFlick(1, false)`);
+  assert.ok(flickDash.fighters[0].dashFrames > 0, `a flick must start a dash, saw dashFrames ${flickDash.fighters[0].dashFrames}`);
+  assert.equal(flickDash.fighters[0].dashDirection, 1, "flick right dashes toward screen right");
+  assert.equal(flickSettled.flickPulses, 0, "the pulse must have settled");
+  assert.ok(!flickSettled.tokens.includes("right"), "lifting the thumb must leave no direction token behind");
+
+  // 5.x sweep #37: the governor remembers the tier it lands on, keyed by
+  // build, and forgets on request so the rest of this run stays at the
+  // static resolution.
+  const governorMemory = await evaluate(client, `(() => {
+    window.__finalBlowQa.governorForget();
+    const before = window.__finalBlowQa.governorMemory();
+    const stepped = window.__finalBlowQa.governorInject(25, 130);
+    const stored = JSON.parse(localStorage.getItem(stepped.key) || 'null');
+    const after = window.__finalBlowQa.governorForget();
+    return { before, stepped, stored, after };
+  })()`);
+  assert.equal(governorMemory.before.remembered, null, "governorForget must leave nothing remembered");
+  assert.match(governorMemory.stepped.key, /^final-blow-governor-tier:/);
+  if (governorMemory.stepped.baseline !== "battery") {
+    assert.match(governorMemory.stepped.lastChange, /^down:/, "130 frames at 25 ms must step the governor down");
+    assert.equal(governorMemory.stored?.profileId, governorMemory.stepped.machineProfile, "the landed tier must be written to localStorage");
+    assert.equal(governorMemory.stepped.remembered, governorMemory.stepped.machineProfile);
+  }
+  assert.equal(governorMemory.after.remembered, null);
+  assert.equal(governorMemory.after.active, false, "governorForget must drop the live machine");
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50 }); (() => {
     for (const action of ['hp', 'lp']) {
       const el = document.querySelector('[data-touch="' + action + '"]');

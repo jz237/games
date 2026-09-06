@@ -136,6 +136,65 @@ export function createPerformanceGovernor({ profileId = "high", baselineId = pro
 }
 
 // ---------------------------------------------------------------------------
+// 5.x governor memory (sweep #37). The machine used to be rebuilt from the
+// static baseline at every fight, so a boundary phone re-lived the same
+// 2 s (one 120-frame window) to 8 s (two steps through a 360-frame cooldown)
+// of misses and the same COOLING toast at the top of every round 1. These
+// helpers remember the landed tier in a storage the game layer hands in
+// (localStorage in the browser, any {getItem,setItem,removeItem} in tests),
+// keyed by build so a release with a different render cost starts fresh, and
+// fenced by a device signature so a shared browser profile on new hardware
+// does not inherit an old phone's verdict. Never throws: storage can be
+// missing, full or refused (private mode) and the governor simply forgets.
+// ---------------------------------------------------------------------------
+export const GOVERNOR_MEMORY_KEY_PREFIX = "final-blow-governor-tier:";
+
+export function governorMemoryKey(buildId = "0.0") {
+  return `${GOVERNOR_MEMORY_KEY_PREFIX}${buildId}`;
+}
+
+export function governorMemorySignature(environment = {}) {
+  return [
+    environment.userAgent || "",
+    environment.hardwareConcurrency ?? "",
+    environment.deviceMemory ?? "",
+    environment.baselineId || "",
+  ].join("|");
+}
+
+export function readGovernorMemory(storage, key, signature) {
+  try {
+    const raw = storage?.getItem?.(key);
+    if (!raw) return null;
+    const record = JSON.parse(raw);
+    if (!record || record.signature !== signature) return null;
+    if (!GOVERNOR_TIERS.includes(record.profileId)) return null;
+    return { profileId: record.profileId, savedAt: Number(record.savedAt) || 0 };
+  } catch {
+    return null;
+  }
+}
+
+export function writeGovernorMemory(storage, key, { signature, profileId, savedAt = Date.now() }) {
+  if (!GOVERNOR_TIERS.includes(profileId)) return false;
+  try {
+    storage?.setItem?.(key, JSON.stringify({ signature, profileId, savedAt }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function forgetGovernorMemory(storage, key) {
+  try {
+    storage?.removeItem?.(key);
+  } catch {
+    // Nothing to forget, or storage refused — either way the next fight
+    // re-baselines from the static resolution, which is the old behaviour.
+  }
+}
+
+// ---------------------------------------------------------------------------
 // R1.9 wave 15: combat-event haptic pattern selection.
 // Pure lookup + scaling so the tiers are unit-testable. The game layer owns
 // every gate (haptics toggle, rollbackResimulating, rate cap) — this module

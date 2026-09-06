@@ -20,6 +20,7 @@ opening normal.
 | Down | Crouch. Crouching alone does **not** block. |
 | Down + away | Crouch-block, which is the only way to guard lows. |
 | Double-tap left / right | Dash. Backdash keeps its startup invulnerability. |
+| Flick the touch pad left / right | Dash on a phone (5.x). A quick sweep of the thumb to the pad edge is read as the same double-tap; see **Touch** below. |
 
 ## The four buttons
 
@@ -102,6 +103,40 @@ button size is derived from the viewport height so the pad fits the 844×390 lan
 target; left-handed mode mirrors the two clusters. A prompt above the cluster shows
 the super command when Grit is full and `FINISH HIM · LP = A · LK = B · ANY DISTANCE`
 during the finishing window.
+
+### Flick to dash (5.x, sweep #41)
+
+Until 5.0 the only phone dash was lifting the thumb and re-landing in the same
+sector inside the 12-frame double-tap window, which the sector pad never signalled
+and QA never drove. A **flick** now dashes: sweep the thumb at least 0.6 of the pad
+radius horizontally inside 100 ms (6 frames) and land at least 0.45 R out in that
+direction (`TOUCH_PAD_RULES.flick*`, `touchPadFlick` in `engine/controls.mjs`; on the
+844×390 target the radius is ~75 px, so a flick is ~45 px of travel). The landing test
+is what stops the thumb's return swing from reading as a backdash. The flick is
+translated into exactly what the sim already understands — two direction presses two
+ticks apart, played on the touch Set as lift / tap / lift / tap / settle, one real sim
+tick per stage from `runSimulationStep` — so `DirectionTapTracker` fires, `readInput`
+is untouched and no new net bit exists. Double-tap still works. The first three
+touch-controlled fights open with `FLICK THE PAD TO DASH · DOUBLE-TAP WORKS TOO` on the
+touch prompt (per install, `final-blow-touch-flick-coach`), and the first three flicks
+of a session flash `DASH ▶▶` / `◀◀ DASH` for a beat; super and finish labels always
+outrank the tip. QA: `__finalBlowQa.touchFlick(direction, hold)` and
+`touchDebug().flicks / flickPulses`.
+
+### Performance governor memory (5.x, sweep #37)
+
+The adaptive governor (`engine/polish.mjs`) used to be rebuilt from the static
+baseline at every fight, so a boundary phone re-lived 2–8 s of dropped frames and the
+COOLING toast at the top of every round 1. It now keeps its machine alive across the
+result/select/title screens (frozen, not fed — a menu's frame times are not fight
+evidence), drops it only when a static gate closes (forced profile, cabinet, online),
+and writes the landed tier to `localStorage` under
+`final-blow-governor-tier:<application-version>` with a device signature (UA,
+`hardwareConcurrency`, `deviceMemory`, static baseline). The next session's first
+fight starts on that tier silently; the memory can never seed above the static
+baseline; the step-up path still needs 30 s of headroom and rewrites the memory when
+it lands. QA: `__finalBlowQa.governorMemory()` / `governorForget()`, and
+`snapshot().governor.{retained, seededFrom, remembered}`.
 
 ## Autonomous decisions taken for this checkpoint
 

@@ -2086,6 +2086,9 @@ body.reduced-motion .announcer strong i { animation-delay: 0ms !important; }
 .touch-prompt[hidden] { display: none !important; }
 .touch-prompt.ready { color: white; background: rgba(160,12,18,.86); animation: prompt-ready .46s ease-in-out infinite alternate; }
 .touch-prompt.super-ready { border-color: #39eaff; color: #9ff0ff; }
+/* 5.x flick-to-dash coach line: quieter than the amber command prompts so it
+   reads as a tip, not an alert. */
+.touch-prompt.hint { border-color: rgba(255,255,255,.55); color: #f2f4f6; background: rgba(6,11,17,.66); }
 @keyframes final-ready { to { transform: rotate(8deg) scale(1.13); filter: brightness(1.35); } }
 @keyframes prompt-ready { to { transform: translateX(-50%) scale(1.08); filter: brightness(1.4); } }
 
