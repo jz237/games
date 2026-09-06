@@ -255,7 +255,8 @@ as a module; `game.js` imports from `engine/`.
   index.html          UI, screens, controls dialog, HUD
   game.js             ~8k lines: simulation loop, rendering, input, QA hooks
   styles.css
-  sw.js               Small PWA shell cache — never add images, audio, or index.html
+  sw.js               Small PWA shell cache (never add images, audio, or index.html
+                      to SHELL) plus the capped, build-keyed runtime media cache (5.1)
   engine/
     foundation.mjs    frame clock, RNG, move instancing, ARCADE_TUNING
     defense.mjs       movement/defense rules, hitboxes, FIGHTER_SCALE, STUN_RULES
@@ -358,11 +359,16 @@ reproduce them exactly. Keep it that way.
   existing Grit row for this reason. `.grit-row` is a 5-column grid; keep it one line.
 - **Keep `sw.js` small and redirect-safe.** The old 19 MB / 162-request media
   precache made browsers load Final Blow once and then fail with `ERR_FAILED`.
-  Cache only the root URL and core code shell; never cache `./index.html`, images,
-  audio, or runtime media. Navigations must fall back to cached `./`, because
-  Cloudflare redirects `/index.html` and browsers reject that redirected cached
-  response on later navigations. Keep the cache name, `sw.js?v=` registration,
-  and `game.js?v=` entry version aligned, then run the service-worker guard.
+  Install only the root URL and core code shell; never cache `./index.html`.
+  Since 5.1 media that has been FETCHED is kept in a second cache
+  (`final-blow-media-<build>`, cache-first under `assets/` and
+  `renderer/hd|vendor`, whole 200s only, 120 MB cap evicting oldest-first) —
+  that is a different thing from installing it, and `SHELL` must stay
+  media-free. Navigations must fall back to cached `./`, because Cloudflare
+  redirects `/index.html` and browsers reject that redirected cached response
+  on later navigations. Keep the cache name (the media name derives from it),
+  `sw.js?v=` registration, and `game.js?v=` entry version aligned, then run
+  the service-worker guard and `tests/service-worker-media.test.mjs`.
 - **Rollback protocol is at version 2.** If you add an input field that affects
   the simulation, add a bit in `NET_INPUT`, handle it in `inputToBits`/`bitsToInput`,
   and bump `ROLLBACK_PROTOCOL_VERSION`.
