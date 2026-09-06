@@ -370,6 +370,15 @@ import {
 // unit-tested under Node. game.js keeps the DOM gates and the state reads.
 import { swingContext, swingResolve } from "./engine/swing-resolve.mjs";
 import {
+  INTRO_ART_HOLD_MS,
+  PRELOAD_PLAN,
+  holdDecision,
+  matchupPreloadIds,
+  readinessSummary,
+  shiftedAnnouncementDelay,
+  unifiedFamilyFor,
+} from "./engine/art-readiness.mjs";
+import {
   AMBIENT_KO_HORNS,
   ambientKoBeat,
   ambientPhaseChange,
@@ -1123,6 +1132,48 @@ for (const fighter of [...roster.filter(({ id }) => id !== ARCADE_BOSS_ID), arca
 const fighterMotionAtlases = {};
 const motionBankState = { masks: null, requested: false };
 
+// ---------------------------------------------------------------------------
+// v5.1 #35 — every authored sheet is requested through ONE constructor, for
+// two reasons the first fight on a phone made measurable. fetchPriority: the
+// browser's scheduler was putting the motion banks, the stage plate and the
+// crowd sheets ahead of the unified family, the one bank whose gate flips a
+// fighter's entire vocabulary on a single tick; the hint (set BEFORE src, or
+// it does nothing) puts that family first. Decode bookkeeping: the readiness
+// hold needs to tell "still downloading" from "404ed" — a failed sheet must
+// count as settled or a missing file would hold every intro to the cap.
+// Module-level render state, never snapshotted, never read by the sim.
+// ---------------------------------------------------------------------------
+const authoredDecodeState = new Map();
+
+function sheetPriority(bank) {
+  return PRELOAD_PLAN.find((entry) => entry.bank === bank)?.priority || "auto";
+}
+
+function authoredSheetImage(bank, url) {
+  const image = new Image();
+  if ("fetchPriority" in image) image.fetchPriority = sheetPriority(bank);
+  image.src = url;
+  return image;
+}
+
+/** Start (once) the decode that settles `key`; returns the decode promise. */
+function trackSheetDecode(key, image) {
+  if (authoredDecodeState.has(key)) return authoredDecodeState.get(key).promise;
+  const entry = { state: "pending", promise: null };
+  authoredDecodeState.set(key, entry);
+  const settle = (ok) => { entry.state = ok ? "ready" : "failed"; };
+  entry.promise = (typeof image.decode === "function" ? image.decode() : Promise.resolve())
+    // decode() rejects for a broken file AND for a still-loading image the
+    // browser chose not to decode; the latter still draws, so the gate's own
+    // predicate has the last word.
+    .then(() => settle(true), () => settle(Boolean(image.complete && image.naturalWidth)));
+  return entry.promise;
+}
+
+function sheetDecodeState(key) {
+  return authoredDecodeState.get(key)?.state || "";
+}
+
 function ensureMotionManifest() {
   if (motionBankState.requested) return;
   motionBankState.requested = true;
@@ -1136,8 +1187,7 @@ function ensureMotionAtlas(fighterId) {
   ensureMotionManifest();
   let atlas = fighterMotionAtlases[fighterId];
   if (!atlas) {
-    atlas = new Image();
-    atlas.src = `assets/motion/${fighterId}.webp`;
+    atlas = authoredSheetImage("motion", `assets/motion/${fighterId}.webp`);
     fighterMotionAtlases[fighterId] = atlas;
   }
   return atlas;
@@ -1170,8 +1220,7 @@ function ensureMotion2Atlas(fighterId) {
   ensureMotion2Manifest();
   let atlas = fighterMotion2Atlases[fighterId];
   if (!atlas) {
-    atlas = new Image();
-    atlas.src = `assets/motion2/${fighterId}.webp`;
+    atlas = authoredSheetImage("motion2", `assets/motion2/${fighterId}.webp`);
     fighterMotion2Atlases[fighterId] = atlas;
   }
   return atlas;
@@ -1190,25 +1239,25 @@ function motion2CellDrawable(fighterId, cell) {
 // the manifest at all, so their mask is undefined, walkCellDrawable is false,
 // and their locomotion stays the base-only cycle byte-identically.
 const fighterWalkAtlases = {};
-const walkBankState = { masks: null, requested: false };
+const walkBankState = { masks: null, requested: false, ready: null };
 
 function ensureWalkManifest() {
-  if (walkBankState.requested) return;
+  if (walkBankState.requested) return walkBankState.ready;
   walkBankState.requested = true;
-  fetch("assets/walk/MANIFEST.json")
+  walkBankState.ready = fetch("assets/walk/MANIFEST.json")
     .then((response) => (response.ok ? response.json() : null))
     .then((manifest) => {
       walkBankState.masks = manifest
         ? buildMotionAcceptMasks(manifest, WALK_CELL_COUNT) : {};
     })
     .catch(() => { walkBankState.masks = {}; });
+  return walkBankState.ready;
 }
 
 function ensureWalkAtlas(fighterId) {
   let atlas = fighterWalkAtlases[fighterId];
   if (!atlas) {
-    atlas = new Image();
-    atlas.src = `assets/walk/${fighterId}.webp`;
+    atlas = authoredSheetImage("walk", `assets/walk/${fighterId}.webp`);
     fighterWalkAtlases[fighterId] = atlas;
   }
   return atlas;
@@ -1241,25 +1290,25 @@ function walkCellDrawable(fighterId, cell) {
 // the manifest in IS the whole integration.
 // ---------------------------------------------------------------------------
 const fighterMotion3Atlases = {};
-const motion3BankState = { masks: null, keyMap: null, requested: false };
+const motion3BankState = { masks: null, keyMap: null, requested: false, ready: null };
 
 function ensureMotion3Manifest() {
-  if (motion3BankState.requested) return;
+  if (motion3BankState.requested) return motion3BankState.ready;
   motion3BankState.requested = true;
-  fetch("assets/motion3/MANIFEST.json")
+  motion3BankState.ready = fetch("assets/motion3/MANIFEST.json")
     .then((response) => (response.ok ? response.json() : null))
     .then((manifest) => {
       motion3BankState.keyMap = buildMotion3KeyMap(manifest);
       motion3BankState.masks = manifest ? buildMotionAcceptMasks(manifest) : {};
     })
     .catch(() => { motion3BankState.masks = {}; motion3BankState.keyMap = {}; });
+  return motion3BankState.ready;
 }
 
 function ensureMotion3Atlas(fighterId) {
   let atlas = fighterMotion3Atlases[fighterId];
   if (!atlas) {
-    atlas = new Image();
-    atlas.src = `assets/motion3/${fighterId}.webp`;
+    atlas = authoredSheetImage("motion3", `assets/motion3/${fighterId}.webp`);
     fighterMotion3Atlases[fighterId] = atlas;
   }
   return atlas;
@@ -1344,8 +1393,7 @@ function unifiedFighterWhole(fighterId) {
 function ensureUnifiedAtlas(fighterId) {
   let atlas = fighterUnifiedAtlases[fighterId];
   if (!atlas) {
-    atlas = new Image();
-    atlas.src = `assets/unified/${fighterId}.webp`;
+    atlas = authoredSheetImage("unified", `assets/unified/${fighterId}.webp`);
     fighterUnifiedAtlases[fighterId] = atlas;
   }
   return atlas;
@@ -1415,8 +1463,7 @@ function ensureUnifiedExtAtlas(fighterId) {
   if (built) return built;
   let source = fighterUnifiedExtSources[fighterId];
   if (!source) {
-    source = new Image();
-    source.src = `assets/unified/${fighterId}-ext.webp`;
+    source = authoredSheetImage("ext", `assets/unified/${fighterId}-ext.webp`);
     fighterUnifiedExtSources[fighterId] = source;
   }
   if (!source.complete || !source.naturalWidth) return null;
@@ -1468,8 +1515,7 @@ function unifiedFighterExt2Whole(fighterId) {
 function ensureUnifiedExt2Atlas(fighterId) {
   let atlas = fighterUnifiedExt2Atlases[fighterId];
   if (!atlas) {
-    atlas = new Image();
-    atlas.src = `assets/unified/${fighterId}-ext2.webp`;
+    atlas = authoredSheetImage("ext2", `assets/unified/${fighterId}-ext2.webp`);
     fighterUnifiedExt2Atlases[fighterId] = atlas;
   }
   return atlas;
@@ -1504,8 +1550,7 @@ function swingFighterWhole(fighterId, bank) {
 function ensureSwingAtlas(fighterId, bank) {
   let atlas = fighterSwingAtlases[bank][fighterId];
   if (!atlas) {
-    atlas = new Image();
-    atlas.src = `assets/unified/${fighterId}-${swingSuffix[bank]}.webp`;
+    atlas = authoredSheetImage(swingSuffix[bank], `assets/unified/${fighterId}-${swingSuffix[bank]}.webp`);
     fighterSwingAtlases[bank][fighterId] = atlas;
   }
   return atlas;
@@ -1577,70 +1622,301 @@ function preloadAuthoredBanks(fighterIds) {
   ensureMotionManifest();
   ensureMotion2Manifest();
   ensureMotion3Manifest();
+  ensureWalkManifest();
   for (const id of ids) {
-    // Counting only FIRST requests keeps the probe meaningful: makeFighter is
+    // Counting only FIRST preloads keeps the probe meaningful: makeFighter is
     // also the rollback rebuild path, and a resimulation must not look like a
-    // fresh preload.
-    if (!fighterMotionAtlases[id] || !fighterMotion2Atlases[id]) motionFxDebug.bankPreloads += 1;
-    for (const atlas of [ensureMotionAtlas(id), ensureMotion2Atlas(id), ensureMotion3Atlas(id)]) {
-      if (atlas && !atlas.complete && typeof atlas.decode === "function") {
-        atlas.decode().catch(() => {});
-      }
+    // fresh preload. (5.1: the select screen preloads too, so a browsed
+    // fighter counts once, at the first highlight, not again at FIGHT.)
+    if (!preloadedFighterIds.has(id)) {
+      preloadedFighterIds.add(id);
+      motionFxDebug.bankPreloads += 1;
     }
   }
-  // v3.0: the unified sheet is warmed through the SAME choke point, but only
-  // once the manifest has confirmed the fighter is 16/16 — an incomplete sheet
-  // can never draw a cell, so requesting it would be pure waste. `cyraxx` is
-  // 0/16 and has no sheet in the repo at all, so this gate is also what keeps
-  // the preload from 404ing on him.
-  //
-  // Warming this one matters MORE than the others, not less. The other banks
-  // fall back per beat, so a late sheet costs one beat; this bank's gate is
-  // all-or-nothing, so a late sheet flips the fighter's ENTIRE core vocabulary
-  // in a single tick. Decoding it before FIGHT! is what keeps that flip off
-  // the screen.
+  const decodeTracked = (key, image) => {
+    if (image) trackSheetDecode(key, image);
+  };
+  // v5.1 #35 — REQUEST ORDER IS THE POINT. Measured on a throttled phone
+  // profile, the motion banks used to go out first (synchronously, here) while
+  // the unified family waited a manifest round trip, and the browser then
+  // scheduled the stage plate and the crowd ahead of it. So the whole preload
+  // now runs behind the manifest (kicked at boot, so it is normally already
+  // settled and this is a microtask), the unified family is requested first
+  // with fetchPriority high on the three sheets the fight opens on, the
+  // per-beat motion banks follow, and the bonus banks go last at low priority
+  // and only when their manifest says the fighter has a sheet.
   ensureUnifiedManifest()?.then(() => {
     for (const id of ids) {
-      if (!unifiedFighterWhole(id)) continue;
-      const atlas = ensureUnifiedAtlas(id);
-      if (atlas && !atlas.complete && typeof atlas.decode === "function") {
-        atlas.decode().catch(() => {});
-      }
-      // v4.0: the ext sheet is warmed through this SAME choke point and behind
-      // the SAME manifest gate, so a fighter with no ext block (the five 3.0
-      // holdouts) never requests one and never 404s — the manifest-BEFORE-sheet
-      // order that keeps cyraxx quiet is what keeps them quiet too.
+      // v3.0: the unified sheet is warmed only once the manifest has confirmed
+      // the fighter is 16/16 — an incomplete sheet can never draw a cell, so
+      // requesting it would be pure waste, and a fighter with no sheet in the
+      // repo must never 404 (the manifest-BEFORE-sheet order).
       //
-      // Warming it matters for the same reason the main sheet's does, one step
-      // further on. This gate does not flip a fighter's vocabulary, it flips
-      // his CADENCE: the walk goes from a four-key cycle at 10 keys/s to a
-      // six-key cycle at 15, and the jump swaps key arrays. A sheet that lands
-      // mid-stride would change both on one tick. Decoding it before FIGHT!
-      // keeps that off the screen, and padding it here rather than on the first
-      // draw keeps the canvas build out of a frame budget.
-      // v4.9: the in-between sheet decodes before FIGHT! too — its first use
-      // is the first jab of the round.
-      if (unifiedFighterExt2Whole(id)) {
-        const atlas2 = ensureUnifiedExt2Atlas(id);
-        if (typeof atlas2.decode === "function") atlas2.decode().catch(() => {});
+      // Warming this one matters MORE than the others, not less. The other
+      // banks fall back per beat, so a late sheet costs one beat; this bank's
+      // gate is all-or-nothing, so a late sheet flips the fighter's ENTIRE
+      // core vocabulary in a single tick. Decoding it before FIGHT! is what
+      // keeps that flip off the screen.
+      if (!unifiedFighterWhole(id)) continue;
+      decodeTracked(`${id}:unified`, ensureUnifiedAtlas(id));
+      // v4.0: the ext sheet flips a fighter's CADENCE — the walk goes from a
+      // four-key cycle at 10 keys/s to a six-key cycle at 15 and the jump
+      // swaps key arrays. The first call starts the request and returns null;
+      // the decode then calls back to build the padded canvas, so the canvas
+      // build stays out of a frame budget.
+      if (unifiedFighterExtWhole(id) && !ensureUnifiedExtAtlas(id)) {
+        const source = fighterUnifiedExtSources[id];
+        if (source) trackSheetDecode(`${id}:ext`, source).then(() => ensureUnifiedExtAtlas(id));
       }
+      // v4.9: the in-between sheet — its first use is the first jab.
+      if (unifiedFighterExt2Whole(id)) decodeTracked(`${id}:ext2`, ensureUnifiedExt2Atlas(id));
+      // v5.0: strikes and reactions.
       for (const swingBank of [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]) {
         if (!swingFighterWhole(id, swingBank)) continue;
-        const swingAtlas = ensureSwingAtlas(id, swingBank);
-        if (typeof swingAtlas.decode === "function") swingAtlas.decode().catch(() => {});
-      }
-      if (!unifiedFighterExtWhole(id)) continue;
-      // The first call starts the request and returns null; the decode then
-      // calls back to build the padded canvas. Both paths end at the same
-      // builder, so a sheet already in cache is simply padded now.
-      if (!ensureUnifiedExtAtlas(id)) {
-        const source = fighterUnifiedExtSources[id];
-        if (source && typeof source.decode === "function") {
-          source.decode().then(() => ensureUnifiedExtAtlas(id)).catch(() => {});
-        }
+        decodeTracked(`${id}:${swingSuffix[swingBank]}`, ensureSwingAtlas(id, swingBank));
       }
     }
+    // Both motion sheets are requested — and DECODED, which is the half that
+    // actually matters, since a complete-but-undecoded image still stalls the
+    // first blit — as soon as a matchup is known (v2.9 B3). Failure stays
+    // silent by design: this is the on-demand media policy, and the fallback
+    // chain remains the safety net.
+    for (const id of ids) {
+      decodeTracked(`${id}:motion`, ensureMotionAtlas(id));
+      decodeTracked(`${id}:motion2`, ensureMotion2Atlas(id));
+    }
+    // The bonus banks gate the REQUEST on their manifests (the walk sheet
+    // exists for two fighters; motion3 has fighters with 0/8 accepted), so
+    // a speculative request cannot 404 on the eight who have none.
+    ensureMotion3Manifest()?.then(() => {
+      for (const id of ids) {
+        if (motion3BankState.masks?.[id]?.accept.some(Boolean)) decodeTracked(`${id}:motion3`, ensureMotion3Atlas(id));
+      }
+    });
+    ensureWalkManifest()?.then(() => {
+      for (const id of ids) {
+        if (walkBankState.masks?.[id]) decodeTracked(`${id}:walk`, ensureWalkAtlas(id));
+      }
+    });
   });
+}
+
+// Fighters whose banks have been through preloadAuthoredBanks at least once.
+const preloadedFighterIds = new Set();
+
+// The unified manifest is the gate every preload waits on, so it is requested
+// at boot: one small JSON, and by the time a player has picked a fighter it
+// has long since settled, which turns the select-screen preload's wait on it
+// into a microtask. (Offline, the fetch fails into the empty-mask path the
+// manifest loader already has.)
+ensureUnifiedManifest();
+
+// ---------------------------------------------------------------------------
+// v5.1 #35 — READINESS + THE INTRO HOLD.
+//
+// Per fighter, per sheet of the unified family: is it drawable NOW, by the
+// same predicate the drawable gates use? (The ext sheet's answer is "the
+// padded canvas exists", so a decoded-but-unpadded ext is still pending —
+// exactly the state that would draw the four-key walk.) The intro of an
+// offline match holds the fixed-step clock while any of these is pending, up
+// to INTRO_ART_HOLD_MS, under a LOADING curtain; the cap means a dead sheet
+// or a dead connection costs a fixed 1.5 s and then the fallback chain takes
+// over as before. The hold never runs online (rollback owns both clocks),
+// never in the attract demo, never for a replay, and never touches the sim:
+// loop() simply hands the clock zero seconds, so the tick stream a replay
+// records is identical with or without it.
+// ---------------------------------------------------------------------------
+const introArtHold = {
+  enabled: true,
+  active: false,
+  ids: [],
+  startedAt: 0,
+  heldMs: 0,
+  lastReason: "",
+  lastPending: [],
+  holds: 0,
+  released: 0,
+  capped: 0,
+  skipped: 0,
+};
+
+function unifiedGatesFor(fighterId) {
+  if (!unifiedBankState.masks) return null;
+  return {
+    whole: unifiedFighterWhole(fighterId),
+    ext: unifiedFighterExtWhole(fighterId),
+    ext2: unifiedFighterExt2Whole(fighterId),
+    ext3: swingFighterWhole(fighterId, UNIFIED_EXT3_BANK),
+    ext4: swingFighterWhole(fighterId, UNIFIED_EXT4_BANK),
+  };
+}
+
+function sheetDrawableNow(fighterId, bank) {
+  const live = (image) => Boolean(image && image.complete && image.naturalWidth);
+  switch (bank) {
+    case "unified": return live(fighterUnifiedAtlases[fighterId]);
+    case "ext": return Boolean(ensureUnifiedExtAtlas(fighterId));
+    case "ext2": return live(fighterUnifiedExt2Atlases[fighterId]);
+    case "ext3": return live(fighterSwingAtlases[UNIFIED_EXT3_BANK][fighterId]);
+    case "ext4": return live(fighterSwingAtlases[UNIFIED_EXT4_BANK][fighterId]);
+    case "motion": return live(fighterMotionAtlases[fighterId]);
+    case "motion2": return live(fighterMotion2Atlases[fighterId]);
+    case "motion3": return live(fighterMotion3Atlases[fighterId]);
+    case "walk": return live(fighterWalkAtlases[fighterId]);
+    default: return false;
+  }
+}
+
+/** One fighter's readiness: the unified family gates the hold, the rest is reported. */
+function fighterArtReadiness(fighterId) {
+  const gates = unifiedGatesFor(fighterId);
+  if (!gates) {
+    return { id: fighterId, manifest: false, ready: false, pending: ["manifest"], failed: [], banks: {} };
+  }
+  const family = unifiedFamilyFor(gates);
+  const summary = readinessSummary(family.map((bank) => ({
+    name: `${fighterId}:${bank}`,
+    drawable: sheetDrawableNow(fighterId, bank),
+    decodeState: sheetDecodeState(`${fighterId}:${bank}`),
+  })));
+  const banks = {};
+  for (const bank of ["motion", "motion2", "motion3", "walk"]) {
+    banks[bank] = sheetDrawableNow(fighterId, bank) ? "ready" : sheetDecodeState(`${fighterId}:${bank}`) || "unrequested";
+  }
+  return { id: fighterId, manifest: true, family, ...summary, banks };
+}
+
+function matchupArtPending(ids) {
+  return ids.flatMap((id) => fighterArtReadiness(id).pending);
+}
+
+function artReadinessSnapshot() {
+  const ids = introArtHold.active ? introArtHold.ids : state.fighters.map((fighter) => fighter.def.id);
+  const fighters = {};
+  for (const id of new Set(ids)) fighters[id] = fighterArtReadiness(id);
+  return {
+    fighters,
+    ready: Object.values(fighters).every((entry) => entry.ready),
+    manifest: Boolean(unifiedBankState.masks),
+    hold: {
+      enabled: introArtHold.enabled,
+      active: introArtHold.active,
+      capMs: INTRO_ART_HOLD_MS,
+      heldMs: Math.round(introArtHold.active ? performance.now() - introArtHold.startedAt : introArtHold.heldMs),
+      lastReason: introArtHold.lastReason,
+      lastPending: [...introArtHold.lastPending],
+      holds: introArtHold.holds,
+      released: introArtHold.released,
+      capped: introArtHold.capped,
+      skipped: introArtHold.skipped,
+    },
+    preloads: motionFxDebug.bankPreloads,
+    preloaded: [...preloadedFighterIds],
+  };
+}
+
+function renderArtHoldCurtain(pending) {
+  const curtain = $("#artHold");
+  if (!curtain) return;
+  curtain.hidden = !introArtHold.active;
+  if (!introArtHold.active) return;
+  const total = introArtHold.ids.reduce((sum, id) => sum + (fighterArtReadiness(id).family?.length || 0), 0);
+  curtain.querySelector("span").textContent = total
+    ? `${Math.max(0, total - pending.length)} / ${total} SHEETS`
+    : "MANIFEST";
+}
+
+/** Arm the hold for this matchup at the top of an offline intro. */
+function armIntroArtHold(ids) {
+  releaseIntroArtHold("rearmed", performance.now());
+  const holdable = introArtHold.enabled && state.mode !== "online" && state.mode !== "demo" && !replayPlayback.active;
+  preloadAuthoredBanks(ids);
+  const pending = holdable ? matchupArtPending(ids) : [];
+  if (!pending.length) {
+    introArtHold.skipped += 1;
+    introArtHold.lastReason = holdable ? "ready" : "ineligible";
+    introArtHold.lastPending = [];
+    return false;
+  }
+  introArtHold.active = true;
+  introArtHold.ids = [...ids];
+  introArtHold.startedAt = performance.now();
+  introArtHold.heldMs = 0;
+  introArtHold.lastReason = "holding";
+  introArtHold.lastPending = pending;
+  introArtHold.holds += 1;
+  renderArtHoldCurtain(pending);
+  return true;
+}
+
+function releaseIntroArtHold(reason, now) {
+  if (!introArtHold.active) return;
+  introArtHold.active = false;
+  introArtHold.heldMs = Math.max(0, now - introArtHold.startedAt);
+  introArtHold.lastReason = reason;
+  if (reason === "capped") introArtHold.capped += 1;
+  else if (reason === "ready") introArtHold.released += 1;
+  renderArtHoldCurtain([]);
+  // The FIGHT! call was armed against the wall clock at the top of the intro;
+  // the sim stood still for heldMs, so the call moves by the same amount.
+  shiftFightAnnouncement(introArtHold.heldMs, now);
+}
+
+/** Called once per rendered frame; true while the sim clock must stand still. */
+function updateIntroArtHold(now) {
+  if (!introArtHold.active) return false;
+  const inIntro = state.screen === "fight" && state.phase === "intro" && !state.paused;
+  const pending = inIntro ? matchupArtPending(introArtHold.ids) : [];
+  const decision = holdDecision({
+    startedAt: introArtHold.startedAt,
+    now,
+    capMs: INTRO_ART_HOLD_MS,
+    pendingCount: pending.length,
+    inIntro,
+  });
+  if (decision.hold) {
+    introArtHold.lastPending = pending;
+    renderArtHoldCurtain(pending);
+    return true;
+  }
+  introArtHold.lastPending = pending;
+  releaseIntroArtHold(decision.reason, now);
+  return false;
+}
+
+// The select screens warm the highlighted matchup. Highlights change on every
+// cursor move, and a decoded family is 30-35 MB of RGBA per fighter, so a
+// browse across the roster must not decode ten of them: a highlight only
+// counts once the cursor has rested on it for SELECT_PRELOAD_DWELL_MS. A
+// lock, and the stage screen, warm immediately.
+const SELECT_PRELOAD_DWELL_MS = 400;
+let selectPreloadTimer = 0;
+
+function selectMatchupIds() {
+  const arcadeMatch = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
+  return matchupPreloadIds({
+    picks: state.picks,
+    roster,
+    teamPicks: state.mode === "team" ? state.teamPicks : null,
+    bossId: arcadeBoss.id,
+    bossActive: arcadeMatch?.opponentId === ARCADE_BOSS_ID,
+  });
+}
+
+function preloadSelectMatchup({ immediate = false, voice = false } = {}) {
+  window.clearTimeout(selectPreloadTimer);
+  selectPreloadTimer = 0;
+  const warm = () => {
+    selectPreloadTimer = 0;
+    const ids = selectMatchupIds();
+    preloadAuthoredBanks(ids);
+    // Voice last, and only for a settled matchup: the pools are Audio
+    // elements per take, and the manifest already knows every take's length,
+    // so this is the same warm startMatch does, a screen earlier.
+    if (voice) warmFighterAudio(ids);
+  };
+  if (immediate) warm();
+  else selectPreloadTimer = window.setTimeout(warm, SELECT_PRELOAD_DWELL_MS);
 }
 
 // The Commissioner has no separate specials sheet, so DOM art paths (victory
@@ -2234,6 +2510,7 @@ const DEMO_FINISHER_REACTION = 0.35;
 const DEMO_ROUND_INTRO_SECONDS = 1.15;
 const DEMO_KO_HOLD_SECONDS = 3.1;
 let fightAnnouncementTimer = 0;
+let fightAnnouncementPlan = null;
 
 // ===========================================================================
 // R2.1 STREETS — REPLAY THEATER + online QoL module state. Everything here is
@@ -3848,14 +4125,33 @@ function demoSnapshot() {
 function cancelFightAnnouncement() {
   window.clearTimeout(fightAnnouncementTimer);
   fightAnnouncementTimer = 0;
+  fightAnnouncementPlan = null;
 }
 
+// v5.1 #35: the plan (callback, when it was armed, for how long) outlives the
+// timer so the intro art hold can move the call by the time it held the sim.
 function scheduleFightAnnouncement(callback, delay) {
   cancelFightAnnouncement();
-  fightAnnouncementTimer = window.setTimeout(() => {
-    fightAnnouncementTimer = 0;
-    callback();
-  }, delay);
+  fightAnnouncementPlan = { callback, armedAt: performance.now(), delay };
+  fightAnnouncementTimer = window.setTimeout(fireFightAnnouncement, delay);
+}
+
+function fireFightAnnouncement() {
+  fightAnnouncementTimer = 0;
+  const plan = fightAnnouncementPlan;
+  if (!plan) return;
+  // The timer beat the hold's release: leave the plan armed, the release
+  // re-arms it for the shifted moment.
+  if (introArtHold.active) return;
+  fightAnnouncementPlan = null;
+  plan.callback();
+}
+
+function shiftFightAnnouncement(heldMs, now) {
+  const plan = fightAnnouncementPlan;
+  if (!plan) return;
+  window.clearTimeout(fightAnnouncementTimer);
+  fightAnnouncementTimer = window.setTimeout(fireFightAnnouncement, shiftedAnnouncementDelay(plan, heldMs, now));
 }
 
 function clearDemoResultTimer() {
@@ -11244,12 +11540,18 @@ function updateRosterUI() {
   } else if (!bothLocked) readout.classList.remove("vs-slam");
   selectBothLocked = bothLocked;
   $("#fighterContinue").disabled = !bothLocked;
+  // v5.1 #35: warm the highlighted matchup's sheets (after a dwell; at once
+  // on a lock) — the select and stage screens are 5-15 s of cover the first
+  // fight used to waste.
+  preloadSelectMatchup({ immediate: bothLocked, voice: bothLocked });
 }
 
 function showStageSelect() {
   if (!(state.locks[0] && state.locks[1])) return;
   $("#fightButton").textContent = state.mode === "training" ? "ENTER LAB →" : "FIGHT →";
   showScreen("stage");
+  // v5.1 #35: the matchup is final here — sheets first, then voice.
+  preloadSelectMatchup({ immediate: true, voice: true });
   renderArcadeRoute();
   updateStageUI();
 }
@@ -11348,6 +11650,10 @@ function startMatch(resetSet = true) {
   commandHistory[1].length = 0;
   updateHud();
   showScreen("fight");
+  // v5.1 #35: hold the intro clock (offline only, capped) until both
+  // fighters' unified family has decoded — see armIntroArtHold. Armed BEFORE
+  // the FIGHT! timer below so a release can shift it.
+  armIntroArtHold(state.fighters.map((fighter) => fighter.def.id));
   // After showScreen: the touch HUD only exists (display: flex) once the
   // fight screen has marked it .playing, and the coach checks exactly that.
   // 5.1: the first-run control card is raised here, on startMatch's own
@@ -26568,6 +26874,9 @@ function loop(now) {
   const steppedFrames = speedScaled ? demoSpeed.takeFrameSteps() : 0;
   for (let index = 0; index < steppedFrames; index += 1) simulationClock.stepOnce(runSimulationStep);
   const simSeconds = speedScaled ? demoSpeed.scale(elapsed) : elapsed;
+  // v5.1 #35: an intro art hold hands the clock zero seconds — no tick runs,
+  // no accumulator builds, the tick stream resumes exactly where it stood.
+  const artHeld = updateIntroArtHold(now);
   const frame = state.qaManualMode
     ? {
       steps: 0,
@@ -26575,7 +26884,7 @@ function loop(now) {
       alpha: state.simulationAlpha,
       droppedSeconds: simulationClock.droppedSeconds,
     }
-    : simulationClock.advance(simSeconds, runSimulationStep);
+    : simulationClock.advance(artHeld ? 0 : simSeconds, runSimulationStep);
   state.simulationTick = state.mode === "online" && onlineSession.rollback
     ? onlineSession.rollback.frame : frame.tick;
   state.simulationAlpha = frame.alpha;
@@ -30628,6 +30937,8 @@ window.__finalBlowEngine = {
         variation: lastSharedVariation ? { ...lastSharedVariation } : null,
       },
       offlineReady: state.offlineReady,
+      // v5.1 #35: per-fighter sheet readiness and the intro art hold.
+      artReadiness: artReadinessSnapshot(),
       accessibility: { ...state.accessibility },
       touchSettings: { ...state.touchSettings },
       // R1.9 wave 15 platform blocks: thumb-slide input, haptics, pad menu
@@ -31798,6 +32109,22 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       poseTrace[0].length = 0;
       poseTrace[1].length = 0;
       return true;
+    },
+    // v5.1 #35: readiness of the fighters' authored sheets and the intro art
+    // hold counters (also on snapshot().artReadiness). `artHold(false)` lets a
+    // timing-sensitive probe opt out of the hold for the rest of the session.
+    artReadiness(ids = null) {
+      const snapshot = artReadinessSnapshot();
+      if (Array.isArray(ids)) {
+        snapshot.fighters = Object.fromEntries(ids.map((id) => [id, fighterArtReadiness(id)]));
+        snapshot.ready = Object.values(snapshot.fighters).every((entry) => entry.ready);
+      }
+      return snapshot;
+    },
+    artHold(enabled = true) {
+      introArtHold.enabled = Boolean(enabled);
+      if (!introArtHold.enabled) releaseIntroArtHold("disabled", performance.now());
+      return introArtHold.enabled;
     },
     // The ambient-pulse latch and its level at the current tick, so a probe
     // can ask whether a big hit / KO actually latched before it measures the

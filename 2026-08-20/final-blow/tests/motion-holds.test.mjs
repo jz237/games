@@ -461,10 +461,17 @@ function testPreloadPath() {
   const preload = body.slice(0, body.indexOf("\n}\n") + 2);
   assert.match(preload, /ensureMotionAtlas\(id\)/);
   assert.match(preload, /ensureMotion2Atlas\(id\)/);
-  assert.match(preload, /atlas\.decode\(\)/);
+  // v5.1 #35 changed this pin: the decode now runs through trackSheetDecode
+  // (one call per sheet, and it records the outcome for the readiness hold)
+  // instead of an inline atlas.decode() per bank — same decode, bookkept.
+  assert.match(preload, /decodeTracked\(`\$\{id\}:motion`, ensureMotionAtlas\(id\)\)/);
   assert.match(preload, /ensureMotion3Manifest\(\)/);
-  // Decode failure must never break a match — this is the on-demand policy.
-  assert.match(preload, /\.catch\(\(\) => \{\}\)/);
+  const tracker = gameSource.slice(gameSource.indexOf("function trackSheetDecode("));
+  assert.match(tracker.slice(0, tracker.indexOf("\n}\n") + 2), /image\.decode\(\)/,
+    "the preload must DECODE, not just request");
+  // Decode failure must never break a match — this is the on-demand policy:
+  // the tracker settles a rejected decode instead of letting it reject out.
+  assert.match(tracker.slice(0, tracker.indexOf("\n}\n") + 2), /\.then\(\(\) => settle\(true\), \(\) => settle\(/);
 
   // The motion3 gate consults the MANIFEST before requesting a sheet, so an
   // absent bank cannot 404 ten times on the first tick of every match.

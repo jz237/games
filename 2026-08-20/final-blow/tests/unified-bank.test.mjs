@@ -884,8 +884,10 @@ function testBankRegistryAndWiring() {
   // The all-or-nothing gate is asked once per resolution and answers for the
   // whole sheet, so a fighter cannot be half on the bank at any instant.
   assert.match(gameSource, /if \(bank === UNIFIED_BANK\) return unifiedCellDrawable\(fighterId, cell\);/);
-  // Warmed through the existing preload choke point, decode included.
-  assert.match(gameSource, /ensureUnifiedManifest\(\)\?\.then\(\(\) => \{[\s\S]{0,400}?unifiedFighterWhole\(id\)[\s\S]{0,300}?atlas\.decode\(\)/,
+  // Warmed through the existing preload choke point, decode included. (v5.1
+  // #35 changed this pin: the whole preload now runs behind the manifest with
+  // the unified sheet FIRST, and the decode is bookkept by trackSheetDecode.)
+  assert.match(gameSource, /ensureUnifiedManifest\(\)\?\.then\(\(\) => \{[\s\S]{0,1200}?if \(!unifiedFighterWhole\(id\)\) continue;\s*\n\s*decodeTracked\(`\$\{id\}:unified`, ensureUnifiedAtlas\(id\)\)/,
     "the unified sheet must be warmed and DECODED from preloadAuthoredBanks");
   // Palette remap, world-size correction and the crossfade all know the bank.
   assert.match(gameSource, /if \(bank === UNIFIED_BANK\) return \{ image: fighterUnifiedAtlases\[fighterId\]/);

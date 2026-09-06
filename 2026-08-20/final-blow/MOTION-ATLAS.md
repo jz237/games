@@ -3394,3 +3394,133 @@ bulbs and pier fireworks — measured on the canvas at the KO tick at +32 to
 +130 mean brightness on the landmark rectangles (numbers in STAGES.md),
 decayed by KO+170, sky flat. Reduced motion zeroes all of it; the horn
 still sounds.
+## v5.1 — THE FIRST FIGHT ON A PHONE: SHEETS BEFORE FIGHT!, AND HALF THE BYTES WHERE THE GATE ALLOWS
+
+Three findings from the 5.1 sweep (#35, #36, #38), one story: the first
+fight of a session on a phone raced its own art. `preloadAuthoredBanks` had
+one call site, inside `makeFighter`, so 8–14 MB of sheets started
+downloading against a 2.25 s intro; the motion banks were requested FIRST
+(synchronously) while the unified family waited a manifest round trip, and
+the browser then scheduled the stage plate and the crowd ahead of it; nothing
+held the intro. Over cellular the fight opened on base cells and popped bank
+by bank for 5–30 s — the cross-generation strobe the one-generation law took
+out of the art, delivered by the network. Jez plays on a phone.
+
+### Sheets at select, the unified family first, and a capped hold
+
+- **The select screens warm the matchup.** `updateRosterUI` preloads the
+  highlighted seats after a 400 ms dwell (a decoded family is 30–35 MB of
+  RGBA per fighter, so a browse across the roster must not decode ten of
+  them); a lock and the stage screen warm at once, the stage screen warms
+  voice too (`warmFighterAudio` by id, off the audio manifest). Block War
+  warms every picked teammate; the arcade FINAL BOUT substitutes the boss.
+  The select and stage screens are 5–15 s of cover the first fight used to
+  waste.
+- **Request order is the point.** Every authored sheet is now built by
+  `authoredSheetImage(bank, url)`, which sets `img.fetchPriority` BEFORE
+  `src` — `high` on the main, ext and ext2 sheets (the idle/walk, the six-key
+  walk, the first jab), `low` on motion3 and walk. The whole preload runs
+  behind the unified manifest (fetched at boot, so this is a microtask by the
+  time anyone picks), the family first, the two motion banks next, the bonus
+  banks last and only when their manifest says the fighter has a sheet
+  (motion3 was requested unconditionally before — a 0/8 fighter's sheet
+  went out for nothing). Order and priorities live in
+  `engine/art-readiness.mjs` (`PRELOAD_PLAN`), pinned by
+  `tests/art-readiness.test.mjs`.
+- **The intro holds, capped.** `startMatch` arms `armIntroArtHold` for the
+  two fighters; while any sheet of either unified family is still decoding
+  (`fighterArtReadiness` — the same predicate the drawable gates use, so a
+  decoded-but-unpadded ext is still pending, exactly the state that would
+  draw the four-key walk), `loop()` hands the fixed-step clock ZERO seconds
+  under a LOADING FIGHTERS curtain, for at most `INTRO_ART_HOLD_MS` = 1500.
+  Then the fallback chain takes over as before. The hold never touches the
+  sim — no tick runs, the accumulator does not build — so the tick stream a
+  replay records is identical with or without it; it never runs online
+  (rollback owns both clocks), never in the attract demo, never for a
+  replay. The FIGHT! call is a wall-clock timer armed at the top of the
+  intro, so a release re-arms it shifted by the held time
+  (`shiftedAnnouncementDelay`); a timer that fires mid-hold defers to the
+  release. A failed sheet counts as settled (a 404 must not hold every intro
+  to the cap). Readiness and the hold's counters are on
+  `snapshot().artReadiness` and `qa.artReadiness(ids)`; `qa.artHold(false)`
+  opts a timing-sensitive probe out.
+
+Measured in the browser against a server that delays every unified sheet
+2.5 s: alan vs post from a cold select goes `LOADING FIGHTERS 0 / 9 SHEETS`,
+the hold releases `ready` the frame the last sheet pads, FIGHT! follows
+1.15 s later; the same pair again is `skipped` (reason `ready`) with no
+curtain. `bankPreloads` still counts one per fighter, at the first
+highlight now rather than at FIGHT.
+
+### The sheets: lossy WebP with exact alpha, gated by the costume measure
+
+36 of the 46 sheets in `assets/unified` shipped lossless (VP8L) — 32.0 of the
+directory's 34.2 MB — because every builder here saves `lossless=True`.
+`tools/swing/encode_sheets.py` re-encodes each from its lossless master
+(the `swing-v50/lossless-51` archive; a shipped VP8L file with no archive
+master is its own master; a sheet already lossy is left alone) as lossy WebP
+via PIL — quality 90 then 92, method 6, `alpha_quality` 100, `exact=True` —
+and keeps the encode only if the alpha plane is byte-identical (the cell
+metrics, foot rows and 3D UVs are read off alpha) AND `measure_de.py`'s
+weighted per-cluster dE against the master is under **0.7**. A sheet that
+fails keeps its lossless bytes. Settings and per-sheet numbers are recorded
+in `MANIFEST.json` `format.encoding`.
+
+The gate is tighter than the size win the sweep predicted: measure_de
+re-assigns the candidate's pixels to the master's clusters by their own
+colour, and the encoder's 4:2:0 chroma on the outline pixels moves enough of
+them between neighbouring clusters that quality barely matters (q90, q92 and
+a q98 probe land within 0.05 of each other). **14 sheets passed, 22 stayed
+lossless.** Directory: 34.42 MB → 26.35 MB (`du -sb`, manifest included);
+sheets alone 34.07 MB → 25.99 MB (76 %).
+
+| sheet | lossless | shipped | q | weighted dE | mean per-pixel dE |
+| --- | --- | --- | --- | --- | --- |
+| `alan-ext2.webp` | 1051 KB | 320 KB | q90 | 0.54 | 2.9 |
+| `alan-ext3.webp` | 810 KB | 257 KB | q90 | 0.47 | 3.3 |
+| `alan-ext4.webp` | 927 KB | 295 KB | q90 | 0.56 | 3.1 |
+| `commissioner-ext2.webp` | 814 KB | 245 KB | q90 | 0.56 | 2.5 |
+| `commissioner-ext3.webp` | 756 KB | 238 KB | q90 | 0.57 | 2.6 |
+| `commissioner-ext4.webp` | 839 KB | 264 KB | q90 | 0.53 | 2.6 |
+| `cyraxx-ext3.webp` | 757 KB | 284 KB | q92 | 0.70 | 3.4 |
+| `deathblow.webp` | 701 KB | 242 KB | q90 | 0.44 | 2.5 |
+| `devil.webp` | 893 KB | 354 KB | q90 | 0.60 | 2.8 |
+| `donald.webp` | 842 KB | 237 KB | q90 | 0.34 | 2.5 |
+| `jez-ext2.webp` | 956 KB | 314 KB | q90 | 0.54 | 3.7 |
+| `jez-ext3.webp` | 773 KB | 261 KB | q90 | 0.62 | 3.9 |
+| `jez-ext4.webp` | 852 KB | 288 KB | q90 | 0.69 | 3.9 |
+| `post.webp` | 794 KB | 280 KB | q90 | 0.60 | 3.1 |
+
+Kept lossless (weighted dE at q90 / q92): ali-ext 1.50/1.53, ali-ext2
+1.94/1.92, ali-ext3 1.90/1.93, ali-ext4 1.90/1.88, ali 1.75/1.77 (every Ali
+sheet — his saturated reds sit on cluster boundaries), benny-ext2 0.84/0.86,
+benny-ext3 0.82/0.84, benny-ext4 0.87/0.87, cyraxx-ext2 0.84/0.85,
+cyraxx-ext4 0.85/0.86, deathblow-ext2 0.92/0.90, deathblow-ext3 0.96/0.97,
+deathblow-ext4 0.95/0.95, devil-ext2 1.25/1.26, devil-ext3 1.26/1.23,
+devil-ext4 1.08/1.07, donald-ext2 0.71/0.71 (a hair over), donald-ext3
+1.22/1.22, donald-ext4 0.96/0.97, post-ext2 1.25/1.23, post-ext3 1.30/1.30,
+post-ext4 1.38/1.36. Per-fighter unified family on the wire, before → after:
+deathblow 3.25 → 2.78 MB, jez 3.08 → 1.32, alan 3.32 → 1.36, post 3.74 →
+3.21, benny 2.89 → 2.89, donald 3.46 → 2.84, cyraxx 2.97 → 2.49, ali 4.51 →
+4.51, devil 3.95 → 3.40, commissioner 2.89 → 1.19.
+
+Two things tried and rejected: extending the RGB of the transparent pixels
+outward before encoding (the outline chroma smear is not where the drift
+comes from — it moved the number by 0.03) and quality 95/98 (same numbers,
+40 % more bytes). Getting the other 22 under the gate wants `cwebp
+-sharp_yuv` or VP8L near-lossless, neither of which PIL exposes and neither
+of which is installed here; the tool re-runs in one command when either is.
+
+### The service worker keeps what it fetched
+
+`sw.js` now has a second cache, `final-blow-media-<build>` (derived from the
+shell name, so one version bump keys both): GET requests under `assets/`,
+`renderer/hd/` and `renderer/vendor/` are cache-first, a miss is fetched and
+stored (whole same-origin 200s only — a media element's byte-range request
+bypasses it), and a 120 MB byte cap evicts oldest-first so the cache can
+never recreate the 19 MB / 162-request install that was rejected in 3.3.
+Activate purges every older build's caches, media included, because a sheet
+is addressed by an un-versioned URL and a 5.0 sheet must never draw under a
+5.1 manifest. The shell path is untouched (`tests/service-worker-guard`),
+and `tests/service-worker-media.test.mjs` runs the worker in a vm against a
+fake CacheStorage to pin the policy.

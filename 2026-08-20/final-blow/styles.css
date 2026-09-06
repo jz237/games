@@ -1338,6 +1338,35 @@ body.demo-active .touch-pause { display: none !important; }
   pointer-events: none;
 }
 .flow-skip-hint[hidden] { display: none !important; }
+/* v5.1 #35: the intro art hold's curtain. Covers the canvas AND the round
+   card (announcer is z 9) for the up-to-1.5 s an offline intro waits on both
+   fighters' unified family: a visible ROUND 1 over a standing clock would read
+   as the fight starting. Reduced motion: no pulse. */
+.art-hold {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+  background: rgba(0,0,0,.82);
+  color: rgba(255,255,255,.86);
+  font: 900 12px/1 system-ui, sans-serif;
+  letter-spacing: .18em;
+  pointer-events: none;
+  animation: art-hold-pulse 1.1s ease-in-out infinite;
+}
+.art-hold b { font-size: 14px; }
+.art-hold span { font-size: 9px; color: rgba(255,255,255,.62); }
+.art-hold[hidden] { display: none !important; }
+@keyframes art-hold-pulse {
+  0%, 100% { color: rgba(255,255,255,.86); }
+  50% { color: rgba(255,255,255,.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .art-hold { animation: none; }
+}
 .pause-reason {
   margin: 7px 0 2px;
   padding: 6px 9px;
