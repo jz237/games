@@ -127,7 +127,11 @@ function testSubstitutionTable() {
   assert.deepEqual(sub("motion", MOTION_CELLS.smearV, {}), { bank: UNIFIED_EXT3_BANK, frame: E3.smearV });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.airAttack, { limb: "kick" }), { bank: UNIFIED_EXT3_BANK, frame: E3.airKick });
   assert.deepEqual(sub("motion", MOTION_CELLS.tuck, { attacking: true, airborne: true }), { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber });
-  assert.equal(sub("motion", MOTION_CELLS.tuck, { attacking: false, airborne: true }), null, "a plain jump keeps its tuck");
+  // v5.2 (ext5-air): a NEUTRAL airborne tuck — the air-tech ball — is the
+  // ext5 apex tuck (the plain jump's tuck band leads with unified:9 under
+  // the `air` answer and never resolves the motion tuck); on the floor, nothing.
+  assert.deepEqual(sub("motion", MOTION_CELLS.tuck, { attacking: false, airborne: true }), { bank: UNIFIED_EXT5_BANK, frame: UNIFIED_EXT5_CELLS.apexTuck });
+  assert.equal(sub("motion", MOTION_CELLS.tuck, { attacking: false, airborne: false }), null, "a tuck on the floor is nobody's");
   // Reactions.
   assert.deepEqual(sub("motion2", MOTION2_CELLS.blockHit, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.blockHit, { crouching: true }), { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard },
@@ -159,11 +163,17 @@ function testSubstitutionTable() {
   assert.deepEqual(sub("motion", MOTION_CELLS.bighit, { victimAirborne: false }), { bank: UNIFIED_EXT4_BANK, frame: E4.bigHit });
   assert.deepEqual(sub("motion", MOTION_CELLS.bighit, { victimAirborne: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.launched });
   assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: true, falling: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.falling });
-  assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: true, falling: false }), { bank: UNIFIED_EXT4_BANK, frame: E4.launched },
-    "a carried victim wears the launched arch — the air-hit cell is inverted on every sheet and stays unrouted");
-  assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: false, airborne: true, attacking: true }),
-    { bank: "unified-ext", frame: 4, alt: { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber } },
-    "an attacker's trail after an air strike is the ext descent, or the chambered air cell where the descent was never accepted");
+  // v5.2 (ext5-air): a carried victim wears the ext5 upright air hit (a fold,
+  // head above the hips on every sheet) with the launched arch as its alt;
+  // the ext4 air-hit cell is inverted on every sheet and stays unrouted.
+  assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: true, falling: false }),
+    { bank: UNIFIED_EXT5_BANK, frame: UNIFIED_EXT5_CELLS.airHitUpright, alt: { bank: UNIFIED_EXT4_BANK, frame: E4.launched } });
+  // v5.2 (ext5-air): the attacker's trail after an air strike (and every other
+  // neutral airborne body) is the air recover; behind it the 5.0 chain in its
+  // order — the ext descent where accepted, then the chambered air cell.
+  const trail = { bank: UNIFIED_EXT5_BANK, frame: UNIFIED_EXT5_CELLS.airRecover, alt: { bank: "unified-ext", frame: 4, alt: { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber } } };
+  assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: false, airborne: true, attacking: true }), trail);
+  assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: false, airborne: true, attacking: false }), trail, "the air-tech tail and the plain jump's last airborne band read the same key");
   assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: false, airborne: false }), { bank: UNIFIED_EXT3_BANK, frame: E3.land },
     "the landing footing holds the land cell");
   const everyCtx = [{}, { victimAirborne: true }, { victimAirborne: true, falling: true }, { airborne: true, attacking: true }, { attacking: true },
@@ -348,15 +358,16 @@ function testCrouchBlockstunTrack() {
 // upright air hit — are the next item's, and stay pinned below.
 // ---------------------------------------------------------------------------
 const E5 = UNIFIED_EXT5_CELLS;
-/** AIR ROUTING ITEM: remove each cell from this list as it is routed. */
-const EXT5_UNROUTED_FOR_NOW = Object.freeze([E5.apexTuck, E5.descent, E5.airRecover, E5.airHitUpright].map((cell) => `${UNIFIED_EXT5_BANK}:${cell}`));
+/** Item three (ext5-air) routed the four air cells: nothing on the sheet is unreached. */
+const EXT5_UNROUTED_FOR_NOW = Object.freeze([]);
 
 function testExt5Manifest() {
   const spec = SWING_BANKS[UNIFIED_EXT5_BANK];
   assert.deepEqual(spec, { base: 72, count: 16, sheetKey: "ext5Sheet", cellsKey: "ext5Cells" });
   assert.deepEqual(manifest.format.ext5PoseIds, UNIFIED_EXT5_BEATS);
-  assert.match(manifest.format.ext5Status, /^WIRED 5\.2 \(ground and bookend cells\)/);
-  assert.match(manifest.format.ext5Status, /AIR cells 4-7 .* routed by the next item/);
+  assert.match(manifest.format.ext5Status, /^WIRED 5\.2 \(all sixteen cells\)/);
+  assert.match(manifest.fighters.jez.ext5Cells[E5.airHitUpright].note, /ROUTED 5\.2/);
+  assert.match(manifest.format.ext5Status, /since item three \(ext5-air\) the four AIR cells/);
   assert.match(manifest.format.ext5Sheet, /grammar cells 72-87/);
   assert.deepEqual(Object.keys(E5), [
     "dashLaunch", "dashStretch", "dashBrake", "turnaround", "apexTuck", "descent", "airRecover", "airHitUpright",
@@ -473,14 +484,20 @@ function testExt5GroundRouted() {
     }
   }
   const tableReached = [...reached].sort();
-  assert.deepEqual(tableReached, [1, 2, 3, 8, 9, 10, 11, 14, 15].map((c) => `${UNIFIED_EXT5_BANK}:${c}`).sort(), "the table's ext5 cells");
+  // v5.2 (ext5-air): the table reaches the apex tuck (the air-tech ball), the
+  // air recover and the upright air hit; the DESCENT is reached only by the
+  // jump track (it replaces a track link, never a table cell).
+  assert.deepEqual(tableReached, [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 14, 15].map((c) => `${UNIFIED_EXT5_BANK}:${c}`).sort(), "the table's ext5 cells");
   const tracks = {
     dash: dashKeys(),
     crouchBlock: crouchBlockstunKeys({ flinch: true }),
     clinch: throwClinchKeys({ inbetween: true }),
-    // Tracks this item does NOT touch: no ext5 link.
-    jump: jumpArcKeys(0.22, { extended: true, descend: true }),
-    jumpPlain: jumpArcKeys(0.22, {}),
+    // v5.2 (ext5-air): the jump arc under the `air` answer, in its three
+    // shapes; without the answer no ext5 link (jumpNoAir).
+    jump: jumpArcKeys(0.22, { extended: true, descend: true, air: true }),
+    jumpExtended: jumpArcKeys(0.22, { extended: true, air: true }),
+    jumpPlain: jumpArcKeys(0.22, { air: true }),
+    jumpNoAir: jumpArcKeys(0.22, { extended: true, descend: true }),
     lightPunch: lightWindupKeys("punch", { inbetween: true }),
     heavyKick: heavyWindupKeys("kick", { extended: true, inbetween: true }),
     recovery: attackRecoveryKeys({ inbetween: true }, { limb: "kick", heavy: true }),
@@ -503,15 +520,28 @@ function testExt5GroundRouted() {
   assert.deepEqual(trackReached.dash, [E5.dashLaunch, E5.dashStretch, E5.dashStretch, E5.dashBrake], "launch -> stretch -> stretch -> brake, one link per band");
   assert.deepEqual(trackReached.crouchBlock, [E5.crouchGuardFlinch]);
   assert.deepEqual(trackReached.clinch, [E5.throwGrab]);
-  for (const name of Object.keys(tracks)) if (!["dash", "crouchBlock", "clinch"].includes(name)) assert.deepEqual(trackReached[name], [], `${name} track names no ext5 cell`);
+  for (const name of ["jump", "jumpExtended", "jumpPlain"]) assert.deepEqual(trackReached[name], [E5.apexTuck, E5.descent, E5.airRecover], `${name}: apex -> descent -> recover, one link per band`);
+  for (const name of Object.keys(tracks)) if (!["dash", "crouchBlock", "clinch", "jump", "jumpExtended", "jumpPlain"].includes(name)) assert.deepEqual(trackReached[name], [], `${name} track names no ext5 cell`);
   // Every ext5 link sits AHEAD of its band's motion links, so the band grid
-  // (and every hold budget) is the one the motion links set.
-  for (const keys of [tracks.dash, tracks.crouchBlock, tracks.clinch]) {
+  // (and every hold budget) is the one the motion links set. The one link
+  // that sits second is the descend arc's fall band, where it is the
+  // same-family fallback behind the fighter's OWN ext descent (ali).
+  for (const keys of [tracks.dash, tracks.crouchBlock, tracks.clinch, tracks.jump, tracks.jumpExtended, tracks.jumpPlain]) {
     for (const key of keys) {
       const first = key.chain.findIndex((l) => l.bank === UNIFIED_EXT5_BANK);
-      if (first >= 0) assert.equal(first, 0, `an ext5 link leads its chain (${key.at})`);
+      if (first < 0) continue;
+      if (first === 1 && key.chain[0].bank === "unified-ext" && key.chain[0].cell === 4) continue;
+      assert.equal(first, 0, `an ext5 link leads its chain (${key.at})`);
+      assert.ok(key.chain.slice(first + 1).every((l) => l.bank !== UNIFIED_EXT5_BANK), `one ext5 link per band (${key.at})`);
     }
   }
+  // The air arc keeps the band grid of the arc it replaces, shape for shape.
+  for (const [withAir, without] of [[tracks.jump, tracks.jumpNoAir], [tracks.jumpExtended, jumpArcKeys(0.22, { extended: true })], [tracks.jumpPlain, jumpArcKeys(0.22)]]) {
+    assert.deepEqual(withAir.map((k) => k.at), without.map((k) => k.at), "the `air` answer moves no band");
+  }
+  // The air-tech site draws its pair through the table: the sites in game.js
+  // still emit the motion tuck and airrec (accepted on all ten sheets).
+  assert.match(gameSource, /return flip < 0\.6\s*\n\s*\? motionPose\(MOTION_CELLS\.tuck, "base", 13\)\s*\n\s*: motionPose\(MOTION_CELLS\.airrec, "base", 13\);/);
   // The descriptor sites game.js emits directly: the exit brake, the pivot,
   // the entrance, the win and the taunt.
   assert.match(gameSource, /return unifiedExt5Pose\(UNIFIED_EXT5_CELLS\.dashBrake, motion2Pose\(MOTION2_CELLS\.dashBrake, "base", 12\)\);/);
@@ -522,6 +552,7 @@ function testExt5GroundRouted() {
   assert.match(gameSource, /if \(winner\) return showcasePoseDescriptor\(fighter\);/);
   for (const cell of [E5.dashBrake, E5.turnaround, E5.entranceA, E5.entranceB, E5.victory, E5.taunt]) reached.add(`${UNIFIED_EXT5_BANK}:${cell}`);
   for (const key of EXT5_UNROUTED_FOR_NOW) assert.ok(!reached.has(key), `${key} is the air item's`);
+  assert.equal(EXT5_UNROUTED_FOR_NOW.length, 0, "v5.2 item three: every ext5 cell is routed");
   for (let frame = 0; frame < 16; frame += 1) {
     const key = `${UNIFIED_EXT5_BANK}:${frame}`;
     if (!EXT5_UNROUTED_FOR_NOW.includes(key)) assert.ok(reached.has(key), `${key} must be reachable`);
@@ -568,6 +599,20 @@ function testExt5GroundRouted() {
     assert.ok(after <= before, `${name}: worst hold ${before} -> ${after}`);
     assert.equal(runsOf(keys, span, swing).length, runsOf(keys, span, shipping).length, `${name}: the same number of drawings`);
   }
+  // v5.2 (ext5-air): the jump arc with the `air` answer draws the SAME runs
+  // as the motion3 read of the arc it replaces — the same number, the same
+  // lengths — at the 46-tick uniform span, in all three shapes; only the
+  // bank changes. (The ballistic tick counts are pinned in swing-resolve.)
+  const airResolve = (key) => defaultBeatKeyResolve(key, { swing: true, ext: true, unified: true, fallback: "fallback" });
+  const motion3Resolve = (key) => defaultBeatKeyResolve(key, { motion3: true, ext: true, unified: true, fallback: "fallback" });
+  for (const [label, opts] of [["descend", { extended: true, descend: true }], ["extended", { extended: true }], ["plain", {}]]) {
+    const air = runsOf(jumpArcKeys(0.22, { ...opts, air: true }), 46, airResolve);
+    const was = runsOf(jumpArcKeys(0.22, opts), 46, motion3Resolve);
+    assert.deepEqual(air.map((r) => r.ticks), was.map((r) => r.ticks), `${label}: ${air.map((r) => `${r.cell}x${r.ticks}`).join(" ")} against ${was.map((r) => `${r.cell}x${r.ticks}`).join(" ")}`);
+    assert.ok(air.every((r) => !r.cell.startsWith("motion")), `${label}: no motion cell on the air arc`);
+  }
+  assert.deepEqual(runsOf(jumpArcKeys(0.22, { extended: true, air: true }), 46, airResolve).map((r) => `${r.cell}x${r.ticks}`),
+    ["unified:8x5", "unified-ext:3x5", "unified:9x7", `${UNIFIED_EXT5_BANK}:4x5`, `${UNIFIED_EXT5_BANK}:5x3`, `${UNIFIED_EXT5_BANK}:6x9`, `${UNIFIED_EXT3_BANK}:10x12`]);
   assert.deepEqual(runsOf(throwClinchKeys({ inbetween: true }), 24, swing).map((r) => `${r.cell}x${r.ticks}`),
     ["unified-ext2:12x9", `${UNIFIED_EXT5_BANK}:14x7`, "fallbackx8"], "reach -> seize -> hurl");
 }

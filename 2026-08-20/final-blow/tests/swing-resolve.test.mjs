@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SIMULATION_STEP_SECONDS } from "../engine/foundation.mjs";
+import { AIR_RECOVERY_RULES, DEFENSE_RULES, FIGHTER_SCALE } from "../engine/defense.mjs";
 import {
   MOTION_CELLS,
   MOTION2_CELLS,
@@ -25,6 +26,7 @@ import {
   crouchBlockstunKeys,
   dashKeys,
   getFighterMovement,
+  jumpArcKeys,
   throwClinchKeys,
   unifiedExt5Pose,
   bareHandedAttack,
@@ -170,11 +172,12 @@ function testSubstitutionAndGate() {
   // Not drawable, no alt: the resolved pose back, the SAME object (timing
   // and identity untouched).
   assert.equal(swingResolve(punchExt, ctx, NONE), punchExt);
-  // Nothing in the table: the same object. (v5.2 routed the dash, so the
-  // plain jump's tuck on the floor is the example now — and the dash is the
-  // ext5 stretch.)
+  // Nothing in the table: the same object. (v5.2 routed the dash and the
+  // airborne tuck, so the tuck on the FLOOR is the example now — and the dash
+  // is the ext5 stretch.)
   const tuck = motionPose(MOTION_CELLS.tuck, "base", 13);
   assert.equal(swingResolve(tuck, { ...ctx, attacking: false }, ALL), tuck);
+  assert.deepEqual(swingResolve(tuck, { ...ctx, attacking: false, airborne: true }, ALL), { bank: UNIFIED_EXT5_BANK, frame: UNIFIED_EXT5_CELLS.apexTuck, fallback: tuck }, "v5.2: a neutral airborne tuck (the air-tech ball) is the apex tuck");
   const dash = motionPose(MOTION_CELLS.dash, "base", 5);
   assert.deepEqual(swingResolve(dash, ctx, ALL), { bank: UNIFIED_EXT5_BANK, frame: UNIFIED_EXT5_CELLS.dashStretch, fallback: dash });
   const idle = { bank: "base", frame: 0 };
@@ -198,23 +201,30 @@ function testSubstitutionAndGate() {
 }
 
 function testAltFallback() {
-  // The attacker's trail after an air strike is the ext descent; five 4.0
-  // sheets never accepted their descent, and for those the chambered air
-  // cell is the same-generation trail. The alt is taken ONLY when the
-  // primary cannot draw and the alt can.
+  // The attacker's trail after an air strike is the ext5 air recover (v5.2);
+  // behind it, in order, the 5.0 chain — the ext descent where a sheet
+  // accepted it (ali), then the chambered air cell for the five 4.0 sheets
+  // that never did. An alt is taken ONLY when everything ahead of it cannot
+  // draw and it can; the chain is followed as deep as it goes.
   const ctx = { limb: "kick", heavy: false, crouching: false, attacking: true, airborne: true, victimAirborne: false, falling: false, crouchActive: false };
   const airrec = motionPose(MOTION_CELLS.airrec, "base", 13);
+  const recover = [UNIFIED_EXT5_CELLS.airRecover, UNIFIED_EXT5_BANK];
   const descent = [UNIFIED_EXT_CELLS.jumpDescend, UNIFIED_EXT_BANK];
   const chamber = [E3.airChamber, UNIFIED_EXT3_BANK];
   const gateOf = (drawableList) => (frame, bank) => drawableList.some(([f, b]) => f === frame && b === bank);
-  assert.deepEqual(swingResolve(airrec, ctx, gateOf([descent, chamber])), { bank: UNIFIED_EXT_BANK, frame: UNIFIED_EXT_CELLS.jumpDescend, fallback: airrec }, "primary wins when both draw");
-  assert.deepEqual(swingResolve(airrec, ctx, gateOf([chamber])), { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber, fallback: airrec }, "alt when the descent cannot draw");
+  assert.deepEqual(swingResolve(airrec, ctx, gateOf([recover, descent, chamber])), { bank: UNIFIED_EXT5_BANK, frame: UNIFIED_EXT5_CELLS.airRecover, fallback: airrec }, "primary wins when all draw");
+  assert.deepEqual(swingResolve(airrec, ctx, gateOf([descent, chamber])), { bank: UNIFIED_EXT_BANK, frame: UNIFIED_EXT_CELLS.jumpDescend, fallback: airrec }, "the first alt when the recover cannot draw");
+  assert.deepEqual(swingResolve(airrec, ctx, gateOf([chamber])), { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber, fallback: airrec }, "the alt's alt when the descent cannot draw either: the 5.0 read");
   assert.equal(swingResolve(airrec, ctx, gateOf([descent])).bank, UNIFIED_EXT_BANK);
-  assert.equal(swingResolve(airrec, ctx, gateOf([])), airrec, "neither: the motion pose stands");
-  // The gate is asked primary first, then alt, and nothing else.
+  assert.equal(swingResolve(airrec, ctx, gateOf([])), airrec, "none: the motion pose stands");
+  // The gate is asked primary first, then down the alt chain, and nothing else.
   const asked = [];
   swingResolve(airrec, ctx, (frame, bank) => { asked.push(`${bank}:${frame}`); return false; });
-  assert.deepEqual(asked, [`${UNIFIED_EXT_BANK}:${UNIFIED_EXT_CELLS.jumpDescend}`, `${UNIFIED_EXT3_BANK}:${E3.airChamber}`]);
+  assert.deepEqual(asked, [`${UNIFIED_EXT5_BANK}:${UNIFIED_EXT5_CELLS.airRecover}`, `${UNIFIED_EXT_BANK}:${UNIFIED_EXT_CELLS.jumpDescend}`, `${UNIFIED_EXT3_BANK}:${E3.airChamber}`]);
+  // A carried juggle victim: the upright air hit, the launched arch behind it.
+  const carried = { ...ctx, attacking: false, victimAirborne: true };
+  assert.deepEqual(swingResolve(airrec, carried, gateOf([[UNIFIED_EXT5_CELLS.airHitUpright, UNIFIED_EXT5_BANK], [E4.launched, UNIFIED_EXT4_BANK]])).frame, UNIFIED_EXT5_CELLS.airHitUpright);
+  assert.deepEqual(swingResolve(airrec, carried, gateOf([[E4.launched, UNIFIED_EXT4_BANK]])), { bank: UNIFIED_EXT4_BANK, frame: E4.launched, fallback: airrec }, "a held sheet keeps the 5.1 arch");
   // A target without an alt never invents one.
   const land = motionPose(MOTION_CELLS.land, "base", 12);
   const askedLand = [];
@@ -315,7 +325,13 @@ function testAirHitNeverReachesTheScreen() {
 // ---------------------------------------------------------------------------
 const gameSource = readFileSync(join(testDir, "..", "game.js"), "utf8");
 
-function buildJezGate() {
+/**
+ * v5.2 (ext5-air): the gate for any fighter, from the shipped manifests.
+ * `extOverride` stands a synthetic ext acceptance in (deathblow has no ext
+ * sheet in 5.1; the parallel ext8 item may give him one), `ext5: false` holds
+ * the ext5 sheet, `swing: false` holds ext3/ext4/ext5 together.
+ */
+function buildGate(id, { extOverride = null, ext5 = true } = {}) {
   const unified = readManifest("unified");
   const main = buildUnifiedAcceptMasks(unified);
   const motion3 = readManifest("motion3");
@@ -333,7 +349,9 @@ function buildJezGate() {
   };
   const keyMap = buildMotion3KeyMap(motion3);
   return (cell, bank) => {
-    const mask = masks[bank]?.jez;
+    if (bank === UNIFIED_EXT5_BANK && !ext5) return false;
+    if (bank === UNIFIED_EXT_BANK && extOverride) return Boolean(extOverride[cell]);
+    const mask = masks[bank]?.[id];
     if (!mask) return false;
     if (bank === MOTION3_BANK) {
       const frame = keyMap[cell];
@@ -343,6 +361,7 @@ function buildJezGate() {
     return Boolean(mask.accept[cell]);
   };
 }
+const buildJezGate = () => buildGate("jez");
 
 const SHORT = { [UNIFIED_BANK]: "unified", [UNIFIED_EXT_BANK]: "ext", [UNIFIED_EXT2_BANK]: "ext2", [UNIFIED_EXT3_BANK]: "ext3", [UNIFIED_EXT4_BANK]: "ext4", [UNIFIED_EXT5_BANK]: "ext5" };
 const cellName = (pose) => `${SHORT[pose.bank] || pose.bank}:${pose.frame}`;
@@ -425,9 +444,14 @@ function testFrameChains() {
   assert.deepEqual(sweep.raw, ["ext2:10", "base:13", "motion:4", "ext2:11", "unified:7", "unified:0"]);
   // The air kick's landing gather (unified:6) is the landing-recovery branch,
   // outside the attack track; the attack's own chain ends on the land cell.
+  // v5.2 (ext5-air): the trail after the strike is the ext5 air recover,
+  // never the chambered air cell again — 5.0 read ext3:8 -> ext3:7 ->
+  // motion3:4 -> ext3:8 -> ext3:10, a chamber rewind on every air normal.
   const airKick = strikeChain(gate, "light", { limb: "kick", airborne: true });
-  assert.deepEqual(airKick.chain, ["ext3:8", "ext3:7", "motion3:4", "ext3:8", "ext3:10"]);
+  assert.deepEqual(airKick.chain, ["ext3:8", "ext3:7", "motion3:4", "ext5:6", "ext3:10"]);
   assert.deepEqual(airKick.raw, ["motion:5", "motion2:13", "motion3:4", "motion:11", "motion:6"]);
+  assert.deepEqual(strikeChain(gate, "light", { limb: "punch", airborne: true }).chain, ["ext3:8", "ext3:6", "motion3:4", "ext5:6", "ext3:10"]);
+  assert.ok(!airKick.chain.slice(1).includes("ext3:8"), "the chamber is drawn once, at the start");
   // No chain ever draws ext4 (the reaction sheet) on the attacker.
   for (const { chain } of [jab, heavyKick, crouchJab, sweep, airKick]) {
     assert.ok(chain.every((cell) => !cell.startsWith("ext4:")), chain.join(" -> "));
@@ -436,7 +460,7 @@ function testFrameChains() {
   // heavy kick keeps ONE substitute: the kick arc's compress band lands on
   // the UNIFIED crouch transition, not a swing sheet, so it draws whenever
   // the unified sheet does — which is exactly why the gate is bank-routed.
-  const noSwing = (cell, bank) => (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK ? false : gate(cell, bank));
+  const noSwing = (cell, bank) => (bank === UNIFIED_EXT3_BANK || bank === UNIFIED_EXT4_BANK || bank === UNIFIED_EXT5_BANK ? false : gate(cell, bank));
   assert.deepEqual(strikeChain(noSwing, "light", {}).chain, jab.raw);
   assert.deepEqual(strikeChain(noSwing, "heavy", { limb: "kick" }).chain, ["ext:6", "ext2:6", "unified:6", "motion:1", "motion:4", "ext2:7", "unified:7", "unified:0"]);
   // Same for the crouch jab's follow-through: a crouching punch holds its ext2
@@ -444,6 +468,10 @@ function testFrameChains() {
   // upright), and ext2 is not a swing sheet either.
   assert.deepEqual(strikeChain(noSwing, "light", { crouching: true }).chain, ["ext2:8", "base:10", "ext2:9", "unified:7", "unified:0"]);
   assert.deepEqual(strikeChain(noSwing, "light", { limb: "kick", airborne: true }).chain, airKick.raw);
+  // With only the ext5 sheet held the trail degrades down its alt chain to the
+  // exact 5.0 read (jez's ext descent is rejected, so the chamber).
+  const noExt5 = (cell, bank) => (bank === UNIFIED_EXT5_BANK ? false : gate(cell, bank));
+  assert.deepEqual(strikeChain(noExt5, "light", { limb: "kick", airborne: true }).chain, ["ext3:8", "ext3:7", "motion3:4", "ext3:8", "ext3:10"]);
 }
 
 function testGameMirror() {
@@ -596,6 +624,214 @@ function testExt5GroundChains() {
   for (const cell of [...forward.cells, ...chargeCells, ...dizzyCells]) assert.ok(!["ext4:7", "ext4:11"].includes(cell));
 }
 
+// ---------------------------------------------------------------------------
+// v5.2 LOCOMOTION (ext5-air) — the AIR chains, at node level, over a
+// ballistic model that mirrors the descriptor's airborne branches (game.js:
+// the neutral jump arc's progress read, the airborne-victim branch, the
+// air-tech flip, the landing-recovery hand-off) with the engine's tracks and
+// the gate from the shipped manifests. MOTION-ATLAS.md v5.2 item three
+// records these attributions; the physics are the sim's (GRAVITY, dt, the
+// devil's glide cap) so the tick counts are the ones a player sees.
+// ---------------------------------------------------------------------------
+const SIM_FLOOR = 600;
+const GRAVITY = Math.round(2180 * FIGHTER_SCALE);
+const E = UNIFIED_EXT_CELLS;
+const snapFor = (id, over = {}) => snapshot({ def: { id }, ...over });
+const drawFor = (id, gate, pose, fighter, opts = {}) => cellName(swingResolve(resolveMotionPose(pose, gate, id, opts), swingContext(fighter, opts), gate));
+const idleFor = (id) => unifiedPose(UNIFIED_CELLS.idle, { bank: "base", frame: baseCellRoles(id).idle[0] });
+const landingFor = () => unifiedPose(UNIFIED_CELLS.crouchTrans, motion2Pose(MOTION2_CELLS.crouchTrans, "base", 12));
+const runsJoined = (cells) => runsOf(cells).join(" -> ");
+/** Mirror of game.js: the ONE capability answer per pose (ext / descend / air). */
+function capabilityFor(id, gate) {
+  const ext = gate(E.jumpAscent, UNIFIED_EXT_BANK) || gate(E.idleBreathe, UNIFIED_EXT_BANK);
+  const descend = ext && gate(E.jumpDescend, UNIFIED_EXT_BANK);
+  const air = gate(E5.apexTuck, UNIFIED_EXT5_BANK) && gate(E5.descent, UNIFIED_EXT5_BANK) && gate(E5.airRecover, UNIFIED_EXT5_BANK);
+  const o = {};
+  if (ext) o.extended = true;
+  if (descend) o.descend = true;
+  if (air) o.air = true;
+  return Object.keys(o).length ? Object.freeze(o) : undefined;
+}
+function arcProgress(id, y, vy) {
+  const launch = getFighterMovement(id).jumpVelocityY || -720;
+  const apex = (launch * launch) / (2 * GRAVITY);
+  const height = Math.max(0, SIM_FLOOR - y);
+  return vy < 0 ? 0.5 * (1 - clamp01(Math.max(0, vy / launch))) : 0.5 + 0.5 * clamp01(1 - height / Math.max(1, apex));
+}
+const arcPose = (id, extOpt, y, vy) => beatPoseAt(jumpArcKeys(id === "donald" ? 0.06 : 0.22, extOpt), arcProgress(id, y, vy), (key) => ({ bank: "base", frame: !key || key.at < 0.76 ? 13 : 12 }));
+/** One physics tick; the devil's glide cap applies only to a CONTROLLED airborne body (never a victim). */
+function fallStep(id, y, vy, controlled = true) {
+  const cap = controlled ? getFighterMovement(id).glideFallCap : 0;
+  let next = vy + GRAVITY * SIMULATION_STEP_SECONDS;
+  if (cap > 0 && next > cap) next = cap;
+  return [y + next * SIMULATION_STEP_SECONDS, next];
+}
+/** The neutral jump: idle, takeoff to touchdown through the arc, the landing recovery, the idle. */
+function jumpTrace(id, gate, extOpt = capabilityFor(id, gate)) {
+  let y = SIM_FLOOR;
+  let vy = getFighterMovement(id).jumpVelocityY || -720;
+  const cells = [drawFor(id, gate, idleFor(id), snapFor(id))];
+  for (;;) {
+    [y, vy] = fallStep(id, y, vy);
+    if (y >= SIM_FLOOR) break;
+    cells.push(drawFor(id, gate, arcPose(id, extOpt, y, vy), snapFor(id, { grounded: false, vy })));
+  }
+  for (let i = 0; i < DEFENSE_RULES.landingRecoveryFrames; i += 1) cells.push(drawFor(id, gate, landingFor(), snapFor(id)));
+  cells.push(drawFor(id, gate, idleFor(id), snapFor(id)));
+  return runsJoined(cells);
+}
+/** An air normal, chamber to land, then the air-attack landing recovery, then the idle. */
+function airNormalTrace(id, gate, limb, extOpt = capabilityFor(id, gate)) {
+  const attack = createFighterMove(id, "light", { limb, airborne: true });
+  const beatOpt = Object.freeze({ ...(extOpt || {}), inbetween: gate(0, UNIFIED_EXT2_BANK) });
+  const cells = [];
+  for (let attackFrame = 0; attackFrame < attack.totalFrames; attackFrame += 1) {
+    const pose = kitlessStrikePose(attack, attackFrame, beatOpt, baseCellRoles(id));
+    cells.push(drawFor(id, gate, pose, snapFor(id, { attacking: attack, attackFrame, grounded: false, vy: 200 }), { bareHanded: bareHandedAttack(attack) }));
+  }
+  for (let i = 0; i < DEFENSE_RULES.airAttackLandingRecoveryFrames; i += 1) cells.push(drawFor(id, gate, landingFor(), snapFor(id)));
+  cells.push(drawFor(id, gate, idleFor(id), snapFor(id)));
+  return runsJoined(cells);
+}
+/** A launched victim carried to the floor: the descriptor's airborne-victim branch. */
+function juggleTrace(id, gate, launchVy = -610) {
+  const roles = baseCellRoles(id);
+  let y = SIM_FLOOR;
+  let vy = launchVy;
+  const cells = [];
+  for (;;) {
+    [y, vy] = fallStep(id, y, vy, false);
+    if (y >= SIM_FLOOR) break;
+    const fighter = snapFor(id, { grounded: false, vy, hitstunFrames: 30, airHitstunFrames: 30, pendingKnockdown: true });
+    const pose = vy > 0 && SIM_FLOOR - y < 55 ? motionPose(MOTION_CELLS.crumple, "base", roles.down)
+      : vy < -120 ? unifiedPose(UNIFIED_CELLS.bigHit, motionPose(MOTION_CELLS.bighit, "base", roles.down))
+        : motionPose(MOTION_CELLS.airrec, "base", roles.down);
+    cells.push(drawFor(id, gate, pose, fighter));
+  }
+  return runsJoined(cells);
+}
+/** An air tech out of a carry: the flip's ball and tail, the neutral fall, the landing tax, the idle. */
+function airTechTrace(id, gate, extOpt = capabilityFor(id, gate)) {
+  let y = SIM_FLOOR - 220;
+  let vy = Math.min(60, AIR_RECOVERY_RULES.liftVelocityY);
+  let flip = AIR_RECOVERY_RULES.flipFrames;
+  const cells = [];
+  for (;;) {
+    [y, vy] = fallStep(id, y, vy);
+    if (y >= SIM_FLOOR) break;
+    const fighter = snapFor(id, { grounded: false, vy, airTechFlipFrames: flip });
+    let pose;
+    if (flip > 0) {
+      pose = 1 - flip / AIR_RECOVERY_RULES.flipFrames < 0.6 ? motionPose(MOTION_CELLS.tuck, "base", 13) : motionPose(MOTION_CELLS.airrec, "base", 13);
+      flip -= 1;
+    } else {
+      pose = arcPose(id, extOpt, y, vy);
+    }
+    cells.push(drawFor(id, gate, pose, fighter));
+  }
+  for (let i = 0; i < DEFENSE_RULES.airAttackLandingRecoveryFrames; i += 1) cells.push(drawFor(id, gate, landingFor(), snapFor(id)));
+  cells.push(drawFor(id, gate, idleFor(id), snapFor(id)));
+  return runsJoined(cells);
+}
+const holdsOf = (runs) => runs.split(" -> ").map((r) => Number(r.split(" x")[1]));
+const banksOf = (runs) => runs.split(" -> ").map((r) => r.split(":")[0]);
+
+function testExt5AirChains() {
+  const jez = buildGate("jez");
+  const jezNo5 = buildGate("jez", { ext5: false });
+  assert.deepEqual(capabilityFor("jez", jez), { extended: true, air: true });
+  // THE PLAIN JUMP, jez: one family from takeoff to touchdown, the same
+  // seven airborne holds the 5.1 read had, tick for tick — rise, ascent,
+  // tuck (un-retired), apex tuck, descent, air recover, gather, then the
+  // unified crouch transition of the landing recovery and the idle.
+  const jump = jumpTrace("jez", jez);
+  assert.equal(jump, "unified:0 x1 -> unified:8 x3 -> ext:3 x4 -> unified:9 x6 -> ext5:4 x4 -> ext5:5 x5 -> ext5:6 x8 -> ext3:10 x7 -> unified:6 x7 -> unified:0 x1");
+  const jumpBefore = jumpTrace("jez", jezNo5);
+  assert.equal(jumpBefore, "unified:0 x1 -> unified:8 x3 -> ext:3 x4 -> motion:5 x6 -> motion3:2 x4 -> motion3:3 x5 -> ext3:8 x8 -> ext3:10 x7 -> unified:6 x7 -> unified:0 x1",
+    "without the sheet the 5.1 read exactly (the capability answer is off, so the rise and tuck stay retired)");
+  assert.deepEqual(holdsOf(jump), holdsOf(jumpBefore), "a same-generation cell replaces a drawing and never changes timing");
+  assert.ok(banksOf(jump).every((b) => ["unified", "ext", "ext3", "ext5"].includes(b)), "no motion cell left on the arc");
+  assert.ok(Math.max(...holdsOf(jump).slice(1, -2)) <= 8, "every airborne hold inside the budget");
+  // DEATHBLOW, both accept states: no ext sheet (5.1) and with one (the
+  // parallel ext8 item may hand him one — traced with the ascent accepted
+  // and the descent held, the 4.0 shape, and with both).
+  const db = buildGate("deathblow");
+  assert.deepEqual(capabilityFor("deathblow", db), { air: true });
+  assert.equal(jumpTrace("deathblow", db), "unified:0 x1 -> unified:8 x6 -> unified:9 x6 -> ext5:4 x3 -> ext5:5 x4 -> ext5:6 x8 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1");
+  assert.equal(jumpTrace("deathblow", buildGate("deathblow", { ext5: false })), "unified:0 x1 -> motion2:7 x6 -> motion:5 x9 -> ext3:8 x12 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1",
+    "5.1: no motion3 on his sheet, so the tuck held 9 and the chamber 12");
+  const dbExt = buildGate("deathblow", { extOverride: { [E.idleBreathe]: 1, [E.jumpAscent]: 1 } });
+  assert.deepEqual(capabilityFor("deathblow", dbExt), { extended: true, air: true });
+  assert.equal(jumpTrace("deathblow", dbExt), "unified:0 x1 -> unified:8 x3 -> ext:3 x3 -> unified:9 x6 -> ext5:4 x3 -> ext5:5 x4 -> ext5:6 x8 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1");
+  const dbDescend = buildGate("deathblow", { extOverride: { [E.idleBreathe]: 1, [E.jumpAscent]: 1, [E.jumpDescend]: 1 } });
+  assert.equal(jumpTrace("deathblow", dbDescend), "unified:0 x1 -> unified:8 x3 -> ext:3 x3 -> unified:9 x6 -> ext:4 x3 -> ext5:5 x4 -> ext5:6 x8 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1",
+    "with a real descent of his own it takes the fall band, as ali's does");
+  // ALI keeps his own cell 20 where 4.1 put it; the ext5 descent follows it,
+  // and the 5.1 rewind (ext:4 -> motion3:3 -> ext:4) is gone.
+  const ali = buildGate("ali");
+  assert.deepEqual(capabilityFor("ali", ali), { extended: true, descend: true, air: true });
+  assert.equal(jumpTrace("ali", ali), "unified:0 x1 -> unified:8 x3 -> ext:3 x4 -> unified:9 x6 -> ext:4 x4 -> ext5:5 x5 -> ext5:6 x8 -> ext3:10 x7 -> unified:6 x7 -> unified:0 x1");
+  assert.equal(jumpTrace("ali", buildGate("ali", { ext5: false })), "unified:0 x1 -> unified:8 x3 -> ext:3 x4 -> unified:9 x6 -> ext:4 x4 -> motion3:3 x5 -> ext:4 x8 -> ext3:10 x7 -> unified:6 x7 -> unified:0 x1");
+  // THE DEVIL: no ext sheet, a glide cap on the fall (longer descent holds,
+  // exactly as long as 5.1's).
+  const devil = buildGate("devil");
+  assert.equal(jumpTrace("devil", devil), "unified:0 x1 -> unified:8 x7 -> unified:9 x6 -> ext5:4 x4 -> ext5:5 x4 -> ext5:6 x9 -> ext3:10 x11 -> unified:6 x7 -> unified:0 x1");
+  assert.deepEqual(holdsOf(jumpTrace("devil", devil)), holdsOf(jumpTrace("devil", buildGate("devil", { ext5: false }))));
+  // AIR NORMALS: the trail after the strike is the air recover on every
+  // fighter, and the chamber is drawn once. jez / ali / the devil carry the
+  // motion3 second strike body; deathblow does not.
+  assert.equal(airNormalTrace("jez", jez, "kick"), "ext3:8 x5 -> ext3:7 x4 -> motion3:4 x4 -> ext5:6 x5 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1");
+  assert.equal(airNormalTrace("jez", jezNo5, "kick"), "ext3:8 x5 -> ext3:7 x4 -> motion3:4 x4 -> ext3:8 x5 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1", "5.0: the chamber rewind");
+  assert.equal(airNormalTrace("jez", jez, "punch"), "ext3:8 x5 -> ext3:6 x5 -> motion3:4 x3 -> ext5:6 x5 -> ext3:10 x3 -> unified:6 x11 -> unified:0 x1");
+  assert.equal(airNormalTrace("deathblow", db, "kick"), "ext3:8 x5 -> ext3:7 x8 -> ext5:6 x5 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1");
+  assert.equal(airNormalTrace("ali", ali, "kick"), "ext3:8 x5 -> ext3:7 x4 -> motion3:4 x4 -> ext5:6 x5 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1");
+  assert.equal(airNormalTrace("ali", buildGate("ali", { ext5: false }), "kick"), "ext3:8 x5 -> ext3:7 x4 -> motion3:4 x4 -> ext:4 x5 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1", "ali's 5.0 trail was his own descent");
+  assert.equal(airNormalTrace("devil", devil, "punch"), "ext3:8 x5 -> ext3:6 x5 -> motion3:4 x3 -> ext5:6 x5 -> ext3:10 x3 -> unified:6 x11 -> unified:0 x1");
+  for (const id of ["jez", "deathblow", "ali", "devil"]) {
+    for (const limb of ["kick", "punch"]) {
+      const runs = airNormalTrace(id, buildGate(id), limb).split(" -> ");
+      assert.equal(runs.filter((r) => r.startsWith("ext3:8")).length, 1, `${id} ${limb}: the chamber is drawn once`);
+      assert.ok(runs.some((r) => r.startsWith("ext5:6")), `${id} ${limb}: the trail is the air recover`);
+    }
+  }
+  // A JUGGLE HIT: the launch opener keeps the ext4 arch while rising fast,
+  // the CARRY (hanging at the top) is the ext5 upright air hit, the fall
+  // with the knockdown pending is ext4:10, the last 55px the crumple.
+  for (const id of ["jez", "deathblow", "ali", "devil"]) {
+    assert.equal(juggleTrace(id, buildGate(id)), "ext4:6 x11 -> ext5:7 x3 -> ext4:10 x6 -> ext4:9 x8", id);
+    assert.equal(juggleTrace(id, buildGate(id, { ext5: false })), "ext4:6 x14 -> ext4:10 x6 -> ext4:9 x8", `${id}: 5.1, the arch through the carry`);
+  }
+  // AN AIR TECH: the flip's ball is the apex tuck, its tail the air recover,
+  // then the neutral fall on the family, the landing tax, the idle.
+  assert.equal(airTechTrace("jez", jez), "ext5:4 x8 -> ext5:6 x4 -> ext5:5 x11 -> ext5:6 x4 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1");
+  assert.equal(airTechTrace("jez", jezNo5), "motion:5 x8 -> ext3:8 x4 -> motion3:3 x11 -> ext3:8 x4 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1", "5.1: three banks in one fall");
+  assert.equal(airTechTrace("deathblow", db), "ext5:4 x8 -> ext5:6 x4 -> ext5:5 x13 -> ext5:6 x2 -> ext3:10 x4 -> unified:6 x11 -> unified:0 x1");
+  assert.equal(airTechTrace("ali", ali), "ext5:4 x8 -> ext5:6 x4 -> ext5:5 x11 -> ext5:6 x3 -> ext3:10 x5 -> unified:6 x11 -> unified:0 x1");
+  assert.equal(airTechTrace("devil", devil), "ext5:4 x8 -> ext5:6 x4 -> ext5:5 x18 -> ext5:6 x7 -> ext3:10 x12 -> unified:6 x11 -> unified:0 x1");
+  // Nothing above draws the inverted ext4 cells; every air chain runs the
+  // same number of ticks as its 5.1 read, and on a fighter with the motion3
+  // keys (jez, ali, the devil) its holds ARE the 5.1 holds. deathblow has no
+  // motion3 sheet, so the ext5 cells fill the two slots his arc left empty
+  // and his holds only shorten (9 + 12 -> 6 + 3 + 4 + 8).
+  const sum = (a) => a.reduce((t, n) => t + n, 0);
+  for (const id of ["jez", "deathblow", "ali", "devil"]) {
+    const g = buildGate(id), n = buildGate(id, { ext5: false });
+    for (const [a, b] of [[jumpTrace(id, g), jumpTrace(id, n)], [airTechTrace(id, g), airTechTrace(id, n)], [airNormalTrace(id, g, "kick"), airNormalTrace(id, n, "kick")]]) {
+      assert.ok(!/ext4:(7|11) /.test(`${a} `), a);
+      assert.equal(sum(holdsOf(a)), sum(holdsOf(b)), `${id}: the same ticks`);
+      assert.ok(Math.max(...holdsOf(a)) <= Math.max(...holdsOf(b)), `${id}: the air cells never lengthen a hold — ${a} against ${b}`);
+      if (id !== "deathblow") assert.deepEqual(holdsOf(a), holdsOf(b), `${id}: ${a} against ${b}`);
+    }
+  }
+  // The descriptor sites this trace mirrors, pinned in game.js.
+  assert.match(gameSource, /const air = unifiedFighterAirReady\(fighter\.def\.id\);/);
+  assert.match(gameSource, /\? \(air \? EXTENDED_DESCEND_AIR : EXTENDED_DESCEND\)\s*\n\s*: \(air \? EXTENDED_AIR : EXTENDED\)\)\s*\n\s*: \(air \? AIR : undefined\);/);
+  assert.match(gameSource, /function unifiedFighterAirReady\(fighterId\) \{\s*\n\s*return swingCellDrawable\(fighterId, UNIFIED_EXT5_CELLS\.apexTuck, UNIFIED_EXT5_BANK\)\s*\n\s*&& swingCellDrawable\(fighterId, UNIFIED_EXT5_CELLS\.descent, UNIFIED_EXT5_BANK\)\s*\n\s*&& swingCellDrawable\(fighterId, UNIFIED_EXT5_CELLS\.airRecover, UNIFIED_EXT5_BANK\);/);
+  assert.match(gameSource, /return beatPoseAt\(jumpArcKeys\(bandStart, extOpt\), progress, \(key\) => \(\s*\n[^\n]*\n\s*!key \|\| key\.at < 0\.76 \? base\(13\) : base\(12\)/);
+  assert.match(gameSource, /if \(fighter\.landingRecoveryFrames > 0\) \{\s*\n\s*return uni\(UNIFIED_CELLS\.crouchTrans, motion2Pose\(MOTION2_CELLS\.crouchTrans, "base", 12\)\);/);
+  assert.match(gameSource, /return flip < 0\.6\s*\n\s*\? motionPose\(MOTION_CELLS\.tuck, "base", 13\)\s*\n\s*: motionPose\(MOTION_CELLS\.airrec, "base", 13\);/);
+}
+
 testContextFromSnapshot();
 testCrouchActiveWindow();
 testSubstitutionAndGate();
@@ -605,5 +841,6 @@ testAirHitNeverReachesTheScreen();
 testFrameChains();
 testGameMirror();
 testExt5GroundChains();
+testExt5AirChains();
 
 console.log("Final Blow swing resolver tests passed");

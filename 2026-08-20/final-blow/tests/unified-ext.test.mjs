@@ -441,7 +441,7 @@ function testRouting() {
     assert.ok(!reachable.has(cell),
       `ext cell ${unifiedExtCell(cell)} is optional but the plain extended track keys it`);
   }
-  const shippingKitSource = kitSource.replace(/if \(extended[^)]*\) \{[\s\S]*?\n  \}\n/g, "");
+  const shippingKitSource = kitSource.replace(/if \((?:extended|air)[^)]*\) \{[\s\S]*?\n  \}\n/g, "");
   assert.ok(!shippingKitSource.includes("xkey(UNIFIED_EXT_CELLS.jumpDescend)"),
     "engine/fighter-kits.mjs keys the descent OUTSIDE an extended branch — a fighter "
     + "whose cell 20 is a hit reaction would flinch on the way down");
@@ -452,8 +452,8 @@ function testRouting() {
   assert.match(gameSource,
     /function unifiedFighterExtDescendReady\(fighterId\) \{\s*\n\s*return unifiedExtCellDrawable\(fighterId, UNIFIED_EXT_CELLS\.jumpDescend\);/,
     "the descent capability must be the same mask read every other ext cell takes");
-  assert.match(gameSource, /unifiedFighterExtDescendReady\(fighter\.def\.id\) \? EXTENDED_DESCEND : EXTENDED/,
-    "the jump arc must select the descend arc from that one capability answer");
+  assert.match(gameSource, /unifiedFighterExtDescendReady\(fighter\.def\.id\)\s*\n\s*\? \(air \? EXTENDED_DESCEND_AIR : EXTENDED_DESCEND\)\s*\n\s*: \(air \? EXTENDED_AIR : EXTENDED\)\)/,
+    "the jump arc must select the descend arc from that one capability answer (v5.2: with the `air` answer riding the same object)");
 
   // Every fighter's cell 20 carries its verdict beside the art, so a future wave
   // knows the cell was DRAWN AND JUDGED rather than overlooked — refused on the

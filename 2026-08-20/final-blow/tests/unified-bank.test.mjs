@@ -523,7 +523,10 @@ function testConnectedRegions() {
   // strip therefore covers every extended-GUARDED branch rather than only the
   // bare one; the SCOPE is unchanged — the arrays that ship for a fighter who
   // cannot draw the cell — and only the spelling of the guard has moved.
-  const shippingKitSource = kitSource.replace(/if \(extended[^)]*\) \{[\s\S]*?\n  \}\n/g, "");
+  // v5.2 (ext5-air): `air` joins the guard — the rise and the tuck are keyed
+  // into the arc only where the fighter's ext5 apex, descent and air recover
+  // follow them (one family to touchdown), so the strip covers that branch too.
+  const shippingKitSource = kitSource.replace(/if \((?:extended|air)[^)]*\) \{[\s\S]*?\n  \}\n/g, "");
   // The strip must not be able to swallow the whole file and pass vacuously.
   assert.ok(shippingKitSource.length > kitSource.length * 0.9,
     "the extended-branch strip removed too much to be checking anything");

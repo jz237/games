@@ -112,9 +112,11 @@ export function swingContext(fighter, { roundDecided = false } = {}) {
  * game.js), not a swing-only one: a substitute may land on any authored bank
  * — ext3/ext4 mostly, but the unified crouch transition, the ext2 crouch
  * recover and the ext descent too. A target that cannot draw falls to its
- * `alt` when it has one and that can draw (the descent's chambered-air
- * fallback for the five sheets that never accepted their descent); otherwise
- * the resolved pose stands untouched, so timing never changes.
+ * `alt` when it has one and that can draw; an alt may carry an alt of its
+ * own (v5.2: the air recover's degrade path is the 5.0 chain in its order —
+ * the ext descent where a sheet accepted it, then the ext3 chamber), and the
+ * gate is asked down that chain until one draws; otherwise the resolved pose
+ * stands untouched, so timing never changes.
  */
 export function swingResolve(pose, ctx, drawable) {
   let sub = swingSubstitute(pose.bank, pose.frame, ctx);
@@ -126,9 +128,7 @@ export function swingResolve(pose, ctx, drawable) {
   // The substitute may land on ANY authored bank (ext3/ext4 mostly, but the
   // unified crouch transition, the ext2 crouch recover and the ext descent
   // too), so the gate is the bank-routed one, not the swing-only one.
-  if (sub && !drawable(sub.frame, sub.bank)) {
-    sub = sub.alt && drawable(sub.alt.frame, sub.alt.bank) ? sub.alt : null;
-  }
+  while (sub && !drawable(sub.frame, sub.bank)) sub = sub.alt || null;
   if (!sub) return pose;
   return { bank: sub.bank, frame: sub.frame, fallback: pose };
 }

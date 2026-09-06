@@ -145,7 +145,7 @@
    "throw-grab",
    "dizzy-sway"
   ],
-  "ext5Status": "WIRED 5.2 (ground and bookend cells) -- the dash launch / stretch / brake (dashKeys, ahead of the motion links, plus the dash-exit tail), the turnaround latch, the super/EX power charge, entrance A/B at the intro, the victory under the spotlight, the taunt, the crouch guard flinch opening a crouched block ahead of the ext3 crouch guard, the throw grab in the clinch's load band and the dizzy sway alternating with the ext4 slump on a 12-tick beat all draw from this sheet; hold budgets untouched. The AIR cells 4-7 (apex tuck, descent, air recover, air-hit-upright) are routed by the next item and tests/unified-swing.test.mjs pins them unreachable until it lands. 159 of 160 cells accept. The one hold is ali's crouch-guard-flinch (85): a yellow impact burst is painted into the cell at his hands and the purge keys purple only, so it stays accept:false until it is keyed out (a crouched block keeps his ext3 crouch guard through the impact band too). The air-hit-upright cell (79) came back as a doubled-over fold on nine sheets and an arched launch on the devil's -- head and feet both down on every one, so unlike the inverted ext4:7 it is accepted and the air routing pass decides what, if anything, it stands in for.",
+  "ext5Status": "WIRED 5.2 (all sixteen cells) -- the ground and bookend cells as item two routed them (the dash launch / stretch / brake, the turnaround, the power charge, entrance A/B, the victory, the taunt, the crouch guard flinch, the throw grab, the dizzy sway), and since item three (ext5-air) the four AIR cells: the apex tuck, descent and air recover lead the jump arc's bands under the fighter's `air` answer (jumpArcKeys, ahead of the motion3 / motion links, with unified:8 and :9 un-retired ahead of them so the arc is one family from takeoff to touchdown), the air recover is the trail after every air normal and the air-tech tail (never the chambered ext3 cell again), the apex tuck the air-tech ball, and the air-hit-upright cell dresses a victim CARRIED in a juggle (the ext4 launched arch stays the launch opener and the falling / crumple cells the descent). Hold budgets untouched: every air cell replaces a drawing on the band it already owned. 159 of 160 cells accept. The one hold is ali's crouch-guard-flinch (85): a yellow impact burst is painted into the cell at his hands and the purge keys purple only, so it stays accept:false until it is keyed out (a crouched block keeps his ext3 crouch guard through the impact band too). The air-hit-upright cell (79) came back as a doubled-over fold on nine sheets and an arched launch on the devil's -- head and feet both down on every one, so unlike the inverted ext4:7 it is accepted and routed for the carry.",
   "swingStatus": "WIRED AND SHIPPING (v5.0). Consumed by swingSubstitute at pose resolution: a resolved motion/motion2 cell with a same-family equivalent on the fighter's ext3/ext4 sheet draws the equivalent instead, gated per cell. Tracks and hold budgets are untouched.",
   "despill": "v5.1: every generated ext bank (ext2/ext3/ext4) rebuilt from its archived raw with tools/swing/build_sheet.py inpaint_magenta \u2014 the model paints a magenta rim on figures against the magenta key and the key solve kept it (2-4% of each sheet's opaque pixels were magenta, zero on the main sheets). Registration is byte-identical (heights, body centres and draw adjusts unchanged); weighted dE to each fighter's unified sheet now 0.75-1.97 (devil 1.8-2.0, previously 3.7-4.2).",
   "encoding": {
@@ -1048,25 +1048,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -1909,25 +1909,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -2774,25 +2774,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -3552,25 +3552,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -4408,25 +4408,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -5191,25 +5191,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -6046,25 +6046,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0304 restores its size."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0304 restores its size. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -7046,25 +7046,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller)."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at its own scale (a 6x4 main sheet draws its figure smaller). Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -7907,25 +7907,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0329 restores its size. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Fit-scaled; drawAdjust 1.0329 restores its size. Drawn as a doubled-over fold (head and feet both down), not an upright recoil; not inverted, so it is accepted and the routing pass decides its use. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,
@@ -8685,25 +8685,25 @@
      "frame": 76,
      "id": "apex-tuck",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's apex band, ahead of the motion3 apex, and the air-tech flip's ball."
     },
     {
      "frame": 77,
      "id": "descent",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's descent band, ahead of the motion3 jump-descent (and, on the five sheets whose ext cell 20 was rejected, the fall the arc never had)."
     },
     {
      "frame": 78,
      "id": "air-recover",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. ROUTED 5.2 (ext5-air): the jump arc's last airborne band, the trail after every air normal and the air-tech tail, over motion:11."
     },
     {
      "frame": 79,
      "id": "air-hit-upright",
      "accept": true,
-     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as an arched launch (head up, feet trailing), not an upright recoil."
+     "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale. Drawn as an arched launch (head up, feet trailing), not an upright recoil. ROUTED 5.2 (ext5-air): a victim carried in a juggle (airborne hitstun before the fall), over the launched arch; never the launch opener or the fall."
     },
     {
      "frame": 80,

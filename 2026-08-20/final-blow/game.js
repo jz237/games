@@ -1593,6 +1593,20 @@ function unifiedFighterExtDescendReady(fighterId) {
   return unifiedExtCellDrawable(fighterId, UNIFIED_EXT_CELLS.jumpDescend);
 }
 
+/**
+ * v5.2 LOCOMOTION (ext5-air): the jump arc's `air` answer — the fighter's
+ * ext5 apex tuck, descent AND air recover all drawable, so the arc can own
+ * everything after the ascent on one family (jumpArcKeys). Asked as one
+ * answer, not per cell: a partial sheet would put a generation crossing back
+ * in the middle of the air, which is the configuration 3.0 measured and
+ * removed.
+ */
+function unifiedFighterAirReady(fighterId) {
+  return swingCellDrawable(fighterId, UNIFIED_EXT5_CELLS.apexTuck, UNIFIED_EXT5_BANK)
+    && swingCellDrawable(fighterId, UNIFIED_EXT5_CELLS.descent, UNIFIED_EXT5_BANK)
+    && swingCellDrawable(fighterId, UNIFIED_EXT5_CELLS.airRecover, UNIFIED_EXT5_BANK);
+}
+
 /** Bank-routed drawable gate for resolveMotionPose (all six authored banks). */
 function motionBankCellDrawable(fighterId, cell, bank) {
   if (bank === "motion3") return motion3KeyDrawable(fighterId, cell);
@@ -19257,6 +19271,13 @@ const EXTENDED = Object.freeze({ extended: true });
 // handed this object unchanged, which keeps "one capability answer per pose"
 // true rather than nearly true.
 const EXTENDED_DESCEND = Object.freeze({ extended: true, descend: true });
+// v5.2 LOCOMOTION (ext5-air): the same three answers with `air` — the ext5
+// apex tuck, descent and air recover drawable — which only the jump arc
+// reads (every other track destructures what it knows and ignores the rest).
+// Frozen for the same reason: a track cannot mutate the caller's answer.
+const AIR = Object.freeze({ air: true });
+const EXTENDED_AIR = Object.freeze({ extended: true, air: true });
+const EXTENDED_DESCEND_AIR = Object.freeze({ extended: true, descend: true, air: true });
 // Idle breaths per second on a fighter with an ext sheet. Two drawings at 7.5/s
 // is 8 ticks each at 60fps — exactly MOTION_HOLD_BUDGET, so the most-seen beat
 // in the game sits precisely at the limit the budget sets rather than holding
@@ -19294,9 +19315,16 @@ function fighterPoseDescriptor(fighter) {
   // Five fighters have no ext sheet and take `false` through every branch,
   // which is the byte-identical 3.5 read.
   const ext = unifiedFighterExtReady(fighter.def.id);
+  // v5.2 LOCOMOTION (ext5-air): `air` rides the same object. A fighter with
+  // no ext sheet but the ext5 air cells (deathblow, post, donald, the devil)
+  // takes AIR, so his plain arc un-retires the unified rise and tuck ahead
+  // of the ext5 apex, descent and recover — one family, takeoff to touchdown.
+  const air = unifiedFighterAirReady(fighter.def.id);
   const extOpt = ext
-    ? (unifiedFighterExtDescendReady(fighter.def.id) ? EXTENDED_DESCEND : EXTENDED)
-    : undefined;
+    ? (unifiedFighterExtDescendReady(fighter.def.id)
+      ? (air ? EXTENDED_DESCEND_AIR : EXTENDED_DESCEND)
+      : (air ? EXTENDED_AIR : EXTENDED))
+    : (air ? AIR : undefined);
   // v4.9 IN-BETWEENS: the third capability answer. `beatOpt` carries the ext
   // answer and adds `inbetween` when this fighter's ext2 sheet is whole, so
   // the strike tracks (light cock, heavy load, recovery, throw reach/release)
@@ -19407,6 +19435,10 @@ function fighterPoseDescriptor(fighter) {
     // chain. Routing the unified tuck into it put a 8.18 dE mean crossing
     // between them (7.56 on deathblow) to remove none; retired, it is
     // crossing-free.
+    // v5.2 LOCOMOTION (ext5-air): the substitution table draws this pair as
+    // the ext5 apex tuck (the ball) and the ext5 air recover (the tail) on a
+    // fighter with the sheet — both motion cells are accepted on all ten, so
+    // the table always sees them and the chain below needs no ext5 descriptor.
     return flip < 0.6
       ? motionPose(MOTION_CELLS.tuck, "base", 13)
       : motionPose(MOTION_CELLS.airrec, "base", 13);
@@ -19910,6 +19942,11 @@ function fighterPoseDescriptor(fighter) {
     // route — every band after it (tuck, apex, descent, air-recovery, landing
     // gather) is motion-family, and the first cut's unified tuck handed to
     // motion:11 at 7.56 dE and held it 15+ ticks in mid-air. See jumpArcKeys.
+    // v5.2 LOCOMOTION (ext5-air): with the `air` answer the arc above is one
+    // family end to end (the rise and tuck un-retired ahead of the ext5 apex
+    // tuck, descent and air recover, the ext3 gather, then the unified crouch
+    // transition below); this reduced-motion / non-neutral read keeps its
+    // motion2 rise and the land cell, which the substitution draws as ext3:10.
     if (fighter.vy < 0) return motion2Pose(MOTION2_CELLS.jumpRise, "base", 13);
     // BODY-FIRST (spec 4): the descent cell advances BEFORE touchdown — the
     // legs gather on the crouch cell through the last ~110px of the fall

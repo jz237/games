@@ -2310,8 +2310,13 @@ const UNIFIED_EXT4_CELL_ADJUST = Object.freeze({
 // swingSubstitute maps the motion dash / charge / victory / signatures and
 // the motion2 pivot / brake / seize / dizzy onto the sheet, and game.js emits
 // the exit brake, the pivot, the entrance, the win and the taunt through
-// unifiedExt5Pose. The AIR cells (4-7) are the next item's;
-// tests/unified-swing.test.mjs pins them unreached until it lands.
+// unifiedExt5Pose. Item three (ext5-air) routes the AIR cells (4-7):
+// jumpArcKeys carries the apex tuck / descent / air recover ahead of the
+// motion3 and motion links under the `air` answer, and swingSubstitute maps
+// the neutral airborne tuck, the attacker's trail, the air-tech tail and the
+// carried juggle victim onto the sheet. All sixteen cells reach the screen.
+// The four are airborne bodies anchored by CELL_BODY_CENTRE like every other
+// airborne cell, so swingStandInAdjust stays 1 on them (no ground rung).
 export const UNIFIED_EXT5_CELL_HEIGHT = Object.freeze({
   deathblow: Object.freeze([215, 211, 168, 254, 168, 259, 251, 194, 248, 253, 246, 260, 249, 197, 232, 244]),
   jez: Object.freeze([251, 184, 186, 291, 202, 285, 292, 236, 279, 292, 289, 292, 298, 233, 288, 292]),
@@ -3711,7 +3716,8 @@ export const UNIFIED_EXT4_BEATS = Object.freeze([
 // swingFrame and the loaders need no bank-specific code). Registered by the
 // install item; the GROUND and BOOKEND cells (0-3, 8-15) are routed by the
 // item after it (see the UNIFIED_EXT5_CELL_HEIGHT block), the AIR cells
-// (4-7) by the one after that — the tests pin those four unreachable.
+// (4-7) by the one after that (jumpArcKeys `air`, the airborne cases of
+// swingSubstitute) — every cell is reachable and the tests pin all sixteen.
 export const UNIFIED_EXT5_BANK = "unified-ext5";
 export const UNIFIED_EXT5_CELL_COUNT = 16;
 export const UNIFIED_EXT5_BASE = 72;
@@ -3883,6 +3889,21 @@ export function swingFighterIds(masks) {
  *                            band, since the seize band leads with ext2's
  *                            reach on every fighter)
  *
+ * v5.2 LOCOMOTION (ext5-air) — the four AIR cells, keyed on the airborne
+ * motion cells (the plain jump's track links them directly, see jumpArcKeys):
+ *
+ *   motion:5  tuck        -> ext3:8 air chamber for an airborne ATTACKER
+ *                            (5.0); ext5:4 apex tuck for a neutral airborne
+ *                            body — the air-tech flip's ball
+ *   motion:11 airrec      -> ext4:10 falling once the knockdown is pending
+ *                            (5.0); ext5:7 air-hit-upright (alt: the ext4
+ *                            launched arch) for a victim CARRIED in a juggle;
+ *                            ext5:6 air recover for any other airborne body —
+ *                            the attacker's trail after an air strike, the
+ *                            air-tech tail — with the 5.0 chain as its alts
+ *                            (the ext descent where accepted, then the ext3
+ *                            chamber); the ext3 land on the floor (5.0)
+ *
  * NOT routed, on purpose: the air hit (7) and the FLOOR BOUNCE (11). Both
  * came out with the feet in the air on every sheet (the bounce is a body on
  * its shoulders, legs up), which is the read 4.6 took off the floor and the
@@ -3920,21 +3941,42 @@ export function swingSubstitute(bank, frame, ctx = {}) {
       case MOTION_CELLS.smearH: return { bank: UNIFIED_EXT3_BANK, frame: E3.smearH };
       case MOTION_CELLS.smearV: return { bank: UNIFIED_EXT3_BANK, frame: E3.smearV };
       case MOTION_CELLS.land: return { bank: UNIFIED_EXT3_BANK, frame: E3.land };
-      case MOTION_CELLS.tuck: return ctx.attacking && ctx.airborne ? { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber } : null;
+      case MOTION_CELLS.tuck:
+        if (ctx.attacking && ctx.airborne) return { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber };
+        // v5.2 (ext5-air): a NEUTRAL airborne tuck — the air-tech flip's ball
+        // (the plain jump's tuck band leads with unified:9 and never resolves
+        // this cell) — is the apex tuck, so the flip stays on the family.
+        if (ctx.airborne) return { bank: UNIFIED_EXT5_BANK, frame: E5.apexTuck };
+        return null;
       case MOTION_CELLS.bighit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.victimAirborne ? E4.launched : E4.bigHit };
       case MOTION_CELLS.airrec:
-        // A launched victim: the falling cell once the knockdown is pending,
-        // the launched arch while still carried. The air-hit cell (E4.airHit)
-        // came out INVERTED on every sheet — head down, feet in the air, the
-        // read 4.6 removed from the floor — so it stays drawn but unrouted.
+        // A launched victim: the falling cell once the knockdown is pending.
+        // The ext4 air-hit cell (E4.airHit) came out INVERTED on every sheet
+        // — head down, feet in the air, the read 4.6 removed from the floor —
+        // so it stays drawn but unrouted.
         if (ctx.falling) return { bank: UNIFIED_EXT4_BANK, frame: E4.falling };
-        if (ctx.victimAirborne) return { bank: UNIFIED_EXT4_BANK, frame: E4.launched };
-        // The ATTACKER's trail after an air strike (and the air-tech flip's
-        // tail) is the ext descent; the same key on the floor is the landing
-        // footing, which is the land cell held rather than a motion cell.
-        // Five sheets never accepted their ext descent (4.0 sheets); for those
-        // the chambered air cell, limbs gathered, is the same-generation trail.
-        if (ctx.airborne) return { bank: UNIFIED_EXT_BANK, frame: UNIFIED_EXT_CELLS.jumpDescend, alt: { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber } };
+        // v5.2 (ext5-air): a victim CARRIED in a juggle (airborne hitstun,
+        // not yet falling with the knockdown pending) wears the ext5 upright
+        // air hit — a body folding over the blow, head above the hips on all
+        // ten sheets — where 5.0/5.1 held the launched arch for the whole
+        // carry. The arch stays the LAUNCH's opener (unified:13 / motion:8
+        // while rising fast) and this cell's alt for a held sheet.
+        if (ctx.victimAirborne) return { bank: UNIFIED_EXT5_BANK, frame: E5.airHitUpright, alt: { bank: UNIFIED_EXT4_BANK, frame: E4.launched } };
+        // v5.2 (ext5-air): the ATTACKER's trail after an air strike, the
+        // air-tech flip's tail and the plain jump's last airborne band are
+        // the ext5 air recover — limbs loose, the same key's own meaning —
+        // and NEVER the chambered air cell again (5.0 drew the chamber here
+        // on the five sheets whose ext descent was rejected, which put a
+        // chamber -> strike -> chamber rewind on every air normal). The 5.0
+        // chain is the degrade path behind it, in its order: the ext descent
+        // where a sheet accepted it (ali), then the chamber. The same key on
+        // the floor is the landing footing, the land cell held.
+        if (ctx.airborne) {
+          return {
+            bank: UNIFIED_EXT5_BANK, frame: E5.airRecover,
+            alt: { bank: UNIFIED_EXT_BANK, frame: UNIFIED_EXT_CELLS.jumpDescend, alt: { bank: UNIFIED_EXT3_BANK, frame: E3.airChamber } },
+          };
+        }
         return { bank: UNIFIED_EXT3_BANK, frame: E3.land };
       case MOTION_CELLS.wallsplat: return { bank: UNIFIED_EXT4_BANK, frame: E4.wallSplat };
       case MOTION_CELLS.crumple: return { bank: UNIFIED_EXT4_BANK, frame: E4.crumple };
@@ -4431,7 +4473,7 @@ export function wakeupKeys(totalFrames = 16, roles = DEFAULT_BASE_ROLES) {
  * ascent cell is his golf swing, so his opens almost immediately — kept
  * exactly as 2.7 shipped it).
  */
-export function jumpArcKeys(bandStart = 0.17, { extended = false, descend = false } = {}) {
+export function jumpArcKeys(bandStart = 0.17, { extended = false, descend = false, air = false } = {}) {
   // donald's band used to open at 0.06 because his BASE ascent cell is the
   // golf swing and a plain jump wore it for ~10 ticks. That workaround is
   // superseded: since 2.9 the ascent wears the authored jump-rise key, so his
@@ -4537,6 +4579,73 @@ export function jumpArcKeys(bandStart = 0.17, { extended = false, descend = fals
   // The apex band keeps motion3 rather than stretching his tuck across it: the
   // tuck would then hold 12 ticks against a budget of 8, which is the very hold
   // this track exists to break.
+  //
+  // v5.2 LOCOMOTION (ext5-air) — THE ARC IS ONE FAMILY FROM TAKEOFF TO
+  // TOUCHDOWN. `air` is the caller's ONE capability answer for this track
+  // (game.js: the ext5 apex tuck, descent and air recover all drawable, read
+  // once per pose exactly as `extended` and `descend` are), and with it every
+  // band below the ascent leads with the fighter's own drawing, one link
+  // AHEAD of the motion link it replaces — the same band grid, so every hold
+  // is the one the motion links set, tick for tick: apex tuck (ext5:4) over
+  // the motion3 apex, descent (ext5:5) over the motion3 jump-descent, air
+  // recover (ext5:6, limbs loose) over motion:11, and the ext3 landing gather
+  // over motion:6 (the substitution table already drew it there; the link
+  // makes the track say so). The 3.0 objection to unified:8 and :9 — "with
+  // no usable descent after it the tuck would hand straight to a motion cell
+  // in mid-air" — was always conditional on what followed, and nothing motion
+  // follows now: the rise and the tuck come back into every `air` arc, on the
+  // ten sheets whose cell 9 reads upright at 1:1 (a compact ball, knees to
+  // chest, head over the hips on all ten — the manifest's notes). Traced on
+  // jez, `unified:8 x5 -> ext:3 x5 -> unified:9 x7 -> ext5:4 x5 -> ext5:5 x3
+  // -> ext5:6 x4 -> ext3:10 -> unified:6`, where 5.1 read `unified:8 -> ext:3
+  // -> motion:5 -> motion3:2 -> motion3:3 -> ext3:8 -> ext3:10`: the same
+  // seven holds, the same lengths, one generation. ali keeps his own ext
+  // descent (cell 20) where the 4.1 arc put it and the ext5 descent follows
+  // it; the five sheets that never accepted cell 20 take ext5:5 in its place.
+  // A fighter without the answer takes the arrays below, byte for byte.
+  if (air) {
+    const rise = [ukey(UNIFIED_CELLS.jumpRise), m2key(MOTION2_CELLS.jumpRise)];
+    const ascent = [xkey(UNIFIED_EXT_CELLS.jumpAscent), m2key(MOTION2_CELLS.jumpRise)];
+    const tuck = [ukey(UNIFIED_CELLS.jumpTuck), m1key(MOTION_CELLS.tuck)];
+    const apex = [x5key(UNIFIED_EXT5_CELLS.apexTuck), m3key(MOTION3_KEYS.jumpApex), m1key(MOTION_CELLS.tuck)];
+    const fall = [x5key(UNIFIED_EXT5_CELLS.descent), m3key(MOTION3_KEYS.jumpDescent), m1key(MOTION_CELLS.airrec)];
+    const recover = [x5key(UNIFIED_EXT5_CELLS.airRecover), m1key(MOTION_CELLS.airrec)];
+    const gather = [x3key(UNIFIED_EXT3_CELLS.land), m1key(MOTION_CELLS.land)];
+    if (extended && descend) {
+      return [
+        { at: 0, chain: rise },
+        { at: open * 0.5, chain: ascent },
+        { at: open, chain: tuck },
+        // THE FALL is still his own cell 20 (the 4.1 arc); the ext5 apex tuck
+        // is the same-family fallback behind it, then the 4.0 cells.
+        { at: open + span * 0.30, chain: [xkey(UNIFIED_EXT_CELLS.jumpDescend), ...apex] },
+        { at: open + span * 0.50, chain: fall },
+        { at: open + span * 0.66, chain: recover },
+        { at: 0.72, chain: gather },
+      ];
+    }
+    if (extended) {
+      return [
+        { at: 0, chain: rise },
+        { at: open * 0.5, chain: ascent },
+        { at: open, chain: tuck },
+        { at: open + span * 0.30, chain: apex },
+        { at: open + span * 0.50, chain: fall },
+        { at: open + span * 0.66, chain: recover },
+        { at: 0.72, chain: gather },
+      ];
+    }
+    // No ext sheet (deathblow, post, donald, the devil): the 3.0 grid with the
+    // rise and the tuck un-retired, since the family owns everything after.
+    return [
+      { at: 0, chain: rise },
+      { at: open, chain: tuck },
+      { at: open + span * 0.30, chain: apex },
+      { at: open + span * 0.50, chain: fall },
+      { at: open + span * 0.66, chain: recover },
+      { at: 0.72, chain: gather },
+    ];
+  }
   if (extended && descend) {
     return [
       // TAKEOFF and ASCENT, identical to the extended arc below.

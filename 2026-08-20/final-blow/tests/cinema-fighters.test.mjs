@@ -577,6 +577,22 @@ test("an ext5 pose draws from the ext5 bank when the fighter owns the sheet, and
   assert.equal(lackLayer.rigs[0].banks["unified-ext5"], undefined);
 });
 
+// v5.2 LOCOMOTION (ext5-air): an airborne ext5 cell — the descent — draws
+// from the ext5 bank and asks the host for the SAME vertical registration the
+// canvas uses (cellVerticalOffset with the bank, the frame and the height
+// above the floor), so the airborne anchor cannot differ between renderers.
+test("an ext5 air cell draws from the ext5 bank with the shared airborne anchor", () => {
+  const asked = [];
+  const airborne = fighterMock({ grounded: false, y: SIM_FLOOR - 150, __pose: { bank: "unified-ext5", frame: 5, fallback: { bank: "motion3", frame: 3, fallback: { bank: "motion", frame: 11, fallback: { bank: "base", frame: 13 } } } } });
+  const state = stateMock([airborne]);
+  const { layer } = layerFor(state, { ownBanks: [...OWN_BANKS, "unified-ext5"] });
+  layer.host.cellVerticalOffset = (id, bank, frame, airHeight) => { asked.push([id, bank, frame, airHeight]); return 0; };
+  layer.update(state, 1 / 60, 0);
+  assert.equal(layer.rigs[0].currentBank, "unified-ext5");
+  assert.ok(asked.some(([id, bank, frame, airHeight]) => id === "post" && bank === "unified-ext5" && frame === 5 && airHeight === 150),
+    `the anchor is asked for the ext5 descent at 150px: ${JSON.stringify(asked)}`);
+});
+
 test("sheets shared by both sides survive one side's disposal; idle rigs are evicted after 3 s", () => {
   const a = fighterMock();
   const b = fighterMock({ side: 1, facing: -1, x: 800 });
