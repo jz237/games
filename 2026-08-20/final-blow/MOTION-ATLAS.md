@@ -4557,3 +4557,168 @@ crowd's KO hold latch (`updateCrowdKoHoldLatch`, keyed on the phase alone)
 are all untouched, and the winner still reads `ext5:11 -> ext5:12` beside the
 body exactly as 5.2 shipped it. The whole change is a drawing and a knockdown
 flag on a round that is already decided.
+
+## v5.3 — SPECTACLE: THE VERIFICATION HARNESS, OR THE FRAME CHAINS ARE A TEST NOW
+
+No art. Every acceptance number in this file above this line was read off a
+screen by a person: the frame chains in the 5.0 section ("verified by frame
+attribution in real play"), the floodlight swell ("measured on the Vet
+canvas"), the crowd's arms going up, the whiff fringe, the decision call. The
+one automated thing that draws anything — `tests/browser-smoke.mjs` — could
+not hold any of it, because it was 3,700 lines of one sequential body: the
+first failing assert aborted the rest, so a broken crowd probe hid the sixty
+checks after it, and re-running one section cost the whole two minutes. That
+is the actual reason the evidence lives in a markdown log. This install turns
+the log into assertions.
+
+### The registry, which is a pure re-wrap
+
+Every body is byte-identical; 788 assertions, unchanged. The 5.2 script's 207
+top-level declarations are hoisted to one `let` block so the sections became
+closures in one scope, and each section is registered as a named probe:
+69 of them, plus six new ones (five 5.1 tells and CINEMA 3D), 75 in all. They run
+in registry order — always, because they share page state on purpose (a probe
+leaves a fight running, a stage picked, reduced motion switched on for the
+offline-boot checks that follow) — but a probe that throws is now recorded
+against its own name and the run carries on. `--only` / `--skip` / `--report`
+/ `--artifacts` / `--list`; `--list` is answered before the server and Chrome
+start, so it is free. Documented in `tests/README.md`.
+
+The first full run under the registry found two pins that were stale rather
+than one: 5.3's stage-reach gave the Janney lot the loose brick where the smoke
+still asserted `weapon === null`, and 5.3's crowd depth gave Somerset one
+street argument where the smoke still asserted zero loop groups. Both are
+pinned by their own unit suites; the smoke had never reported the second one,
+because the first aborted the run. Both pins moved, with the reason written
+beside them.
+
+    5.2   one body, first failure aborts     stage-tailgate red, 61 probes never ran, ~120 s
+    5.3   75 probes, continue on failure     both stale pins reported in one 74 s run
+    5.3   node tests/browser-smoke.mjs --only=crowd,tempo,ambient    8.3 s
+    node  411 unit tests at HEAD -> 434 (probe registry 14, PNG decoder 7, setTimer guard 1, live host contract 1)
+
+### The five 5.1 tells, measured
+
+`ambient-ko-pulse` samples the two authored Vet floodlight centres through
+`getImageData` on the game canvas — [125, 88] and [1230, 232], the glow radius
+growing 90 → 210 with the pulse — as 120 px and 110 px boxes, against a patch
+of plain sky outside every glow and every firework lane as the control. MEDIANS
+over nine painted frames, not peaks and not means: the Vet's sky carries a
+crawling blimp (which only darkens what it crosses) and an ambient firework
+every few seconds (which only brightens, and whose sparks spread nearly
+200 px), so one frame is a sample and a peak picks the firework. The swell
+itself is CONSTANT across the hold — a QA fight freezes the sim clock, so the
+pulse age does not move — which is what makes the median the honest statistic.
+The peak-based first draft of this probe passed four isolated runs and then
+failed inside the full suite when a firework landed in its baseline window; the
+median has held to +/-0.2 across six runs.
+
+    floodlight A (125, 88)     45.6 quiet -> 63.0 KO      +16.5 .. +18.4
+    floodlight B (1230, 232)   66.3 quiet -> 111.8 KO     +45.1 .. +47.5
+    both regions, mean                                    +31 .. +33   (5.0 read +27 by hand)
+    plain sky (1000, 15)       34.3 quiet -> 35.9 KO      +1.5 .. +1.8
+    asserted                   mean >= 15, each >= 10, sky < 8, each flood > 3x sky
+
+Then all six stages, driven from Node so each gets real frames either side of
+its KO — the KO kind and the crowd's hold both latch from the DRAW path, which
+is the trap that made the first three attempts at this probe read `big` where
+they should have read `ko`: calm before (surge 0), surge 1 and `pulseKind: ko`
+after, on somerset, vet, wildwood, buffet, cruise and janney alike.
+
+`crowd-ko-hold` reads the latch the way a player sees it — after painted
+frames, not after a `qa.step`: hold 0 → 1, held reaction 1.4, the crowd split
+into 9 cheering / 14 wincing / 9 flinching on the tailgate, one voiced take
+(`roar-3`) and no take following itself, then 40 ticks of sim and the hold has
+aged with it. It waits out the roar's 2,000 ms rate limit first, so "the KO
+plays a take" is an assertion rather than a race against whichever probe landed
+a KO before it.
+
+`tempo-tells` scripts a jab into thin air at 700 px: `whiffTells` +1, the tell
+walking `none -> whiff -> rearm -> none` at ticks 8 / 20 / 24, strength 0.7,
+profile `jez-neon-jab`. The drawn counters are per-frame, so they are sampled
+over real frames while the QA fight holds the sim clock still — 1 fringe and 2
+ghosts on the whiff, 1 flash on the re-arm, and a second press inside the gap
+producing exactly one `rearmDrop`, one `rearmClick` and one drop flash.
+
+`announcer-decision` needed a hook. The clock's whole voice — the once-per-round
+TEN SECONDS call at :10, the synthesised tick per displayed second under it,
+the time-over decision at :00 — was unreachable, because a round starts at 99
+seconds and no test waits 89 of them. `__finalBlowQa.setTimer(seconds)` writes
+`state.timer` the way the sim does (whole seconds, carry cleared, `updateHud()`
+left to book the edge) and refuses anything that is not a QA fight:
+`state.qaManualMode` is set by `qa.fight()` / `qa.training()` and cleared by
+every real match start, so the probe proves the guard by starting a match from
+the menu and watching `setTimer` throw before it uses it. Walked in ~30 ms:
+
+    setTimer(11)      HUD 11        clockCallouts +0   timerTicks +0
+    step(1.05)        HUD 10        clockCallouts +1   timerTicks +1    announcerCalls +1
+    step(11)          HUD 00        clockCallouts +1   timerTicks +11   decisionCalls +1, phase roundover
+    invariant                       clockTicksVoiced == timerTicks (11)
+
+`pose-trace-chains` is the one that closes the 5.0 loop. `qa.pose()` resolves
+through the same `fighterAnimationPose` both renderers call, and
+`recordPoseTrace` sits at the end of it — so stepping one tick and asking for
+the pose records the transition with no rendered frame and no tick counting at
+all. Chains are asserted as an ordered PREFIX, never a length or a timing, so
+tempo tuning cannot break them. Four of the five come back exactly as this file
+recorded them by eye in 5.0. The fifth has moved, and the doc was wrong:
+
+    jab          ext2:0 -> ext3:0 -> ext3:2 -> ext2:1 -> unified:7                       as written in 5.0
+    heavy kick   ext:6 -> ext2:6 -> unified:6 -> ext3:14 -> ext3:11 -> ext2:7 -> unified:7   as written in 5.0
+    crouch jab   ext2:8 -> ext3:4 -> ext2:9 -> unified:7                                 as written in 5.0
+    sweep        ext2:10 -> ext3:5 -> ext3:15 -> ext2:11                                 as written in 5.0
+    air kick     ext3:8 -> ext3:7 -> motion3:4 -> ext5:6 -> ext3:10 -> unified:6          5.0 wrote the fourth cell as ext3:8
+
+5.2 LOCOMOTION gave the jump its own ext5 cells, and the return out of the
+descent became `unified-ext5:6` where 5.0 had drawn `unified-ext3:8` again. The
+5.0 note's parenthetical still holds: `motion3:4` is the one cross-generation
+cell left on the whole set, and the probe asserts that as a rule — every ground
+chain is unified-family end to end, and the air arc's single exception is
+written out by name rather than tolerated.
+
+### CINEMA 3D had never been booted by a test
+
+`renderer/three` is ~9,000 lines across 17 files. No test imported it, the
+smoke had no `?renderer=3d` probe, and 4.3 Mesh Fighters and 4.8 Front Row
+therefore shipped with no automated check at all. The `cinema-3d` probe runs
+last, because it reloads the page. Two things had to be put back before it
+could: the mobile section leaves the quality governor on `battery`, which
+`cinema3dAllowed()` refuses outright, and the fatality section leaves reduced
+motion on. Measured on Somerset in headless Chrome — through SwiftShader on the
+smoke's existing flags, no `--use-angle` needed:
+
+    stats()          241 draw calls, 4,211 triangles, 36 programs, 10 crowd billboards, 22 sheet banks
+    host contract    39 members (17 required, 22 optional), 0 missing on the LIVE bridge
+    world objects    forced stage weapon drawn (phase "ground"), live projectile drawn
+    artifact         cinema-3d.png, mean luma 59.6, 67% of the frame carrying image
+    console          0 errors, 0 exceptions, 0 failed responses across the whole 75-probe run
+
+The contract read is new: `tests/cinema-host.test.mjs` pins the list against
+the source at both ends, which cannot see the object the renderer is actually
+holding, so `__finalBlowThree.hostContract()` reports
+`missingHostMembers(host)` off the live bridge and the probe asserts it comes
+back empty. The screenshot is measured rather than just kept, because a WebGL
+canvas cannot be read back from the page — `Page.captureScreenshot` is the only
+honest read, so the PNG is decoded in Node (`tests/helpers/png-luma.mjs`,
+zlib only) and pinned against PNGs built byte by byte, one per filter type
+(`tests/png-luma.test.mjs`). A wrong decoder would turn "the 3D world is black"
+into a green test, which is precisely the failure the probe exists to catch.
+
+### What this install did not do, written down
+
+No art, no audio, no gameplay. Nothing in `game.js` changed except the new
+`setTimer` hook. No pin moved except the two stale ones named above, each with
+the reason beside it. The probes measure what already shipped; where a
+measurement disagreed with this file, the file is corrected here and the
+number in the probe is the one that was measured, not the one that was hoped
+for. The 45 reviewed takes and the four music tracks were not touched.
+
+Residuals, for the next wave: the `cinema-3d` probe is 31 s of the 75 s run,
+almost all of it the reload and the 3D module's first-frame sheet build (the
+5.1 #40 finding); the probes still share page state, so a `--only` run of a
+late probe boots from the title screen rather than from the state its
+neighbours would have left it in — every new probe here is written to be
+self-contained for that reason, but the 69 inherited ones are not; and the
+2D/3D pose parity assert from sweep #54's proposal is not written — the 3D
+fighter layer does not report the bank/frame it used, so there is nothing to
+compare `qa.pose()` against yet.

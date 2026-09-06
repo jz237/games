@@ -32,7 +32,7 @@ import { buildGenericStage } from "./stage-generic.mjs";
 import { spriteLightFor } from "./stage-lighting.mjs";
 // 5.1: the explicit list of everything this renderer reads off `host`, pinned
 // by tests/cinema-host.test.mjs against the literal game.js passes in.
-import { assertHostContract, CINEMA_HOST_MEMBERS } from "./host-contract.mjs";
+import { assertHostContract, CINEMA_HOST_MEMBERS, missingHostMembers } from "./host-contract.mjs";
 export { CINEMA_HOST_MEMBERS };
 
 const stageBuilders = new Map();
@@ -485,6 +485,12 @@ export function createRenderer(host) {
     registerStage,
     registerLayer: renderer3d.registerLayer,
     registerImpactEffect: renderer3d.registerImpactEffect,
+    // 5.3 VERIFICATION HARNESS (sweep #54): the contract, checked against the
+    // LIVE host object rather than the literal in game.js's source. The unit
+    // test (tests/cinema-host.test.mjs) reads both ends statically; this is the
+    // only read that proves the object the renderer actually holds still has
+    // every member on it after the bridge was assembled and 3D booted.
+    hostContract: () => ({ members: CINEMA_HOST_MEMBERS, ...missingHostMembers(host) }),
     // Debug internals for QA probes (read-only use).
     get _internals() {
       return { renderer, scene, camera: framing?.camera, post, stage };

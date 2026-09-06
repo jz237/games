@@ -33063,6 +33063,25 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       }
       return window.__finalBlowEngine.snapshot();
     },
+    // v5.3 VERIFICATION HARNESS: force the round clock. The announcer's
+    // decision path (the once-per-round TEN SECONDS call at :10, the tick
+    // ladder under it and the time-over round end at :00) was the one voice
+    // branch no probe could reach — waiting out 99 real seconds is not a
+    // test. Setting the clock to 11 and stepping twelve seconds of sim walks
+    // the whole ladder in ~30 ms. GUARDED TO QA FIGHTS: `state.qaManualMode`
+    // is set by qa.fight()/qa.training() and by nothing a player can reach,
+    // so an arcade run, a daily or an online match can never have its clock
+    // written from here. The value lands the way the sim writes it (whole
+    // seconds, carry cleared) and updateHud() is left to book the pulse, so
+    // the edge counters stay honest.
+    setTimer(seconds = 10) {
+      if (state.screen !== "fight") throw new Error("Start a fight first");
+      if (!state.qaManualMode) throw new Error("setTimer is QA-fight only");
+      state.timer = clamp(Math.floor(seconds), 0, 99);
+      state.timerCarry = 0;
+      updateHud();
+      return { timer: state.timer, timerCarry: state.timerCarry, mode: state.mode };
+    },
     loseBout() {
       if (state.screen !== "fight") throw new Error("Start a fight first");
       finishRound(1, -1);

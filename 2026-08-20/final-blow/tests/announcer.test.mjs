@@ -176,3 +176,31 @@ test("game.js wiring: no knockout.mp3 on a decision or a dizzy, tick on the time
   assert.doesNotMatch(synths, /\.mp3|sfxPools|fighterVoiceTake|sound\(/);
   assert.match(synths, /impactAudioAllowed\(\)/);
 });
+
+// v5.3 VERIFICATION HARNESS (sweep #53). The whole clock ladder above — the
+// :10 call, the tick per displayed second, the time-over decision — was
+// unreachable from a probe: a round starts at 99 seconds and nothing waits 89
+// of them. qa.setTimer() puts the clock on the edge so the browser smoke's
+// `announcer-decision` probe can walk it, and it is guarded so nothing a
+// player can reach ever has its clock written.
+test("qa.setTimer forces the round clock, and only inside a QA fight", () => {
+  const setTimer = slice("    setTimer(seconds = 10) {", "    loseBout() {");
+  assert.match(setTimer, /if \(state\.screen !== "fight"\) throw new Error\("Start a fight first"\);/);
+  assert.match(
+    setTimer,
+    /if \(!state\.qaManualMode\) throw new Error\("setTimer is QA-fight only"\);/,
+    "state.qaManualMode is set by qa.fight()/qa.training() and cleared by every real match start",
+  );
+  // Whole seconds with the carry cleared: the same shape the sim writes, so
+  // the very next tick books an honest edge.
+  assert.match(setTimer, /state\.timer = clamp\(Math\.floor\(seconds\), 0, 99\);/);
+  assert.match(setTimer, /state\.timerCarry = 0;/);
+  // updateHud() is what books the pulse, the tick and the callout — setTimer
+  // must go through it rather than announcing anything itself.
+  assert.match(setTimer, /updateHud\(\);/);
+  assert.doesNotMatch(setTimer, /announcerSay|clockCallout|clockTickAudio/);
+  // The real match starts clear the flag, which is what makes the guard real.
+  for (const marker of ["  state.qaManualMode = false;"]) {
+    assert.ok(gameSource.includes(marker), "a played match must not be a QA fight");
+  }
+});

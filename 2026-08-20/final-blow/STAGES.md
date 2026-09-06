@@ -227,8 +227,14 @@ the resim guard and the tick. `tests/ambient.test.mjs` pins the thresholds,
 the decay and the one-shot KO latch (finish and roundover both, fight screen
 only); `__finalBlowQa.ambient()` returns the latch and the level at the
 current tick so a probe can confirm a pulse fired before it measures the
-floodlights (+27 mean brightness at the KO tick on the Vet, measured by hand
-for 5.0 — the browser probe for it is still to write).
+floodlights. The browser probe for it is written as of 5.3: browser-smoke's
+`ambient-ko-pulse` samples both floodlight regions and a patch of plain sky
+through `getImageData` on the game canvas, as medians over nine painted frames
+(the blimp and the ambient fireworks make any single frame a sample). It reads
+floodlight A +16.5..+18.4 and floodlight B +45.1..+47.5 (mean +31..+33,
+against the +27 measured by hand for 5.0) with the sky flat at +1.5..+1.8, and
+asserts the mean at 15 so a lighting retune cannot false-fail it. The same probe then walks all six stages and asserts each one latches the
+KO kind and surges above zero. See `tests/README.md`.
 ### 5.1 — the crowd celebrates the KO, out loud
 
 The roundover hold now belongs to the crowd: a render-side latch on the

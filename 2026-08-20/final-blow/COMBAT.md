@@ -114,7 +114,14 @@ plan (`roundEndAnnouncerPlan`); game.js only executes it.
   MISSING-AUDIO.md Priority 6). All of it sits behind the updateHud/announce()
   rollback guards; replays and resims stay silent. QA: `snapshot().violence`
   exposes `timerTicks` (must equal `timerPulses`), `clockTicksVoiced`,
-  `dizzyRings`, `clockCallouts` and `decisionCalls`.
+  `dizzyRings`, `clockCallouts` and `decisionCalls`. **5.3:** none of that was
+  reachable from a probe — a round starts at 99 and nothing waits 89 seconds —
+  so `__finalBlowQa.setTimer(seconds)` forces the clock. It writes the value
+  the way the sim does (whole seconds, carry cleared) and leaves `updateHud()`
+  to book the edge, so the counters stay honest, and it throws unless
+  `state.qaManualMode` is set: a match the player started from the menu can
+  never have its clock written. browser-smoke's `announcer-decision` probe
+  proves the guard, then walks :11 -> :10 -> :00 in about 30 ms.
 - Every announcer cue draws from a shuffle bag (`drawFromBag`, now unit tested):
   each take plays once per bag and the same take never lands back to back.
 

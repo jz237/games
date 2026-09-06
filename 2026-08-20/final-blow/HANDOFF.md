@@ -423,10 +423,18 @@ Frame roles are documented in `tools/README.md`.
 ```sh
 cd /home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20/final-blow
 
-node --test tests/*.test.mjs        # 106 unit/module/guard tests
-node tests/browser-smoke.mjs        # full browser suite, needs Chrome, ~2min
+node --test tests/*.test.mjs        # 434 unit/module/guard tests, ~0.9s
+node tests/browser-smoke.mjs        # full browser suite (75 probes), needs Chrome, ~75s
 node tests/orientation-gate.mjs     # portrait-gate capability scenarios, needs Chrome
 node tests/mobile-parity.mjs        # 1.9E atlas-facing / scanline / profile parity, needs Chrome
+
+# 5.3: the smoke is a probe registry. It keeps going after a failure and
+# lists every failed probe at the end (exit code non-zero if any failed).
+node tests/browser-smoke.mjs --list                 # probe names, no server, no Chrome
+node tests/browser-smoke.mjs --only=cinema-3d       # one probe, seconds instead of minutes
+node tests/browser-smoke.mjs --only=crowd,tempo     # name equals OR contains
+node tests/browser-smoke.mjs --skip=demo-mode
+node tests/browser-smoke.mjs --report=/tmp/fb.json --artifacts=/tmp/fb
 
 # online rollback (two browsers against a local signaling worker)
 cd signaling && npx wrangler dev --port 8787 --local &
@@ -437,7 +445,12 @@ FINAL_BLOW_SIGNALING_API=http://127.0.0.1:8787 node tests/online-browser-smoke.m
 landscape layout, PWA offline boot, Training, Arcade, Watch Demo, the portrait
 gate, all eight grabs and throwables, stage weapons, Passive CPU, dizzy, crowd
 density, fighter framing, controller disconnect, flow skips and same-fighters
-stage selection. **A green run here is the bar for publishing.**
+stage selection — and, since 5.3, the CINEMA 3D renderer under `?renderer=3d`
+and the 5.1 spectacle tells (the Vet's ambient KO pulse measured off the
+canvas, the crowd's KO hold, the tempo tells, the announcer's decision path
+and the 5.0 frame chains through `poseTrace`). **A green run here is the bar
+for publishing.** `tests/README.md` documents the probe names, the flags and
+every measurement they assert.
 
 The game exposes `window.__finalBlowQa` for driving it headlessly —
 `fight()`, `stage()`, `positions()`, `input()`, `step()`, `difficulty()`,
