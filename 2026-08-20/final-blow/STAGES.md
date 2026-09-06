@@ -229,3 +229,17 @@ only); `__finalBlowQa.ambient()` returns the latch and the level at the
 current tick so a probe can confirm a pulse fired before it measures the
 floodlights (+27 mean brightness at the KO tick on the Vet, measured by hand
 for 5.0 — the browser probe for it is still to write).
+### 5.1 — the crowd celebrates the KO, out loud
+
+The roundover hold now belongs to the crowd: a render-side latch on the
+phase edge pins an effective reaction that ramps past every painted
+threshold in 20 ticks (arms up person by person) and holds for the whole
+4.9 s, with each person pumping and bouncing so nothing freezes, the tailgate
+scuffles switching to the celebrate choreography, cups flying and three
+flashbulbs per 8-tick window; CINEMA 3D inherits all of it through
+`host.crowdBillboards()`. Twelve generated crowd takes in
+`assets/audio/crowd/` (gasp / ooh / roar / sustained cheer, three each, never
+the same take twice in a row, level tied to the stir) play over the synth
+swells on specials, throws, wall bounces, supers, the KO and the fatal blow,
+and answer a taunt. Details and measurements in MOTION-ATLAS.md, "v5.1 — THE
+KO MOMENT".

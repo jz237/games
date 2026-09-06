@@ -434,6 +434,18 @@ import {
   scufflePhase,
 } from "./engine/crowd.mjs";
 import {
+  CROWD_KO_HOLD,
+  CROWD_VOICE_CUES,
+  createCrowdVoiceBag,
+  crowdKoHoldColumn,
+  crowdKoHoldReaction,
+  crowdVoiceBagDraw,
+  crowdVoiceCueFor,
+  crowdVoiceFiles,
+  crowdVoiceLevel,
+  crowdVoicePath,
+} from "./engine/crowd-voice.mjs";
+import {
   STAGE_WEAPONS,
   canPickUpWeapon,
   canWeaponArrive,
@@ -1755,6 +1767,14 @@ const elementAudioAssets = Object.freeze({
 const fatalityAudioAssets = Object.freeze(Object.fromEntries(
   Object.entries(GORE_SFX).map(([kind, meta]) => [kind, `assets/audio/fatality/${meta.file}`]),
 ));
+
+// v5.1 KO MOMENT: the voiced crowd bank (assets/audio/crowd/, manifest in
+// engine/crowd-voice.mjs) — generated media on the same pattern. It does NOT
+// join sfxPools: sound()'s round-robin cursor can land the same take twice in
+// a row across pool borders, and a crowd that repeats itself is the one thing
+// Jez listens for. playCrowdVoice() below draws from a per-cue shuffle bag
+// instead. Listed here so the registration is auditable next to the others.
+const crowdVoiceAssets = Object.freeze(crowdVoiceFiles());
 
 const sfxVolumes = {
   select: 0.5,
@@ -9620,7 +9640,15 @@ let crowdFlashCacheCrowd = null;
 let crowdFlashCandidates = [];
 
 function crowdFlashPick(crowd, frame, reaction) {
-  if (reaction <= 0.7 || !crowd.people?.length) return null;
+  return crowdFlashPicks(crowd, frame, reaction)[0] || null;
+}
+
+// v5.1 KO MOMENT: during the KO hold the phones come out — an 8-tick window
+// lit 5 of 8 (7.5 pops/s against the fight's 3/s cap) with three picks per
+// window, each hashed on its own salt so they land on different people.
+// Outside the hold this is exactly the single 20-tick pick it always was.
+function crowdFlashPicks(crowd, frame, reaction) {
+  if (reaction <= 0.7 || !crowd.people?.length) return [];
   if (crowdFlashCacheCrowd !== crowd) {
     crowdFlashCacheCrowd = crowd;
     const phones = [];
@@ -9631,15 +9659,23 @@ function crowdFlashPick(crowd, frame, reaction) {
     crowdFlashCandidates = phones.length >= 3 ? phones : crowd.people.map((_, index) => index);
   }
   const reduced = state.accessibility.reducedMotion;
-  const windowTicks = reduced ? 60 : 20; // 20 ticks @60Hz → ≤3 pops per second
+  const hold = !reduced && crowdKoHoldAge() >= 0;
+  const windowTicks = reduced ? 60 : hold ? CROWD_KO_HOLD.flashWindowTicks : 20; // 20 ticks @60Hz → ≤3 pops per second
+  const litTicks = hold ? CROWD_KO_HOLD.flashLitTicks : 8;
   const windowIndex = Math.floor(frame / windowTicks);
   const inWindow = frame - windowIndex * windowTicks;
-  if (!reduced && inWindow >= 8) return null;
-  const pick = crowdFlashCandidates[
-    Math.floor(presentationHash01(windowIndex, crowdFlashCandidates.length) * crowdFlashCandidates.length)
-    % crowdFlashCandidates.length
-  ];
-  return { index: pick, fade: reduced ? 1 : 1 - inWindow / 8, reduced };
+  if (!reduced && inWindow >= litTicks) return [];
+  const count = hold ? Math.min(CROWD_KO_HOLD.flashPicks, crowdFlashCandidates.length) : 1;
+  const picks = [];
+  for (let salt = 0; salt < count; salt += 1) {
+    const pick = crowdFlashCandidates[
+      Math.floor(presentationHash01(windowIndex, crowdFlashCandidates.length + salt * 7919) * crowdFlashCandidates.length)
+      % crowdFlashCandidates.length
+    ];
+    if (picks.some((entry) => entry.index === pick)) continue;
+    picks.push({ index: pick, fade: reduced ? 1 : 1 - inWindow / litTicks, reduced });
+  }
+  return picks;
 }
 
 function drawCrowdFlash(spot, pick) {
@@ -9681,6 +9717,40 @@ function roundWinBeatLevel(frame) {
   if (roundWinBeatStartTick < 0) return 0;
   const t = (frame - roundWinBeatStartTick) / ROUND_WIN_BEAT_TICKS;
   return t >= 1 || t < 0 ? 0 : 1 - t;
+}
+
+// v5.1 KO MOMENT: the crowd's KO hold, latched on the same render-side
+// pattern from the roundover phase edge (a fatality round latches on the kill
+// itself, observed through finisher.slowMotionHits like the bed swell, so the
+// crowd stays hushed through the pre-kill cinematic). While latched the crowd
+// draw, the CINEMA 3D billboards, the scuffles, the cups, the flashbulbs and
+// the crowd bed all read crowdDrawReaction() — the hold curve from
+// engine/crowd-voice.mjs — instead of the decaying sim value. Measured before
+// this on 20 seeds: a heavy-hit KO put 6-10% of the painted people on the
+// cheer cell for 2.5 ticks of the 294-tick hold. Never sim state, never
+// resimulated; the latch is idempotent so every consumer may poke it.
+const crowdKoHold = { startTick: -1, cheerFired: false };
+
+function updateCrowdKoHoldLatch() {
+  const live = state.screen === "fight" && state.phase === "roundover"
+    && (!state.finisher || (state.finisher.slowMotionHits || 0) > 0);
+  if (live) {
+    if (crowdKoHold.startTick < 0) {
+      crowdKoHold.startTick = state.simulationTick;
+      crowdKoHold.cheerFired = false;
+    }
+  } else if (crowdKoHold.startTick >= 0) {
+    crowdKoHold.startTick = -1;
+    crowdKoHold.cheerFired = false;
+  }
+}
+
+function crowdKoHoldAge() {
+  return crowdKoHold.startTick < 0 ? -1 : state.simulationTick - crowdKoHold.startTick;
+}
+
+function crowdDrawReaction() {
+  return Math.max(state.crowdReaction, crowdKoHoldReaction(crowdKoHoldAge()));
 }
 
 const ROUND_WIN_BEATS = Object.freeze({
@@ -11438,6 +11508,12 @@ function finishRound(winner, type = -1) {
   state.phase = "roundover";
   state.rounds[winner] += 1;
   state.finisherType = type;
+  // v5.1 KO MOMENT: the round-winning hit is the biggest stir of the round —
+  // the FINISH prompt's 1.4, tagged "ko" so the swell plays the KO recipe and
+  // the voiced crowd roars. Sim path on purpose (deterministic on both
+  // rollback peers, like every other stir); the roundover HOLD that keeps the
+  // crowd up for the 4.9 s is render-side (updateCrowdKoHoldLatch).
+  stirCrowd(1.4, "ko");
   // v2.9 FLOW: demo coverage — the round-end beat, plus the Final Blow
   // ceremony when one executes (the gore/fatality toggles decide the flavour
   // downstream exactly as before; this is pure observation).
@@ -13796,6 +13872,10 @@ function performTaunt(fighter) {
   demoChoreoBeat(fighter.side, "taunt");
   spawnCombatText(fighter.x, fighter.y - fighter.height - 44, "TAUNT", fighter.def.accent);
   stirCrowd(0.25);
+  // v5.1 KO MOMENT: the crowd answers the showboat out loud. 0.25 sits under
+  // the 0.5 swell latch, so this is its own render-side cue (resim-guarded
+  // inside): an "oooh" at taunt level, never the roar.
+  playCrowdVoice("ooh", 0.25, { source: "taunt" });
   fighterTauntCue(fighter, fighter.tauntLine);
 }
 
@@ -16966,13 +17046,14 @@ function pulseAmbient(kind, amount) {
   pulseAmbientLatch(ambientObs, kind, amount, state.simulationTick);
 }
 
-function stirCrowd(amount = 1) {
+function stirCrowd(amount = 1, kind = "") {
   state.crowdReaction = Math.min(1.4, state.crowdReaction + amount);
   const pulseKind = stirPulseKind(amount);
   if (pulseKind) pulseAmbient(pulseKind, amount);
   // Release 1.6 LOUD: big stirs also latch a one-shot crowd swell/gasp for
   // the render-side crowd bus (guarded + tick-deduped inside the latch).
-  if (amount >= 0.5) latchCrowdSwell(amount);
+  // v5.1: the kind rides along so a "ko" stir gets the KO swell and roar.
+  if (amount >= 0.5) latchCrowdSwell(amount, kind);
 }
 
 // v4.7 BYSTANDERS: painted crowd sheets (assets/crowd/, built by
@@ -16983,6 +17064,9 @@ const crowdSheets = { manifest: null, images: new Map(), requested: false };
 function ensureCrowdMedia() {
   if (crowdSheets.requested) return;
   crowdSheets.requested = true;
+  // v5.1: the voiced crowd warms with the painted one (twelve small takes,
+  // 18-49 KB each) so the first KO of the session does not miss its roar.
+  ensureCrowdVoiceMedia();
   fetch("assets/crowd/MANIFEST.json")
     .then((response) => (response.ok ? response.json() : null))
     .then((manifest) => {
@@ -17021,11 +17105,17 @@ function crowdSpriteFrame(person, gait, paused, reaction) {
   const reducedMotion = state.accessibility.reducedMotion;
   const frame = state.simulationTick;
   let column = 0;
-  if (reaction > person.sprite.reactThreshold) column = 2;
+  // v5.1 KO MOMENT: through the hold a person past their threshold pumps
+  // between the cheer and weight-shift cells on their own shift timer and
+  // bounces on the spot, so a crowd that is up for five seconds never freezes.
+  const holdColumn = crowdKoHoldAge() >= 0 && !reducedMotion ? crowdKoHoldColumn(person.sprite, frame, reaction) : -1;
+  if (holdColumn >= 0) column = holdColumn;
+  else if (reaction > person.sprite.reactThreshold) column = 2;
   else if (!paused && !reducedMotion) column = Math.sin(gait) > 0 ? 3 : 0;
   else if (!reducedMotion && ((frame + person.sprite.shiftOffset) % person.sprite.shiftPeriod) < person.sprite.shiftLength) column = 1;
   const posture = POSTURE_BY_ID[person.posture] || POSTURES[0];
-  const bob = paused || reducedMotion ? 0 : Math.abs(Math.sin(gait)) * posture.bob * 2.4;
+  let bob = paused || reducedMotion ? 0 : Math.abs(Math.sin(gait)) * posture.bob * 2.4;
+  if (holdColumn === 2) bob = Math.abs(Math.sin(frame * 0.19 + person.sprite.shiftOffset)) * CROWD_KO_HOLD.bobPx;
   return { column, bob };
 }
 
@@ -17271,14 +17361,18 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
 // The choreography of one scuffle / pool-incident loop on a frame: where each
 // member stands in group space, how they lean and reach, and which painted
 // cell they wear. Shared by drawScuffle and the CINEMA 3D billboards.
-function scuffleMembers(group, frame, reaction) {
+function scuffleMembers(group, frame, reaction, celebrate = false) {
   const phase = scufflePhase(group, frame);
   const beat = Math.sin(phase * Math.PI * 2);
   const clash = Math.max(0, Math.sin(phase * Math.PI * 2 - 0.6));
   const swing = group.reach * (0.4 + clash * 0.6) * (1 + reaction * 0.25);
   const members = [];
   const add = (offsetX, lean, armReach, tilt = 0) => members.push({ offsetX, lean, armReach, tilt });
-  switch (group.kind) {
+  // v5.1 KO MOMENT: through the hold every group drops its quarrel for the
+  // celebrate choreography (the pool incidents already run it — they have no
+  // case of their own — so this only turns the tailgate's fights into a cheer).
+  const kind = celebrate ? "celebrate" : group.kind;
+  switch (kind) {
     case "argue":
       add(-16, 0.2 + beat * 0.06, swing * 0.7);
       add(18, -0.2 - beat * 0.06, -swing * 0.7, 0.04);
@@ -17317,7 +17411,7 @@ function scuffleMembers(group, frame, reaction) {
   }
   members.forEach((member, index) => {
     const reaching = Math.abs(member.armReach) > group.reach * 0.55;
-    const armsUp = group.kind === "celebrate" || (group.kind === "separate" && index === 2) || (clash > 0.5 && group.kind !== "wrestle");
+    const armsUp = kind === "celebrate" || (kind === "separate" && index === 2) || (clash > 0.5 && kind !== "wrestle");
     member.column = armsUp ? (reaching ? 3 : 2) : reaching ? 3 : 0;
     member.character = group.characters ? group.characters[index % group.characters.length] : null;
   });
@@ -17325,7 +17419,7 @@ function scuffleMembers(group, frame, reaction) {
 }
 
 function drawScuffle(group, frame, centre, reaction) {
-  const { phase, clash, members } = scuffleMembers(group, frame, reaction);
+  const { phase, clash, members } = scuffleMembers(group, frame, reaction, crowdKoHoldAge() >= 0);
   const drawX = group.x + (centre - W * 0.5) * -0.2;
   if (drawX < -110 || drawX > W + 110) return;
 
@@ -17432,7 +17526,11 @@ function crowdBillboards() {
   const variant = crowdSheets.manifest?.variants?.[crowd?.variant];
   if (!crowd || !variant || state.screen !== "fight") return out;
   const frame = state.simulationTick;
-  const reaction = state.crowdReaction;
+  // v5.1 KO MOMENT: the 3D crowd reads the same held reaction as the canvas,
+  // so the arms-up cells, the pumps and the celebrate scuffles carry over.
+  updateCrowdKoHoldLatch();
+  const reaction = crowdDrawReaction();
+  const celebrate = crowdKoHoldAge() >= 0;
   const holdDim = 1 - fatalitySpotLevel * 0.62;
   crowd.people.forEach((person, index) => {
     if (!person.sprite) return;
@@ -17449,7 +17547,7 @@ function crowdBillboards() {
     });
   });
   (crowd.scuffles || []).forEach((group, groupIndex) => {
-    const { members } = scuffleMembers(group, frame, reaction);
+    const { members } = scuffleMembers(group, frame, reaction, celebrate);
     members.forEach((member, index) => {
       const character = member.character === null ? null : variant.characters[member.character];
       if (!character) return;
@@ -17967,13 +18065,15 @@ function drawCrowd(time) {
   const crowd = state.crowd;
   if (!crowd) return;
   const centre = state.fighters.length ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5;
-  const reaction = state.crowdReaction;
+  // v5.1 KO MOMENT: the held reaction (the sim value outside the hold).
+  updateCrowdKoHoldLatch();
+  const reaction = crowdDrawReaction();
   const frame = state.simulationTick;
   // Cheapest possible culling: skip anyone whose parallaxed x is off screen.
   // A hard-stirred crowd pops scattered phone flashes; the pick hashes
   // (window, person) so it can never perturb the visualRandom stream.
-  const flashPick = crowdFlashPick(crowd, frame, reaction);
-  let flashSpot = null;
+  const flashPicks = crowdFlashPicks(crowd, frame, reaction);
+  const flashSpots = [];
   let personIndex = -1;
   for (const person of crowd.people) {
     personIndex += 1;
@@ -17982,13 +18082,14 @@ function drawCrowd(time) {
     const drawX = x + (centre - W * 0.5) * -layer.parallax;
     if (drawX < -70 || drawX > W + 70) continue;
     drawPedestrian(person, layer, drawX, gait, paused, reaction);
-    if (flashPick && personIndex === flashPick.index) {
+    const flashPick = flashPicks.length ? flashPicks.find((pick) => pick.index === personIndex) : null;
+    if (flashPick) {
       const scale = layer.scale * person.height;
-      flashSpot = { x: drawX + person.direction * 8 * scale, y: person.y - 118 * scale, size: 8 + 9 * layer.scale };
+      flashSpots.push([{ x: drawX + person.direction * 8 * scale, y: person.y - 118 * scale, size: 8 + 9 * layer.scale }, flashPick]);
     }
   }
   ctx.globalAlpha = 1;
-  if (flashSpot) drawCrowdFlash(flashSpot, flashPick);
+  for (const [spot, pick] of flashSpots) drawCrowdFlash(spot, pick);
 
   for (const group of crowd.scuffles || []) drawScuffle(group, frame, centre, reaction);
   if (crowd.variant === "tailgate") {
@@ -26143,7 +26244,7 @@ function duckMusic(amount, duration) {
 }
 
 function stopSfx() {
-  [...Object.values(sfxPools).flat(), ...[...fighterSfxPools.values()].flat()].forEach((sample) => {
+  [...Object.values(sfxPools).flat(), ...[...fighterSfxPools.values()].flat(), ...[...crowdVoiceBanks.values()].flat()].forEach((sample) => {
     sample.pause();
     sample.currentTime = 0;
   });
@@ -26568,6 +26669,8 @@ const audioFxDebug = {
   dizzyRings: 0, clockTicks: 0,
   // Item 21: jittered shared-sample plays and the two synthesised cues.
   sharedVariations: 0, dashScuffs: 0, weaponClatters: 0,
+  // v5.1 KO MOMENT: voiced crowd takes actually started (post every gate).
+  crowdVoicePlays: 0,
 };
 // Live node bookkeeping for the QA node-graph hook: persistent = currently
 // connected long-lived nodes (master bus, beds, music routing), one-shots =
@@ -26932,14 +27035,17 @@ let crowdBed = null;
 // One-shot swell latch fed by stirCrowd (sim path, guarded + tick-deduped).
 let crowdSwellPending = 0;
 let crowdSwellTick = -1;
+// v5.1: the pending swell's kind ("ko" for the round-winning hit, "" else).
+let crowdSwellPendingKind = "";
 // Post-fatal-blow bed swell and its render-side edge observer.
 let crowdKillSwell = 0;
 let crowdObservedKillHits = 0;
 
-function latchCrowdSwell(amount) {
+function latchCrowdSwell(amount, kind = "") {
   if (rollbackResimulating || crowdSwellTick === state.simulationTick) return;
   crowdSwellTick = state.simulationTick;
   crowdSwellPending = Math.max(crowdSwellPending, Math.min(1.6, amount));
+  if (kind) crowdSwellPendingKind = kind;
 }
 
 function buildCrowdBed(variant) {
@@ -26974,11 +27080,20 @@ function teardownCrowdBed() {
   crowdBed = null;
 }
 
-function playCrowdSwell(variant, amount) {
+function playCrowdSwell(variant, amount, kind = "") {
   const profile = CROWD_AUDIO_PROFILES[variant] || CROWD_AUDIO_PROFILES.street;
   const strength = clamp(amount / 1.4, 0.25, 1.15);
   const level = state.sfxVolume;
   const jitter = presentationHash01(state.simulationTick, audioFxDebug.crowdSwells) - 0.5;
+  if (kind === "ko") {
+    // v5.1 KO MOMENT: the KO gets its own recipe under the voiced roar — a
+    // slower, longer, lower swell (0.25 s attack, ~2 s) with a second late
+    // wave at 0.9 s — so the round-winning hit never reuses the mid-round
+    // gasp/whoop the crowd just made for a throw.
+    synthNoiseShot({ seconds: 1.6 + strength * 0.6, filterType: "lowpass", freq: 520 + strength * 520, freqEnd: 360, peak: 0.055 * strength * level, attack: 0.25 });
+    synthNoiseShot({ seconds: 1.2, filterType: "bandpass", freq: 760 * (1 + jitter * 0.15), q: 1.1, peak: 0.028 * strength * level, attack: 0.2, delay: 0.9 });
+    return;
+  }
   switch (profile.swell) {
     case "roar":
       synthNoiseShot({ seconds: 0.9 + strength * 0.5, filterType: "lowpass", freq: 700 + strength * 700, freqEnd: 420, peak: 0.05 * strength * level, attack: 0.16 });
@@ -27001,6 +27116,79 @@ function playCrowdSwell(variant, amount) {
   }
 }
 
+// --- v5.1 KO MOMENT: the voiced crowd ---------------------------------------
+// Twelve generated takes (assets/audio/crowd/, engine/crowd-voice.mjs) played
+// OVER the synth swell, never instead of it. Module-level render state on the
+// announcer pattern: HTMLAudio takes per cue, a shuffle bag per cue (every
+// take once per bag, no repeat across the border), a per-cue minimum gap and
+// a shared busy window so a gasp never lands on a roar still sounding. The
+// level is the cue's base volume scaled by the stir amount (crowdVoiceLevel)
+// and the SFX slider. Nothing here reads back into the simulation.
+const crowdVoiceBanks = new Map();
+const crowdVoiceBags = new Map();
+const crowdVoiceLastAt = new Map();
+let crowdVoiceBusyUntil = 0;
+// The last dozen plays as "cue-take", newest last (snapshot().violence).
+const crowdVoiceRecent = [];
+let lastCrowdVoice = null;
+
+function crowdVoiceBank(cue) {
+  let bank = crowdVoiceBanks.get(cue);
+  if (bank) return bank;
+  const spec = CROWD_VOICE_CUES[cue];
+  bank = [];
+  for (let take = 1; take <= (spec?.takes || 0); take += 1) {
+    const sample = new Audio(crowdVoicePath(cue, take));
+    sample.preload = "auto";
+    bank.push(sample);
+  }
+  crowdVoiceBanks.set(cue, bank);
+  return bank;
+}
+
+function ensureCrowdVoiceMedia() {
+  for (const cue of Object.keys(CROWD_VOICE_CUES)) crowdVoiceBank(cue);
+}
+
+/**
+ * Play one voiced crowd take. `amount` is the stir amount the reaction
+ * answers (sets the level); `source` is bookkeeping for the recent log.
+ * Returns the take index played, or -1 when a gate held it back.
+ */
+function playCrowdVoice(cue, amount, { source = "" } = {}) {
+  if (rollbackResimulating || !cue) return -1;
+  const spec = CROWD_VOICE_CUES[cue];
+  if (!spec) return -1;
+  if (!$("#soundToggle")?.checked || !(state.sfxVolume > 0)) return -1;
+  if (demoSession.attract && !state.audioUnlocked) return -1;
+  const now = performance.now();
+  if (now - (crowdVoiceLastAt.get(cue) ?? -Infinity) < spec.minGapMs) return -1;
+  if (!spec.layers && now < crowdVoiceBusyUntil) return -1;
+  const bank = crowdVoiceBank(cue);
+  if (!bank.length) return -1;
+  let bag = crowdVoiceBags.get(cue);
+  if (!bag || bag.size !== bank.length) {
+    bag = createCrowdVoiceBag(bank.length);
+    crowdVoiceBags.set(cue, bag);
+  }
+  const take = crowdVoiceBagDraw(bag, visualRandom);
+  const sample = bank[take];
+  unlockAudio();
+  showSoundCaption("crowd-voice", null, spec.caption);
+  sample.pause();
+  sample.currentTime = 0;
+  sample.volume = clamp(spec.volume * crowdVoiceLevel(amount) * state.sfxVolume, 0, 1);
+  const playback = sample.play();
+  if (playback?.catch) playback.catch(() => {});
+  crowdVoiceLastAt.set(cue, now);
+  crowdVoiceBusyUntil = Math.max(crowdVoiceBusyUntil, now + spec.busyMs);
+  audioFxDebug.crowdVoicePlays += 1;
+  lastCrowdVoice = Object.freeze({ cue, take: take + 1, amount, source, level: Number(sample.volume.toFixed(3)) });
+  crowdVoiceRecent.push(`${cue}-${take + 1}`);
+  while (crowdVoiceRecent.length > 12) crowdVoiceRecent.shift();
+  return take;
+}
+
 function updateCrowdAudio(dt) {
   const fightLive = state.screen === "fight" && state.fighters.length === 2;
   const soundOn = Boolean($("#soundToggle")?.checked) && state.sfxVolume > 0;
@@ -27015,8 +27203,11 @@ function updateCrowdAudio(dt) {
   crowdObservedKillHits = state.finisher ? finisherHits : 0;
   crowdKillSwell = Math.max(0, crowdKillSwell - dt / 2.6);
   const preKillDuck = state.finisher && finisherHits === 0 ? 0.12 : 1;
+  // v5.1 KO MOMENT: the bed rides the held reaction too, so it stays up for
+  // the whole roundover instead of breathing out 2.5 ticks after the KO.
+  updateCrowdKoHoldLatch();
   const target = fightLive
-    ? clamp(clamp(state.crowdReaction / 1.4, 0, 1) * preKillDuck + crowdKillSwell * 0.8, 0, 1)
+    ? clamp(clamp(crowdDrawReaction() / 1.4, 0, 1) * preKillDuck + crowdKillSwell * 0.8, 0, 1)
     : 0;
   // Fast attack, slow decay — the crowd catches its breath rather than
   // snapping quiet.
@@ -27026,11 +27217,21 @@ function updateCrowdAudio(dt) {
   // One-shot swell/gasp bursts latched by stirCrowd spikes and the kill.
   if (crowdSwellPending > 0) {
     const amount = crowdSwellPending;
+    const kind = crowdSwellPendingKind;
     crowdSwellPending = 0;
+    crowdSwellPendingKind = "";
     if (fightLive && soundOn) {
       audioFxDebug.crowdSwells += 1;
-      playCrowdSwell(state.crowd?.variant || "street", amount);
+      playCrowdSwell(state.crowd?.variant || "street", amount, kind);
+      // The voiced take over the synth layer: roar for the KO and the fatal
+      // blow, ooh/gasp by amount below that (engine/crowd-voice.mjs tiers).
+      playCrowdVoice(kind === "ko" ? "roar" : crowdVoiceCueFor(amount), amount, { source: kind || "stir" });
     }
+  }
+  // The sustained cheer follows the KO roar 0.6 s into the hold, once.
+  if (fightLive && soundOn && !crowdKoHold.cheerFired && crowdKoHoldAge() >= CROWD_KO_HOLD.cheerDelayTicks) {
+    crowdKoHold.cheerFired = true;
+    playCrowdVoice("cheer", 1.4, { source: "ko-hold" });
   }
   const wantBed = fightLive && soundOn && audioContextRunning();
   if (wantBed) {
@@ -29589,6 +29790,15 @@ window.__finalBlowEngine = {
         // into the simulation.
         crowdBusLevel: Number(crowdAudioLevel.toFixed(3)),
         crowdSwells: audioFxDebug.crowdSwells,
+        // v5.1 KO MOMENT: voiced crowd plays, the last dozen as "cue-take" so
+        // the smoke can prove no take ever repeats back to back, and the hold.
+        crowdVoicePlays: audioFxDebug.crowdVoicePlays,
+        crowdVoiceRecent: crowdVoiceRecent.slice(),
+        crowdVoiceLast: lastCrowdVoice,
+        crowdVoiceFiles: crowdVoiceAssets.length,
+        crowdKoHold: crowdKoHoldAge() >= 0 ? 1 : 0,
+        crowdKoHoldAge: crowdKoHoldAge(),
+        crowdDrawReaction: Number(crowdDrawReaction().toFixed(3)),
         impactLayers: audioFxDebug.impactLayers,
         // Item 21: jittered shared-sample plays and the synthesised dash
         // scuff / stage-weapon clatter totals (monotonic, resim-guarded).

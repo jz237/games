@@ -3176,3 +3176,68 @@ latch and its level. See STAGES.md.
 script derives the checkout from its own location (`repo_root.py`,
 `FINAL_BLOW_ROOT` overrides) instead of one hard-coded path, and
 `tools/README.md` documents the numpy venv and the exact commands.
+## v5.1 — THE KO MOMENT: THE CROWD STAYS UP FOR THE HOLD, AND IT HAS A VOICE
+
+Sweep items #14 and #24. Measured with the real `createCrowd` over 20 seeds
+before this: a heavy-hit KO (stir 0.34 against painted thresholds of 0.3-0.8,
+decaying 0.016/tick) put 6-10% of the crowd on the cheer cell for 2.5 ticks,
+then the 4.9 s roundover hold played to a crowd already back on its routes;
+a non-super KO never popped a flashbulb (reaction > 0.7) and never made a
+sound but the synth swell.
+
+THE HOLD (render-side, `updateCrowdKoHoldLatch` in game.js, curve in
+`engine/crowd-voice.mjs`). Latched on the roundover phase edge the way
+`roundWinBeatStartTick` is — a fatality round latches on the kill itself,
+observed through `finisher.slowMotionHits`, so the crowd stays hushed under
+the pre-kill cinematic. While latched, `crowdDrawReaction()` (max of the sim
+value and the hold curve) is what the crowd draw, `crowdBillboards()` for
+CINEMA 3D, the scuffles, the tailgate cups and the crowd bed read. The curve
+opens at 0.3 (the lowest painted threshold: nobody up on tick 0) and climbs to
+0.95 over 20 ticks, so a person with threshold t throws their arms up at tick
+(t - 0.3) / 0.5 * 20 — the crowd goes up person by person over a third of a
+second, everyone by tick 20, and stays up for the full 294 ticks. Past their
+threshold each person pumps between the cheer and weight-shift cells for half
+their own shift window (`crowdKoHoldColumn`) and bounces 3 px on the spot, so
+measured over 20 seeds on every painted stage (32-44 people) 88% of the crowd
+is arms-up on an average tick (66-100% on any one) against 6-10% for 2.5 ticks
+before; the scuffles drop their quarrel for the
+celebrate choreography; the phones come out at three per 8-tick window (7.5/s
+against the fight's 3/s cap), lit 5 of 8. Reduced motion keeps the old cells
+and the single dim steady flash. The sim's `state.crowdReaction` is untouched
+(the smoke's "settles to 0" pin still holds); `finishRound` adds a
+`stirCrowd(1.4, "ko")` — the FINISH prompt's amount, sim path, deterministic
+on both rollback peers — so the KO is the round's biggest stir.
+
+THE VOICE (`assets/audio/crowd/`, twelve takes). Generated with the ElevenLabs
+sound-effects tool — gasp x3 (1.5-1.8 s), ooh x3 (2.0-2.2 s), roar x3
+(3.5 s), sustained cheer x3 (4.0 s) — and normalised with ffmpeg: static gain
+to -14 LUFS (the shipped hits sit at -11, the announcer at -13.4), limiter at
+-1 dBTP, 0.32 s tail fade, mono 44.1 kHz 96 kbps, 18-49 KB each; every
+measurement is in the directory's MANIFEST.json and pinned by
+`tests/crowd-ko-moment.test.mjs`. New generated media on the
+`elementAudioAssets` pattern — the 45 reviewed takes and the four music tracks
+are untouched, and the takes do NOT join `sfxPools` (its round-robin cursor
+can land the same take twice across pool borders). `playCrowdVoice(cue,
+amount)` draws from a per-cue shuffle bag with a no-repeat border (the
+announcer contract, rng-injected so node proves it), at the cue volume x
+`crowdVoiceLevel(amount)` (0.4-1: a special's gasp 0.61, a super's ooh 0.79,
+the KO roar 0.93) x the SFX slider, behind a per-cue minimum gap and a shared
+busy window so a gasp never lands on a roar still sounding (roar and cheer may
+layer). Routing: every swell the sim latches now also picks a take by amount —
+>= 1.2 roar (FINISH, KO, fatal blow), 0.7-1.2 ooh (wall bounce, super),
+0.5-0.7 gasp (special, throw, weapon) — over the synth swell, which stays
+underneath and gains a KO-only recipe (0.25 s attack, ~2 s, a second wave at
+0.9 s) so the round-winning hit never reuses the mid-round whoop; the
+sustained cheer follows the roar 36 ticks into the hold, once; a taunt (0.25,
+under the swell latch) answers with an ooh at taunt level. Captions read
+CROWD GASPS / CROWD: OOOH / CROWD ROARS / CROWD CHEERS. Debug:
+`snapshot().violence.crowdVoicePlays`, `crowdVoiceRecent` (the last twelve as
+cue-take, for the never-repeat assertion), `crowdVoiceLast`, `crowdKoHold`,
+`crowdKoHoldAge`, `crowdDrawReaction`. sw.js is unchanged on purpose: the
+shell test pins that runtime media stays out of the install cache, and the
+bank warms with the painted sheets in `ensureCrowdMedia()`.
+
+Not done here: a boo/laugh bank for the taunt (it borrows the ooh), the
+per-stage KO ambient beats for the four stages without one (item #15), and
+the 3D stages' own reaction to the hold (the billboards carry it; the stage
+furniture in `renderer/three` does not — item #43).

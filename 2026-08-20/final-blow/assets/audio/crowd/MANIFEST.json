@@ -1,0 +1,20 @@
+{
+  "version": "5.1",
+  "generator": "elevenlabs sound-generation (text_to_sound_effects), normalised with ffmpeg: static gain to -14 LUFS, alimiter -1 dBTP, trim <= 4.0 s, 0.32 s tail fade, mono 44.1 kHz libmp3lame 96k",
+  "note": "Voiced crowd reactions played only through playCrowdVoice() in game.js (never-repeat bag draw per cue, level tied to the stir amount, rate-capped). Cue tiers, volumes and gaps live in engine/crowd-voice.mjs CROWD_VOICE_CUES. New generated media on the elementAudioAssets pattern; not part of the 45 reviewed takes.",
+  "takes": { "gasp": 3, "ooh": 3, "roar": 3, "cheer": 3 },
+  "measured": {
+    "gasp-1": { "seconds": 1.515, "lufs": -14.68, "truePeak": -1.19 },
+    "gasp-2": { "seconds": 1.802, "lufs": -14.07, "truePeak": -2.01 },
+    "gasp-3": { "seconds": 1.646, "lufs": -14.28, "truePeak": -3.11 },
+    "ooh-1": { "seconds": 2.038, "lufs": -13.43, "truePeak": 0.03 },
+    "ooh-2": { "seconds": 2.247, "lufs": -16.59, "truePeak": -1.0 },
+    "ooh-3": { "seconds": 2.247, "lufs": -14.94, "truePeak": -5.33 },
+    "roar-1": { "seconds": 3.527, "lufs": -14.7, "truePeak": -0.74 },
+    "roar-2": { "seconds": 3.527, "lufs": -13.41, "truePeak": -0.62 },
+    "roar-3": { "seconds": 3.527, "lufs": -13.44, "truePeak": -2.23 },
+    "cheer-1": { "seconds": 4.049, "lufs": -16.31, "truePeak": -3.55 },
+    "cheer-2": { "seconds": 4.049, "lufs": -15.1, "truePeak": -0.38 },
+    "cheer-3": { "seconds": 4.049, "lufs": -15.16, "truePeak": -0.11 }
+  }
+}
