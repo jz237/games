@@ -365,7 +365,8 @@ try {
   assert.equal(title.trainingTools, 5);
   assert.equal(title.flowSkipHint, true);
   assert.equal(title.newStageButton, true);
-  assert.equal(title.pauseButtons, 4);
+  // 5.1: the pause menu gained MOVE LIST and the control card's controls entry.
+  assert.equal(title.pauseButtons, 6);
   assert.equal(title.soundCaptions, false);
   assert.match(title.onlineButton, /PRIVATE ROOM/);
   assert.match(title.demoButton, /WATCH DEMO/);

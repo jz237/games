@@ -3524,3 +3524,28 @@ is addressed by an un-versioned URL and a 5.0 sheet must never draw under a
 5.1 manifest. The shell path is untouched (`tests/service-worker-guard`),
 and `tests/service-worker-media.test.mjs` runs the worker in a vm against a
 fake CacheStorage to pin the policy.
+
+## v5.1 — TRUTH: THE WAVE IN ONE PLACE
+
+Fourteen items from the post-5.0 sweep, built in parallel on isolated
+worktrees and integrated onto the despilled 5.0 tree; each has its own
+section above or in the sibling docs:
+announcer and clock truth (a time-over is a DECISION, a dizzy is not a KO, the
+last ten seconds tick — COMBAT.md); the build-time audio manifest (zero voice
+probes, real announcer take lengths); the block economy (one blocked
+voltage/flow cancel per string, reversal-invulnerable moves negative on block,
+half Grit on block, per-projectile Grit cap, Perfect Guard re-arms — COMBAT.md);
+the ext4 routing pass above; the tempo tells (whiff fringe, ghosts, WHIFF text,
+re-arm wash and click, the lab's taxed readout — COMBAT.md, VISUALS.md); shared
+sample variation (pitch/level jitter, a synthesised dash scuff and weapon
+clatter); the KO moment above; the four other stages' KO beats above; flick-to-
+dash and the governor's memory (CONTROLS.md); the first fight on a phone above;
+the pause move list, first-run card, Fight School 8-12, CPU Team Battle and
+the Devil/Commissioner trials (CONTROLS.md, DEMO.md); CINEMA 3D gameplay reads
+(world-objects, the explicit host contract — VISUALS.md) and the 3D fighter
+layer above; the resolver, ambient pulse and tools pipeline under test. Every
+generated sheet was also rebuilt with the despill (see the manifest's
+`format.despill`). Seams closed at integration: the body blow opens on a LOW
+contact or a crouched victim (there is no HIGH level — a MID jab snaps the
+head), a blocked contact keeps its stance through the hit flash, and the
+wake-up rung is measured on the ext4 get-up it draws from.
