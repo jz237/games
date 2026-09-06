@@ -513,6 +513,19 @@ import {
   DEFAULT_DEMO_SPEED,
 } from "./engine/demo-speed.mjs";
 import {
+  DEMO_RESUME_BEAT_MS,
+  createDemoHold,
+  demoBugText,
+  demoHoldWanted,
+  demoIdleState,
+  demoLegendVisible,
+  demoResultHoldRemaining,
+  demoResultPrompt,
+  demoSpeedTag,
+  finishThemSubline,
+  flowSkipHintVisible,
+} from "./engine/demo-hud.mjs";
+import {
   auditGraphicFatalities,
   getGraphicFatality,
   graphicFatalitySnapshot,
@@ -2607,6 +2620,14 @@ const demoSession = {
   // frame a probe happened to sample.
   rounds: [],
   shareNoteTimer: 0,
+  // 5.4 #31: the result hold's wall-clock bookkeeping, so a hidden tab can
+  // freeze the 5 s countdown and a returning one re-arms exactly what was
+  // left. `resultRemainingMs` is null while nothing is frozen.
+  resultArmedAt: 0,
+  resultRemainingMs: null,
+  // 5.4 #10/#32: the footer ticker the demo found on the title, put back on
+  // exit so an ended show does not leave the last exhibition's stage there.
+  tickerBefore: "",
 };
 // The ledger is bounded: an unattended cabinet runs for hours.
 const DEMO_ROUND_LEDGER_MAX = 64;
@@ -2633,6 +2654,22 @@ let bedFadeLevel = 1;
 // as "fighter:cue:take" for the QA no-repeat readout (every mode, observation).
 const fighterVoiceBags = new Map();
 const fighterVoiceRecent = [];
+
+// 5.4 #31 — THE HIDDEN-TAB HOLD. Presentation-only, on the demoSession
+// pattern (never snapshotted, never read by the sim). While a demo tab is
+// hidden (or a phone is turned portrait) the render loop hands the fixed-step
+// clock zero seconds — the tick stream simply waits, the way the intro art
+// hold already waits — and the two wall-clock plans that pace the loop (the
+// result hold, the FIGHT! call) are frozen with it. Without this, rAF stopped
+// in the hidden tab but the 5 s timer kept firing, so the viewer came back to
+// a DIFFERENT pair mid-intro with the round card and FIGHT! already spent.
+const demoHold = createDemoHold();
+// 5.4 #32 — SCREENSAVER PRESENCE. The demo runs for hours on a TV; these are
+// the two idle clocks (pointer hide, bug tuck + chrome dim) the render loop
+// turns into body classes. Reset by mouse movement and transport keys — any
+// other input exits the demo anyway — and the HUD clock restarts per
+// exhibition so every new matchup is announced at full strength first.
+const demoPresence = { lastInputAt: 0, matchStartedAt: 0, cursorIdle: false, hudIdle: false };
 
 // v3.2 — the demo speed transport. See engine/demo-speed.mjs for why
 // this scales the TICK CADENCE and never dt. `?speed=` seeds it at boot; the
@@ -4421,6 +4458,15 @@ function demoSnapshot() {
     source: demoSession.source,
     shareUrl: demoShareUrl(),
     roundsSettled: demoSession.rounds.length,
+    // 5.4 #31/#32: the hidden-tab hold and the screensaver presence classes.
+    hold: {
+      ...demoHold.snapshot(),
+      resultRemainingMs: demoSession.resultRemainingMs,
+    },
+    presence: {
+      cursorIdle: demoPresence.cursorIdle,
+      hudIdle: demoPresence.hudIdle,
+    },
   };
 }
 
@@ -4500,6 +4546,104 @@ function isDemoShareTarget(event) {
     && target.closest("#demoShareButton"));
 }
 
+// ---------------------------------------------------------------------------
+// 5.4 #31 — the hidden-tab hold. See engine/demo-hud.mjs for the machine.
+// ---------------------------------------------------------------------------
+function freezeDemoResultTimer(now) {
+  if (!demoSession.resultTimer) return;
+  demoSession.resultRemainingMs = demoResultHoldRemaining({
+    armedAt: demoSession.resultArmedAt,
+    holdMs: DEMO_RESULT_HOLD_MS,
+    now,
+  });
+  clearDemoResultTimer();
+}
+
+function armDemoResultTimer(delay, now = performance.now()) {
+  clearDemoResultTimer();
+  demoSession.resultRemainingMs = null;
+  demoSession.resultArmedAt = now - Math.max(0, DEMO_RESULT_HOLD_MS - delay);
+  demoSession.resultTimer = window.setTimeout(() => {
+    demoSession.resultTimer = 0;
+    startNextDemoMatch();
+  }, delay);
+}
+
+/**
+ * Called from visibilitychange and the orientation gate. Holds while the
+ * page cannot be seen; on return starts the RESUMING beat, which the render
+ * loop settles (settleDemoHold) once it has actually painted a frame.
+ */
+function syncDemoHold(now = performance.now()) {
+  if (!demoSession.active) {
+    demoHold.reset();
+    return;
+  }
+  const wanted = demoHoldWanted({
+    hidden: document.hidden,
+    orientationBlocked: document.body.classList.contains("orientation-blocked"),
+  });
+  if (wanted) {
+    if (demoHold.hold(now)) {
+      freezeDemoResultTimer(now);
+      // Keep the plan, drop the timer: the release re-arms it shifted by
+      // exactly the time held, the way the intro art hold does.
+      window.clearTimeout(fightAnnouncementTimer);
+      fightAnnouncementTimer = 0;
+    }
+  } else {
+    demoHold.release(now);
+  }
+  updateDemoUi();
+}
+
+/** One call per rendered frame. Returns true while the clock must wait. */
+function settleDemoHold(now) {
+  if (!demoSession.active || !demoHold.frozen()) return false;
+  const settled = demoHold.settle(now);
+  if (!settled) return true;
+  if (fightAnnouncementPlan) {
+    // Fold the held span into the plan's own clock so a later hold (or the
+    // art hold's shift) composes instead of overwriting it.
+    fightAnnouncementPlan.armedAt += settled.heldMs;
+    if (!fightAnnouncementTimer) shiftFightAnnouncement(0, now);
+  }
+  if (demoSession.resultRemainingMs !== null && state.screen === "result") {
+    armDemoResultTimer(demoSession.resultRemainingMs, now);
+  } else {
+    demoSession.resultRemainingMs = null;
+  }
+  updateDemoUi();
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// 5.4 #32 — screensaver presence: pointer hide and the bug's tuck.
+// ---------------------------------------------------------------------------
+function noteDemoPresence(now = performance.now()) {
+  demoPresence.lastInputAt = now;
+  syncDemoPresence(now);
+}
+
+function syncDemoPresence(now) {
+  const active = demoSession.active;
+  const idle = active
+    ? demoIdleState({ now, lastInputAt: demoPresence.lastInputAt, matchStartedAt: demoPresence.matchStartedAt })
+    : { cursorIdle: false, hudIdle: false };
+  if (idle.cursorIdle !== demoPresence.cursorIdle) {
+    demoPresence.cursorIdle = idle.cursorIdle;
+    document.body.classList.toggle("demo-cursor-idle", idle.cursorIdle);
+  }
+  if (idle.hudIdle !== demoPresence.hudIdle) {
+    demoPresence.hudIdle = idle.hudIdle;
+    document.body.classList.toggle("demo-idle", idle.hudIdle);
+  }
+}
+
+function coarsePointer() {
+  return Boolean(window.matchMedia?.("(pointer: coarse)").matches);
+}
+
 function cancelFightAnnouncement() {
   window.clearTimeout(fightAnnouncementTimer);
   fightAnnouncementTimer = 0;
@@ -4544,30 +4688,62 @@ function clearIdleDemoTimer() {
   demoSession.idlePrewarmTimer = 0;
 }
 
+// 5.4 #10/#28: the BROADCAST BUG. One corner element (bottom-left, over the
+// reflection band where the old key legend sat, so it can never cover a
+// fighter) carrying the show name, the matchup, the cycle + stage, the rate
+// tag and the one prompt a viewer can act on. It replaced a 9 px chip whose
+// only readable neighbour at TV distance was the operator's 20 px speed chip.
 function updateDemoUi() {
   const activeFight = demoSession.active && state.mode === "demo" && state.screen === "fight";
   const panel = $("#demoHud");
   panel.hidden = !activeFight;
   // 5.4 (sweep #19): TAP FOR SOUND until a gesture arms the attract gate,
   // SOUND AT THE BELL while it waits for its card, gone once it sounds.
-  const chip = $("#demoHudSound");
+  const soundChip = $("#demoHudSound");
   const chipLabel = attractSoundChip({ attract: demoSession.attract && activeFight, state: attractAudio.snapshot().state });
-  if (chipLabel) chip.textContent = chipLabel;
-  chip.hidden = !chipLabel;
+  if (chipLabel) soundChip.textContent = chipLabel;
+  soundChip.hidden = !chipLabel;
+  const speedTag = $("#demoHudSpeed");
+  if (speedTag) {
+    const tag = demoSpeedTag({ rate: demoSpeed.rate, paused: demoSpeed.paused, held: demoHold.frozen() });
+    speedTag.textContent = tag.text;
+    speedTag.dataset.tone = tag.tone;
+  }
+  panel.classList.toggle("held", demoSession.active && demoHold.phase === "held");
+  panel.classList.toggle("resuming", demoSession.active && demoHold.phase === "resuming");
+  const resultStatus = $("#demoResultStatus");
+  if (resultStatus && demoSession.active) {
+    resultStatus.textContent = demoResultPrompt({
+      holdMs: DEMO_RESULT_HOLD_MS,
+      coarsePointer: coarsePointer(),
+      held: demoHold.frozen(),
+    });
+  }
   if (!demoSession.cycle) return;
   const [firstId, secondId] = demoSession.cycle.picks;
   const first = roster.find(({ id }) => id === firstId);
   const second = roster.find(({ id }) => id === secondId);
-  $("#demoHudMatchup").textContent = `${first?.name || firstId} VS ${second?.name || secondId}`;
-  // 5.4: a CLOCK card says so on the chip — the viewer should know the
-  // clock is the story of this one — and (#30) the seed rides on the bug so
-  // what the link will say is what the screen says: SEED 237 · CYCLE 3 is
-  // the exhibition's address.
+  const text = demoBugText({
+    first: first?.name || firstId,
+    second: second?.name || secondId,
+    cycle: demoSession.cycle.cycle,
+    stageName: stages[demoSession.cycle.stage].name,
+    coarsePointer: coarsePointer(),
+  });
+  $("#demoHudMatchup").textContent = text.matchup;
+  $("#demoHudCycle").textContent = text.cycle;
+  const prompt = panel.querySelector("small");
+  if (prompt) prompt.textContent = demoHold.phase === "resuming" ? "RESUMING" : demoHold.phase === "held" ? "HOLDING" : text.prompt;
+  // 5.4: a CLOCK card says so on the bug — the viewer should know the
+  // clock is the story of this one — and (#30) the seed rides on it so what
+  // the link will say is what the screen says: SEED 237 · CYCLE 3 is the
+  // exhibition's address.
   const onTheClock = demoSession.show?.format === "clock" ? " · ON THE CLOCK" : "";
   const seedLabel = demoSession.seed === null ? "" : ` · SEED ${demoSession.seed}`;
-  $("#demoHudCycle").textContent = `CYCLE ${demoSession.cycle.cycle} · ${stages[demoSession.cycle.stage].name}${onTheClock}${seedLabel}`;
-  const chip = $("#demoHudLoading");
-  if (chip) chip.hidden = !(activeFight && introArtHold.active);
+  $("#demoHudCycle").textContent = `${text.cycle}${onTheClock}${seedLabel}`;
+  // 5.4 (prewarm): the intro art hold wears a LOADING chip here, not the curtain.
+  const loadingChip = $("#demoHudLoading");
+  if (loadingChip) loadingChip.hidden = !(activeFight && introArtHold.active);
   const share = $("#demoShareButton");
   share.hidden = demoSession.seed === null;
   if (!demoSession.shareNoteTimer) share.textContent = "COPY LINK";
@@ -4577,6 +4753,11 @@ function endDemoSession() {
   clearDemoResultTimer();
   cancelFightAnnouncement();
   clearDemoPrewarm(true);
+  demoHold.reset();
+  demoSession.resultRemainingMs = null;
+  demoSession.resultArmedAt = 0;
+  if (demoSession.tickerBefore) $("#stageTicker").textContent = demoSession.tickerBefore;
+  demoSession.tickerBefore = "";
   demoSession.active = false;
   demoSession.attract = false;
   demoSession.qa = false;
@@ -4605,6 +4786,7 @@ function endDemoSession() {
   attractAudio.endShow();
   bedFadeLevel = 1;
   document.body.classList.remove("demo-active");
+  syncDemoPresence(performance.now());
   $("#demoHud").hidden = true;
   $("#demoResultStatus").hidden = true;
   $("#attractScores").hidden = true;
@@ -4682,7 +4864,14 @@ function handleDemoSpeedKey(event) {
     case "Digit4": demoSpeed.setRate(0.1); break;
     default: return false;
   }
+  // 5.4 #10: the legend is hidden by default and a transport key reveals it
+  // (nine seconds, then away again). A key is also real presence: it wakes
+  // the tucked bug and the pointer clocks.
   demoSpeed.hintUntilMs = performance.now() + DEMO_SPEED_HINT_MS;
+  if (demoSession.active) {
+    noteDemoPresence();
+    updateDemoUi();
+  }
   return true;
 }
 
@@ -4757,6 +4946,15 @@ function startNextDemoMatch() {
   // rng stream, and so every seed's matchup order, is unchanged) but the
   // draw no longer picks the bed: measured 17.2% stage/track agreement over
   // 600 director cycles before, 100% after (tests/demo-audio.test.mjs).
+  // 5.4 #32: the footer ticker follows the stage bag. It was only ever written
+  // by the select screen, so an evening of exhibitions all ran under whichever
+  // stage the title had last shown.
+  $("#stageTicker").textContent = stages[state.stage].ticker;
+  // 5.4 #32: a new exhibition brings the bug back at full strength; the tuck
+  // clock restarts from here (see demoIdleState).
+  demoPresence.matchStartedAt = performance.now();
+  demoSession.resultRemainingMs = null;
+  syncDemoPresence(demoPresence.matchStartedAt);
   updateDemoUi();
   announce(`WATCH DEMO · CYCLE ${cycle.cycle}`, `${state.fighters[0].def.name} VS ${state.fighters[1].def.name}`, 1.2);
   return true;
@@ -4792,14 +4990,19 @@ function startDemo({ attract = false, qa = false, seed = null, cycle = 1, source
   // a pause left latched from a previous session would open the next one
   // frozen with no obvious cause.
   demoSpeed.setPaused(false);
-  // v4.0: THE LEGEND'S HOME. The speed transport's key legend used to be armed
-  // only by the retired A/B exhibition's entry point, so on its own the demo
-  // never announced the transport at all — the keys worked, but the only way
-  // to discover them was to already know one and press it. Arming the hint on
-  // every demo start puts the legend where the controls are actually useful:
-  // nine seconds under the floor line at the top of a WATCH DEMO (and of the
-  // attract loop), then out of the way, and any transport key brings it back.
-  demoSpeed.hintUntilMs = performance.now() + DEMO_SPEED_HINT_MS;
+  // v4.0 armed the transport's key legend for nine seconds at every demo
+  // start so the keys announced themselves. 5.4 #10 DEMOTED IT: from the
+  // couch the viewer reads the largest text first, and a three-line keyboard
+  // legend (plus the 20 px speed chip) was the loudest demo-specific type on
+  // the screen — on a phone the third line fell off the viewport entirely.
+  // The rate now lives as a small tag inside the broadcast bug; the legend is
+  // hidden until a transport key asks for it (handleDemoSpeedKey).
+  demoSpeed.hintUntilMs = 0;
+  demoHold.reset();
+  demoSession.resultRemainingMs = null;
+  demoSession.tickerBefore = $("#stageTicker").textContent;
+  demoPresence.lastInputAt = performance.now();
+  demoPresence.matchStartedAt = demoPresence.lastInputAt;
   // v2.9 FLOW round 2 — SAME-PAGE DETERMINISM. A seeded demo is the QA
   // reproduction path, and every match seed derives from state.matchSerial
   // (see seedMatch), which only ever GROWS across a page's lifetime. A second
@@ -4886,10 +5089,15 @@ function scheduleNextDemoMatch() {
   // demoResult, a double-perfect) still gets the result hold's five seconds
   // of warm-up; a no-op when round 2 already started it.
   demoPrewarmNextPair("result");
-  demoSession.resultTimer = window.setTimeout(() => {
-    demoSession.resultTimer = 0;
-    startNextDemoMatch();
-  }, DEMO_RESULT_HOLD_MS);
+  // 5.4 #31: a result that lands while the tab is hidden waits for the
+  // screen; the settle re-arms the full hold once a frame has been seen.
+  if (demoHold.frozen()) {
+    demoSession.resultRemainingMs = DEMO_RESULT_HOLD_MS;
+    updateDemoUi();
+    return;
+  }
+  armDemoResultTimer(DEMO_RESULT_HOLD_MS);
+  updateDemoUi();
 }
 
 function scheduleIdleDemo() {
@@ -12692,7 +12900,9 @@ function announce(main, sub = "", duration = 1, { speak = null } = {}) {
 }
 
 function updateFlowSkipHint() {
-  const visible = state.screen === "fight" && (state.phase === "intro" || state.phase === "roundover");
+  // 5.4 #10: never in a demo — any input EXITS the show and the CPU seats
+  // refuse the skip, so the prompt was an instruction to kill the demo.
+  const visible = flowSkipHintVisible({ screen: state.screen, phase: state.phase, demoActive: demoSession.active });
   $("#flowSkipHint").hidden = !visible;
 }
 
@@ -18294,12 +18504,14 @@ function checkKnockout() {
   // the FINISH THEM window: the loser stands through the KO freeze and then
   // finishRound lays him down (koCollapseOnRoundEnd), so the banner, the
   // touch prompt and the "FINAL BLOW READY" cue are not promised. Every other
-  // mode keeps the 6 s window and the prompt exactly as before.
+  // mode keeps the 6 s window and the prompt exactly as before — and (#10) a
+  // demo spectator holds no controller, so the sub-line names who is moving
+  // in; outside the demo the exact shipped string is returned.
   const plainDemoKo = state.mode === "demo" && !demoPlanCloser(winner).finisher;
   if (plainDemoKo) {
     state.phaseTime = DEMO_PLAIN_KO_WINDOW_SECONDS;
   } else {
-    announce("FINISH THEM", "LP = A  ·  LK = B  ·  ANY DISTANCE", 2.2);
+    announce("FINISH THEM", finishThemSubline({ demo: state.mode === "demo", winnerName: attacker.def.name }), 2.2);
     if (!rollbackResimulating) setTouchPrompt("final");
   }
   updateHud();
@@ -28395,6 +28607,8 @@ function draw(time) {
   // intensity routing, stage ambience) from observed state. Unconditional so
   // every bed settles/tears down the moment the fight screen goes away.
   updateAudioPresentation(time, hudDtMs);
+  // 5.4 #32: the demo's screensaver clocks (no-op unless a demo is running).
+  syncDemoPresence(time);
   // v2.6 MOTION: observe landings/skids/dash starts/hitstun edges and pace
   // the squash/wobble/crossfade counters BEFORE either renderer consumes the
   // shared motion transforms (the 3D renderFrame below reads the same layer).
@@ -28603,24 +28817,36 @@ function draw(time) {
 // ---------------------------------------------------------------------------
 function drawDemoSpeedHud(nowMs) {
   if (!demoSpeedScoped()) return;
-  const rateLabel = demoSpeed.paused ? "PAUSED" : `${demoSpeed.rate}x`;
-  const accent = demoSpeed.paused ? "#ffb347" : demoSpeed.rate === 1 ? "#4eddf5" : "#8affc1";
   const originX = 26;
   const originY = 122;
   ctx.save();
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.font = "900 20px ui-monospace, monospace";
-  const head = `DEMO SPEED · ${rateLabel}`;
-  const headWidth = ctx.measureText(head).width + 24;
-  ctx.fillStyle = "rgba(4,9,14,.78)";
-  ctx.fillRect(originX, originY - 16, headWidth, 32);
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(originX, originY - 16, headWidth, 32);
-  ctx.fillStyle = accent;
-  ctx.fillText(head, originX + 12, originY + 1);
-  if (nowMs < demoSpeed.hintUntilMs) {
+  // 5.4 #10/#28: in a DEMO the rate is a DOM tag inside the broadcast bug
+  // (updateDemoUi), so CSS owns its place on every viewport — the canvas chip
+  // at (26,122) landed on CPU 1's Grit row once object-fit: cover cropped a
+  // phone's frame. Training keeps the canvas chip exactly as it was.
+  if (state.mode !== "demo") {
+    const rateLabel = demoSpeed.paused ? "PAUSED" : `${demoSpeed.rate}x`;
+    const accent = demoSpeed.paused ? "#ffb347" : demoSpeed.rate === 1 ? "#4eddf5" : "#8affc1";
+    ctx.font = "900 20px ui-monospace, monospace";
+    const head = `DEMO SPEED · ${rateLabel}`;
+    const headWidth = ctx.measureText(head).width + 24;
+    ctx.fillStyle = "rgba(4,9,14,.78)";
+    ctx.fillRect(originX, originY - 16, headWidth, 32);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(originX, originY - 16, headWidth, 32);
+    ctx.fillStyle = accent;
+    ctx.fillText(head, originX + 12, originY + 1);
+  }
+  // The legend: hidden by default, a transport key reveals it, and never on a
+  // coarse pointer (keyboard advice a touch viewer cannot follow, with its
+  // third line clipped off an 844x390 viewport).
+  const legendVisible = state.mode === "demo"
+    ? demoLegendVisible({ scoped: true, hintUntilMs: demoSpeed.hintUntilMs, nowMs, coarsePointer: coarsePointer() })
+    : nowMs < demoSpeed.hintUntilMs;
+  if (legendVisible) {
     // The legend lives BELOW THE FLOOR LINE, not under the chip: down here it
     // is over the reflection band, clear of both fighters entirely, and it
     // hides itself after nine seconds anyway. Armed on every demo start (see
@@ -28680,6 +28906,11 @@ function loop(now) {
   // v5.1 #35: an intro art hold hands the clock zero seconds — no tick runs,
   // no accumulator builds, the tick stream resumes exactly where it stood.
   const artHeld = updateIntroArtHold(now);
+  // 5.4 #31: a demo whose tab is hidden (or has just come back and is on its
+  // RESUMING beat) waits the same way — zero seconds, the tick stream resumes
+  // exactly where it stood. Gated on the demo session inside; a played match
+  // never enters this branch.
+  const demoHeld = settleDemoHold(now);
   const frame = state.qaManualMode
     ? {
       steps: 0,
@@ -28687,7 +28918,7 @@ function loop(now) {
       alpha: state.simulationAlpha,
       droppedSeconds: simulationClock.droppedSeconds,
     }
-    : simulationClock.advance(artHeld ? 0 : simSeconds, runSimulationStep);
+    : simulationClock.advance(artHeld || demoHeld ? 0 : simSeconds, runSimulationStep);
   state.simulationTick = state.mode === "online" && onlineSession.rollback
     ? onlineSession.rollback.frame : frame.tick;
   state.simulationAlpha = frame.alpha;
@@ -28990,6 +29221,9 @@ function scheduleCabinetCursorHide() {
 }
 
 document.addEventListener("mousemove", () => {
+  // 5.4 #32: mouse movement is presence for the demo's own idle clocks
+  // (pointer hide, bug tuck) — it never exits the show, a click does.
+  if (demoSession.active) noteDemoPresence();
   if (!state.cabinetMode) return;
   document.body.classList.remove("cabinet-idle");
   scheduleCabinetCursorHide();
@@ -31316,6 +31550,8 @@ function syncOrientationGate() {
   document.body.classList.toggle("mobile-landscape", phone && !portrait);
   if (blocked) renderRotateGate();
   setOnlineLocalSuspended(blocked || document.hidden);
+  // 5.4 #31: a phone turned portrait holds the demo the way a hidden tab does.
+  syncDemoHold();
 }
 
 function lockLandscape() {
@@ -32509,6 +32745,8 @@ document.addEventListener("visibilitychange", () => {
   else if (document.hidden && state.screen === "fight" && !state.paused) setPaused(true);
   if (document.hidden) clearIdleDemoTimer();
   else if (state.screen === "title") scheduleIdleDemo();
+  // 5.4 #31: a running demo freezes with the tab and resumes on a beat.
+  syncDemoHold();
   // Release 1.6 LOUD: rAF stops in hidden tabs, so drop the synth beds here
   // rather than letting them drone at their last eased level. The render loop
   // re-eases them when the tab returns; music restart stays syncMusic's job,

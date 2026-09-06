@@ -356,12 +356,13 @@ single-frame step.
 | `?speed=0.25` | set the rate from the URL |
 | `qa.demoSpeed(rate)` · `qa.demoPause()` · `qa.frameStep(n)` | the same three controls |
 
-The rate chip is always on screen. The key legend shows itself for nine
-seconds at the start of every demo session and again after any transport key,
-below the floor line so it can never cover a fighter. Arming it on the session
-start is what keeps the controls discoverable: 3.2-3.5 armed it only from the
-retired A/B exhibition's entry point, so in an ordinary WATCH DEMO the keys
-worked but never announced themselves.
+The rate is always on screen — since 5.4 as the small tag inside the demo's
+broadcast bug (see *TV-safe and phone-safe*, below); training keeps the canvas
+chip. The key legend is hidden by default and shows itself for nine seconds
+after any transport key, below the floor line so it can never cover a
+fighter, and never on a coarse pointer. (v4.0 armed it on every demo start so
+the keys announced themselves; 5.4 demoted it — from the couch it was the
+loudest demo-specific text on the screen.)
 
 **It scales the TICK CADENCE, never dt.** Every frame count in this sim is an
 integer number of 1/60s ticks and every physics integration is written against
@@ -957,3 +958,90 @@ always have for the announcer and crowd bags.
   the activation table, the fade, the loop/bag scoping, the bed-restart
   decision, the 1.6 resolver, the 600-cycle stage/bed agreement, the bag's
   no-repeat rule, and the game.js wiring from source.
+
+## TV-safe and phone-safe: the broadcast bug, the hold and the screensaver (5.4 Fight Night, sweep #10 / #28 / #31 / #32)
+
+The demo is watched from a couch and from a phone, for hours, and it was
+dressed for neither. Measured at 1440x900 on the 5.3 head: the show chip that
+said who was fighting was a 469x23 px strip at an **8.35 px** font (9 px at
+1080p) parked at 13% from the top, while the loudest demo-specific text on the
+screen was the operator's 20 px `DEMO SPEED · 0.75x` canvas chip and a
+three-line keyboard legend that came up for nine seconds at every demo start.
+Three prompts told a spectator to do things that either did nothing or killed
+the show: `ANY ATTACK / START · SKIP` in every intro and roundover (any input
+exits a demo; the CPU seats refuse the skip), `FINISH THEM · LP = A · LK = B`
+(nobody is holding a controller), and the legend itself on a touch screen. On
+844x390 the canvas is `object-fit: cover`, so the chip painted at canvas
+(26,106-138) landed at CSS y 27-48 — straight through CPU 1's Grit row
+(measured at y 34-43) — the legend's third line fell at y 399 on a 390 px
+viewport, and the phone media query hid `PRESS ANY BUTTON TO PLAY` outright:
+with the touch controls and pause button gone in a demo, a phone viewer had no
+visible way out. A hidden tab kept cycling (rAF stops but the 5 s result timer
+fires), so the viewer came back to a different pair mid-intro with FIGHT!
+already spent — reproduced: hide during the result hold, 5.4 s later the next
+exhibition had started unseen (`matches 2, phase intro, tick 123`). And the
+footer ticker was only ever written by the select screen, so an evening of
+exhibitions all ran under `SOMERSET SEPTA STATION` whatever the stage bag drew.
+
+`engine/demo-hud.mjs` holds the logic; game.js only wires it, and every call
+site is gated on the demo session (pinned from source in
+`tests/demo-hud.test.mjs`). A played match is byte-identical: the same
+`aiFight('deathblow','jez','pro')` + 20 s trace checksums `844be2ee` at tick
+1494 before and after, and the seeded demo (`qa.demo(237)` + 30 s) checksums
+`fa9806cb` at tick 1800 before and after — nothing here reads or writes sim
+state.
+
+**The broadcast bug** (`#demoHud`, same ids the smoke reads). One stable corner
+element, bottom-left over the reflection band where the legend used to sit,
+so it can never cover a fighter: `WATCH DEMO · CPU VS CPU` + the rate tag,
+the matchup in Impact, the cycle · stage and the one prompt a viewer can act
+on. At 1440x900 it measures 424x66 px with an 11.2 px base and a 19.7 px
+matchup line (about 26 px at 1080p — the old chip was 8.35); on the phone it
+is 253x44 px inside the 390 px viewport, the rate tag sits at y 338-350 against
+a Grit row at y 34-43 (no intersection, asserted in `mobile-landscape`), and
+the prompt reads `TAP TO PLAY` because a coarse pointer has no button to
+press. The rate tag (`#demoHudSpeed`) replaces the canvas chip in demos —
+`0.75×` / `PAUSED` / `HELD`, toned — so CSS owns its place on every viewport;
+training keeps the canvas chip exactly as it was. The legend is demoted:
+hidden by default, nine seconds after a transport key, never on a coarse
+pointer. The skip hint is gated on `!demoSession.active`, and FINISH THEM's
+sub-line becomes `POST MOVES IN FOR THE FINAL BLOW` in a demo while the
+player's string stays byte-identical (`FINISH_THEM_PLAYER_SUBLINE`).
+
+**The hidden-tab hold** (`createDemoHold`). On `visibilitychange` (and when a
+phone turns portrait) a running demo freezes: the render loop hands the
+fixed-step clock zero seconds, the way the intro art hold does, so the tick
+stream simply waits; the 5 s result timer is cleared with its remaining time
+remembered; the FIGHT! plan keeps its callback and drops its timer. On return
+the bug reads RESUMING for a one-second beat — the viewer sees a frame before
+anything moves — then the remaining hold is re-armed and the FIGHT! plan's
+`armedAt` is shifted by exactly the time held (folded into the plan, so a
+second hold or the art hold's own shift composes). The hold is deliberately
+not the speed transport's pause: no key releases it and the chip never says
+PAUSED for a state the viewer did not choose. Measured in headless Chrome:
+hide during the result hold → `phase held, resultRemainingMs 4999`, 5.4 s
+later still `matches 1, screen result`; show → `resuming`; 1.4 s later
+`live, resultScheduled true, heldMs 6451`; the next exhibition then starts
+after the remembered 5 s. The `demo-hold` smoke probe pins the sequence.
+
+**Screensaver hygiene.** Two idle clocks run off real presence (mouse
+movement, transport keys — anything else exits): the pointer hides after 3 s
+(`body.demo-cursor-idle`, cabinet-idle's rule, measured `cursor: none` at
+4.5 s quiet), and after 12 s the bug tucks toward its corner at 45%, the
+top/footer chrome dims to 55% and the fight HUD joins a slow 60 s drift
+(`body.demo-idle`). The HUD clock restarts on every new exhibition, so each
+matchup is announced at full strength first. The bug always rides a ~8 px
+60 s orbit (burn-in), reduced motion kills both animations. The footer ticker
+is written from `startNextDemoMatch` so it follows the stage bag, and the
+title gets its own ticker back on exit. The wake lock is unchanged: held for
+the whole demo, released with the tab, re-acquired on return.
+
+Verification: `node --test tests/demo-hud.test.mjs` (the bug text, the rate
+tag, the three prompt gates, the idle clocks, the hold machine and its shift
+arithmetic, the source pins); `node tests/browser-smoke.mjs
+--only=fighter-framing-desktop,demo,mobile-landscape` (the `demo-hud` probe
+measures the bug's corner, size and prompts at 1440x900, the ticker follow and
+restore; `demo-hold` walks a hidden tab through hold → resuming → live;
+`mobile-landscape` asserts the tag/Grit-row separation and the touch prompt at
+844x390). The framing probe is listed because `mobile-landscape` reads its
+desktop numbers.

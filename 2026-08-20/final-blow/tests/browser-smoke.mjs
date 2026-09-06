@@ -3980,6 +3980,149 @@ probe('demo-seed-url', async () => {
     await navigate(client, gameUrl);
 });
 
+// 5.4 FIGHT NIGHT (demo sweep #10 / #32): the broadcast bug, the demoted
+// operator legend, the three spectator-wrong prompts and the stage ticker.
+probe('demo-hud', async () => {
+    const demoHudBug = await evaluate(client, `(() => {
+      const qa = window.__finalBlowQa;
+      qa.demo(237);
+      qa.step(0.4);
+      const hud = document.querySelector('#demoHud');
+      const rect = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
+      const frame = rect(document.querySelector('#gameFrame'));
+      const bug = rect(hud);
+      const firstTicker = document.querySelector('#stageTicker').textContent;
+      const firstCycle = document.querySelector('#demoHudCycle').textContent;
+      const intro = {
+        phase: window.__finalBlowEngine.snapshot().phase,
+        skipHidden: document.querySelector('#flowSkipHint').hidden,
+      };
+      qa.step(4.5);
+      qa.demoKnockout(0);
+      const finish = {
+        phase: window.__finalBlowEngine.snapshot().phase,
+        main: document.querySelector('#announcer strong').textContent,
+        sub: document.querySelector('#announcer span').textContent,
+      };
+      const snapshot = window.__finalBlowEngine.snapshot();
+      const stages = qa.demoStages();
+      // Cycle 2 lands on a different stage (the bag never repeats a stage
+      // back to back), so the ticker refresh is observable.
+      qa.demoCycles(2);
+      const second = window.__finalBlowEngine.snapshot();
+      const result = {
+        frame, bug,
+        hidden: hud.hidden,
+        fontSize: parseFloat(getComputedStyle(hud).fontSize),
+        matchupSize: parseFloat(getComputedStyle(document.querySelector('#demoHudMatchup')).fontSize),
+        show: hud.querySelector('b').textContent,
+        matchup: document.querySelector('#demoHudMatchup').textContent,
+        cycle: firstCycle,
+        prompt: hud.querySelector('small').textContent,
+        promptDisplay: getComputedStyle(hud.querySelector('small')).display,
+        speed: { text: document.querySelector('#demoHudSpeed').textContent, tone: document.querySelector('#demoHudSpeed').dataset.tone },
+        intro, finish,
+        stage: snapshot.stage,
+        firstTicker,
+        secondStage: second.stage,
+        secondTicker: document.querySelector('#stageTicker').textContent,
+        secondCycle: document.querySelector('#demoHudCycle').textContent,
+        bodyClasses: [...document.body.classList],
+        presence: second.demo.presence,
+        hold: second.demo.hold,
+        stageCount: stages.length,
+      };
+      qa.exitDemo();
+      result.tickerAfterExit = document.querySelector('#stageTicker').textContent;
+      return result;
+    })()`);
+    assert.equal(demoHudBug.hidden, false);
+    assert.equal(demoHudBug.show, 'WATCH DEMO · CPU VS CPU');
+    assert.match(demoHudBug.matchup, /^[A-Z0-9 .'-]+ VS [A-Z0-9 .'-]+$/);
+    assert.match(demoHudBug.cycle, /^CYCLE 1 · /);
+    assert.equal(demoHudBug.prompt, 'PRESS ANY BUTTON TO PLAY');
+    assert.notEqual(demoHudBug.promptDisplay, 'none');
+    // TV-safe: the matchup line is the bug's loudest text and at least twice
+    // the old 8.35 px chip on this 1440-wide viewport.
+    assert.ok(demoHudBug.matchupSize >= 17, `matchup line should read from the couch, got ${demoHudBug.matchupSize}px`);
+    assert.ok(demoHudBug.fontSize >= 10, `bug base size ${demoHudBug.fontSize}px`);
+    // A stable corner: bottom-left, inside the frame, under the floor line.
+    assert.ok(demoHudBug.bug.left >= demoHudBug.frame.left && demoHudBug.bug.right <= demoHudBug.frame.right);
+    assert.ok(demoHudBug.bug.bottom <= demoHudBug.frame.bottom);
+    assert.ok(demoHudBug.bug.top >= demoHudBug.frame.top + demoHudBug.frame.height * 0.78, 'the bug sits in the reflection band, clear of the fighters');
+    assert.ok(demoHudBug.bug.left < demoHudBug.frame.left + demoHudBug.frame.width * 0.1);
+    // The rate is a tag in the bug, not a 20 px canvas chip.
+    assert.equal(demoHudBug.speed.text, '0.75×');
+    assert.equal(demoHudBug.speed.tone, 'slow');
+    // The three prompts a spectator cannot act on.
+    assert.equal(demoHudBug.intro.phase, 'intro');
+    assert.equal(demoHudBug.intro.skipHidden, true, 'ANY ATTACK / START · SKIP must not show in a demo');
+    assert.equal(demoHudBug.finish.phase, 'finish');
+    assert.equal(demoHudBug.finish.main, 'FINISH THEM');
+    assert.match(demoHudBug.finish.sub, /MOVES IN FOR THE FINAL BLOW$/);
+    assert.doesNotMatch(demoHudBug.finish.sub, /LP = A/);
+    // The footer ticker follows the stage bag and is put back on exit.
+    assert.notEqual(demoHudBug.secondStage, demoHudBug.stage);
+    assert.match(demoHudBug.secondCycle, /^CYCLE 2 · /);
+    assert.ok(demoHudBug.secondTicker.length > 10);
+    assert.notEqual(demoHudBug.secondTicker, demoHudBug.firstTicker, 'the footer ticker must follow the stage bag');
+    assert.equal(demoHudBug.tickerAfterExit, 'SOMERSET SEPTA STATION // STREET ENTRANCE // PHILADELPHIA', 'the title gets its ticker back');
+    assert.deepEqual(demoHudBug.hold.phase, 'live');
+    assert.equal(demoHudBug.bodyClasses.includes('demo-active'), true);
+});
+
+// 5.4 FIGHT NIGHT (demo sweep #31): a hidden tab holds the demo — the 5 s
+// result countdown freezes, the tab comes back to a RESUMING beat, and only
+// then does the countdown pick up what was left.
+probe('demo-hold', async () => {
+    const demoHoldProbe = await evaluate(client, `(async () => {
+      const qa = window.__finalBlowQa;
+      qa.demo(237);
+      qa.step(2);
+      qa.demoKnockout(0);
+      qa.step(0.05);
+      qa.demoResult(0);
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const read = () => { const s = window.__finalBlowEngine.snapshot(); return { screen: s.screen, matches: s.demo.matches, resultScheduled: s.demo.resultScheduled, hold: s.demo.hold, tick: s.tick, status: document.querySelector('#demoResultStatus').textContent, prompt: document.querySelector('#demoHud small').textContent, speed: document.querySelector('#demoHudSpeed').textContent }; };
+      const before = read();
+      let hidden = true;
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      const atHide = read();
+      await wait(5400);
+      const stillHidden = read();
+      hidden = false;
+      document.dispatchEvent(new Event('visibilitychange'));
+      const atShow = read();
+      await wait(1400);
+      const afterBeat = read();
+      await wait(atHide.hold.resultRemainingMs + 400);
+      const afterHold = read();
+      delete document.hidden;
+      delete document.visibilityState;
+      qa.exitDemo();
+      return { before, atHide, stillHidden, atShow, afterBeat, afterHold };
+    })()`);
+    assert.equal(demoHoldProbe.before.screen, 'result');
+    assert.equal(demoHoldProbe.before.resultScheduled, true);
+    assert.equal(demoHoldProbe.atHide.hold.phase, 'held');
+    assert.equal(demoHoldProbe.atHide.resultScheduled, false, 'the wall-clock timer is frozen, not left running');
+    assert.ok(demoHoldProbe.atHide.hold.resultRemainingMs > 4000 && demoHoldProbe.atHide.hold.resultRemainingMs <= 5000, `remaining ${demoHoldProbe.atHide.hold.resultRemainingMs}`);
+    assert.equal(demoHoldProbe.atHide.status, 'NEXT FIGHT WAITS FOR THE SCREEN');
+    assert.equal(demoHoldProbe.atHide.speed, 'HELD');
+    assert.equal(demoHoldProbe.stillHidden.matches, 1, 'no new exhibition may start while hidden');
+    assert.equal(demoHoldProbe.stillHidden.screen, 'result');
+    assert.equal(demoHoldProbe.atShow.hold.phase, 'resuming');
+    assert.equal(demoHoldProbe.atShow.matches, 1);
+    assert.equal(demoHoldProbe.afterBeat.hold.phase, 'live');
+    assert.equal(demoHoldProbe.afterBeat.resultScheduled, true, 'the remaining hold is re-armed after the beat');
+    assert.equal(demoHoldProbe.afterBeat.matches, 1);
+    assert.ok(demoHoldProbe.afterBeat.hold.heldMs >= 6000, `held ${demoHoldProbe.afterBeat.hold.heldMs} ms`);
+    assert.equal(demoHoldProbe.afterHold.matches, 2, 'the next exhibition starts once the remaining hold runs out');
+    assert.equal(demoHoldProbe.afterHold.screen, 'fight');
+});
+
 probe('offline-cache', async () => {
     offlineCache = await evaluate(client, `(async () => {
       await navigator.serviceWorker.ready;
@@ -4202,9 +4345,19 @@ probe('mobile-landscape', async () => {
       const hud = document.querySelector('#demoHud').getBoundingClientRect();
       const touch = document.querySelector('#touchControls');
       const pause = document.querySelector('#touchPauseButton');
+      // 5.4 #28: the rate tag must stay off CPU 1's Grit row, the prompt must
+      // be visible and touch-worded, and the keyboard legend must stay off a
+      // coarse pointer (drawDemoSpeedHud paints it only when armed AND fine).
+      const rect = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
+      const small = document.querySelector('#demoHud small');
       const result = {
         snapshot,
         hud: { left: hud.left, top: hud.top, right: hud.right, bottom: hud.bottom },
+        speedTag: rect(document.querySelector('#demoHudSpeed')),
+        gritRow: rect(document.querySelector('.p1-hud .grit-row')),
+        prompt: { text: small.textContent, display: getComputedStyle(small).display },
+        matchupSize: parseFloat(getComputedStyle(document.querySelector('#demoHudMatchup')).fontSize),
+        coarse: matchMedia('(pointer: coarse)').matches,
         touchDisplay: getComputedStyle(touch).display,
         pauseDisplay: getComputedStyle(pause).display,
         overflow: document.documentElement.scrollWidth > innerWidth,
@@ -4232,6 +4385,15 @@ probe('mobile-landscape', async () => {
     assert.ok(mobileDemo.titleButtons.demo.left >= 0 && mobileDemo.titleButtons.demo.right <= 844);
     assert.ok(mobileDemo.titleButtons.controls.left >= 0 && mobileDemo.titleButtons.controls.right <= 844);
     assert.ok(mobileDemo.hud.left >= 0 && mobileDemo.hud.right <= 844 && mobileDemo.hud.bottom <= 390);
+    // 5.4 #28: the rate tag and the Grit row must not intersect (the canvas
+    // chip used to be painted straight through it on this viewport).
+    assert.equal(mobileDemo.coarse, true);
+    const apart = mobileDemo.speedTag.top >= mobileDemo.gritRow.bottom || mobileDemo.speedTag.bottom <= mobileDemo.gritRow.top
+      || mobileDemo.speedTag.left >= mobileDemo.gritRow.right || mobileDemo.speedTag.right <= mobileDemo.gritRow.left;
+    assert.ok(apart, `speed tag ${JSON.stringify(mobileDemo.speedTag)} overlaps the Grit row ${JSON.stringify(mobileDemo.gritRow)}`);
+    assert.equal(mobileDemo.prompt.text, 'TAP TO PLAY', 'a phone viewer needs a touch-worded exit');
+    assert.notEqual(mobileDemo.prompt.display, 'none', 'the exit prompt must be visible on a phone');
+    assert.ok(mobileDemo.matchupSize >= 12, `phone matchup line ${mobileDemo.matchupSize}px`);
 });
 
 probe('mobile-polish', async () => {

@@ -1048,35 +1048,95 @@ kbd,
 .online-hud.error { border-color: var(--red); }
 .online-hud.error b { color: var(--red); }
 
+/* 5.4 FIGHT NIGHT (#10/#28/#32): the demo's BROADCAST BUG. One stable corner
+   element, bottom-left over the reflection band (the fighters' feet stop at
+   the floor line above it), sized for a TV: the matchup line is ~1.3vw, so at
+   1080p it is ~22 px against the old 9 px chip. Rows: show name + rate tag /
+   matchup / cycle·stage + the one prompt a viewer can act on. It drifts on a
+   slow 60 s orbit (burn-in), tucks and dims once the room is quiet
+   (body.demo-idle, see demoIdleState), and reads HELD / RESUMING while the
+   hidden-tab hold has the clock. */
 .demo-hud {
   position: absolute;
   z-index: 9;
-  top: 13.2%;
-  left: 50%;
-  display: flex;
-  gap: 8px;
+  left: 2.6%;
+  bottom: 3.4%;
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "show speed" "matchup matchup" "cycle prompt" "actions actions";
+  gap: 2px 12px;
   align-items: center;
-  padding: 5px 9px;
-  border: 1px solid rgba(255,177,27,.68);
-  background: rgba(12,7,2,.86);
-  color: #cad2d7;
-  font-size: clamp(6px, .58vw, 9px);
+  justify-content: start;
+  padding: 6px 14px 7px 11px;
+  border-left: 4px solid var(--amber);
+  background: linear-gradient(90deg, rgba(8,6,3,.92), rgba(8,6,3,.78));
+  box-shadow: 0 4px 14px rgba(0,0,0,.55);
+  color: #e3eaee;
+  font-size: clamp(8px, .78vw, 13px);
   font-weight: 900;
-  letter-spacing: .07em;
+  letter-spacing: .1em;
+  text-shadow: 0 1px 0 #000;
   pointer-events: none;
-  transform: translateX(-50%);
   white-space: nowrap;
+  opacity: 1;
+  transition: opacity .7s ease, transform .9s cubic-bezier(.3,.8,.4,1);
+  animation: demo-bug-drift 60s ease-in-out infinite;
 }
 .demo-hud[hidden] { display: none !important; }
-.demo-hud b { color: var(--amber); }
-.demo-hud em { color: var(--cyan); font-style: normal; }
-.demo-hud small { color: #fff; font-size: inherit; animation: demo-prompt .7s ease-in-out infinite alternate; }
+.demo-hud b { grid-area: show; color: var(--amber); font-size: .92em; }
+.demo-hud-speed {
+  grid-area: speed;
+  justify-self: end;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  font-family: ui-monospace, monospace;
+  font-size: .9em;
+  font-style: normal;
+  letter-spacing: .06em;
+}
+.demo-hud-speed[data-tone="live"] { color: var(--cyan); }
+.demo-hud-speed[data-tone="slow"] { color: #8affc1; }
+.demo-hud-speed[data-tone="paused"] { color: #ffb347; }
+.demo-hud-speed[data-tone="held"] { color: #ffb347; border-style: dashed; }
+.demo-hud span { grid-area: matchup; color: #fff; font-family: Impact, "Arial Narrow", sans-serif; font-size: 1.75em; font-style: italic; font-weight: 400; letter-spacing: .05em; line-height: 1; }
+.demo-hud em { grid-area: cycle; color: var(--cyan); font-style: normal; font-size: .9em; }
+.demo-hud small { grid-area: prompt; justify-self: end; color: #fff; font-size: .9em; animation: demo-prompt .7s ease-in-out infinite alternate; }
+.demo-hud.held small,
+.demo-hud.resuming small { color: #ffb347; animation-duration: .35s; }
+@keyframes demo-prompt { to { opacity: .5; } }
+/* Burn-in orbit: ~8 px at the frame's own scale, imperceptible frame to
+   frame, never in the same place for an hour. */
+@keyframes demo-bug-drift {
+  0% { translate: 0 0; }
+  25% { translate: 0.55% -0.6%; }
+  50% { translate: 0.15% -1.1%; }
+  75% { translate: -0.35% -0.5%; }
+  100% { translate: 0 0; }
+}
+/* Screensaver: once the room is quiet the bug tucks toward its corner at
+   ~45%, the static chrome dims and the fight HUD joins the drift. The pointer
+   hides on its own, shorter clock (demo-cursor-idle), mirroring cabinet-idle.
+   Any mouse movement or transport key brings all of it straight back. */
+body.demo-active.demo-idle .demo-hud { opacity: .45; transform: translate(-6%, 18%) scale(.9); }
+body.demo-active.demo-idle .topbar,
+body.demo-active.demo-idle .footer-strip { opacity: .55; transition: opacity 1.2s ease; }
+body.demo-active.demo-idle .hud { animation: demo-bug-drift 60s ease-in-out infinite reverse; }
+body.demo-active .topbar,
+body.demo-active .footer-strip { transition: opacity .6s ease; }
+body.demo-active.demo-cursor-idle,
+body.demo-active.demo-cursor-idle * { cursor: none !important; }
+body.reduced-motion .demo-hud,
+body.reduced-motion.demo-active.demo-idle .hud { animation: none; }
+/* 5.4 integration: the three chips (LOADING, COPY LINK, TAP FOR SOUND) share
+   one row under the bug; the row collapses when every chip is hidden. The
+   panel itself stays pointer-events: none — only the two buttons take a press. */
+.demo-hud-actions { grid-area: actions; display: flex; align-items: center; gap: 6px; }
+.demo-hud-actions:not(:has(> :not([hidden]))) { display: none; }
 /* 5.4 FIGHT NIGHT (prewarm): the demo honours the intro art hold like a played
    match, but wears a chip on its own HUD instead of the LOADING FIGHTERS
    curtain — a curtain over the attract loop reads as a broken cabinet. */
-.demo-hud i { color: var(--amber); font-style: normal; animation: demo-prompt .55s ease-in-out infinite alternate; }
-.demo-hud i[hidden] { display: none !important; }
-@keyframes demo-prompt { to { opacity: .5; } }
+.demo-hud-loading { color: var(--amber); font-style: normal; animation: demo-prompt .55s ease-in-out infinite alternate; }
+.demo-hud-loading[hidden] { display: none !important; }
 /* 5.4 #30: the COPY LINK bug. The HUD itself passes pointers through (the
    fight underneath is the show); the bug is the one thing in it that takes a
    press, and the capture-phase guard in game.js keeps that press from ending
@@ -1084,7 +1144,7 @@ kbd,
    the loudest thing on a TV. */
 .demo-hud .demo-share {
   min-height: 28px;
-  margin: -4px -4px -4px 2px;
+  margin: 0;
   padding: 4px 9px;
   border: 1px solid rgba(78,221,245,.7);
   border-radius: 3px;
@@ -1108,7 +1168,7 @@ kbd,
 .demo-hud-sound {
   pointer-events: auto;
   cursor: pointer;
-  margin-left: 4px;
+  margin-left: 0;
   padding: 4px 10px;
   border: 1px solid var(--amber);
   border-radius: 2px;
@@ -2337,9 +2397,13 @@ body:has(#app:fullscreen) {
   .online-match-setup > p { font-size: 5px; }
   .online-room-details .arcade-button { min-height: 25px; padding: 4px 8px; font-size: 7px; }
   .online-back { margin-top: 5px; font-size: 7px; }
-  .demo-hud { top: 16%; gap: 5px; padding: 3px 6px; font-size: 6px; }
-  .demo-hud small { display: none; }
-  .demo-hud .demo-share { min-height: 26px; margin: -3px -3px -3px 1px; padding: 3px 7px; font-size: 7px; }
+  /* 5.4 #28: the bug keeps its corner and its prompt on a phone. The old rule
+     hid the prompt here, and with the touch controls and pause button gone
+     in a demo that left a phone viewer no visible way out (a tap does exit;
+     updateDemoUi words the prompt TAP TO PLAY on a coarse pointer). */
+  .demo-hud { left: 2.2%; bottom: 3%; gap: 1px 8px; padding: 4px 9px 4px 7px; border-left-width: 3px; font-size: 7.5px; }
+  .demo-hud span { font-size: 1.7em; }
+  .demo-hud .demo-share { min-height: 26px; margin: 0; padding: 3px 7px; font-size: 1em; }
   /* 5.4: the sound chip stays — touch is exactly where TAP FOR SOUND matters. */
   .demo-hud-sound { font-size: 1.6em; padding: 5px 9px; }
   .roster-grid { gap: 5px; margin: 9px 0; }

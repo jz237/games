@@ -172,7 +172,11 @@ test("game.js wiring: family-first preload, select-screen warm, the hold and the
   // one). The pin moved from "demo excluded" to "demo included" for that.
   assert.ok(game.includes('state.mode !== "online" && !replayPlayback.active'));
   assert.ok(!game.includes('const holdable = introArtHold.enabled && state.mode !== "online" && state.mode !== "demo"'), "the demo honours the hold (5.4)");
-  assert.match(game, /const artHeld = updateIntroArtHold\(now\);[\s\S]{0,400}?simulationClock\.advance\(artHeld \? 0 : simSeconds, runSimulationStep\)/);
+  // 5.4 FIGHT NIGHT (demo sweep #31): the hidden-tab demo hold shares the
+  // art hold's zero-seconds branch — `demoHeld` is false unless a demo is
+  // running (tests/demo-hud.test.mjs pins that gate), so the art hold's own
+  // contract here is unchanged: held means the clock is handed 0.
+  assert.match(game, /const artHeld = updateIntroArtHold\(now\);[\s\S]{0,700}?simulationClock\.advance\(artHeld \|\| demoHeld \? 0 : simSeconds, runSimulationStep\)/);
   assert.ok(game.includes("if (introArtHold.active) return;"), "a FIGHT! timer that fires mid-hold defers to the release");
   assert.ok(game.includes("shiftFightAnnouncement(introArtHold.heldMs, now)"));
   // QA surface.
