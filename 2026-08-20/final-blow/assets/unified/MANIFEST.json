@@ -127,7 +127,434 @@
    "ko"
   ],
   "swingStatus": "WIRED AND SHIPPING (v5.0). Consumed by swingSubstitute at pose resolution: a resolved motion/motion2 cell with a same-family equivalent on the fighter's ext3/ext4 sheet draws the equivalent instead, gated per cell. Tracks and hold budgets are untouched.",
-  "despill": "v5.1: every generated ext bank (ext2/ext3/ext4) rebuilt from its archived raw with tools/swing/build_sheet.py inpaint_magenta \u2014 the model paints a magenta rim on figures against the magenta key and the key solve kept it (2-4% of each sheet's opaque pixels were magenta, zero on the main sheets). Registration is byte-identical (heights, body centres and draw adjusts unchanged); weighted dE to each fighter's unified sheet now 0.75-1.97 (devil 1.8-2.0, previously 3.7-4.2)."
+  "despill": "v5.1: every generated ext bank (ext2/ext3/ext4) rebuilt from its archived raw with tools/swing/build_sheet.py inpaint_magenta \u2014 the model paints a magenta rim on figures against the magenta key and the key solve kept it (2-4% of each sheet's opaque pixels were magenta, zero on the main sheets). Registration is byte-identical (heights, body centres and draw adjusts unchanged); weighted dE to each fighter's unified sheet now 0.75-1.97 (devil 1.8-2.0, previously 3.7-4.2).",
+  "encoding": {
+   "tool": "tools/swing/encode_sheets.py",
+   "settings": "PIL 12.3.0 WebP lossy, method 6, alpha_quality 100, exact=True; quality ladder [90, 92]; gate: measure_de weighted dE < 0.7 against the lossless master AND byte-identical alpha, else the sheet keeps its lossless bytes",
+   "why": "5.1 #36 -- lossless VP8L sheets were 5-7x the bytes of the lossy 4.0 ext sheets at the same cell size; every byte is on the wire for the first fight of a session on a phone. Alpha is exact so the cell metrics, foot rows and 3D UVs are unchanged.",
+   "sheets": {
+    "alan-ext.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 161744
+    },
+    "alan-ext2.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 327778,
+     "quality": 90,
+     "weightedDe": 0.537,
+     "perCluster": [
+      0.61,
+      0.31,
+      0.415,
+      0.264,
+      0.852,
+      0.955
+     ],
+     "pixelDe": 2.933,
+     "losslessBytes": 1076922
+    },
+    "alan-ext3.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 263258,
+     "quality": 90,
+     "weightedDe": 0.469,
+     "perCluster": [
+      0.498,
+      0.373,
+      0.428,
+      0.811,
+      0.309,
+      0.396
+     ],
+     "pixelDe": 3.279,
+     "losslessBytes": 830348
+    },
+    "alan-ext4.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 302588,
+     "quality": 90,
+     "weightedDe": 0.564,
+     "perCluster": [
+      0.243,
+      0.575,
+      0.486,
+      0.371,
+      0.303,
+      7.027
+     ],
+     "pixelDe": 3.121,
+     "losslessBytes": 949720
+    },
+    "alan.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 303172
+    },
+    "ali-ext.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 509392,
+     "losslessBytes": 509392
+    },
+    "ali-ext2.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1070402,
+     "losslessBytes": 1070402
+    },
+    "ali-ext3.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 903226,
+     "losslessBytes": 903226
+    },
+    "ali-ext4.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1094478,
+     "losslessBytes": 1094478
+    },
+    "ali.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 932866,
+     "losslessBytes": 932866
+    },
+    "benny-ext.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 139766
+    },
+    "benny-ext2.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 847088,
+     "losslessBytes": 847088
+    },
+    "benny-ext3.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 769726,
+     "losslessBytes": 769726
+    },
+    "benny-ext4.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 866896,
+     "losslessBytes": 866896
+    },
+    "benny.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 268702
+    },
+    "commissioner-ext.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 150632
+    },
+    "commissioner-ext2.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 251814,
+     "quality": 90,
+     "weightedDe": 0.564,
+     "perCluster": [
+      0.076,
+      0.446,
+      0.537,
+      4.296,
+      1.678,
+      1.723
+     ],
+     "pixelDe": 2.515,
+     "losslessBytes": 833634
+    },
+    "commissioner-ext3.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 244516,
+     "quality": 90,
+     "weightedDe": 0.569,
+     "perCluster": [
+      0.53,
+      0.08,
+      0.236,
+      0.822,
+      0.655,
+      4.142
+     ],
+     "pixelDe": 2.631,
+     "losslessBytes": 774410
+    },
+    "commissioner-ext4.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 271036,
+     "quality": 90,
+     "weightedDe": 0.526,
+     "perCluster": [
+      0.166,
+      0.516,
+      0.394,
+      0.666,
+      0.565,
+      4.421
+     ],
+     "pixelDe": 2.619,
+     "losslessBytes": 859330
+    },
+    "commissioner.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 273258
+    },
+    "cyraxx-ext.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 157760
+    },
+    "cyraxx-ext2.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 801968,
+     "losslessBytes": 801968
+    },
+    "cyraxx-ext3.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 291452,
+     "quality": 92,
+     "weightedDe": 0.698,
+     "perCluster": [
+      0.198,
+      0.474,
+      0.517,
+      0.73,
+      2.634,
+      0.534
+     ],
+     "pixelDe": 3.439,
+     "losslessBytes": 775490
+    },
+    "cyraxx-ext4.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 932584,
+     "losslessBytes": 932584
+    },
+    "cyraxx.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 306710
+    },
+    "deathblow-ext2.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 980804,
+     "losslessBytes": 980804
+    },
+    "deathblow-ext3.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 721410,
+     "losslessBytes": 721410
+    },
+    "deathblow-ext4.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 827180,
+     "losslessBytes": 827180
+    },
+    "deathblow.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 248192,
+     "quality": 90,
+     "weightedDe": 0.442,
+     "perCluster": [
+      0.2,
+      0.609,
+      0.552,
+      1.059,
+      0.469,
+      0.918
+     ],
+     "pixelDe": 2.466,
+     "losslessBytes": 718802
+    },
+    "devil-ext2.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1128184,
+     "losslessBytes": 1128184
+    },
+    "devil-ext3.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 905840,
+     "losslessBytes": 905840
+    },
+    "devil-ext4.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1000194,
+     "losslessBytes": 1000194
+    },
+    "devil.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 362620,
+     "quality": 90,
+     "weightedDe": 0.602,
+     "perCluster": [
+      0.06,
+      0.609,
+      0.774,
+      1.305,
+      1.054,
+      1.155
+     ],
+     "pixelDe": 2.823,
+     "losslessBytes": 915012
+    },
+    "donald-ext2.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1039864,
+     "losslessBytes": 1039864
+    },
+    "donald-ext3.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 751826,
+     "losslessBytes": 751826
+    },
+    "donald-ext4.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 806154,
+     "losslessBytes": 806154
+    },
+    "donald.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 243126,
+     "quality": 90,
+     "weightedDe": 0.345,
+     "perCluster": [
+      0.241,
+      0.129,
+      0.247,
+      0.36,
+      1.092,
+      0.851
+     ],
+     "pixelDe": 2.508,
+     "losslessBytes": 862942
+    },
+    "jez-ext.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 150338
+    },
+    "jez-ext2.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 321890,
+     "quality": 90,
+     "weightedDe": 0.543,
+     "perCluster": [
+      0.63,
+      0.452,
+      0.262,
+      0.39,
+      1.231,
+      0.537
+     ],
+     "pixelDe": 3.692,
+     "losslessBytes": 979948
+    },
+    "jez-ext3.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 267614,
+     "quality": 90,
+     "weightedDe": 0.621,
+     "perCluster": [
+      1.078,
+      0.307,
+      0.605,
+      0.138,
+      0.581,
+      0.907
+     ],
+     "pixelDe": 3.872,
+     "losslessBytes": 792150
+    },
+    "jez-ext4.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 295678,
+     "quality": 90,
+     "weightedDe": 0.691,
+     "perCluster": [
+      0.835,
+      0.55,
+      0.538,
+      0.421,
+      1.27,
+      0.432
+     ],
+     "pixelDe": 3.859,
+     "losslessBytes": 873464
+    },
+    "jez.webp": {
+     "codec": "VP8",
+     "action": "kept-lossy",
+     "bytes": 284572
+    },
+    "post-ext2.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 1100602,
+     "losslessBytes": 1100602
+    },
+    "post-ext3.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 849440,
+     "losslessBytes": 849440
+    },
+    "post-ext4.webp": {
+     "codec": "VP8L",
+     "action": "kept-lossless",
+     "bytes": 974896,
+     "losslessBytes": 974896
+    },
+    "post.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 287618,
+     "quality": 90,
+     "weightedDe": 0.604,
+     "perCluster": [
+      0.994,
+      0.072,
+      0.758,
+      0.206,
+      0.982,
+      0.804
+     ],
+     "pixelDe": 3.137,
+     "losslessBytes": 813668
+    }
+   }
+  }
  },
  "fighters": {
   "deathblow": {

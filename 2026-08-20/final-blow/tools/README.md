@@ -115,7 +115,22 @@ a run at another clone. A root without a `game.js` is refused.
    generation; `install_ali.py` is that one-off install, kept as the worked
    example of re-deriving every table.
 
-5. `node --test tests/*.test.mjs` — the manifest shape, the per-cell gate and
+5. **Ship-encode.** The builders write lossless WebP; the shipped file is
+   lossy with exact alpha, gated by the costume measure (v5.1 #36):
+
+   ```sh
+   $PY tools/swing/encode_sheets.py --masters <lossless archive dir> [--only jez-ext4.webp] [--dry-run]
+   ```
+
+   Quality 90 then 92, method 6, `alpha_quality` 100, `exact=True`; an encode
+   is kept only if the alpha plane is byte-identical to the master and
+   `measure_de.py`'s weighted dE against the master is under 0.7 — otherwise
+   the sheet keeps its lossless bytes. A shipped VP8L file with no archive
+   master is its own master; an already-lossy sheet is skipped. Settings and
+   per-sheet numbers land in `MANIFEST.json` `format.encoding`; writes are
+   remove-then-write. Re-run after any rebuild of a unified-family sheet.
+
+6. `node --test tests/*.test.mjs` — the manifest shape, the per-cell gate and
    the measured tables are pinned.
 ## Audio manifest
 
