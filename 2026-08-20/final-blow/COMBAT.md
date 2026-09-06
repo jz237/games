@@ -179,3 +179,42 @@ interprets kit movement as **ratios** of `AUTHORED_MOVEMENT_BASELINE`, so a figh
 authored at 246 against a 292 baseline stays at 84% of whatever the shared walk
 currently is. Personality is preserved and every future tempo or scale change
 propagates correctly. The kit test asserts this for all eight fighters.
+
+## Shared-sample variation and the two synthesised movement cues (post-5.0)
+
+Seven reviewed shared takes carry most of what a player hears: `body-hit.mp3`
+on nearly every impact (hit-heavy is recorded for 0/8 fighters, hit-light for
+1/8), `light-swing`/`heavy-swing` on most swings (2/8, 3/8), and until now
+`jump.mp3` doubled as the dash and the `ui-select` menu click was the
+stage-weapon drop. The takes are frozen by the audio review and are never
+regenerated or re-encoded, so the variety happens at play time
+(`engine/shared-sfx.mjs`):
+
+- **Per-play pitch and level jitter on the shared pool.** `hit` ±8%, `light`
+  ±7%, `heavy` ±6%, `jump` ±6% playbackRate with `preservesPitch` off, plus an
+  independent ±1.5 dB (±1.2 dB for jump) level nudge. `distinctDraw()` keeps
+  consecutive plays of one take at least 0.35 of the span apart (~2.8% on
+  body-hit — clearly a different pitch), rejection-sampling and then stepping
+  to the far side of the previous draw, so the guarantee holds even for a
+  stuck random source. The draw uses `visualRandom` (checksum-exempt, the same
+  stream the single-take fighter banks already use), never `state.rng`. The
+  menu click and the once-a-round `finish`/`ko` takes play as reviewed.
+- **Dash scuff** replaces the borrowed jump sample: a band-passed noise hiss
+  sweeping 2200→900 Hz over 0.13 s with a short sine plant for the push-off;
+  a back dash is the heel dragging (1650→700 Hz, 0.165 s). It plays under a
+  fighter's own dash grunt where one is recorded, and is the whole cue where
+  none is. Jitter comes from the tick hash salted by the scuff serial
+  (the `impactLayerAudio` pattern) through the same no-repeat draw.
+- **Stage-weapon clatter** replaces the menu click: one material per weapon
+  `style` in `STAGE_WEAPON_CLATTER` — two glassy tinks for the needle, a glass
+  ring + thud + three ticks + roll for the bottle, a body thud and four wing
+  flaps for the pigeon, two metal partials and hard ticks for the tongs, a
+  hollow plastic clunk that bounces and rolls for the cup. Bounces arrive
+  sooner and quieter each time; the draw detunes the whole event ±9% and
+  stretches the bounce gaps ±20%.
+
+`fallbackSoundKinds` no longer lists `dash` or `stage-weapon`; both route
+through `SHARED_SYNTH_VOICES` in `sound()`. QA: `snapshot().audio.variation`
+is the last shared draw (`kind`, `rate`, `db`, `gain`) and
+`snapshot().violence` carries `sharedVariations`, `dashScuffs` and
+`weaponClatters` totals. Unit coverage in `tests/shared-sfx.test.mjs`.

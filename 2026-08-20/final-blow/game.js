@@ -454,6 +454,12 @@ import {
   fighterAudioCue,
   fighterAudioVariants,
 } from "./engine/fighter-audio.mjs";
+import {
+  dashScuffParams,
+  distinctDraw,
+  pickSharedVariation,
+  weaponClatterParams,
+} from "./engine/shared-sfx.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -1824,8 +1830,13 @@ const fighterAudioAudit = auditFighterAudio();
 // those takes were rejected and deleted — they name a proceduralSound() voice
 // instead, which is the whole point of routing through a kind rather than a
 // path. Nothing here may ever name a rejected recording.
+//
+// `dash` and `stage-weapon` are deliberately absent: they used to borrow
+// jump.mp3 and the ui-select menu click, which were the wrong reads (a dash
+// is a foot on concrete, not a jump; a bottle landing is not a menu). Both
+// now synthesise through SHARED_SYNTH_VOICES in sound() — a dash scuff and a
+// per-material clatter — so they never reach the shared pool at all.
 const fallbackSoundKinds = Object.freeze({
-  dash: "jump",
   throw: "heavy",
   "hit-light": "hit",
   "hit-heavy": "hit",
@@ -1837,7 +1848,6 @@ const fallbackSoundKinds = Object.freeze({
   "roundhouse-impact": "hit",
   super: "final",
   fatal: "final",
-  "stage-weapon": "select",
   // Wave 9 reactive voice cues: shared-sample/procedural fallbacks mirror the
   // FIGHTER_REACTIVE_PLACEHOLDERS mapping so a fighter with no palette at all
   // still lands on the nearest generic sound.
@@ -26151,6 +26161,11 @@ function sound(kind, fighter = null) {
   // preservesPitch are set explicitly on every play because pool elements
   // are reused and a detuned take must never leak into the next play.
   const take = fighterVoiceTake(kind, fighterId);
+  // Item 21: the dash scuff and the stage-weapon clatter are synthesised
+  // (SHARED_SYNTH_VOICES) rather than borrowed samples. The scuff is the
+  // foot, so it plays under a fighter's own dash grunt as well; with no
+  // take it IS the cue and the shared pool is never consulted.
+  const synthesised = sharedSynthVoice(kind, fighter);
   if (take) {
     voiceFxDebug.voiceVariantPlays += 1;
     const sample = take.sample;
@@ -26163,6 +26178,7 @@ function sound(kind, fighter = null) {
     if (playback?.catch) playback.catch(() => proceduralSound(fallbackKind));
     return;
   }
+  if (synthesised) return;
   const pool = sfxPools[fallbackKind];
   if (!pool?.length) {
     proceduralSound(fallbackKind);
@@ -26171,11 +26187,54 @@ function sound(kind, fighter = null) {
   const cursor = (sfxCursors[fallbackKind] || 0) % pool.length;
   sfxCursors[fallbackKind] = cursor + 1;
   const sample = pool[cursor];
+  // Item 21: body-hit.mp3 lands on nearly every impact and the two swing
+  // takes on most swings, bit-identical play after play. The reviewed files
+  // are frozen, so the variety is applied here: a per-play pitch shift
+  // (±6-8%, preservesPitch off so the rate actually changes the sound) and a
+  // ±1.5 dB level nudge, drawn so no two consecutive plays of one take can
+  // share a pitch (engine/shared-sfx.mjs distinctDraw). visualRandom is the
+  // checksum-exempt stream the single-take fighter banks already use. Set on
+  // every play: pool elements are reused and a detuned rate must never leak
+  // into a kind outside the table.
+  const variation = nextSharedVariation(fallbackKind);
   sample.pause();
   sample.currentTime = 0;
-  sample.volume = (sfxVolumes[kind] ?? 0.62) * state.sfxVolume;
+  sample.preservesPitch = variation.rate === 1;
+  sample.playbackRate = variation.rate;
+  sample.volume = Math.min(1, (sfxVolumes[kind] ?? 0.62) * state.sfxVolume * variation.gain);
   const playback = sample.play();
   if (playback?.catch) playback.catch(() => proceduralSound(fallbackKind));
+}
+
+// Last variation record per shared kind (the "previous" distinctDraw needs)
+// plus the most recent play for QA: snapshot().audio.variation lets the smoke
+// prove two consecutive body-hits differ in rate without listening.
+const sharedVariationLast = {};
+let lastSharedVariation = null;
+
+function nextSharedVariation(kind) {
+  const variation = pickSharedVariation(kind, sharedVariationLast[kind], visualRandom);
+  if (variation.rate !== 1) {
+    sharedVariationLast[kind] = variation;
+    audioFxDebug.sharedVariations += 1;
+    lastSharedVariation = Object.freeze({ kind, ...variation });
+  }
+  return variation;
+}
+
+// Cues that synthesise instead of borrowing a shared take. Each returns true
+// when it handled the cue (whether or not the context was awake enough to
+// make a sound) so sound() skips the pool and the procedural fallback.
+const SHARED_SYNTH_VOICES = Object.freeze({
+  dash: (fighter) => dashScuff(fighter),
+  "stage-weapon": () => weaponClatter(),
+});
+
+function sharedSynthVoice(kind, fighter) {
+  const voice = SHARED_SYNTH_VOICES[kind];
+  if (!voice) return false;
+  voice(fighter);
+  return true;
 }
 
 function showSoundCaption(kind, fighter = null, overrideText = "") {
@@ -26332,6 +26391,8 @@ const audioFxDebug = {
   // w51: synthesised dizzy rings and clock ticks/buzzers actually voiced
   // (after the sound-toggle / attract gates, unlike the hudFxDebug edges).
   dizzyRings: 0, clockTicks: 0,
+  // Item 21: jittered shared-sample plays and the two synthesised cues.
+  sharedVariations: 0, dashScuffs: 0, weaponClatters: 0,
 };
 // Live node bookkeeping for the QA node-graph hook: persistent = currently
 // connected long-lived nodes (master bus, beds, music routing), one-shots =
@@ -26621,6 +26682,59 @@ function impactSwingWhoosh(attack) {
     peak: (0.016 + size * 0.02) * state.sfxVolume,
     attack: 0.03,
   });
+}
+
+// --- Item 21: synthesised dash scuff and stage-weapon clatter --------------
+
+// Previous distinctDraw per synth voice so consecutive dashes (or drops) can
+// never share a hiss. Draws come from the tick hash salted by the voice's
+// own serial (the impactLayerAudio pattern) — never an RNG stream.
+const synthVoiceLastDraw = {};
+
+function synthVoiceDraw(name, serial) {
+  let salt = 0;
+  const rand = () => presentationHash01(state.simulationTick, serial, 41 + salt++);
+  const draw = distinctDraw(synthVoiceLastDraw[name], rand);
+  synthVoiceLastDraw[name] = draw;
+  return draw;
+}
+
+/**
+ * Dash scuff: a sneaker skidding on concrete instead of the borrowed
+ * jump.mp3. Band-passed hiss sweeping down as the foot slows, over a short
+ * sine plant for the push-off; a back dash is the heel dragging (lower,
+ * longer). Sim-path trigger, so it rides impactAudioAllowed() and the tick
+ * hash like the impact layers.
+ */
+function dashScuff(fighter) {
+  if (!impactAudioAllowed()) return;
+  audioFxDebug.dashScuffs += 1;
+  const forward = !fighter || fighter.dashDirection === 0 || fighter.dashDirection === fighter.facing;
+  const params = dashScuffParams({
+    forward,
+    draw: synthVoiceDraw("dash", audioFxDebug.dashScuffs),
+    level: state.sfxVolume,
+  });
+  synthNoiseShot(params.hiss);
+  synthToneShot(params.plant);
+}
+
+/**
+ * Stage-weapon clatter: the object that just landed, in its own material
+ * (engine/shared-sfx.mjs STAGE_WEAPON_CLATTER keyed by the weapon style) —
+ * glass ring and roll for the bottle, metal tinks for the needle, wing flaps
+ * for the pigeon — instead of the ui-select menu click.
+ */
+function weaponClatter() {
+  if (!impactAudioAllowed()) return;
+  audioFxDebug.weaponClatters += 1;
+  const style = stageWeaponProfile()?.style || "cup";
+  const params = weaponClatterParams(style, {
+    draw: synthVoiceDraw("stage-weapon", audioFxDebug.weaponClatters),
+    level: state.sfxVolume,
+  });
+  for (const tone of params.tones) synthToneShot(tone);
+  for (const noise of params.noises) synthNoiseShot(noise);
 }
 
 // --- Feature: crowd audio bus driven by state.crowdReaction ----------------
@@ -28917,6 +29031,9 @@ window.__finalBlowEngine = {
         audit: fighterAudioAudit,
         lastEvent: lastSoundEvent ? { ...lastSoundEvent } : null,
         loadedPalettes: new Set([...fighterSfxPools.keys()].map((key) => key.split(":")[0])).size,
+        // Item 21: the last shared-pool pitch/level draw, so QA can prove two
+        // consecutive body-hits were not the identical play.
+        variation: lastSharedVariation ? { ...lastSharedVariation } : null,
       },
       offlineReady: state.offlineReady,
       accessibility: { ...state.accessibility },
@@ -29223,6 +29340,11 @@ window.__finalBlowEngine = {
         crowdBusLevel: Number(crowdAudioLevel.toFixed(3)),
         crowdSwells: audioFxDebug.crowdSwells,
         impactLayers: audioFxDebug.impactLayers,
+        // Item 21: jittered shared-sample plays and the synthesised dash
+        // scuff / stage-weapon clatter totals (monotonic, resim-guarded).
+        sharedVariations: audioFxDebug.sharedVariations,
+        dashScuffs: audioFxDebug.dashScuffs,
+        weaponClatters: audioFxDebug.weaponClatters,
         musicIntensity: Number(musicIntensityLevel.toFixed(3)),
         ambienceActive: ambienceEngaged ? 1 : 0,
         ambienceStage: ambienceEngaged ? state.stage : "",
