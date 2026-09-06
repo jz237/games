@@ -3895,3 +3895,177 @@ tech-specific fall track would remove the return. (3) The plain jump's last
 airborne band holds the air recover 8-9 ticks on the short arcs (the 5.1
 chamber's own hold); the band grid is untouched on purpose. (4) The ext5
 sheets are still lossless on the wire.
+
+## v5.2 — LOCOMOTION, ITEM FOUR: THE BOOKENDS AND THE FINAL BLOW ON THE FAMILY
+
+Routing only, no art. Sweep item #6's evidence was blunt: the intro, the win
+pose and the fatality cinematics drew RAW BASE-ATLAS CELLS and motion
+signature cells at 1.02-1.34x zoom — the oldest generation on the roster at
+the most-watched moments, on both sides of a Final Blow. Item two had already
+put the ext5 entrance and the ext5 victory on screen as one held cell each;
+this item makes the two bookends two-beat reads and re-keys every one of the
+ten Final Blow scripts through the unified family, under the same rule as the
+items before it: a same-generation cell REPLACES A DRAWING AND NEVER CHANGES
+TIMING.
+
+THE INTRO is `ext5:9 -> ext5:10 -> unified:0` on both fighters. Item two's
+seed-and-side pick chose entrance A OR B for the whole 1.3 s walk-on; the
+walk-on is now entrance A for its first half, entrance B for its second, then
+the idle for the 0.95 s before FIGHT! — keyed on the intro clock the sim
+already snapshots (`engine/bookends.mjs introEntranceCell`: A above 1.6 s,
+B down to the 2.7 FRAMES release at 0.95, released below). The pre-5.2
+fallback — the motion signature the seed-and-side pick chose — rides under
+BOTH beats, so a held ext5 sheet reads exactly as it did. Traced through the
+engine (jez, deathblow, both sides, both seed parities) and in the browser:
+
+    intro      unified-ext5:9 x39 -> unified-ext5:10 x39 -> unified:0 x57      (2.25 s, 60 Hz; the browser probe: ext5:9@+0 -> ext5:10@+40 -> idle@+79)
+    held ext5  motion:14 x78 -> unified:0 x57  |  motion:15 x78 -> unified:0 x57  (the 5.1 read, tick for tick)
+
+THE ROUND WIN is the ext5 victory through the "<name> WINS" call, then the
+ext5 taunt as the SECOND beat — on the two showcase picks that were the
+rotation's own second drawings (the motion victory2 and the second
+signature; item two had flattened all three picks onto the victory). The
+kit's own pick holds the victory: one drawing was always what that pick
+meant. The beat is keyed on the roundover clock (`roundWinShowcaseCell`:
+the taunt from 2.4 s in, the call's own length, only when the hold leaves it
+a whole second — the demo's 3.1 s KO hold does not, and reads one beat).
+`ROUND_WIN_HOLD_SECONDS` is the 4.9 `finishRound` always set, now read back
+by the pose. Traced (jez, the kit victory as the rotation's base):
+
+    pick 0     unified-ext5:11 x294
+    pick 1, 2  unified-ext5:11 x144 -> unified-ext5:12 x150                 (browser: ext5:11@+0 -> ext5:12@+145)
+    demo hold  unified-ext5:11 x186
+    held ext5  specials:15 x294 | motion:13 x294 | motion:15 x294         (the rotation's own three drawings, as 5.1 drew them)
+
+THE FINAL BLOW. The ten scripts (`finisherChoreography`) carried their
+drawings as `af` / `vf`, raw base indices in the 4x4 atlas grammar wave 5
+wrote them against — "9 is a punch, 13 the heavy, 12 the crouch, 15 the
+flinch" — and the resolver drew exactly that. The table lives in
+`engine/finisher-scripts.mjs` now, VERBATIM in everything that moves
+(sha256 of the ten scripts with the new fields stripped is the base commit's,
+`tests/fatalities-poses` pins the digest), and every key also names the
+same-generation drawing for that beat as a "bank:frame" token — `a` for the
+attacker, `v` for the victim, `vPlain` for the victim's plain body at rest —
+which `cinematicPoseDescriptor` puts OVER the base cell the sim still stores
+in `cinematicFrame` (checksummed, rolled back, unchanged). The drawing
+switches at the half-way point of a segment, the rule `af` / `vf` always
+had, so a new cell arrives on the exact tick the base cell always did; a
+held sheet is the pre-item read, byte for byte (pinned, both bodies, all
+ten). Where the key's beat has no family drawing the base cell stays and is
+named: `FINISHER_RESIDUAL_BASE_CELLS`.
+
+The attacker's vocabulary, by beat: the run-in is the ext5 dash launch and
+stretch (unified:1 / unified:3 walk keys on donald and the commissioner —
+see below); jabs and crosses ext3:0, a cross-through the victim ext3:3 (the
+horizontal smear: jez's PHASE STEP, benny's CROSS CURRENT, the devil's
+TALON RIP), kicks ext3:1, the heavy ext3:13 / ext3:14, a body shot the
+crouched extension ext3:4, the LIFT the rising smear ext3:9 (every script's
+launch key), the airborne strike ext3:6 / ext3:7, a fall onto the victim the
+ext5 descent, a landing the ext3 gather, alan's piledriver the ext5 seize
+in the air then the ext2 throw release, post's PRIMER the ext2 special
+gather; the wind-up before the kill is the ext5 power charge on every
+script that backed off for one (base:12, the crouch, before); and the exit
+key — 0.65 s of the script plus the whole 3.4 s aftermath hold — is the
+ext5 VICTORY: the attacker turns from the body into the same drawing a
+plain KO wins on. THE PROPS decided two scripts: donald's club and the
+commissioner's cane are on the UNIFIED sheet and on no ext sheet (ext3 and
+ext5 draw both men bare-handed — an art residual item two shipped with),
+so their scripts stay on unified cells end to end: the walk keys for the
+approach, unified:10 (the club thrust / the cane jab), unified:11 (the
+club chip / the cane kick), unified:8 (the club backswing and the cane
+raised overhead — the 3.0-retired jump rise, which is a drawing here, not a
+track), unified:9 for the airborne key (the tuck, club shaft through the
+ball), unified:7 for the commissioner's brace. GOLDEN DRIVE and FINAL
+AUTHORITY lose their baked crescent and fire aura: the projectile-focus
+beats own that spectacle, and a cane-less base:13 in the middle of a
+cane-carrying script is the 2.9 R8 blink. The one script that keeps base
+cells is POST: PAINT LIFT, FULL COVERAGE and the wind-up between are the
+spray can with its baked mist (base:13, base:14), a weapon-specific
+cinematic drawing no sheet in the family carries — four keys, two cells,
+named as the residual.
+
+The victim's ladder is the same shape on all ten: dazed on the ext4 dizzy
+(5) while the attacker runs in, the head snap (1) and the body blow (2)
+alternating under the jabs, the big hit (3) under the heavy that starts the
+lift, the launched arch (6) at the apex, the ext5 carried fold (7) where
+the attacker is in the air with him (alan, donald, the commissioner), and
+from the slam to the end of the hold the ext4 WALL SPLAT (8) — a body that
+hit something hard, arms and legs splayed — laid down by the script's own
+`vr`. That cell was chosen for the dismemberment: the graphic fatality
+slices the victim's cell into bands by height (head 0-28%, torso, waist,
+legs) and anchors the stump at the standing pose's arm and leg heights, so
+under the overlay the rest MUST stay an upright-plan cell; a splayed one
+puts the arms out where the cut is drawn. With the sprite drawn WHOLE — the
+gore toggle off, or before the kill — there is nothing to slice, and the
+last key's `vPlain` lays the body in the ext4 KO cell instead. A script's
+`vr` was written to lay an UPRIGHT flinch down about its feet (1.18 at the
+kill, 1.35-1.38 at rest: 77-79 degrees), and applied to a cell authored flat
+it would stand the body back up, so `cinematicDrawRotation` (engine) takes
+the lie a prone cell already carries (1.35, DOWN_TILT_RADIANS) off the
+script's rotation toward zero before either renderer applies it — the KO
+cell draws flat at every rest the ten scripts ask for (1.7 degrees at the
+deepest, 1.38), and every upright-plan cell keeps the script's rotation
+untouched. The CINEMA 3D rig reads the same function through a new optional
+host member (`cinematicDrawRotation`; `tests/cinema-fighters` pins the KO
+lie at -0.03 and the splat at -1.38 through the bridge). The wall splat was
+measured against the idle (drawn height x fit-restore, the commissioner's
+fold on both sides): 0.87-1.03 on all ten, the commissioner's +2.5% the only
+one over and inside the deadband — no stand-in rule; the dizzy opener keeps
+item two's loop against the sway; the KO lie is 0.28-0.39 of the idle tall.
+
+ATTRIBUTIONS, traced through the engine over script time (60 Hz, the
+finisher's own slow-motion ticks not counted — the browser stretches the
+same runs and never reorders them; `tests/fatalities-poses` pins the four
+below and sweeps all ten for family-only banks, both bodies, plus the
+plain-body ladder into the KO lie):
+
+    jez        attacker  ext5:0 x12 -> ext5:1 x17 -> ext3:0 x15 -> ext3:3 x16 -> ext3:0 x17 -> ext3:3 x21 -> ext3:9 x25 -> ext3:6 x29 -> ext5:5 x34 -> ext5:8 x37 -> ext3:14 x55 -> ext5:11 x242
+               victim    ext4:5 x29 -> ext4:1 x15 -> ext4:2 x16 -> ext4:1 x17 -> ext4:2 x21 -> ext4:3 x25 -> ext4:6 x29 -> ext4:8 x368
+               plain     ... -> ext4:8 x126 -> ext4:15 x242                                                        (the KO lie from the last key, 4.65 s)
+        5.1    base:0 x12 -> base:7 x17 -> base:9 x15 -> base:10 x16 -> base:9 x17 -> base:10 x21 -> base:13 x25 -> base:14 x29 -> base:13 x34 -> base:12 x37 -> base:14 x55 -> base:0 x242 / base:15 throughout
+    deathblow  attacker  ext5:0 x13 -> ext5:1 x20 -> ext3:13 x22 -> ext3:9 x23 -> ext3:3 x24 -> ext3:6 x30 -> ext3:14 x42 -> ext5:8 x46 -> ext3:4 x62 -> ext5:11 x244
+               victim    ext4:5 x33 -> ext4:2 x22 -> ext4:1 x23 -> ext4:3 x24 -> ext4:6 x30 -> ext4:8 x394
+    alan       attacker  ext5:0 x13 -> ext5:1 x20 -> ext3:0 x16 -> ext3:13 x19 -> ext3:4 x21 -> ext3:9 x27 -> ext5:14 x31 -> ext2:13 x38 -> ext5:8 x40 -> ext3:13 x56 -> ext5:11 x242
+               victim    ext4:5 x33 -> ext4:2 x16 -> ext4:1 x19 -> ext4:2 x21 -> ext4:6 x27 -> ext5:7 x31 -> ext4:8 x376
+    post       attacker  ext5:0 x15 -> ext2:14 x25 -> ext3:0 x20 -> ext3:13 x23 -> ext3:3 x24 -> base:13 x25 -> base:14 x29 -> ext3:10 x31 -> base:13 x33 -> base:14 x53 -> ext5:11 x242   (the spray can, residual)
+    benny      attacker  ext5:0 x12 -> ext5:1 x19 -> ext3:0 x14 -> ext3:3 x16 -> ext3:1 x17 -> ext3:9 x22 -> ext3:7 x29 -> ext5:5 x36 -> ext5:8 x47 -> ext3:14 x65 -> ext5:11 x243
+    donald     attacker  unified:1 x15 -> unified:3 x23 -> unified:10 x18 -> unified:11 x21 -> unified:8 x24 -> unified:10 x25 -> unified:9 x27 -> unified:11 x32 -> unified:8 x39 -> unified:10 x59 -> ext5:11 x243
+               victim    ext4:5 x38 -> ext4:1 x18 -> ext4:2 x45 -> ext4:6 x25 -> ext5:7 x27 -> ext4:8 x373
+    cyraxx     attacker  ext5:0 x14 -> ext5:1 x22 -> ext3:0 x17 -> ext3:1 x18 -> ext3:9 x22 -> ext3:6 x26 -> ext5:5 x29 -> ext3:10 x33 -> ext5:8 x38 -> ext3:13 x60 -> ext5:11 x244
+    ali        attacker  ext5:0 x13 -> ext5:1 x20 -> ext3:0 x15 -> ext3:3 x17 -> ext3:1 x19 -> ext3:9 x21 -> ext3:6 x27 -> ext3:7 x33 -> ext5:8 x46 -> ext3:13 x68 -> ext5:11 x244
+    devil      attacker  ext5:0 x12 -> ext5:1 x20 -> ext3:0 x15 -> ext3:3 x18 -> ext3:1 x20 -> ext3:13 x22 -> ext3:6 x27 -> ext3:7 x32 -> ext5:8 x45 -> ext3:14 x68 -> ext5:11 x244
+    commissioner attacker unified:1 x15 -> unified:3 x24 -> unified:10 x20 -> unified:8 x21 -> unified:11 x23 -> unified:8 x27 -> unified:9 x29 -> unified:10 x33 -> unified:7 x36 -> unified:8 x57 -> ext5:11 x244
+               victim    ext4:5 x39 -> ext4:1 x20 -> ext4:2 x21 -> ext4:3 x23 -> ext4:6 x27 -> ext5:7 x29 -> ext4:8 x370
+
+Every run's length is the base cell's, tick for tick (the `held` column of
+the trace script reproduces the 5.1 read exactly, deathblow's base:13 -> 9
+unusable swap included); only the generation changed. The count of
+cross-generation flips inside a script goes from "every key" to zero on
+nine scripts and to post's four named ones. In the browser (jez vs
+deathblow, NEON GUILLOTINE, gore on): attacker `ext5:0 -> ext5:1 -> ext3:0
+-> ext3:3 -> ext3:0 -> ext3:3 -> ext3:9 -> ext3:6 -> ext5:5 -> ext5:8 ->
+ext3:14 -> ext5:11`, victim `ext4:5 -> ext4:1 -> ext4:2 -> ext4:1 -> ext4:2
+-> ext4:3 -> ext4:6 -> ext4:8`, the same lists; gore off the victim's tail
+is `ext4:8 -> ext4:15` and the body lies flat on the street under the
+attacker's raised arms.
+
+ONE REGRESSION CAUGHT ON THE WAY, item two's: the dash ghost trail read its
+base frame ONE level down the resolved pose's fallback, and an ext5 dash
+cell falls back to the motion link it stands in for and only then to the
+base cell — so on every fighter whose ext5 sheet had decoded, the trail
+went silent (the browser smoke's "a dash must leave a ghost trail" fails on
+73e7f4f once the sheet is ready before the probe; the roadmap2 checkout on
+disk has no ext5 family and never showed it). `baseFallbackFrame` (engine)
+walks the chain to its base cell; the smoke is green again on this branch.
+
+Residuals, named bluntly: (1) post's four spray-can keys are base cells, and
+will be until a sheet draws the can — the one weapon-specific cinematic
+drawing on the roster. (2) donald's club and the commissioner's cane are
+absent from their ext3 and ext5 sheets (dash, entrances, victory, every
+strike stand-in), so both scripts end on a bare-handed ext5 victory after a
+prop-carrying script, as their plain-KO win pose already did — an art item,
+the same class as ali's boombox in 5.0. (3) The victim's rest under the
+gore overlay is the upright-plan splat by necessity; the KO lie is the
+plain body's only. (4) The finisher's slow-motion ticks stretch every run
+on screen; the attributions above are script time. 387 tests green (the
+two new suites, the cinema pin, the trail pin).

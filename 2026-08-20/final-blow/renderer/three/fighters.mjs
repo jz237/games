@@ -1132,7 +1132,12 @@ export class FighterLayer {
       ? (host.downTiltFor ? host.downTiltFor(fighter.def.id, bankName, pose.frame) : downTiltRadians) : 0;
     const prone = proneTransform({ facing, downTilt, downTiltRadians });
     let rootRotation = prone.rotation;
-    if (fighter.cinematicRotation) rootRotation += -fighter.cinematicRotation;
+    // v5.2 LOCOMOTION (bookends): the host says what a prone cinematic cell
+    // (the victim's KO lie) draws under — the same rule as the 2D canvas.
+    const cineRotation = fighter.cinematicRotation
+      ? (host.cinematicDrawRotation ? host.cinematicDrawRotation(bankName, pose.frame, fighter.cinematicRotation) : fighter.cinematicRotation)
+      : 0;
+    if (cineRotation) rootRotation += -cineRotation;
     if (fighter.airTechFlipFrames > 0) {
       const flip = 1 - fighter.airTechFlipFrames / 14;
       rootRotation += -facing * flip * Math.PI * 2;

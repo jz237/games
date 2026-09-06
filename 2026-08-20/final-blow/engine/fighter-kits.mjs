@@ -1790,6 +1790,24 @@ export const MOTION_CELLS = Object.freeze({
   charge: 12, victory2: 13, sig1: 14, sig2: 15,
 });
 
+/**
+ * v5.2 LOCOMOTION (bookends): the BASE cell at the bottom of a descriptor's
+ * fallback chain, or -1 when the chain never reaches the base bank. The dash
+ * ghost trail reads it: a resolved ext5 dash cell falls back to the motion
+ * link it stands in for and only then to the base cell, so reading one level
+ * of fallback found nothing and the trail went silent on a decoded sheet.
+ */
+export function baseFallbackFrame(pose) {
+  let current = pose;
+  let guard = 0;
+  while (current && guard < 12) {
+    if (current.bank === "base") return Number.isInteger(current.frame) ? current.frame : -1;
+    current = current.fallback;
+    guard += 1;
+  }
+  return -1;
+}
+
 export function motionPose(cell, fallbackBank, fallbackFrame) {
   return { bank: "motion", frame: cell, fallback: { bank: fallbackBank, frame: fallbackFrame } };
 }
@@ -3751,6 +3769,12 @@ export const SWING_STAND_IN_TARGET = Object.freeze({
     2: Object.freeze({ cell: 0, mode: "ceiling" }),  // body blow     <= idle
     3: Object.freeze({ cell: 0, mode: "ceiling" }),  // big hit       <= idle
     4: Object.freeze({ cell: 0, mode: "ceiling" }),  // stagger/reel  <= idle
+    // v5.2 LOCOMOTION (bookends): the wall splat (8) is the Final Blow
+    // victim's rest from the slam to the end of the hold, under a 1.34x zoom.
+    // Measured (drawn height x fit-restore over the unified idle, the
+    // commissioner's fold on both sides) it sits at 0.87-1.03 of the idle on
+    // all ten sheets — the commissioner's +2.5% is the only one over, inside
+    // the deadband — so it takes no rule; tests/fatalities-poses pins that.
   }),
   [UNIFIED_EXT3_BANK]: Object.freeze({
     12: Object.freeze({ cell: 5, mode: "match" }),   // crouch guard  -> crouch

@@ -64,6 +64,8 @@ export const CINEMA_HOST_OPTIONAL = Object.freeze([
   // 5.1 CINEMA 3D fighter layer (#40, #44).
   "downTiltRadians",       // DOWN_TILT_RADIANS (1.35) — the prone settle's full-tilt reference (fallback 1.35)
   "fighterBankSheet",      // (fighterId, bank) -> the bank's OWN sheet (Image/canvas) or null: the warm-up gate
+  // 5.2 LOCOMOTION (bookends).
+  "cinematicDrawRotation", // (bank, frame, cinematicRotation) -> the rotation a prone cinematic cell draws under
 ]);
 
 export const CINEMA_HOST_MEMBERS = Object.freeze([...CINEMA_HOST_REQUIRED, ...CINEMA_HOST_OPTIONAL]);

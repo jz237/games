@@ -846,3 +846,28 @@ test("fighters.mjs builds nothing synchronously past the raw shell, and game.js 
   assert.match(mainSource, /banks: layers\.get\("fighters"\)\?\.bankReport\?\.\(\) \?\? null,/);
   assert.match(mainSource, /drainBankQueue: renderer3d\.drainBankQueue,/);
 });
+
+// ---------------------------------------------------------------------------
+// v5.2 LOCOMOTION (bookends) — the Final Blow's prone rest through the bridge.
+// ---------------------------------------------------------------------------
+test("a cinematic KO lie draws flat through host.cinematicDrawRotation; an upright cinematic cell keeps the script's rotation", async () => {
+  const { cinematicDrawRotation } = await import("../engine/finisher-scripts.mjs");
+  // The victim at the script's rest (vr 1.38 x direction 1), drawn WHOLE on the ext4 KO cell.
+  const victim = fighterMock({ side: 1, facing: -1, cinematicFrame: 15, cinematicRotation: 1.38, __pose: { bank: "unified-ext4", frame: 15 } });
+  const state = stateMock([victim]);
+  state.phase = "roundover";
+  const { host, layer } = layerFor(state);
+  host.cinematicDrawRotation = cinematicDrawRotation;
+  layer.update(state, 1 / 60, 0);
+  const rig = layer.rigs[0];
+  assert.ok(Math.abs(rig.root.rotation.z + 0.03) < 1e-9, `the KO lie sheds its 1.35 lie: ${rig.root.rotation.z}`);
+  // The same script angle on the splayed wall splat (the upright plan the 2D overlay slices) is the full lay-down.
+  victim.__pose = { bank: "unified-ext4", frame: 8 };
+  layer.update(state, 1 / 60, 0);
+  assert.ok(Math.abs(rig.root.rotation.z + 1.38) < 1e-9, `an upright cell keeps the script's rotation: ${rig.root.rotation.z}`);
+  // A host without the member (an older bridge) applies the raw rotation, as 5.1 did.
+  delete host.cinematicDrawRotation;
+  victim.__pose = { bank: "unified-ext4", frame: 15 };
+  layer.update(state, 1 / 60, 0);
+  assert.ok(Math.abs(rig.root.rotation.z + 1.38) < 1e-9);
+});

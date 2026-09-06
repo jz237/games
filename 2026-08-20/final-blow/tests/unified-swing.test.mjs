@@ -546,10 +546,17 @@ function testExt5GroundRouted() {
   // the entrance, the win and the taunt.
   assert.match(gameSource, /return unifiedExt5Pose\(UNIFIED_EXT5_CELLS\.dashBrake, motion2Pose\(MOTION2_CELLS\.dashBrake, "base", 12\)\);/);
   assert.match(gameSource, /return unifiedExt5Pose\(UNIFIED_EXT5_CELLS\.turnaround, motion2Pose\(MOTION2_CELLS\.turnaround, "base",/);
-  assert.match(gameSource, /const entrance = cell === MOTION_CELLS\.sig2 \? UNIFIED_EXT5_CELLS\.entranceB : UNIFIED_EXT5_CELLS\.entranceA;\s*\n\s*return unifiedExt5Pose\(entrance, motionPose\(cell, "base", Math\.floor\(fighter\.animTime \* 5\) % 4\)\);/);
+  // v5.2 (bookends): the entrance is two beats from engine/bookends
+  // (introEntranceCell: A, then B, then released) over the seed-and-side
+  // signature; the win pose asks roundWinShowcaseCell (victory, then the
+  // taunt on the rotation's two motion picks); the taunt key is the taunt.
+  assert.match(gameSource, /const entrance = state\.phase === "intro" \? introEntranceCell\(state\.phaseTime\) : null;\s*\n\s*if \(entrance !== null && fighter\.grounded && !fighter\.attacking && fighter\.kit\?\.victory\) \{[\s\S]{0,900}return unifiedExt5Pose\(entrance, motionPose\(cell, "base", Math\.floor\(fighter\.animTime \* 5\) % 4\)\);/);
   assert.match(gameSource, /function showcasePoseDescriptor\(fighter, ext5Cell = UNIFIED_EXT5_CELLS\.victory\) \{[\s\S]{0,700}return unifiedExt5Pose\(ext5Cell, rotation\);/);
   assert.match(gameSource, /return showcasePoseDescriptor\(fighter, UNIFIED_EXT5_CELLS\.taunt\);/);
-  assert.match(gameSource, /if \(winner\) return showcasePoseDescriptor\(fighter\);/);
+  assert.match(gameSource, /return showcasePoseDescriptor\(fighter, roundWinShowcaseCell\(showcasePick\(\), hold - state\.phaseTime, hold\)\);/);
+  // The Final Blow draws through the engine's scripts (tests/fatalities-poses pins the cells).
+  assert.match(gameSource, /if \(fighter\.cinematicFrame !== null\) return cinematicPoseDescriptor\(fighter, base\(fighter\.cinematicFrame\)\);/);
+  assert.match(gameSource, /const finisherChoreography = FINISHER_CHOREOGRAPHY;/);
   for (const cell of [E5.dashBrake, E5.turnaround, E5.entranceA, E5.entranceB, E5.victory, E5.taunt]) reached.add(`${UNIFIED_EXT5_BANK}:${cell}`);
   for (const key of EXT5_UNROUTED_FOR_NOW) assert.ok(!reached.has(key), `${key} is the air item's`);
   assert.equal(EXT5_UNROUTED_FOR_NOW.length, 0, "v5.2 item three: every ext5 cell is routed");
