@@ -208,7 +208,13 @@ export class WorldObjectsLayer {
       // body to white through ACES + bloom; the object's own painting is
       // the read, the light only kisses the boards and the near fighter.
       const light = new THREE.PointLight(0xffffff, 0, 2.6, 2);
-      light.visible = false;
+      // ALWAYS visible at intensity 0 when idle: three keys every lit
+      // material's program on the visible light COUNT, so toggling these
+      // would compile a new shader variant for the sprites and the stage on
+      // the first pizza of the round (a hitch), and again per count. A
+      // constant count costs one compile at init and nothing after.
+      light.visible = true;
+      light.intensity = 0;
       this.group.add(light);
       this.lights.push(light);
     }
@@ -302,7 +308,7 @@ export class WorldObjectsLayer {
     }
     for (const mesh of this.shadows) mesh.visible = false;
     for (const mesh of this.pools) mesh.visible = false;
-    for (const light of this.lights) light.visible = false;
+    for (const light of this.lights) light.intensity = 0;
     this.cable.visible = false;
     this.charmTail.visible = false;
     this.scorch.visible = false;
@@ -356,7 +362,6 @@ export class WorldObjectsLayer {
           light.color.set(color);
           light.position.set(wx, Math.max(0.15, worldY(projectile.y)), 0.55);
           light.intensity = 2.4 * closeness * Math.min(1, life * 2) * pulse;
-          light.visible = true;
         }
       }
       discIndex += 1;
