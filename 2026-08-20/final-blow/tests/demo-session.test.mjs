@@ -377,7 +377,7 @@ test("game.js reaches the session layer only through the demo: a played match is
   // The closer's quick-bout inputs come from the show tag, inside demoPlanCloser.
   assert.match(game, /quickBout: demoSession\.show\?\.bout\?\.kind === "quick",\s*quickFinisher: Boolean\(demoSession\.show\?\.quickFinisher\),/);
   // The ledger is written at showResult on the demo path and persisted per bout.
-  assert.match(game, /if \(state\.mode === "demo"\) demoRecordBout\(winner\);/);
+  assert.match(game, /if \(state\.mode === "demo"\) \{\n    demoRecordBout\(winner\);\n    noteDemoMatchResult\(winner\);\n    scheduleNextDemoMatch\(\);\n  \}/);
   assert.match(game, /function demoRecordBout\(winner\) \{\s*if \(!demoSession\.active \|\| !demoSession\.ledger \|\| rollbackResimulating\) return null;/);
   assert.match(game, /localStorage\.setItem\(demoStandingsStorageKey\(GAME_VERSION\)/);
   assert.match(game, /demoSession\.ledger = restoreDemoStandings\(storedJson\(demoStandingsStorageKey\(GAME_VERSION\), null\), \{ build: GAME_VERSION \}\);/);

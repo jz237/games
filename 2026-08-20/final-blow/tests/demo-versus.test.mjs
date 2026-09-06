@@ -215,7 +215,7 @@ test("game.js: the versus card, the hold floor, the standings and the deferred R
   assert.match(block("releaseDemoVersusCard"), /demoVersusAnnouncesRound\(\{ reason, phase: state\.phase, screen: state\.screen \}\)/);
   // The standings fold and the beat firing are demo-only.
   assert.match(block("noteDemoMatchResult"), /if \(state\.mode !== "demo" \|\| !demoSession\.active \|\| rollbackResimulating\) return;/);
-  assert.match(block("showResult"), /if \(state\.mode === "demo"\) \{\n    noteDemoMatchResult\(winner\);\n    scheduleNextDemoMatch\(\);\n  \}/);
+  assert.match(block("showResult"), /if \(state\.mode === "demo"\) \{\n    demoRecordBout\(winner\);\n    noteDemoMatchResult\(winner\);\n    scheduleNextDemoMatch\(\);\n  \}/);
   assert.match(block("fireDemoVersusBeats"), /if \(!demoVersus\.active \|\| !demoVersus\.plan\) return;/);
   // The collision itself: startNextDemoMatch no longer slams WATCH DEMO over
   // the ROUND 1 card.
