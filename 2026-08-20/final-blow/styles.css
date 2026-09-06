@@ -3943,3 +3943,105 @@ body.reduced-motion .set-score-card.crowned { animation: none; }
   .control-card { left: 2.5%; top: 17%; bottom: auto; width: min(300px, 48%); font-size: 8px; }
   .move-list-overlay { inset: 3% 3%; }
 }
+
+/* ---------------------------------------------------------------------------
+   5.3 (sweep #30 / #31) — TITLE TIERS AND THE COACH LINE.
+   Fourteen equally weighted buttons is a wall. The stack is now three labelled
+   tiers — PLAY, LEARN, MORE — with the weight falling off a step at a time:
+   PLAY keeps the full button height, LEARN drops 3px, MORE drops to 26px with
+   dimmed chrome. Nothing is hidden or collapsed: every button keeps its id,
+   its text and a real bounding box, so the pad walk and the smoke selectors
+   are untouched and MORE is one glance away rather than one click away.
+   --------------------------------------------------------------------------- */
+/* The tier labels buy back their own height: the stack starts a little higher
+   and MORE packs a little tighter, so the whole menu is 29px SHORTER than the
+   flat 5.2 stack (941px -> 897px bottom at 1440x900). */
+.title-tiers { gap: 0; }
+.title-screen .title-tiers { margin-top: clamp(6px, 1.2vw, 14px); }
+.menu-tier { display: grid; gap: 5px; }
+.menu-tier + .menu-tier { margin-top: 7px; }
+.tier-label {
+  margin: 0 0 1px;
+  color: #9fb2bf;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .34em;
+}
+.tier-play .tier-label { color: var(--amber); }
+.tier-learn .tier-label { color: var(--cyan); }
+.tier-label::after {
+  display: block;
+  margin-top: 3px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,.22), transparent 78%);
+  content: "";
+}
+.title-screen .tier-play .arcade-button { min-height: 38px; font-size: 12px; }
+.title-screen .tier-learn .arcade-button { min-height: 33px; }
+.title-screen .tier-more { gap: 3px; }
+.title-screen .tier-more .arcade-button { min-height: 26px; padding: 4px 12px; font-size: 9px; opacity: .82; }
+.title-screen .tier-more .arcade-button small { font-size: 7px; }
+/* The four MORE entries that carry a status line are the tall ones; they get
+   the same 26px body as their neighbours instead of growing to fit. */
+.title-screen .tier-more .daily-button,
+.title-screen .tier-more .ledger-button,
+.title-screen .tier-more .bracket-button,
+.title-screen .tier-more .demo-button { min-height: 30px; padding: 3px 12px; line-height: 1.15; }
+/* THE PHILLY OPEN's status line has no block rule of its own anywhere in the
+   sheet, so at 5.2 it ran on as "BRACKET4 OR 8 ENTRANTS" whenever the button
+   was wide enough to fit one line. In the tier it always is. */
+.title-screen .tier-more .bracket-button small { display: block; margin-top: 1px; opacity: .74; }
+.title-screen .tier-more .arcade-button:hover,
+.title-screen .tier-more .arcade-button:focus-visible,
+.title-screen .tier-more .arcade-button.pad-focus { opacity: 1; }
+.tier-more .tier-label { color: #7d8d99; }
+
+/* The recommendation. Same card on the title and the result screen. */
+.title-coach {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 2px;
+  padding: 6px 10px;
+  border: 1px solid rgba(94, 233, 255, .6);
+  border-left-width: 4px;
+  /* Opaque base under the tint: on the result screen this card sits over the
+     victory pose, and a translucent panel put the coach's line on top of a
+     fighter's shoulder. */
+  background: linear-gradient(180deg, rgba(7, 17, 25, .94), rgba(7, 17, 25, .86)), rgba(94, 233, 255, .14);
+  color: var(--cyan);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.title-coach[hidden] { display: none !important; }
+.title-coach b { font-size: 9px; font-weight: 900; letter-spacing: .16em; }
+.title-coach small { color: #b7c6cf; font-size: 8px; letter-spacing: .1em; }
+.title-coach:hover,
+.title-coach:focus-visible,
+.title-coach.pad-focus {
+  background: linear-gradient(180deg, rgba(12, 34, 45, .96), rgba(12, 34, 45, .9)), rgba(94, 233, 255, .3);
+  outline: none;
+}
+.result-coach { justify-self: start; margin-top: 8px; }
+
+/* "What just happened" — the top cause of the damage the player took. */
+.result-recap {
+  margin: 8px 0 0;
+  color: var(--amber);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+.result-recap[hidden] { display: none !important; }
+
+@media (max-width: 900px), (max-height: 560px) {
+  .menu-tier + .menu-tier { margin-top: 5px; }
+  .tier-label { font-size: 7px; letter-spacing: .24em; }
+  .tier-label::after { margin-top: 2px; }
+  .title-screen .tier-play .arcade-button { min-height: 31px; font-size: 10px; }
+  .title-screen .tier-learn .arcade-button { min-height: 28px; }
+  .title-screen .tier-more .arcade-button { min-height: 22px; padding: 3px 10px; font-size: 8px; }
+  .title-coach { padding: 4px 8px; }
+  .title-coach b { font-size: 8px; }
+  .title-coach small { font-size: 7px; }
+}

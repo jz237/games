@@ -216,13 +216,19 @@ import {
   applyMatchToRecords,
   blackBookObserve,
   blackBookSummary,
+  classifyDamageCause,
+  createFightDigest,
   evaluateBlackBook,
   favoriteMove,
+  fightRecapLine,
   masteryRank,
   normalizeBlackBookStore,
+  normalizeFightDigest,
   normalizeRecordsStore,
+  noteFightDamage,
   prettyMoveName,
   recordsSummary,
+  topDamageCause,
 } from "./engine/progression.mjs";
 import {
   ATTACK_BUTTONS,
@@ -279,6 +285,7 @@ import {
   trainingSnapshot,
   trialDemoScript,
   fightSchoolStepLabel,
+  recommendLesson,
 } from "./engine/training.mjs";
 import {
   PERFORMANCE_PROFILES,
@@ -3210,7 +3217,10 @@ function exitFightSchool({ toTitle = false } = {}) {
   if (!toTitle) updateTrainingUi();
 }
 
-function startFightSchool() {
+// 5.3: `startAt` is the lesson index the coach card routes to. Omitted (the
+// menu button, the newcomer ribbon) it keeps the old behaviour — the first
+// lesson the player has not finished.
+function startFightSchool(startAt = null) {
   unlockAudio();
   exitDemo?.();
   state.mode = "training";
@@ -3221,14 +3231,17 @@ function startFightSchool() {
   endScoreRun();
   const progress = loadSchoolProgress();
   const firstOpen = FIGHT_SCHOOL_LESSONS.findIndex((lesson) => !progress.completed[lesson.id]);
+  const requested = Number.isInteger(startAt) && startAt >= 0 && startAt < FIGHT_SCHOOL_LESSONS.length
+    ? startAt
+    : null;
   state.picks = [0, 1];
   state.locks = [true, true];
   startMatch(true);
   state.phase = "fight";
   state.phaseTime = 0;
   schoolSession.machine = createFightSchoolState({
-    lesson: firstOpen < 0 ? 0 : firstOpen,
-    completed: firstOpen < 0 ? {} : progress.completed,
+    lesson: requested !== null ? requested : firstOpen < 0 ? 0 : firstOpen,
+    completed: requested !== null || firstOpen >= 0 ? progress.completed : {},
   });
   schoolSession.active = true;
   schoolSession.savedDifficulty = state.aiDifficulty;
@@ -3292,6 +3305,9 @@ function schoolEvent(event) {
   if (!progress) return;
   trainingFxDebug.schoolSteps += 1;
   saveSchoolProgress();
+  // 5.3: the coach reads the completion map, so a finished lesson has to move
+  // the title recommendation on before the player gets back there.
+  refreshProgressionUi();
   if (progress.graduated) {
     announce("SCHOOL'S OUT", schoolCoach("graduate"), 2.6);
     state.training.autoRecover = true;
@@ -3397,14 +3413,24 @@ const modeFxDebug = {
 
 const RECORDS_STORAGE_KEY = "final-blow-records";
 const BLACK_BOOK_STORAGE_KEY = "final-blow-black-book";
+// 5.3: one slot, overwritten every match — the LAST fight, not a history.
+// It survives a reload so the title screen can still name a lesson.
+const LAST_FIGHT_STORAGE_KEY = "final-blow-last-fight";
 
 let recordsStore = normalizeRecordsStore(storedJson(RECORDS_STORAGE_KEY, null));
 let blackBookLedger = normalizeBlackBookStore(storedJson(BLACK_BOOK_STORAGE_KEY, null));
+let lastFightDigest = normalizeFightDigest(storedJson(LAST_FIGHT_STORAGE_KEY, null));
 
 function saveRecordsStore() {
   try {
     localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(recordsStore));
   } catch { /* storage full/blocked — records stay in-memory for the session */ }
+}
+
+function saveLastFightDigest() {
+  try {
+    localStorage.setItem(LAST_FIGHT_STORAGE_KEY, JSON.stringify(lastFightDigest));
+  } catch { /* storage full/blocked — the digest stays in-memory for the session */ }
 }
 
 function saveBlackBookLedger() {
@@ -3438,6 +3464,10 @@ const progressionMatch = {
   // round end to classify decision/weapon finishes.
   lastDamage: [null, null],
   roundKey: "",
+  // 5.3 (sweep #30 / #31): the P1 seat's last-fight digest — per-cause damage
+  // taken plus the handful of habit counters the FIGHT SCHOOL lesson graph
+  // reads. Guarded meta like everything else here; never read by the sim.
+  digest: createFightDigest(),
 };
 
 function progressionResetRound() {
@@ -3463,6 +3493,7 @@ function progressionResetMatch() {
   progressionMatch.peakCombo = [0, 0];
   progressionMatch.timeOverWin = false;
   progressionMatch.roundKey = "";
+  progressionMatch.digest = createFightDigest();
   progressionResetRound();
 }
 
@@ -3483,9 +3514,42 @@ function progressionNoteMove(fighter) {
 }
 
 // Damage-source latch from every damage site (guarded call sites).
-function progressionNoteDamage(victimSide, { chip = false, weapon = false } = {}) {
+//
+// 5.3: the same call now attributes the hit. `lastDamage` answers "what had
+// the last word" for the ledger; the digest answers "what took my health",
+// which needs a cause per landed hit — a health delta at round end cannot
+// know. Only the P1 seat is folded (the digest is the cabinet owner's), and
+// a blocked hit counts as a block whether or not its chip is non-zero.
+function progressionNoteDamage(victimSide, {
+  chip = false, weapon = false, amount = 0,
+  throwMove = false, throwable = false, superMove = false, kind = "", level = "",
+} = {}) {
   if (victimSide !== 0 && victimSide !== 1) return;
   progressionMatch.lastDamage[victimSide] = { tick: state.simulationTick, chip, weapon };
+  if (victimSide !== 0 || sideIsCpuControlled(0)) return;
+  const digest = progressionMatch.digest;
+  if (chip) digest.blocks += 1;
+  const cause = classifyDamageCause({ blocked: chip, throwMove, weapon, throwable, superMove, kind, level });
+  noteFightDamage(digest, cause, amount);
+  digest.damageTaken += Math.max(0, Number(amount) || 0);
+}
+
+// The mirror of the latch on the attacking side: what the player actually
+// GOT OUT, which is half of what the lesson graph reasons about (a fight with
+// no special and no EX is a different lesson from a fight with no blocks).
+function progressionNoteLanded(attackerSide, {
+  blocked = false, kind = "", superMove = false, enhanced = false, throwable = false,
+} = {}) {
+  if (attackerSide !== 0 || blocked || sideIsCpuControlled(0)) return;
+  const digest = progressionMatch.digest;
+  digest.hitsLanded += 1;
+  if (throwable) digest.throwablesUsed += 1;
+  if (superMove) digest.supersLanded += 1;
+  else if (enhanced) digest.exLanded += 1;
+  if (superMove || kind === "special") digest.specialsLanded += 1;
+  else if (kind === "heavy") digest.heavyLanded += 1;
+  else if (kind === "light") digest.lightLanded += 1;
+  // A throw is booked on the seat that ATE it (throwsTaken), not here.
 }
 
 // Instant one-shot ledger events (throwables landed, perfect guards, taunts…).
@@ -3656,6 +3720,19 @@ function progressionMatchEnd(winner) {
     moveUses: progressionMatch.moveUses[0],
   });
   saveRecordsStore();
+  // 5.3: seal the digest for this match and hand it to the coach. The record
+  // store's damage numbers come from round-start health deltas; the digest's
+  // come from the attributed hits, so they agree to within chip rounding and
+  // the percentage on the result screen is internally consistent.
+  const digest = progressionMatch.digest;
+  digest.fighterId = heroDef.id;
+  digest.opponentId = state.fighters[1]?.def?.id || "";
+  digest.mode = progressionRecordMode();
+  digest.won = won;
+  digest.rounds = progressionMatch.rounds;
+  digest.damageDealt = progressionMatch.damageDealt[0];
+  lastFightDigest = normalizeFightDigest(digest);
+  saveLastFightDigest();
   if (result?.rankedUp) queueRankUpToast(result.after, heroDef.name);
   blackBookObserve(blackBookLedger, {
     type: "matchEnd",
@@ -3757,7 +3834,50 @@ function refreshProgressionUi() {
         : `${FIGHT_SCHOOL_LESSONS.length} LESSONS · FREE`;
   }
   const newcomer = $("#titleNewcomer");
-  if (newcomer) newcomer.hidden = !(records.matches === 0 && done === 0);
+  const recommendation = currentLessonRecommendation();
+  // The NEW HERE ribbon is the zero-state; once a fight is on the books the
+  // coach card takes over, so the two never stack.
+  const firstRun = records.matches === 0 && done === 0;
+  if (newcomer) newcomer.hidden = !firstRun;
+  renderCoachCard("#titleCoach", recommendation, { hidden: firstRun });
+}
+
+// ---------------------------------------------------------------------------
+// 5.3 (sweep #30 / #31): THE COACH.
+//
+// One recommendation, computed from the last fight's digest against the
+// school's completion map (engine/training.mjs owns the rule order; this side
+// only renders it and routes the click). Shown in the title's LEARN tier and
+// again on the result screen, where the fight it is talking about is still on
+// the player's mind.
+// ---------------------------------------------------------------------------
+
+function currentLessonRecommendation(digest = lastFightDigest) {
+  const progress = loadSchoolProgress();
+  return recommendLesson(digest, { completed: progress.completed });
+}
+
+function renderCoachCard(selector, recommendation, { hidden = false } = {}) {
+  const card = $(selector);
+  if (!card) return null;
+  if (!recommendation || hidden) {
+    card.hidden = true;
+    delete card.dataset.lesson;
+    return null;
+  }
+  card.querySelector("b").textContent = recommendation.headline;
+  card.querySelector("small").textContent = recommendation.reason;
+  card.dataset.lesson = String(recommendation.lessonIndex);
+  card.dataset.rule = recommendation.ruleId || "";
+  card.hidden = false;
+  return recommendation;
+}
+
+function startRecommendedLesson(selector) {
+  const card = $(selector);
+  const index = Number(card?.dataset.lesson);
+  sound("select");
+  startFightSchool(Number.isInteger(index) ? index : null);
 }
 
 function renderBlackBookScreen() {
@@ -13186,6 +13306,7 @@ function showResult(winner) {
   $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN"
     : state.mode === "online" ? "LEAVE ROOM" : "SELECT FIGHTERS";
   $("#newStageButton").hidden = state.mode !== "versus";
+  renderResultRecap();
   updateDailyBanners();
   showScreen("result");
   // Victory entrance: pose rises from the bottom edge, the WINS title slams
@@ -13227,6 +13348,34 @@ function showResult(winner) {
     $("#rematchButton").hidden = false;
     $("#reselectButton").hidden = false;
   }
+}
+
+// 5.3 (sweep #30): the two coaching lines under the win quote. The recap is
+// the fight's own damage attribution — the biggest single source of the health
+// the player lost — and the coach card is the lesson that answers it. Both are
+// suppressed wherever the digest is not the player's own fight: demo, replay,
+// tournament, online, and the CPU-in-seat-0 flows the records fold already
+// refuses. The digest folds at progressionMatchEnd, which runs BEFORE
+// showResult on every match-end path, so this reads the sealed match.
+function renderResultRecap() {
+  const recap = $("#resultRecap");
+  const digest = lastFightDigest;
+  const eligible = !replayPlayback.active
+    && !demoSession.active
+    && !["demo", "tournament", "online"].includes(state.mode)
+    && !sideIsCpuControlled(0)
+    && Boolean(digest)
+    && digest.rounds > 0
+    && digest.fighterId === (state.fighters[0]?.def?.id || "");
+  if (recap) {
+    recap.textContent = eligible ? fightRecapLine(digest) : "";
+    recap.hidden = !eligible;
+  }
+  if (!eligible) {
+    renderCoachCard("#resultCoach", null);
+    return null;
+  }
+  return renderCoachCard("#resultCoach", currentLessonRecommendation(digest));
 }
 
 function showSameFightersStageSelect() {
@@ -13514,6 +13663,15 @@ function resolveMatchResult(winner) {
 function updateHud() {
   if (rollbackResimulating) return;
   if (!state.fighters.length) return;
+  // 5.3: two digest signals that have no single sim event — the highest Grit
+  // the player ever held (dozens of gain sites) and whether the street ever
+  // put an object down. Sampled here because updateHud is already the
+  // once-per-frame presentation read and is resim-exempt by its first line.
+  if (state.screen === "fight" && state.fighters.length === 2 && !sideIsCpuControlled(0)) {
+    const digest = progressionMatch.digest;
+    digest.meterPeak = Math.max(digest.meterPeak, clamp(state.fighters[0].meter || 0, 0, GRIT_RULES.maximum));
+    if (state.stageWeapon && state.stageWeapon.phase !== "gone") digest.weaponOffered = true;
+  }
   const sideTags = $$(".side-tag");
   const seatTag = (side) => (state.mode !== "demo" ? `P${side + 1}` : `CPU ${side + 1}`);
   if (sideTags[0]) sideTags[0].textContent = seatTag(0);
@@ -13633,10 +13791,13 @@ function controlCardLines(device = controlCardDevice()) {
       : "LEFT PAD WALKS · UP JUMPS · DOWN CROUCHES";
   return [
     ["MOVE", move],
-    ["BLOCK", "HOLD AWAY · DOWN-AWAY FOR LOWS"],
+    // 5.3 (sweep #31 audit): BLOCK and GRAB were the last two hard-coded
+    // command strings on this card — GRAB even disagreed with the move list,
+    // which has always said TOWARD/AWAY + LP OR LK.
+    ["BLOCK", commandLabel("block", style)],
     ["BUTTONS", buttons.join(" · ")],
     ["SPECIAL", commandLabel("commandSpecial", style)],
-    ["GRAB", "CLOSE + TOWARD + LP"],
+    ["GRAB", commandLabel("throw", style)],
   ];
 }
 
@@ -13727,7 +13888,7 @@ function setTouchPrompt(kind = "") {
   const prompt = $("#touchPrompt");
   const actions = $(".touch-action");
   const hintActive = !kind && Boolean(touchHint.text) && performance.now() < touchHint.until;
-  const label = kind === "final" ? "FINISH HIM · LP = A · LK = B · ANY DISTANCE"
+  const label = kind === "final" ? `FINISH HIM · ${commandLabel("finalBlow", state.controlStyle)}`
     : kind === "super" ? `SUPER READY · ${commandLabel("super", state.controlStyle)}`
       : hintActive ? touchHint.text
         : "";
@@ -13807,7 +13968,7 @@ function updateTrainingUi(input = {}) {
   const grabReady = inProximityGrabRange(player, opponent) && !player.attacking;
   $("#trainingGrabHint").textContent = grabReady
     ? "IN GRAB RANGE · TOWARD + LP/LK THROWS FORWARD · AWAY + LP/LK THROWS BACK"
-    : "GRAB: STEP IN CLOSE, THEN TOWARD OR AWAY + LP OR LK";
+    : `GRAB: STEP IN CLOSE, THEN ${commandLabel("throw", state.controlStyle).replace(/^CLOSE \+ /, "")}`;
   $("#trainingGrabHint").classList.toggle("ready", grabReady);
   if (inputLabel && (inputLabel !== state.training.lastInputLabel
     || state.simulationTick - state.training.lastInputFrame > 6)) {
@@ -14273,6 +14434,11 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     };
     state.training.lastAdvantage = null;
   }
+  // 5.3: what the player actually SPENT — the GRIT ECONOMY rule needs the
+  // difference between "had none" and "banked it and never cashed out".
+  if (!rollbackResimulating && gritCost > 0 && fighter.side === 0 && !sideIsCpuControlled(0)) {
+    progressionMatch.digest.meterSpent += gritCost;
+  }
   fighter.meter = clamp(fighter.meter - gritCost, 0, GRIT_RULES.maximum);
   fighter.attackTime = 0;
   fighter.attackFrame = 0;
@@ -14684,6 +14850,10 @@ function enterKnockdown(fighter) {
   // Landing before reaching the wall forfeits the pending bounce conversion.
   fighter.wallBounceArmed = 0;
   if (fighter.tauntFrames > 0) interruptTaunt(fighter);
+  // 5.3: the one entry point every knockdown funnels through (guarded meta).
+  if (!rollbackResimulating && fighter.side === 0 && !sideIsCpuControlled(0)) {
+    progressionMatch.digest.knockdownsTaken += 1;
+  }
   fighter.down = true;
   fighter.knockdownFrames = DEFENSE_RULES.knockdownFrames;
   fighter.wakeupFrames = 0;
@@ -14810,6 +14980,10 @@ function recoverFromGuardCrush(fighter) {
 // Release 1.7: air recovery (juggle tech) — escapes the juggle into a brief
 // invulnerable back-flip; the landing tax is applied by applyFighterPhysics.
 function performAirRecovery(fighter) {
+  // 5.3: an air tech is a tech too — the OFF THE FLOOR rule reads both.
+  if (!rollbackResimulating && fighter.side === 0 && !sideIsCpuControlled(0)) {
+    progressionMatch.digest.techs += 1;
+  }
   fighter.pendingKnockdown = false;
   fighter.wallBounceArmed = 0;
   fighter.hitstunFrames = 0;
@@ -15771,7 +15945,10 @@ function triggerPaintTrap(trap, victim) {
     : clamp(victim.health - damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
   // v2.1 PROGRESSION: damage-source latch (guarded meta observation).
-  if (!rollbackResimulating) progressionNoteDamage(victim.side, { chip: blocked });
+  if (!rollbackResimulating) {
+    progressionNoteDamage(victim.side, { chip: blocked, amount: damage, kind: "special", level: ATTACK_LEVELS.LOW });
+    progressionNoteLanded(owner.side, { blocked, kind: "special" });
+  }
   victim.blockstunFrames = blocked ? trap.blockstunFrames : 0;
   victim.hitstunFrames = blocked ? 0 : trap.hitstunFrames;
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
@@ -16050,7 +16227,18 @@ function triggerProjectile(projectile, victim) {
   // v2.1 PROGRESSION: damage-source latch + personal-throwable-landed event
   // (guarded meta observation on the announce() pattern).
   if (!rollbackResimulating) {
-    progressionNoteDamage(victim.side, { chip: blocked, weapon: Boolean(projectile.stageWeapon) });
+    progressionNoteDamage(victim.side, {
+      chip: blocked,
+      weapon: Boolean(projectile.stageWeapon),
+      throwable: Boolean(projectile.throwable),
+      amount: damage,
+      kind: "special",
+    });
+    progressionNoteLanded(owner.side, {
+      blocked: blocked || armored,
+      kind: "special",
+      throwable: Boolean(projectile.throwable),
+    });
     if (!blocked && !armored && projectile.throwable) {
       progressionEvent("throwableLand", { fighterId: owner.def.id }, owner.side);
     }
@@ -16586,6 +16774,9 @@ function tryPickUpStageWeapon(fighter, input) {
   fighter.inputBuffer.consume("heavy", state.simulationTick);
   spawnCombatText(fighter.x, fighter.y - fighter.height - 40, profile.name, fighter.def.accent);
   if (!rollbackResimulating) objectSound(profile.style);
+  if (!rollbackResimulating && fighter.side === 0 && !sideIsCpuControlled(0)) {
+    progressionMatch.digest.weaponPickups += 1;
+  }
   if (!rollbackResimulating && state.mode === "training" && fighter.side === 0) schoolEvent({ type: "pickup" });
   updateHud();
   return true;
@@ -16746,7 +16937,11 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   victim.health = clamp(victim.health - grab.damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
   // v2.1 PROGRESSION: damage-source latch (guarded meta observation).
-  if (!rollbackResimulating) progressionNoteDamage(victim.side, {});
+  if (!rollbackResimulating) {
+    progressionNoteDamage(victim.side, { amount: grab.damage, throwMove: true });
+    if (victim.side === 0 && !sideIsCpuControlled(0)) progressionMatch.digest.throwsTaken += 1;
+    progressionNoteLanded(attacker.side, { kind: "throw" });
+  }
   victim.lastHitResult = ATTACK_LEVELS.THROW;
   victim.juggleCount = 0;
   victim.wallBounceUsed = false;
@@ -16846,7 +17041,10 @@ function techThrow(attacker, victim, { clinch = false } = {}) {
   // Wave 9: tech shout from the escaping fighter (guarded + tick-deduped).
   fighterReactiveCue(victim, "tech");
   // v2.1 PROGRESSION: the escapee's grab-tech tally (guarded meta counter).
-  if (!rollbackResimulating) progressionMatch.techs[victim.side] += 1;
+  if (!rollbackResimulating) {
+    progressionMatch.techs[victim.side] += 1;
+    if (victim.side === 0 && !sideIsCpuControlled(0)) progressionMatch.digest.techs += 1;
+  }
 }
 
 function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack, collision) {
@@ -17065,7 +17263,21 @@ function hit(attacker, victim, attack, collision) {
     progressionNoteDamage(victim.side, {
       chip: blocked,
       weapon: String(attack.profileId || "").startsWith("stage-weapon-"),
+      amount: damage,
+      kind: attack.kind,
+      level: attack.level,
+      superMove: Boolean(attack.superMove),
     });
+    if (attacker.attackHits === 1) {
+      progressionNoteLanded(attacker.side, {
+        blocked: blocked || armored,
+        kind: attack.kind,
+        superMove: Boolean(attack.superMove),
+        // Attack instances carry no "enhanced" flag — a Grit price IS the
+        // flag, and the super is already claimed by the branch above.
+        enhanced: Number(attack.gritCost) > 0,
+      });
+    }
     if (!blocked && !armored && attack.superMove && attacker.attackHits === 1) {
       progressionMatch.supers[attacker.side] += 1;
     }
@@ -17226,6 +17438,13 @@ function hit(attacker, victim, attack, collision) {
   if (perfect) {
     if (!rollbackResimulating) {
       mechFxDebug.perfectGuards += 1;
+      // 5.3: a Perfect Guard deals nothing, so it never reaches
+      // progressionNoteDamage — it has to book its own block here or the
+      // SPLIT SECOND rule would read a perfect fight as "never blocked".
+      if (victim.side === 0 && !sideIsCpuControlled(0)) {
+        progressionMatch.digest.blocks += 1;
+        progressionMatch.digest.perfectGuards += 1;
+      }
       // v2.1 PROGRESSION: the defender's Perfect Guard ledger event (guarded).
       progressionEvent("perfectGuard", {}, victim.side);
     }
@@ -31204,6 +31423,8 @@ $("#moveListSelect").addEventListener("change", (event) => renderMoveList(event.
 $("#pauseMoveListButton")?.addEventListener("click", () => openMoveListOverlay());
 $("#moveListOverlayClose")?.addEventListener("click", () => closeMoveListOverlay());
 $("#titleNewcomerButton")?.addEventListener("click", () => startFightSchool());
+$("#titleCoach")?.addEventListener("click", () => startRecommendedLesson("#titleCoach"));
+$("#resultCoach")?.addEventListener("click", () => startRecommendedLesson("#resultCoach"));
 $("#controlCardClose")?.addEventListener("click", () => hideControlCard());
 $("#controlCard")?.addEventListener("click", () => hideControlCard());
 $$("[data-team-opponent]").forEach((button) => button.addEventListener("click", () => chooseTeamOpponent(button.dataset.teamOpponent)));
@@ -32562,6 +32783,46 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     schoolStepLabel(lessonIndex = 0, stepIndex = 0, style = state.controlStyle) {
       return fightSchoolStepLabel(FIGHT_SCHOOL_LESSONS[lessonIndex]?.steps[stepIndex], style);
     },
+    // --- 5.3 onboarding depth probes ---------------------------------------
+    // The live digest, the sealed one, the recommendation both coach cards
+    // render, and what the two lines say on screen right now.
+    coach() {
+      const titleCard = $("#titleCoach");
+      const resultCard = $("#resultCoach");
+      return {
+        live: JSON.parse(JSON.stringify(progressionMatch.digest)),
+        lastFight: JSON.parse(JSON.stringify(lastFightDigest)),
+        top: topDamageCause(lastFightDigest),
+        recap: fightRecapLine(lastFightDigest),
+        recommendation: currentLessonRecommendation(),
+        title: {
+          hidden: Boolean(titleCard?.hidden),
+          head: titleCard?.querySelector("b")?.textContent || "",
+          reason: titleCard?.querySelector("small")?.textContent || "",
+          lesson: titleCard?.dataset.lesson ?? null,
+        },
+        result: {
+          hidden: Boolean(resultCard?.hidden),
+          head: resultCard?.querySelector("b")?.textContent || "",
+          reason: resultCard?.querySelector("small")?.textContent || "",
+          lesson: resultCard?.dataset.lesson ?? null,
+          recapHidden: Boolean($("#resultRecap")?.hidden),
+          recapText: $("#resultRecap")?.textContent || "",
+        },
+        tiers: [...document.querySelectorAll("#titleScreen .menu-tier")].map((tier) => ({
+          label: tier.querySelector(".tier-label")?.textContent || "",
+          buttons: tier.querySelectorAll("button").length,
+        })),
+      };
+    },
+    // Seed a digest straight in (no fight required) so a probe can drive the
+    // recommendation and the recap deterministically.
+    seedLastFight(digest = {}) {
+      lastFightDigest = normalizeFightDigest({ rounds: 1, ...digest });
+      saveLastFightDigest();
+      refreshProgressionUi();
+      return JSON.parse(JSON.stringify(lastFightDigest));
+    },
     trialMedals() {
       return JSON.parse(JSON.stringify(trialMedals));
     },
@@ -32571,8 +32832,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       refreshTrialMedalBadges();
       return true;
     },
-    school() {
-      startFightSchool();
+    // 5.3: `startAt` opens the school on a chosen lesson, the way the coach
+    // card's click does — schoolStatus() reads without restarting.
+    school(startAt = null) {
+      startFightSchool(Number.isInteger(startAt) ? startAt : null);
       return { active: schoolSession.active, ...fightSchoolSnapshot(schoolSession.machine) };
     },
     schoolStatus() {
