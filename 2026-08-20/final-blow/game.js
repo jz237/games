@@ -9639,10 +9639,6 @@ function drawForegroundOccluders(centre) {
 let crowdFlashCacheCrowd = null;
 let crowdFlashCandidates = [];
 
-function crowdFlashPick(crowd, frame, reaction) {
-  return crowdFlashPicks(crowd, frame, reaction)[0] || null;
-}
-
 // v5.1 KO MOMENT: during the KO hold the phones come out — an 8-tick window
 // lit 5 of 8 (7.5 pops/s against the fight's 3/s cap) with three picks per
 // window, each hashed on its own salt so they land on different people.
@@ -14373,7 +14369,7 @@ function performWallBounce(fighter, wallDirection) {
     );
   }
   // Spectacle through the existing systems: the wave-4 splat, the crowd surge
-  // (0.75 clears the crowdFlashPick flashbulb threshold), combat text, the
+  // (0.75 clears the crowdFlashPicks flashbulb threshold), combat text, the
   // announcer bank and the shared violence response.
   spawnWallImpact(fighter, wallDirection);
   stirCrowd(0.75);
