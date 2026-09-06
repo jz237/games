@@ -1,0 +1,4 @@
+# tools/swing (the 4.9/5.0 sheet pipeline) needs both; the top-level
+# build_*.py scripts need Pillow only. See tools/README.md for the venv line.
+Pillow>=10
+numpy>=1.26

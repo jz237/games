@@ -1,10 +1,12 @@
-"""Build assets/unified/<id>-ext2.webp (the attack in-between bank) from a raw
-1024px magenta-keyed generation, normalised to the unified bank's convention:
-320px cells, the tallest STANDING figure scaled to targetH (306) with its feet
-on floorRow (315), figure centred on its silhouette, colours pulled onto the
-fighter's own unified sheet (color_match), lossless WebP with exact alpha.
+"""Build assets/unified/<id>-<bank>.webp (ext2 in-betweens, ext3 strikes or ext4
+reactions) from a raw 1024px magenta-keyed generation, normalised to the
+unified bank's convention: 320px cells, the tallest STANDING figure scaled to
+targetH (306) with its feet on floorRow (315), figure centred on its
+silhouette, colours pulled onto the fighter's own unified sheet (color_match;
+--ref for another reference), lossless WebP with exact alpha.
 
-Usage: build_ext2.py <fighter> <raw png> [--targetH 306] [--floorRow 315] [--scale S]
+Usage: build_sheet.py <fighter> <raw png> [--bank ext2|ext3|ext4] [--ref sheet]
+                      [--targetH 306] [--floorRow 315] [--scale S] [--out path]
 Writes the sheet, a JSON sidecar with per-cell boxes/heights, and a preview.
 """
 import argparse, json, os, subprocess, sys
@@ -13,7 +15,7 @@ from PIL import Image
 from measure_de import load, to_lab, clusters
 
 A = os.path.dirname(os.path.abspath(__file__))
-G = "/home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-roadmap2/2026-08-20/final-blow"
+from repo_root import G  # the checkout this file lives in (FINAL_BLOW_ROOT overrides)
 KEY = np.array([255.0, 0.0, 255.0])
 CELL_OUT = 320
 CELL_IN = 256

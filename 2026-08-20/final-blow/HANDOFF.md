@@ -396,7 +396,8 @@ frames: `assets/fighters/cyraxx.webp` (588x720 portrait),
 `assets/atlases/cyraxx.webp` (4x4 combat), `assets/moves/cyraxx-specials.webp`
 (4x4 specials, **frame 15 is the victory pose**).
 
-Pipeline (`tools/`, Pillow only, no numpy):
+Pipeline (`tools/`; the `build_*.py` below are Pillow-only — the `tools/swing/`
+sheet pipeline needs numpy too, see `tools/README.md` and `tools/requirements.txt`):
 
 1. Generate each 4x4 sheet as a **single image** on a flat pure magenta
    (`#FF00FF`) background — one generation per sheet, never 16 separate ones, or

@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 
 A = os.path.dirname(os.path.abspath(__file__))
-G = "/home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-roadmap2/2026-08-20/final-blow"
+from repo_root import G  # the checkout this file lives in (FINAL_BLOW_ROOT overrides)
 sys.path.insert(0, A)
 from build_sheet import key_unmultiply, keep_main_components
 

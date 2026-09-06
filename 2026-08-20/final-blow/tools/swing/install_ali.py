@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 
 A = os.path.dirname(os.path.abspath(__file__))
-G = "/home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-roadmap2/2026-08-20/final-blow"
+from repo_root import G  # the checkout this file lives in (FINAL_BLOW_ROOT overrides)
 cand, sidecar = sys.argv[1], sys.argv[2]
 u = json.load(open(sidecar)); cells = {c["cell"]: c for c in u["cells"]}
 main_h = [cells[i]["height"] for i in range(16)]; main_c = [cells[i]["bodyCentre"] for i in range(16)]

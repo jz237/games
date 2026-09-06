@@ -1,12 +1,19 @@
-"""Generate the in-between sheets for every fighter from its own unified sheet.
-Runs the fal edit endpoint concurrently; each fighter's prompt = the shared
-16-cell grammar with a one-line costume reminder. Raws land as raw-<id>-g<N>.png."""
+"""Generate a 16-cell sheet (ext2 in-betweens, ext3 strikes, ext4 reactions) for
+every fighter from its own unified sheet, image-to-image through the fal edit
+endpoint, concurrently; each fighter's prompt = the shared 16-cell grammar with
+a one-line costume reminder. Raws land as raw-<id>-g<N>.png next to this file.
+
+Usage: gen_all.py [<gen tag> [<ids or all> [<grammar file>]]]
+  gen_all.py g1                         ext2 grammar (grammar-ext2.txt), all fighters
+  gen_all.py g2 jez,ali grammar-ext3.txt
+fal_edit.py reads FAL_KEY from ~/.claude.json inside the process (never printed,
+never written into this tree). See ../README.md for the venv and the steps."""
 import os, subprocess, sys, threading, json
 from PIL import Image
-G = "/home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-roadmap2/2026-08-20/final-blow"
+from repo_root import G  # the checkout this file lives in (FINAL_BLOW_ROOT overrides)
 A = os.path.dirname(os.path.abspath(__file__))
 GEN = sys.argv[1] if len(sys.argv) > 1 else "g1"
-GRAMMAR_FILE = sys.argv[3] if len(sys.argv) > 3 else "grammar.txt"
+GRAMMAR_FILE = sys.argv[3] if len(sys.argv) > 3 else "grammar-ext2.txt"
 ONLY = sys.argv[2].split(",") if len(sys.argv) > 2 and sys.argv[2] != "all" else None
 LOOK = {
   "deathblow": "a heavyset, heavily muscled man with a dark beard, glasses and a dark cap, in a black t-shirt, black shorts, red fingerless gloves and black sneakers",
