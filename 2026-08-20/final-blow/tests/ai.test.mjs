@@ -8,10 +8,13 @@ import {
   decideAiIntent,
   getReactionObservation,
   justDefendHold,
+  meatyTiming,
   recordAiObservation,
   stepAiBrain,
   visibleOpponentObservation,
+  whiffedThrowPunish,
 } from "../engine/ai.mjs";
+import { DEFENSE_RULES, THROW_RULES } from "../engine/defense.mjs";
 
 const attack = (overrides = {}) => ({
   level: "mid", kind: "heavy", activeStartFrame: 8, activeEndFrame: 15,
@@ -225,11 +228,148 @@ function testDepthDefensiveOptions() {
   }
 }
 
+// 5.3 CLOSE RANGE: the CPU plays the two new reads through the same inputs a
+// human uses — a timed light/grab on the vulnerable rising frames, an
+// answering grab inside the clinch, and a punish on a throw that has already
+// missed. Every branch is reached from the VISIBLE observation only; the wake
+// option (quick / delayed) is deliberately not observable, because guessing it
+// is the read.
+function testCloseRangeReads() {
+  const brain = createAiBrain("final");
+  const settings = AI_DIFFICULTIES.final;
+
+  // Ladder shape: the new chances rise with difficulty and Passive has none.
+  for (const key of ["meatyChance", "clinchTechChance", "throwWhiffPunishChance"]) {
+    assert.equal(AI_DIFFICULTIES.passive[key], 0, `passive must never ${key}`);
+    assert.ok(AI_DIFFICULTIES.final[key] > AI_DIFFICULTIES.pro[key]);
+    assert.ok(AI_DIFFICULTIES.pro[key] > AI_DIFFICULTIES.street[key]);
+    assert.ok(AI_DIFFICULTIES.street[key] > AI_DIFFICULTIES.rookie[key]);
+    assert.ok(AI_DIFFICULTIES.rookie[key] > 0, `rookie must sometimes ${key}, or the read is invisible below PRO`);
+  }
+
+  // --- meaty timing, the same frame arithmetic justDefendHold uses ---------
+  const rising = (wakeupFrames, frame = 0) => visibleOpponentObservation(fighter("jez", { x: 600, wakeupFrames }), frame);
+  const startup = 5;
+  // Too early: the strike would meet the hurtbox-less half of the rise.
+  assert.equal(meatyTiming(rising(DEFENSE_RULES.wakeupFrames), 0, startup), false);
+  // In the pocket: startup frames before the window opens.
+  const openAt = DEFENSE_RULES.wakeupVulnerableFrames + startup;
+  assert.equal(meatyTiming(rising(openAt), 0, startup), true);
+  assert.equal(meatyTiming(rising(openAt + 1), 0, startup), false, "one frame too early is a whiff");
+  // Still true through the window, so a late decision tick still swings.
+  assert.equal(meatyTiming(rising(1), 0, startup), true);
+  // Past the rise: nothing to meaty.
+  assert.equal(meatyTiming(rising(0), 0, startup), false);
+  assert.equal(meatyTiming(null, 0, startup), false);
+  // The reaction delay is compensated exactly like the just-defend hold: a
+  // stale observation of the same rise still resolves to the same press tick.
+  assert.equal(meatyTiming(rising(openAt + 6, 0), 6, startup), true, "a 6-frame-stale observation still times the press");
+
+  // --- the intent itself ---------------------------------------------------
+  const self = fighter("alan", { x: 500 });
+  const observation = rising(openAt);
+  const meatyRoll = findRoll((roll) => {
+    const fresh = createAiBrain("final");
+    return ["meaty", "meaty-throw"].includes(decideAiIntent(fresh, { frame: 0, self, observation, roll }).reason);
+  });
+  const meatyBrain = createAiBrain("final");
+  const meaty = decideAiIntent(meatyBrain, { frame: 0, self, observation, roll: meatyRoll });
+  assert.ok(["light", "throw"].includes(meaty.action), "a meaty is a fast button or a command grab, never a slow one");
+  assert.equal(meaty.movement, "hold", "the walk-in is over by the time the press happens");
+  // The take is LATCHED for the whole knockdown: the roll is a fresh RNG draw
+  // every tick in game.js, so re-deciding every frame (which the brain does,
+  // to time the press) must not re-roll the decision into existence.
+  assert.ok(meatyBrain.okiWindowEnd > 0);
+  // Plain finite data only: the aiBrain rides the rollback fighter snapshot
+  // (it is not in rollbackFighterReferences), so every latch field has to
+  // survive structuredClone and the wire format.
+  for (const key of ["okiWindowEnd", "okiTake", "clinchTick", "clinchTake"]) {
+    const value = createAiBrain("final")[key];
+    assert.ok(["number", "boolean"].includes(typeof value) && (typeof value === "boolean" || Number.isFinite(value)),
+      `${key} must be plain finite data for the rollback snapshot`);
+  }
+  const declining = createAiBrain("final");
+  decideAiIntent(declining, { frame: 0, self, observation: rising(DEFENSE_RULES.wakeupFrames), roll: 0.999 });
+  assert.equal(declining.okiTake, false, "a declined knockdown stays declined");
+  for (let frame = 1; frame < 40; frame += 1) {
+    const reason = decideAiIntent(declining, { frame, self, observation: rising(Math.max(1, 16 - frame), frame), roll: 0.001 }).reason;
+    assert.notEqual(reason, "meaty", "a declined knockdown must not re-roll into a meaty on a later frame");
+  }
+
+  // --- clinch tech ---------------------------------------------------------
+  const clinched = (frame) => fighter("alan", { grabbed: { attacker: 1, frame, total: 14, startTick: 100 } });
+  const techRoll = findRoll((roll) => {
+    const fresh = createAiBrain("final");
+    return decideAiIntent(fresh, { frame: 101, self: clinched(1), observation, roll }).reason === "clinch-tech";
+  });
+  const clinchBrain = createAiBrain("final");
+  const tech = decideAiIntent(clinchBrain, { frame: 101, self: clinched(1), observation, roll: techRoll });
+  assert.equal(tech.action, "throw", "the tech is an answering grab, the same input a human presses");
+  // Latched per clinch, and the window is respected on both edges.
+  assert.equal(
+    decideAiIntent(clinchBrain, { frame: 120, self: clinched(DEFENSE_RULES.clinchTechWindowFrames + 1), observation, roll: techRoll }).reason,
+    "clinched",
+    "past the window the CPU is stuck in the hold like anyone else",
+  );
+  const refusing = createAiBrain("rookie");
+  decideAiIntent(refusing, { frame: 101, self: clinched(1), observation, roll: 0.999 });
+  for (let frame = 102; frame <= 108; frame += 1) {
+    assert.notEqual(
+      decideAiIntent(refusing, { frame, self: clinched(frame - 100), observation, roll: 0.001 }).reason,
+      "clinch-tech",
+      "one clinch is one decision — re-deciding every frame must not inflate the tech rate",
+    );
+  }
+
+  // --- punishing a throw that already missed -------------------------------
+  const whiffedGrab = visibleOpponentObservation(fighter("jez", {
+    x: 600,
+    attacking: attack({ level: "throw", kind: "throw", activeStartFrame: 5, activeEndFrame: 8 }),
+    attackFrame: 12,
+  }), 0);
+  assert.equal(whiffedThrowPunish(whiffedGrab, 0), true);
+  const liveGrab = visibleOpponentObservation(fighter("jez", {
+    x: 600,
+    attacking: attack({ level: "throw", kind: "throw", activeStartFrame: 5, activeEndFrame: 8 }),
+    attackFrame: 2,
+  }), 0);
+  assert.equal(whiffedThrowPunish(liveGrab, 0), false, "a grab still in startup is a threat, not a punish");
+  assert.equal(whiffedThrowPunish(liveGrab, 12), true, "the stale observation ages into the recovery");
+  const landedGrab = visibleOpponentObservation(fighter("jez", {
+    x: 600, grabbing: true,
+    attacking: attack({ level: "throw", kind: "throw", activeStartFrame: 5, activeEndFrame: 8 }),
+    attackFrame: 12,
+  }), 0);
+  assert.equal(whiffedThrowPunish(landedGrab, 0), false, "a grab that CONNECTED is not a punish, it is a clinch");
+  const punishRoll = findRoll((roll) => {
+    const fresh = createAiBrain("final");
+    return decideAiIntent(fresh, { frame: 0, self, observation: whiffedGrab, roll }).reason === "throw-whiff-punish";
+  });
+  const punish = decideAiIntent(createAiBrain("final"), { frame: 0, self, observation: whiffedGrab, roll: punishRoll });
+  assert.ok(["heavy", "super"].includes(punish.action), "the punish is the biggest thing that reaches, not a jab");
+
+  // --- the CPU never mashes grabs into the commit band ---------------------
+  // Its own throws stay strictly inside the reach; pressing in the band is a
+  // whiffed grab with a 39-52-frame tail and a CPU that fed it would be free.
+  for (let distance = THROW_RULES.grabRange - 10; distance <= THROW_RULES.attemptRange + 20; distance += 2) {
+    const far = visibleOpponentObservation(fighter("jez", { x: 500 + distance }), 0);
+    for (let step = 1; step < 120; step += 1) {
+      const intent = decideAiIntent(createAiBrain("final"), { frame: 0, self, observation: far, roll: step / 120 });
+      if (intent.reason === "throw" || intent.reason === "back-throw") {
+        assert.ok(distance < THROW_RULES.grabRange,
+          `the CPU grabbed at ${distance}, outside its ${THROW_RULES.grabRange} reach`);
+      }
+    }
+  }
+  assert.ok(settings.meatyChance > 0);
+}
+
 testDifficultyFairness();
 testPassiveIsInert();
 testDelayedVisibleObservations();
 testDefenseAntiAirWakeupAndCombos();
 testArchetypesAndDeterminism();
 testDepthDefensiveOptions();
+testCloseRangeReads();
 
 console.log("Final Blow fair AI tests passed");

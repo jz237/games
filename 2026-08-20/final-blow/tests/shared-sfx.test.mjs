@@ -7,6 +7,7 @@ import {
   DISTINCT_DRAW_MIN_STEP,
   SHARED_SAMPLE_VARIATION,
   STAGE_WEAPON_CLATTER,
+  clinchTechBreakParams,
   dashScuffParams,
   distinctDraw,
   pickSharedVariation,
@@ -163,4 +164,45 @@ test("the re-arm click is a dry muted tick under every swing and impact", () => 
   assert.ok(high.tick.freq > low.tick.freq);
   assert.ok(high.pip.from > low.pip.from);
   assert.equal(rearmClickParams({ level: 0.5 }).tick.peak, click.tick.peak * 0.5);
+});
+
+// 5.3 CLOSE RANGE: the clinch-break snap — the layer that tells a REACTION
+// tech (a hold broken open) apart from the pre-contact clash, which keeps the
+// reviewed `block` take underneath it in both cases.
+test("the clinch-break snap is a downward rip that never repeats back to back", () => {
+  const snap = clinchTechBreakParams({ draw: 0, level: 1 });
+  assert.equal(snap.rip.filterType, "bandpass");
+  assert.ok(snap.rip.freq > snap.rip.freqEnd, "the rip sweeps DOWN — the opposite of the dash scuff, so the two never blur");
+  assert.ok(snap.rip.freqEnd < dashScuffParams({ forward: true }).hiss.freqEnd * 1.5
+    || snap.rip.freq !== dashScuffParams({ forward: true }).hiss.freq,
+    "it must not land on the scuff's own sweep");
+  assert.ok(snap.rip.seconds > 0.08 && snap.rip.seconds < 0.2, "a snap, not a wash");
+  assert.equal(snap.partials.length, 2);
+  assert.ok(snap.partials.every((partial) => partial.wave === "square" && partial.from > partial.to),
+    "both shove partials fall");
+  assert.ok(snap.partials[1].delay > 0, "the second partial lands after the first — one event, not a chord");
+  // Louder than the eaten-press click (it is an escape, not a nothing) and
+  // still under the recorded impact takes.
+  assert.ok(snap.rip.peak > rearmClickParams({}).tick.peak);
+  assert.ok(snap.rip.peak < 0.09);
+  assert.equal(clinchTechBreakParams({ level: 0.5 }).rip.peak, snap.rip.peak * 0.5);
+
+  // The no-repeat guarantee: consecutive draws from distinctDraw are at least
+  // DISTINCT_DRAW_MIN_STEP apart, and the detune is monotonic in the draw, so
+  // two clinch techs in a row are audibly different pitches.
+  const low = clinchTechBreakParams({ draw: -1 });
+  const high = clinchTechBreakParams({ draw: 1 });
+  assert.ok(high.rip.freq > low.rip.freq);
+  assert.ok(high.partials[0].from > low.partials[0].from);
+  const rand = lcg(11);
+  let previous = null;
+  for (let index = 0; index < 200; index += 1) {
+    const draw = distinctDraw(previous, rand);
+    if (previous !== null) {
+      assert.ok(Math.abs(draw - previous) >= DISTINCT_DRAW_MIN_STEP - 1e-9,
+        "two consecutive clinch breaks must never share a pitch");
+      assert.notEqual(clinchTechBreakParams({ draw }).rip.freq, clinchTechBreakParams({ draw: previous }).rip.freq);
+    }
+    previous = draw;
+  }
 });

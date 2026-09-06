@@ -1,4 +1,4 @@
-import { ATTACK_LEVELS } from "./defense.mjs";
+import { ATTACK_LEVELS, DEFENSE_RULES, THROW_RULES } from "./defense.mjs";
 import { GRIT_RULES } from "./combos.mjs";
 import { getFighterKit, selectKitAiIntent } from "./fighter-kits.mjs";
 
@@ -12,6 +12,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     defenseChance: 0, antiAirChance: 0, comboChance: 0,
     throwChance: 0, meterChance: 0, wakeupReversalChance: 0, errorChance: 0,
     throwTechChance: 0, grabPressureChance: 0,
+    meatyChance: 0, clinchTechChance: 0, throwWhiffPunishChance: 0,
     quickRiseChance: 0, wakeDelayChance: 0, airRecoveryChance: 0, perfectGuardChance: 0,
     tauntChance: 0,
     repeatLimit: 0, inert: true,
@@ -21,6 +22,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     defenseChance: 0.46, antiAirChance: 0.38, comboChance: 0.22,
     throwChance: 0.09, meterChance: 0.24, wakeupReversalChance: 0.16, errorChance: 0.24,
     throwTechChance: 0.12, grabPressureChance: 0.1,
+    meatyChance: 0.1, clinchTechChance: 0.08, throwWhiffPunishChance: 0.15,
     quickRiseChance: 0.14, wakeDelayChance: 0.08, airRecoveryChance: 0.12, perfectGuardChance: 0.05,
     tauntChance: 0.35,
     repeatLimit: 2,
@@ -30,6 +32,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     defenseChance: 0.62, antiAirChance: 0.55, comboChance: 0.42,
     throwChance: 0.15, meterChance: 0.44, wakeupReversalChance: 0.31, errorChance: 0.14,
     throwTechChance: 0.3, grabPressureChance: 0.2,
+    meatyChance: 0.26, clinchTechChance: 0.22, throwWhiffPunishChance: 0.4,
     quickRiseChance: 0.32, wakeDelayChance: 0.12, airRecoveryChance: 0.28, perfectGuardChance: 0.12,
     tauntChance: 0.12,
     repeatLimit: 2,
@@ -39,6 +42,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     defenseChance: 0.76, antiAirChance: 0.72, comboChance: 0.65,
     throwChance: 0.22, meterChance: 0.68, wakeupReversalChance: 0.52, errorChance: 0.08,
     throwTechChance: 0.56, grabPressureChance: 0.34,
+    meatyChance: 0.5, clinchTechChance: 0.44, throwWhiffPunishChance: 0.66,
     quickRiseChance: 0.55, wakeDelayChance: 0.16, airRecoveryChance: 0.5, perfectGuardChance: 0.24,
     tauntChance: 0.05,
     repeatLimit: 3,
@@ -48,6 +52,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     defenseChance: 0.87, antiAirChance: 0.84, comboChance: 0.8,
     throwChance: 0.29, meterChance: 0.84, wakeupReversalChance: 0.7, errorChance: 0.04,
     throwTechChance: 0.78, grabPressureChance: 0.48,
+    meatyChance: 0.72, clinchTechChance: 0.66, throwWhiffPunishChance: 0.84,
     quickRiseChance: 0.78, wakeDelayChance: 0.2, airRecoveryChance: 0.68, perfectGuardChance: 0.38,
     tauntChance: 0.02,
     repeatLimit: 3,
@@ -98,6 +103,15 @@ export function createAiBrain(difficulty = DEFAULT_AI_DIFFICULTY) {
     lastDecisionFrame: -Infinity,
     lastObservedFrame: -1,
     lastComboKey: "",
+    // 5.3 CLOSE RANGE: the two close-range reads are COMMITMENTS, not a fresh
+    // coin flip per frame. `roll` is a new RNG draw every tick, and both reads
+    // need the brain to look every frame (a meaty is a 4-8 frame window; a
+    // clinch tech is 7), so the decision is latched once per knockdown and
+    // once per clinch and only the TIMING is re-evaluated after that.
+    okiWindowEnd: -1,
+    okiTake: false,
+    clinchTick: -1,
+    clinchTake: false,
     recentActions: [],
     suppressedRepeats: 0,
     decisions: 0,
@@ -122,6 +136,12 @@ export function visibleOpponentObservation(opponent, frame) {
     guarding: Boolean(opponent?.guarding),
     down: Boolean(opponent?.down),
     wakeupFrames: opponent?.wakeupFrames || 0,
+    // 5.3 OKIZEME / CLOSE RANGE: the knockdown clock (so the brain can walk
+    // in before the rise instead of reacting to it) and the swing's total
+    // length (so it can tell a live throw from one that has already whiffed).
+    // Both are on-screen facts — the animation says them — not hidden state.
+    knockdownFrames: opponent?.knockdownFrames || 0,
+    attackTotalFrames: attack?.totalFrames ?? 0,
     attacking: Boolean(attack),
     attackLevel: attack?.level || null,
     attackKind: attack?.kind || null,
@@ -188,6 +208,38 @@ export function justDefendHold(observation, frame) {
   const observationAge = frame - observation.frame;
   const framesUntilActive = (observation.attackStartupFrame - observation.attackFrame) - observationAge;
   return framesUntilActive <= 4;
+}
+
+/**
+ * 5.3 OKIZEME — meaty timing. The last `wakeupVulnerableFrames` of a rise
+ * carry hurtboxes (engine/defense.mjs), so a strike started `startup` frames
+ * before that window opens is active on it. This compensates for the
+ * reaction-delayed observation exactly like justDefendHold does, and reads
+ * only the visible wake clock — never the hidden wake option, which is
+ * precisely the thing the attacker is supposed to be guessing.
+ *
+ * Returns true through the whole window (not just its first frame) so a brain
+ * whose decision tick lands late still swings instead of freezing.
+ */
+export function meatyTiming(observation, frame, startup = 5) {
+  if (!observation || observation.wakeupFrames <= 0) return false;
+  const age = frame - observation.frame;
+  const untilVulnerable = (observation.wakeupFrames - DEFENSE_RULES.wakeupVulnerableFrames) - age;
+  return untilVulnerable <= startup && untilVulnerable > -DEFENSE_RULES.wakeupVulnerableFrames;
+}
+
+/**
+ * 5.3 CLOSE RANGE — is the opponent's live swing a THROW that has already
+ * missed? A whiffed throw now runs its full 32-39 frames plus the 0.25 whiff
+ * tax, which is the punish window this pass created; the brain reads it off
+ * the same visible fields a player reads off the animation (a grab that is
+ * past its active frames with nobody in its hands).
+ */
+export function whiffedThrowPunish(observation, frame) {
+  if (!observation?.attacking || observation.attackLevel !== ATTACK_LEVELS.THROW) return false;
+  if (observation.grabbing) return false;
+  const age = frame - observation.frame;
+  return (observation.attackFrame + age) >= observation.attackActiveEndFrame;
 }
 
 function inputFromIntent(intent, self, observation, pulseAction = false, frame = observation.frame) {
@@ -283,6 +335,23 @@ export function decideAiIntent(brain, {
     return { movement: "hold", action: null, guard: true, reason: "downed" };
   }
 
+  // 5.3 CLOSE RANGE: caught in a clinch — the REACTION tech. The hold runs
+  // 11-18 frames and its first `clinchTechWindowFrames` accept a fresh grab
+  // of your own, so the CPU answers with the same →+LP a human would inside
+  // the same window. Sits above every other branch because a grabbed fighter
+  // has no other legal option.
+  if (self.grabbed) {
+    const startTick = self.grabbed.startTick ?? -1;
+    if (brain.clinchTick !== startTick) {
+      brain.clinchTick = startTick;
+      brain.clinchTake = mixRoll(roll, 33) < (settings.clinchTechChance ?? settings.throwTechChance ?? 0);
+    }
+    if (brain.clinchTake && (self.grabbed.frame || 0) <= DEFENSE_RULES.clinchTechWindowFrames) {
+      return { movement: "hold", action: "throw", reason: "clinch-tech" };
+    }
+    return { movement: "hold", action: null, reason: "clinched" };
+  }
+
   // Release 1.7: juggled — tech out with an attack button once the sim's
   // escape window opens, at the difficulty's configured rate.
   if (!self.grounded && self.pendingKnockdown) {
@@ -290,6 +359,59 @@ export function decideAiIntent(brain, {
       return { movement: "hold", action: "light", reason: "air-tech" };
     }
     return { movement: "hold", action: null, reason: "juggled" };
+  }
+
+  // 5.3 CLOSE RANGE: punish a whiffed throw. The commitment band means a
+  // grab pressed just outside its reach now runs 42-51 frames of tail; that
+  // is the biggest free punish in the game and the brain must take it.
+  if (whiffedThrowPunish(observation, frame) && distance < 170
+    && mixRoll(roll, 34) < (settings.throwWhiffPunishChance || 0)) {
+    return {
+      movement: distance > 120 ? "advance" : "hold",
+      action: self.meter >= GRIT_RULES.superCost && mixRoll(roll, 35) < settings.meterChance
+        ? "super" : "heavy",
+      reason: "throw-whiff-punish",
+    };
+  }
+
+  // 5.3 OKIZEME: the meaty. The last rising frames carry hurtboxes now, so a
+  // knockdown is finally worth pressure: walk in while the opponent is still
+  // down, watch the rise, and swing so the active window lands on the 4-8
+  // vulnerable frames. A command grab is legal on the way up after a STRIKE
+  // knockdown (the 40-frame throw immunity is reserved for throws and techs),
+  // so grapplers mix it in — that is the strike/throw half of the read, and
+  // quick-rise/delayed-rise is what makes it a guess rather than a script.
+  //
+  // The take is decided ONCE per knockdown (the roll is a fresh RNG draw every
+  // tick, and stepAiBrain re-decides every frame while the reason is
+  // "oki-approach" so the press can be timed). Being early is not free: the
+  // strike meets the hurtbox-less half of the rise, pays the whiff tax and
+  // eats the reversal — the same risk a human takes guessing the rise.
+  const opponentRising = Boolean(observation.down) || observation.wakeupFrames > 0;
+  if (opponentRising && distance <= 240) {
+    if (frame > (brain.okiWindowEnd ?? -1)) {
+      brain.okiWindowEnd = frame + DEFENSE_RULES.knockdownFrames + DEFENSE_RULES.wakeupFrames + 30;
+      brain.okiTake = mixRoll(roll, 36) < (settings.meatyChance || 0);
+    }
+    if (brain.okiTake) {
+      if (meatyTiming(observation, frame, 5) && distance <= 170) {
+        const grabMeaty = distance <= THROW_RULES.grabRange
+          && mixRoll(roll, 37) < (settings.grabPressureChance || 0);
+        if (grabMeaty) return { movement: "hold", action: "throw", reason: "meaty-throw" };
+        return {
+          movement: "hold",
+          action: "light",
+          limb: mixRoll(roll, 38) < 0.45 ? "kick" : "punch",
+          down: mixRoll(roll, 39) < 0.4,
+          reason: "meaty",
+        };
+      }
+      return {
+        movement: distance > 118 ? "advance" : "hold",
+        action: null,
+        reason: "oki-approach",
+      };
+    }
   }
 
   // Release 1.7 wave 11: disrespect. With the opponent visibly down and the
@@ -341,7 +463,11 @@ export function decideAiIntent(brain, {
     return { movement: "hold", action: null, guard: true, down: mixRoll(roll, 9) < 0.36, reason: "wakeup-block" };
   }
 
-  if (distance < 96 * (settings.spacing || 1) && mixRoll(roll, 10) < settings.throwChance) {
+  // 5.3 CLOSE RANGE: the brain grabs strictly inside the throw's REACH, not
+  // the wider commit band — pressing in the band is now a whiffed throw with
+  // a real punish window, and a CPU that mashed it there would be feeding.
+  if (distance < Math.min(THROW_RULES.grabRange - 12, 96 * (settings.spacing || 1))
+    && mixRoll(roll, 10) < settings.throwChance) {
     // Corner-carry with a back throw sometimes, forward throw otherwise.
     const back = mixRoll(roll, 18) < (settings.grabPressureChance || 0) * 0.5;
     return { movement: "hold", action: "throw", throwBack: back, reason: back ? "back-throw" : "throw" };
@@ -433,7 +559,13 @@ export function stepAiBrain(brain, {
   if (brain.intent.comboKey) brain.lastComboKey = brain.intent.comboKey;
   brain.lastDecisionFrame = frame;
   brain.decisions += 1;
-  brain.nextDecisionFrame = frame
+  // 5.3 CLOSE RANGE: the two timed reads look again NEXT FRAME. A meaty
+  // window is 4-8 frames and a clinch tech 7, both far inside the 7-18-frame
+  // decision cadence, so without this the brain would only ever hit them by
+  // luck. The take itself is already latched (okiTake / clinchTake), so this
+  // buys timing, never extra probability.
+  const timedRead = brain.intent.reason === "oki-approach" || brain.intent.reason === "clinched";
+  brain.nextDecisionFrame = timedRead ? frame + 1 : frame
     + resolveAiSettings(brain.difficulty).decisionFrames
     + Math.floor(mixRoll(roll, 16) * 4);
   return inputFromIntent(brain.intent, self, observation, true, frame);

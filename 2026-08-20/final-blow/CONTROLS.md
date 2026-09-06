@@ -71,9 +71,13 @@ can also take over during the first six frames of a normal it accidentally start
 ## Throws and the finishing window
 
 - **Throw:** stand touching a grounded opponent and press **toward + LP or LK** to
-  throw forward, or **away + LP or LK** to throw backward and swap corners. Outside
-  the 104px grab range the same press is an ordinary normal — there is no grab-whiff
-  animation.
+  throw forward, or **away + LP or LK** to throw backward and swap corners. The throw
+  **reaches 104px** (checked when the press converts and again when the grab makes
+  contact), but the press **commits out to 140px**: in the band between the two the
+  grab comes out and misses. A whiffed grab runs its full 32–39 frames plus the whiff
+  tax and the re-arm gap — 39–52 frames, with the red WHIFF tell — so →+LP just
+  outside the clinch is a real risk rather than a free advancing light. Past 140px the
+  same press is an ordinary normal.
 - A grab needs a grounded, close, correctly facing opponent who is not in hitstun,
   blockstun, knockdown, wake-up or throw invulnerability.
 - **The grab is visible.** A landed throw opens a clinch: the victim is locked to the
@@ -84,12 +88,18 @@ can also take over during the first six frames of a normal it accidentally start
   like Ali G's judo arc or Jez's low trip.
 - A completed special motion always beats the proximity grab, so close-range command
   specials stay reachable.
-- The existing throw-tech window is unchanged: pressing a grab of your own inside the
-  tech window breaks it, pushes both fighters apart and grants both sides throw
-  invulnerability. A tech cancels any clinch that had already started.
-- The CPU grabs and techs on a per-difficulty profile (`throwTechChance` and
-  `grabPressureChance` in `engine/ai.mjs`), and holds a real direction when it does so
-  it goes through the same proximity rule a human uses.
+- **The tech is two windows.** Pressing a grab of your own in the **6 frames before**
+  contact breaks the throw as hands clash (**THROW TECH**, cyan). Pressing one in the
+  **first 7 frames of the clinch itself** breaks a hold that had already started
+  (**CLINCH TECH**, green — a harder shove apart, a longer flash and its own break
+  snap). 14 frames end to end, about 233 ms, so the tech is a reaction to the lift
+  animation rather than a pre-emption of the press. Either one pushes both fighters
+  apart and grants both sides throw invulnerability.
+- The CPU grabs and techs on a per-difficulty profile (`throwTechChance`,
+  `clinchTechChance` and `grabPressureChance` in `engine/ai.mjs`), and holds a real
+  direction when it does so it goes through the same proximity rule a human uses. It
+  keeps its own grabs strictly inside the 104px reach — the commit band is a risk for
+  it too.
 - **Final Blow:** once the finishing prompt appears, one fresh press of **LP** selects
   Finisher A or one fresh press of **LK** selects Finisher B. HP, HK and multi-button
   chords do not execute finishers. There is no proximity requirement: LP or LK works
@@ -99,6 +109,25 @@ can also take over during the first six frames of a normal it accidentally start
   three-beat executions: restraint, that fighter's assigned signature special,
   then one explicit arm or leg sever. A complete limb remains in the aftermath
   while the wound pumps arterial blood. See `FATALITIES.md` for the full matrix.
+
+## Getting up (5.3)
+
+- The last **6 frames** of the 16-frame rise carry hurtboxes, so a **meaty** — a
+  strike timed to be active exactly as the body becomes real — connects. An amber rim
+  and a ground arc light the body for those frames, and a strike that lands on them
+  prints **MEATY**.
+- On those frames only, **hold away (or down-away) to guard**. You still cannot
+  attack, walk, dash or jump on the way up, so the wake-up is a high/low guess plus a
+  timing guess, not a free hit. A guard held off the floor is never a Perfect Guard.
+- **Tap Up** during the knockdown to quick-rise (14 frames earlier, a 1-frame shorter
+  reversal window, **2 extra vulnerable frames**); **hold Down** to delay it (12
+  frames later, **2 fewer**). The attacker is guessing across a 26-frame spread.
+- After the rise there are still **4 invulnerable frames** — the reversal window a
+  wake-up special comes out of. A meaty that connected cancels them: you were hit
+  before you stood up.
+- A knockdown from a **strike** leaves you throwable 8 frames after the rise, so a
+  command grab is a legal wake-up option. A knockdown from a **throw** keeps the full
+  40 frames, so throws can never loop.
 
 ## Touch
 

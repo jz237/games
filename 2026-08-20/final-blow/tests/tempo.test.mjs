@@ -9,7 +9,7 @@ import {
   createAttackInstance,
   whiffRecoveryFrames,
 } from "../engine/foundation.mjs";
-import { MOVEMENT_RULES } from "../engine/defense.mjs";
+import { DEFENSE_RULES, MOVEMENT_RULES, THROW_RULES } from "../engine/defense.mjs";
 import { STRIDE_CADENCE, createFighterMove, strideClockAdvance } from "../engine/fighter-kits.mjs";
 import {
   GRIT_RULES,
@@ -178,6 +178,66 @@ function testReversalInvulnerabilityClampAndNeutralGate() {
   assert.doesNotMatch(gameSource, /if \(reversal \|\| fighter\.attacking\.reversalInvulnerableFrames\) \{/);
 }
 
+// 5.3 CLOSE RANGE — the whiffed throw. 4.4's tax table already covered
+// baseKind "throw" at 0.25, but nothing ever whiffed a throw: applyProximityGrab
+// refused to convert the press outside the grab range, so →+LP at range came
+// out as a safe advancing light instead. With the commit band the tax finally
+// has a swing to charge, and these are the numbers it charges.
+function testWhiffedThrowIsARealPunishWindow() {
+  // Every kit, so a future kit edit cannot ship a throw that whiffs for free.
+  for (const id of ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "devil", "commissioner"]) {
+    const grab = createFighterMove(id, "throw", {});
+    const tax = whiffRecoveryFrames(grab);
+    assert.equal(tax, Math.max(WHIFF_RECOVERY_MINIMUM_FRAMES, Math.round(grab.recoveryFrames * WHIFF_RECOVERY_TAX.throw)),
+      `${id}: a whiffed grab pays the throw row of the tax table`);
+    assert.ok(tax >= 5 && tax <= 8, `${id}: the throw tax measures 5-8 frames, got ${tax}`);
+    // The whole commitment a mistimed grab now costs: the move, the tax and
+    // the re-arm gap the 4.5 rule adds on top. Measured in the browser on
+    // deathblow: 38 + 8 + 4 = 50 frames, 833 ms of standing still.
+    const commitment = grab.totalFrames + tax + ATTACK_REARM_FRAMES;
+    assert.ok(commitment >= 39 && commitment <= 52,
+      `${id}: a whiffed grab commits 39-52 frames, got ${commitment}`);
+    // It must out-commit the fighter's own fastest button by a clear margin,
+    // or "I whiffed a grab" would not be a punishable mistake.
+    const jab = createFighterMove(id, "light", {});
+    assert.ok(commitment > jab.totalFrames + whiffRecoveryFrames(jab) + ATTACK_REARM_FRAMES + 12,
+      `${id}: a whiffed grab must cost far more than a whiffed jab`);
+  }
+  // And the tax is still the SMALLEST multiplier in the table — the length of
+  // the punish comes from the throw's own long recovery, not from a new
+  // penalty invented for this pass.
+  assert.equal(WHIFF_RECOVERY_TAX.throw, 0.25);
+  assert.ok(Object.values(WHIFF_RECOVERY_TAX).every((scale) => scale >= WHIFF_RECOVERY_TAX.throw));
+}
+
+// The commit band and the clinch tech, wired through game.js. The band is the
+// mechanism that makes the tax above reachable; the clinch tech is the answer
+// that keeps the read two-sided.
+function testThrowCommitBandAndClinchTechWiring() {
+  // Reach unchanged (104px × the 1.14 scale), commit band beyond it.
+  assert.equal(THROW_RULES.grabRange, Math.round(104 * 1.14));
+  assert.ok(THROW_RULES.attemptRange > THROW_RULES.grabRange);
+  // A back-walk covers backWalkSpeed / 60 units a frame, and the universal
+  // throws start in 4-5 frames: 5 × 4.98 = 25 units. The band has to be at
+  // least that wide or walking back would never turn a press into a whiff.
+  const backWalkPerFrame = MOVEMENT_RULES.backWalkSpeed / 60;
+  assert.ok(THROW_RULES.attemptRange - THROW_RULES.grabRange > backWalkPerFrame * 5,
+    "the commit band must exceed the ground a back-walk covers during throw startup");
+  // The two sim sites the band needs: the press converts on the wide range…
+  assert.match(gameSource, /if \(!fighter\.grabbed\s*\n\s*&& !inProximityGrabAttemptRange\(/);
+  // …and the grab only LANDS inside the reach, re-checked at contact.
+  assert.match(gameSource, /if \(attack\.kind === "throw" && Math\.abs\(victim\.x - attacker\.x\) > PROXIMITY_GRAB_RANGE\) return;/);
+  // The WHIFF tell is the 5.1 one, reached through the same noteWhiff site —
+  // no second tell system, and a throw whiff is counted apart from the rest.
+  assert.match(gameSource, /if \(!rollbackResimulating && attack\.kind === "throw"\) mechFxDebug\.throwWhiffs \+= 1;/);
+  // The clinch tech runs inside updateGrabHolds on the fighter field the
+  // rollback snapshot already carries.
+  assert.match(gameSource, /grab\.frame <= DEFENSE_RULES\.clinchTechWindowFrames/);
+  assert.match(gameSource, /startTick: state\.simulationTick,/);
+  assert.ok(DEFENSE_RULES.clinchTechWindowFrames > DEFENSE_RULES.throwTechWindowFrames,
+    "the reaction half is the longer half — it is the one a human actually uses");
+}
+
 testRearmGap();
 testWhiffTaxScalesWithRecovery();
 testWhiffTaxExemptions();
@@ -187,5 +247,7 @@ testVoltageCancelIsOnePerStringOnBlock();
 testBlockedHitsPayHalfGrit();
 testProjectileGritIsCappedPerProjectile();
 testReversalInvulnerabilityClampAndNeutralGate();
+testWhiffedThrowIsARealPunishWindow();
+testThrowCommitBandAndClinchTechWiring();
 
 console.log("Final Blow tempo tests passed");

@@ -241,6 +241,58 @@ export function rearmClickParams({ draw = 0, level = 1 } = {}) {
   };
 }
 
+/**
+ * 5.3 CLOSE RANGE — the clinch-break snap. The pre-contact throw tech already
+ * has the reviewed `block` take under it; the new REACTION tech (breaking a
+ * hold that had already started) needs to sound different or the player
+ * cannot tell the two reads apart. This is a synthesised layer over that take:
+ * a short cloth/grip rip (band-passed noise sweeping DOWN, the opposite
+ * direction to the dash scuff so the two never blur) plus two detuned square
+ * partials for the shove. `draw` comes from distinctDraw, so two clinch techs
+ * in a row can never share a pitch — the never-repeat-back-to-back rule the
+ * shared pool already lives by.
+ */
+export function clinchTechBreakParams({ draw = 0, level = 1 } = {}) {
+  const spread = clamp(draw, -1, 1);
+  const detune = 1 + spread * 0.11;
+  return {
+    rip: {
+      seconds: round4(0.115 * (1 - spread * 0.1)),
+      filterType: "bandpass",
+      freq: round4(1750 * detune),
+      freqEnd: round4(520 * detune),
+      q: 1.5,
+      peak: round4(0.052 * level),
+      attack: 0.003,
+    },
+    partials: [
+      {
+        wave: "square",
+        from: round4(268 * detune),
+        to: round4(126 * detune),
+        seconds: 0.1,
+        peak: round4(0.038 * level),
+        attack: 0.002,
+        filterType: "lowpass",
+        freq: round4(1200 * detune),
+        q: 0.7,
+      },
+      {
+        wave: "square",
+        delay: round4(0.028 * (1 + spread * 0.2)),
+        from: round4(402 * detune),
+        to: round4(196 * detune),
+        seconds: 0.08,
+        peak: round4(0.024 * level),
+        attack: 0.002,
+        filterType: "lowpass",
+        freq: round4(1600 * detune),
+        q: 0.7,
+      },
+    ],
+  };
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
 }

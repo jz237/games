@@ -59,12 +59,31 @@ export const COLLISION_RULES = Object.freeze({
 });
 
 export const DEFENSE_RULES = Object.freeze({
+  // 5.3 CLOSE RANGE: the tech is now two windows, not one. `throwTechWindow`
+  // is the PRE-contact half (a grab of your own already buffered when the
+  // clinch starts); `clinchTechWindowFrames` is the REACTION half, open on
+  // the first frames of the clinch itself. 6 + 8 = 14 frames ≈ 233 ms, which
+  // is a human reaction to the lift animation instead of a pre-emption.
   throwTechWindowFrames: 6,
-  // Long post-throw protection is what stops throw loops without a defensive answer.
+  clinchTechWindowFrames: 8,
+  // Long post-throw protection is what stops throw loops without a defensive
+  // answer. 5.3: reserved for THROWS AND TECHS ONLY. Before, every knockdown
+  // handed the riser 40 unthrowable frames on top of 64-76 hurtbox-less ones,
+  // so a knockdown from a sweep was worth nothing to a grappler.
   throwInvulnerableFrames: 40,
+  // A knockdown that came from a STRIKE pays the short immunity instead: long
+  // enough that the throw cannot be pre-buffered onto the wake tick, short
+  // enough that a command grab is a real okizeme option.
+  strikeKnockdownThrowImmuneFrames: 8,
   knockdownFrames: 48,
   wakeupFrames: 16,
+  // 5.3 OKIZEME: the first 10 rising frames stay hurtbox-less (the getting-up
+  // animation is not a fair target) and the LAST 6 are vulnerable, so a meaty
+  // has a timing to hit. Derived pair — `wakeupInvulnerableFrames` used to be
+  // dead config; it is now exactly wakeupFrames − wakeupVulnerableFrames and
+  // the depth test asserts the two stay consistent.
   wakeupInvulnerableFrames: 10,
+  wakeupVulnerableFrames: 6,
   reversalWindowFrames: 4,
   counterDamageMultiplier: 1.3,
   counterHitstunBonusFrames: 7,
@@ -137,6 +156,14 @@ export const WAKEUP_RULES = Object.freeze({
   quickRiseFrames: 14,
   delayFrames: 12,
   quickRiseReversalPenaltyFrames: 1,
+  // 5.3 OKIZEME: the rise options now move the MEATY timing as well as the
+  // wake tick. The 26-frame spread between a quick rise (−14) and a delayed
+  // one (+12) is what the attacker has to read; on top of it a quick rise
+  // spends 2 extra frames vulnerable (you came up fast and sloppy) and a
+  // delayed rise 2 fewer (you waited and covered up), so guessing the option
+  // wrong costs the attacker the window even if the frame count is close.
+  quickRiseVulnerableBonusFrames: 2,
+  delayVulnerableReductionFrames: 2,
 });
 
 export function resolveWakeOption(input = {}) {
@@ -144,6 +171,68 @@ export function resolveWakeOption(input = {}) {
   if (input.down) return "delay";
   return null;
 }
+
+/**
+ * 5.3 OKIZEME — how many of the trailing wake-up frames carry hurtboxes, for
+ * the wake option this fighter actually chose. Pure; game.js, the renderers
+ * and engine/ai.mjs all read it so the meaty window is one number everywhere.
+ */
+export function wakeupVulnerableFrames(wakeOption = "") {
+  const base = DEFENSE_RULES.wakeupVulnerableFrames;
+  if (wakeOption === "quick") return base + WAKEUP_RULES.quickRiseVulnerableBonusFrames;
+  if (wakeOption === "delay") return Math.max(1, base - WAKEUP_RULES.delayVulnerableReductionFrames);
+  return base;
+}
+
+/**
+ * True on the trailing wake-up frames a meaty may hit. The fighter is still
+ * rising — no attacks, no dash, no jump — but the body is real, and a held
+ * guard direction does block (game.js reads guardHeight on these frames), so
+ * the wake-up is a high/low/timing read rather than a coin flip.
+ */
+export function isWakeupVulnerable(fighter) {
+  const wakeup = fighter?.wakeupFrames || 0;
+  if (wakeup <= 0) return false;
+  return wakeup <= wakeupVulnerableFrames(fighter.wakeOption);
+}
+
+/**
+ * The single "can a STRIKE touch this body at all?" predicate. Hitboxes go
+ * through getHurtboxes; projectiles and paint traps do their own overlap test
+ * against the same boxes, so they ask this instead of re-listing the states.
+ */
+export function isStrikeVulnerable(fighter) {
+  if (!fighter) return false;
+  if (fighter.invulnerableFrames > 0 || fighter.down || fighter.knockdownFrames > 0) return false;
+  if ((fighter.wakeupFrames || 0) > 0) return isWakeupVulnerable(fighter);
+  return true;
+}
+
+/**
+ * 5.3 CLOSE RANGE — throw commitment. `grabRange` is the reach a throw
+ * actually has, checked BOTH when the →/←+LP shortcut converts the press and
+ * again when the grab makes contact; `attemptRange` is the wider band where
+ * the press still commits to the grab. Between the two the throw comes out
+ * and misses, which is the whiff risk that used to be absent (the same press
+ * silently became a safe advancing light).
+ *
+ * Measured on the live boxes: the universal throw's authored hitbox reaches
+ * 152-167 world units against a standing hurtbox, while the press gate was
+ * 119 — so the old contact test let a throw pressed at 119 still land after
+ * the victim had walked 38 units away. The contact gate removes that slop and
+ * makes CONTROLS.md's "104px grab range" literally true. Command grabs
+ * (level THROW, kind "special") keep their own authored reach untouched.
+ */
+export const THROW_RULES = Object.freeze({
+  grabRange: spatial(104),
+  attemptRange: spatial(140),
+  // The clinch tech shoves harder than the pre-contact tech: you broke out of
+  // a hold rather than clashing hands, and the extra gap is the visible tell.
+  techPushback: 260,
+  clinchTechPushback: 330,
+  techFlashFrames: 18,
+  clinchTechFlashFrames: 24,
+});
 
 /**
  * Release 1.7 DEPTH — air recovery (juggle tech). Any attack button pressed
@@ -765,7 +854,14 @@ export const HURTBOX_MAX_EXTENT = Math.max(
 ) * FIGHTER_SCALE;
 
 export function getHurtboxes(fighter) {
-  if (fighter.invulnerableFrames > 0 || fighter.down || fighter.knockdownFrames > 0 || fighter.wakeupFrames > 0) return [];
+  if (fighter.invulnerableFrames > 0 || fighter.down || fighter.knockdownFrames > 0) return [];
+  // 5.3 OKIZEME: a rising fighter is hurtbox-less for the first 10 frames and
+  // then REAL for the last 6 (see isWakeupVulnerable). The rising body wears
+  // the crouch shape — it has not stood up yet — so a meaty has to be aimed
+  // at the floor, not at where the head will be.
+  const wakeup = (fighter.wakeupFrames || 0) > 0;
+  if (wakeup && !isWakeupVulnerable(fighter)) return [];
+  if (wakeup) return HURTBOX_SHAPES.crouch.map((box) => localBoxToWorld(fighter, { ...box }));
   let boxes;
   if (!fighter.grounded) {
     boxes = HURTBOX_SHAPES.air.map((box) => ({ ...box }));

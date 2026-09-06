@@ -175,6 +175,32 @@ settle, the tremble and the hunch) is in MOTION-ATLAS.md.
   warmed / lateFallbacks / evicted, per-side bank stages and cache sizes —
   the probe for "no growth across an arcade ladder".
 
+## The wake-up vulnerable rim (5.3, sweep #10)
+
+Before 5.3 a rising fighter had no hurtboxes at all, so there was nothing to draw —
+and nothing to aim at. Now the last 4-8 rising frames are real (the count moves with
+the quick-rise / delayed-rise option), and that window has to be **seen** or a meaty
+is a guess about invisible state.
+
+- **What draws.** In `drawFighter`'s local space, under the sprite, on the same layer
+  as the whiff fringe: an enlarged silhouette in amber `#ffb347` at 1.055-1.08 scale
+  (so the sprite covers all but a 4-8 px rim), plus a screen-blended ground arc under
+  the feet. Both pop on the exact frame `isWakeupVulnerable` turns true and brighten
+  as the window closes — 0.55 → 0.90 alpha across it.
+- **Why amber.** It is deliberately neither the whiff tell's hot red `#ff3f55` nor
+  any fighter's accent, so "my swing met air", "I am super-ready" and "this body is
+  hittable right now" can never read as one another.
+- **Never dropped.** Like the whiff fringe and the super aura this is gameplay
+  information, so reduced motion and the battery profile keep the rim and the arc
+  (there are no trails or ghosts here to drop).
+- **Probe.** `presentationDebug.wakeupTells` counts rims drawn **this frame** — the
+  whole of `presentationDebug` is zeroed every rendered frame — and is surfaced as
+  `snapshot().violence.wakeupTells` and `__finalBlowQa.oki().wakeupTells`. Pause on a
+  vulnerable frame and it reads 1; pause on a standing fighter and it reads 0.
+- **Gap.** The CINEMA 3D fighter layer has no counterpart yet; the whiff tell's
+  `uFbWhiffRim` is the pattern to copy when it does (and that means a program cache
+  key bump in `renderer/three/host-contract.mjs`).
+
 ## Traps
 
 - `ctx.filter` is also used by `drawFighter` for hit flashes; the reflection

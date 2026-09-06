@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -8,13 +9,18 @@ import {
   GUARD_RULES,
   PERFECT_GUARD_RULES,
   STUN_RULES,
+  THROW_RULES,
   WAKEUP_RULES,
   canAirRecover,
   createCombatMove,
   createDepthFighterFields,
+  getHurtboxes,
   guardGainForAttack,
   isPerfectGuard,
+  isStrikeVulnerable,
+  isWakeupVulnerable,
   resolveWakeOption,
+  wakeupVulnerableFrames,
 } from "../engine/defense.mjs";
 import {
   checksumState,
@@ -174,7 +180,6 @@ test("perfect guard re-arms inside a string on a fresh back tap (block economy)"
   // directional back edge (guardInputHeld) while blockstun is live; the
   // engine-internal input.guard channel the CPU drives is deliberately not
   // part of the edge.
-  const { readFileSync } = await import("node:fs");
   const source = readFileSync(new URL("../game.js", import.meta.url), "utf8");
   assert.match(source, /const backTapped = directionContext\(fighter, input\)\.backHeld;/);
   assert.match(source, /const guardTapEdge = backTapped && !fighter\.guardInputHeld;/);
@@ -256,4 +261,187 @@ test("every DEPTH fighter field round-trips the rollback snapshot machinery", ()
     const changed = { ...createDepthFighterFields(), [name]: mutated };
     assert.notEqual(checksumState(changed), baseline, `${name} must be checksum-visible`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// 5.3 OKIZEME — the wake-up is a read, not a hard reset
+//
+// Sweep item #10: getHurtboxes returned [] for `down || knockdownFrames > 0 ||
+// wakeupFrames > 0`, so nothing could be timed against a rising fighter for
+// 64 frames (76 with the Down delay), and EVERY knockdown then handed out 40
+// throw-immune frames. Measured on the live build before this pass: after a
+// TREMOR TAP knockdown the victim was untouchable for 64 frames and
+// unthrowable for 104, while the knockdown starters are −12 to −20 on block.
+// The round genuinely restarted after every knockdown.
+// ---------------------------------------------------------------------------
+
+const risingFighter = (overrides = {}) => ({
+  x: 500, y: 600, facing: 1, grounded: true, crouch: false, guardHeight: "high",
+  attacking: null, attackFrame: 0, invulnerableFrames: 0, down: false,
+  knockdownFrames: 0, wakeupFrames: 0, wakeOption: "", ...overrides,
+});
+
+test("the last wake-up frames carry hurtboxes so a meaty has a timing", () => {
+  // The split is derived, not two independent numbers: the hurtbox-less half
+  // of the rise is exactly what is left after the vulnerable half.
+  assert.equal(
+    DEFENSE_RULES.wakeupFrames - DEFENSE_RULES.wakeupVulnerableFrames,
+    DEFENSE_RULES.wakeupInvulnerableFrames,
+    "wakeupInvulnerableFrames must stay the derived complement of the meaty window",
+  );
+  assert.ok(DEFENSE_RULES.wakeupVulnerableFrames >= 4 && DEFENSE_RULES.wakeupVulnerableFrames <= 8,
+    "the meaty window is a real timing (4-8 frames = 67-133 ms), not a free hit and not a pixel");
+
+  // Down and knocked down stay untouchable — the lie-down animation is not a
+  // fair target, and that half is unchanged from 1.7.
+  assert.deepEqual(getHurtboxes(risingFighter({ down: true, knockdownFrames: 20 })), []);
+  assert.deepEqual(getHurtboxes(risingFighter({ invulnerableFrames: 3 })), []);
+
+  // The rise: hurtbox-less for the first 10 frames, real for the last 6.
+  const seen = [];
+  for (let wakeup = DEFENSE_RULES.wakeupFrames; wakeup >= 1; wakeup -= 1) {
+    const boxes = getHurtboxes(risingFighter({ wakeupFrames: wakeup }));
+    seen.push(boxes.length > 0);
+    assert.equal(boxes.length > 0, isWakeupVulnerable(risingFighter({ wakeupFrames: wakeup })),
+      `wakeupFrames ${wakeup}: the boxes and the predicate must agree`);
+  }
+  assert.equal(seen.filter(Boolean).length, DEFENSE_RULES.wakeupVulnerableFrames);
+  assert.equal(seen.slice(0, DEFENSE_RULES.wakeupInvulnerableFrames).some(Boolean), false,
+    "the first half of the rise is still untouchable");
+  assert.equal(seen.slice(-DEFENSE_RULES.wakeupVulnerableFrames).every(Boolean), true,
+    "the last frames are all vulnerable — the window is contiguous, so it can be aimed at");
+
+  // The rising body wears the CROUCH shape: it has not stood up yet, so a
+  // meaty has to be aimed at the floor rather than at head height.
+  const rising = getHurtboxes(risingFighter({ wakeupFrames: 1 }));
+  const crouching = getHurtboxes(risingFighter({ crouch: true }));
+  assert.deepEqual(rising, crouching, "a rising body is the crouch shape");
+  assert.ok(rising.length < getHurtboxes(risingFighter()).length, "and is smaller than a standing one");
+
+  // Projectiles and paint traps ask the same question the fists do.
+  assert.equal(isStrikeVulnerable(risingFighter({ wakeupFrames: 1 })), true);
+  assert.equal(isStrikeVulnerable(risingFighter({ wakeupFrames: DEFENSE_RULES.wakeupFrames })), false);
+  assert.equal(isStrikeVulnerable(risingFighter({ down: true, knockdownFrames: 4 })), false);
+  assert.equal(isStrikeVulnerable(risingFighter()), true);
+  assert.equal(isStrikeVulnerable(null), false);
+});
+
+test("quick rise and delayed rise move the meaty window, so the rise is a guess", () => {
+  const base = wakeupVulnerableFrames("");
+  const quick = wakeupVulnerableFrames("quick");
+  const delayed = wakeupVulnerableFrames("delay");
+  assert.equal(quick, base + WAKEUP_RULES.quickRiseVulnerableBonusFrames);
+  assert.equal(delayed, Math.max(1, base - WAKEUP_RULES.delayVulnerableReductionFrames));
+  assert.ok(quick > base && delayed < base, "the three options must be three different windows");
+  assert.ok(delayed >= 1, "a delayed rise is still meaty-able — it is a mix-up, not immunity");
+
+  // The frame-count spread the attacker actually has to read: a quick rise
+  // gets up 14 frames early and a delay 12 late, so the window the attacker is
+  // aiming at moves by 26 frames (433 ms) between the two extremes. That is a
+  // genuine guess, not a reaction.
+  const spread = WAKEUP_RULES.quickRiseFrames + WAKEUP_RULES.delayFrames;
+  assert.equal(spread, 26);
+  assert.ok(spread > DEFENSE_RULES.wakeupVulnerableFrames * 2,
+    "the option spread must be wider than the window itself or one timing covers both");
+
+  // A fighter carrying its option resolves its own window.
+  assert.equal(isWakeupVulnerable({ wakeupFrames: 7, wakeOption: "quick" }), true);
+  assert.equal(isWakeupVulnerable({ wakeupFrames: 7, wakeOption: "" }), false);
+  assert.equal(isWakeupVulnerable({ wakeupFrames: 5, wakeOption: "delay" }), false);
+  assert.equal(isWakeupVulnerable({ wakeupFrames: 4, wakeOption: "delay" }), true);
+  assert.equal(isWakeupVulnerable({ wakeupFrames: 0 }), false);
+});
+
+test("the 40-frame throw immunity belongs to throws and techs, not to every knockdown", async () => {
+  // Old: 40 frames on EVERY wake-up, so a knockdown left the victim
+  // unthrowable for 40 frames on top of the 64 hurtbox-less ones — command
+  // grabs could never follow a knockdown at all. New: a strike knockdown pays
+  // the short one, and only a knockdown that came from a throw pays 40.
+  assert.equal(DEFENSE_RULES.throwInvulnerableFrames, 40);
+  assert.ok(DEFENSE_RULES.strikeKnockdownThrowImmuneFrames > 0,
+    "a strike knockdown still needs enough immunity that a throw cannot be pre-buffered onto the wake tick");
+  assert.ok(DEFENSE_RULES.strikeKnockdownThrowImmuneFrames < DEFENSE_RULES.wakeupFrames,
+    "…but it must expire before the rise finishes, or nothing changed");
+  assert.ok(DEFENSE_RULES.strikeKnockdownThrowImmuneFrames * 4 <= DEFENSE_RULES.throwInvulnerableFrames,
+    "the anti-throw-loop number stays a different order of magnitude from the strike one");
+
+  const source = readFileSync(new URL("../game.js", import.meta.url), "utf8");
+  // The latch is set by the throw itself and consumed (and cleared) by the
+  // wake tick, so it can never leak into the next knockdown.
+  assert.match(source, /victim\.throwKnockdown = true;/);
+  assert.match(source, /fighter\.throwInvulnerableFrames = fighter\.throwKnockdown\s*\?\s*DEFENSE_RULES\.throwInvulnerableFrames\s*:\s*DEFENSE_RULES\.strikeKnockdownThrowImmuneFrames;/);
+  assert.match(source, /fighter\.throwKnockdown = false;/);
+  assert.match(source, /throwKnockdown: false,/, "the latch is a plain fighter field so rollback carries it");
+  // A meaty that connected on the way up cancels the reversal grant: without
+  // this the victim got 4 invulnerable frames mid-hitstun and the meaty's own
+  // combo dropped.
+  assert.match(source, /const meatied = fighter\.hitstunFrames > 0 \|\| fighter\.blockstunFrames > 0;/);
+  assert.match(source, /const reversalFrames = meatied \? 0 :/);
+  assert.match(source, /fighter\.justWoke = !meatied;/);
+  // And the stun clocks run during the rise, so a meaty's hitstun is honest.
+  assert.match(source, /} else if \(fighter\.wakeupFrames > 0\) \{\s*\n\s*fighter\.wakeupFrames -= 1;[\s\S]{0,400}?fighter\.hitstunFrames = Math\.max\(0, fighter\.hitstunFrames - 1\);/);
+  // The rising fighter may guard on the vulnerable frames — the wake-up is a
+  // high/low read, not a coin flip.
+  assert.match(source, /if \(isWakeupVulnerable\(fighter\)\) \{\s*\n\s*const risingDirection = directionContext\(fighter, input\);/);
+});
+
+// ---------------------------------------------------------------------------
+// 5.3 CLOSE RANGE — the throw has a whiff and a reactable tech
+//
+// Sweep item #13: the only tech was the 6 sim frames BEFORE contact (a
+// pre-emption, not a reaction), `updateGrabHolds` ran the 11-18-frame clinch
+// with no tech check at all although CONTROLS.md promised one, and an
+// out-of-range →+LP silently became a safe advancing light — so →+LP at close
+// range was a no-loss option-select: throw / tech / safe poke.
+// ---------------------------------------------------------------------------
+
+test("the throw commits further than it reaches, so a grab can whiff", () => {
+  assert.ok(THROW_RULES.attemptRange > THROW_RULES.grabRange,
+    "the press must commit beyond the reach or there is no whiff risk");
+  // Measured on the live build: the universal throw's authored hitbox reaches
+  // 152-167 world units against a standing hurtbox (163-167 for alan, the
+  // longest), while the press gate was 119 — so the contact test let a throw
+  // pressed at the gate still land after the victim had walked ~38 units away,
+  // and neither a back-walk nor a backdash could escape a grab it had already
+  // seen. The contact gate now re-checks grabRange, and the commit band is the
+  // 41 units between the two.
+  const band = THROW_RULES.attemptRange - THROW_RULES.grabRange;
+  assert.equal(THROW_RULES.grabRange, 119, "104px × the 1.14 fighter scale — the documented reach, unchanged");
+  assert.equal(THROW_RULES.attemptRange, 160, "140px × the same scale");
+  assert.ok(band >= 30 && band <= 60,
+    "the band is a quarter to half a body width: real spacing risk, but the forward light stays reachable past it");
+});
+
+test("the clinch tech is a reaction window, and it never covers the whole hold", () => {
+  const pre = DEFENSE_RULES.throwTechWindowFrames;
+  const clinch = DEFENSE_RULES.clinchTechWindowFrames;
+  assert.equal(pre, 6, "the pre-contact half is unchanged");
+  assert.ok(clinch > 0, "the clinch half is the half CONTROLS.md promised and the code never had");
+  // Total reactable span: a press from 6 frames before contact through the
+  // 7th clinch frame breaks the hold — 14 ticks, 233 ms at 60 Hz, which is a
+  // reaction to the lift animation rather than a pre-emption of it. Measured
+  // in the browser: pressing on observed clinch frames 1-7 techs, frame 8 does
+  // not, and the throw lands for its full 19.7.
+  const spanTicks = pre + clinch;
+  assert.equal(spanTicks, 14);
+  assert.ok(spanTicks / 60 >= 0.2 && spanTicks / 60 <= 0.28,
+    `the window must sit in human reaction range, got ${(spanTicks / 60 * 1000).toFixed(0)} ms`);
+  // The shortest authored hold is 11 frames (jez/ali/benny); the window has to
+  // stay inside it or the "clinch" would simply be teched by holding a button.
+  assert.ok(clinch < 11, "the window must end before the shortest hold does");
+  // The break reads differently from the clash: harder shove, longer flash.
+  assert.ok(THROW_RULES.clinchTechPushback > THROW_RULES.techPushback);
+  assert.ok(THROW_RULES.clinchTechFlashFrames > THROW_RULES.techFlashFrames);
+
+  const source = readFileSync(new URL("../game.js", import.meta.url), "utf8");
+  assert.match(source, /if \(grab\.frame <= DEFENSE_RULES\.clinchTechWindowFrames/);
+  assert.match(source, /victim\.lastThrowInputFrame >= \(grab\.startTick \?\? -Infinity\)/);
+  assert.match(source, /techThrow\(attacker, victim, \{ clinch: true \}\);/);
+  // The universal throw re-checks its reach at CONTACT; command grabs (level
+  // THROW, kind "special") keep their own authored reach.
+  assert.match(source, /if \(attack\.kind === "throw" && Math\.abs\(victim\.x - attacker\.x\) > PROXIMITY_GRAB_RANGE\) return;/);
+  // The press commits over the wider band…
+  assert.match(source, /if \(!fighter\.grabbed\s*\n\s*&& !inProximityGrabAttemptRange\(fighter, state\.fighters\[1 - fighter\.side\]\)\) return;/);
+  // …and a fighter already in a clinch may always answer it.
+  assert.match(source, /const PROXIMITY_GRAB_ATTEMPT_RANGE = THROW_RULES\.attemptRange;/);
 });

@@ -80,7 +80,9 @@ deterministic under replay and rollback.
 
 Best-of-three with the existing 99-count timer, unchanged. Post-throw invulnerability
 rose from 30 to 40 frames so there is no throw loop without a defensive answer, and
-knockdown/wake-up were retuned (48/16) to keep okizeme readable.
+knockdown/wake-up were retuned (48/16) to keep okizeme readable. **Superseded in part
+by the 5.3 close-range pass below**: the 40 frames are now paid only after a throw or
+a tech, and the wake-up carries hurtboxes for its last few frames.
 
 #### Announcer and clock truth (roadmap2 w51, sweep #22/#27)
 
@@ -289,3 +291,136 @@ the meter phase, the totals, what the last frame drew, the lab line). Tests:
 `tests/tempo-tells.test.mjs` (phase arithmetic, meter, readout, source pins in
 both renderers), `tests/shared-sfx.test.mjs` (click), `tests/cinema-host.test.mjs`
 (program cache key v12 for the two new uniforms).
+
+## Close range: okizeme and the throw (5.3 "Spectacle", sweep #10 and #13)
+
+Two close-range situations had no read in them at all. Both are fixed here, and both
+fixes are read-shaped: a new option on one side always comes with the answer to it on
+the other.
+
+### The wake-up was a hard reset (#10)
+
+`getHurtboxes` returned `[]` for `down || knockdownFrames > 0 || wakeupFrames > 0`,
+so **nothing could be timed against a rising fighter for 64 frames** (76 after a
+delayed rise), and the wake tick then handed out 40 throw-immune frames on *every*
+knockdown — measured on the live build, a TREMOR TAP knockdown left the victim
+untouchable for 64 frames and unthrowable for 104, while the knockdown starters that
+put them there are −12 to −20 on block. The round genuinely restarted after every
+knockdown. DeathBlow's AFTERSHOCK GRAB and the Commissioner's BINDING CLAUSE could
+never follow one, which contradicted their own kit summaries.
+
+| Value | Before | After | Why |
+| --- | --- | --- | --- |
+| Hurtboxes while `down` / `knockdownFrames > 0` | none | none | Unchanged — the lie-down is not a fair target. |
+| Hurtboxes on the 16 rising frames | none for all 16 | none for the first **10**, the **crouch shape** for the last **6** (`DEFENSE_RULES.wakeupVulnerableFrames`) | A meaty has a timing. `wakeupInvulnerableFrames: 10` was dead config; it is now the derived complement and the depth test pins the pair. |
+| Rising body shape | — | crouch (`HURTBOX_SHAPES.crouch`, 2 boxes vs the standing 3) | A rising fighter has not stood up; a meaty is aimed at the floor, not at head height. |
+| Guard while rising | impossible | the vulnerable frames accept back / down-back | The meaty is a **high/low read**, not a tax on being knocked down. The riser still cannot attack, walk, dash or jump. |
+| Perfect Guard while rising | n/a | never (`guardStartedTick` is stamped `-Infinity` on those frames) | The rising guard goes false→true on the first vulnerable frame, so without the exclusion every blocked meaty would land inside the 4-frame just-defend window and pay the *blocker* Grit. |
+| Reversal window after a landed meaty | 4 invulnerable frames regardless | **0** when the riser is in hitstun or blockstun at the wake tick | You were touched before you stood up. Without this a landed meaty handed the victim 4 invulnerable frames mid-hitstun and dropped its own combo. |
+| Hitstun / blockstun clocks during the rise | frozen | tick normally | Otherwise a meaty's hitstun froze until the fighter finished standing and the move's frame data lied. |
+| Throw immunity on the wake tick | **40 on every knockdown** | 40 only after a **throw or a tech** (`throwKnockdown` latch); **8** after a strike (`strikeKnockdownThrowImmuneFrames`) | 40 is the anti-throw-loop rule and belongs to throws. 8 is long enough that a grab cannot be pre-buffered onto the wake tick and short enough that a command grab is a real okizeme option. |
+| Meaty window vs the wake option | — | neutral **6**, quick rise **8**, delayed rise **4** (`WAKEUP_RULES.quickRiseVulnerableBonusFrames` / `delayVulnerableReductionFrames`) | The 1.7 DEPTH rise options finally change something the attacker cares about. |
+
+Measured in the browser (deathblow TREMOR TAP knockdown, jez rising, `__finalBlowQa.oki()`):
+
+- Rise frames 16→7 report `hurtboxes: 0`; frames 6→1 report `hurtboxes: 2, vulnerable: true`;
+  frame 0 reports `invulnerableFrames: 4` (the reversal window).
+- Throw immunity on the wake tick: **8** after the special knockdown, **40** after a
+  CONCRETE POUR — the latch reads `throwKnockdown: false` / `true` respectively.
+- Meaty press window with deathblow's jab (S4): pressed at rise frames **8–14** the
+  active window lands on the vulnerable frames and `meaties` increments; pressed at
+  4–7 the jab arrives after the rise, meets the 4 reversal frames, and is exactly the
+  attempt a wake-up DP beats.
+- The high/low read, WRECKING HOOK (overhead) vs SPINE SPLITTER (crouching, mid):
+  overhead into a high-guarding riser is **0 damage, `blocked-overhead`**; the same
+  overhead into a low-guarding riser is **20.7**; the crouching heavy chips 5.6 either
+  way. Rising guard never registers as `perfect-guard` any more.
+- Total untouchable frames after a knockdown: **64 → 58** neutral, **76 → 72** delayed,
+  **50 → 42** on a quick rise.
+
+The wake-up window is drawn: a hot amber rim (`#ffb347`, deliberately neither the
+whiff fringe's red nor the fighter's accent) pops onto the body on the frame the
+hurtboxes appear and brightens as the window closes, with a low ground arc under the
+feet. It is gameplay information, so reduced motion and the battery profile keep it.
+`snapshot().violence.wakeupTells` is its per-frame draw count (presentationDebug is
+zeroed every rendered frame, unlike the monotonic totals beside it). A strike that
+lands on those frames prints **MEATY** (or **MEATY BLOCKED**) exactly the way a
+counter-hit prints COUNTER.
+
+### The throw had no whiff and no reactable tech (#13)
+
+`techThrow` was only ever called at contact, gated on `lastThrowInputFrame` being
+within 6 frames — a *pre-emption*, not a reaction. `updateGrabHolds` ran the 11–18
+frame clinch with no tech check at all, so CONTROLS.md's "a tech cancels any clinch
+that had already started" was simply false. And an out-of-range →+LP silently became
+the forward light, which is safe on block and advances 131–192 px/s: at close range
+→+LP was a no-loss option-select (throw / tech / safe poke).
+
+| Value | Before | After | Why |
+| --- | --- | --- | --- |
+| Throw reach | press gated at 119 (104 × the 1.14 scale); **contact by hitbox only, which reaches 152–167** | 119 at the press **and again at contact** (`THROW_RULES.grabRange`) | The documented 104px is now literally true. The old slop meant a throw pressed at the gate still landed after the victim had walked ~38 units away — a back-walk or a backdash could not escape a grab it had already seen. Command grabs (level THROW, kind `"special"`) keep their own authored reach untouched. |
+| Where →+LP commits | inside 119 only; outside it, the forward light | out to **160** (`THROW_RULES.attemptRange`, 140 × the scale) | The 41-unit band between reach and commitment is the whiff risk. Every state gate is unchanged — a press during a blockstring is still the frame trap, never a whiffed grab. |
+| Whiffed throw | could not happen | runs the full move + the 4.4 tax + the 4.5 re-arm gap | `WHIFF_RECOVERY_TAX.throw` (0.25) already existed; nothing had ever whiffed a throw for it to charge. |
+| Tech window | 6 frames, all **before** contact | 6 before **+ clinch frames 1–7** (`DEFENSE_RULES.clinchTechWindowFrames: 8`) | 14 ticks ≈ **233 ms** — a reaction to the lift animation instead of a pre-emption of it, which is what the docs have promised since 1.1C. |
+| Throw damage and knockdown | 15.1–20.9, unblockable, knockdown | unchanged | The fix is risk, not a nerf. |
+
+Measured in the browser (deathblow vs jez, `__finalBlowQa.oki()` / `.tempo()`):
+
+- Press distance sweep, holding forward: **91–135 connects** (the forward walk closes
+  ~17 units during the 4–5 frame startup, so the contact gate is met), **140–160 is a
+  whiffed grab**, **165+ is the forward light** (BODY CHECK, 10.3 damage, 27 frames).
+- The whiffed grab costs 38 → **46 frames** (tax 8) plus the 4-frame re-arm gap = **50
+  frames, 833 ms**, and `tempo()` reports `phase: "whiff", taxFrames: 8` with the
+  **WHIFF** text at the hand. Per kit the tax measures 5–8 frames and the whole
+  commitment 39–52 frames — always more than double a whiffed jab's.
+- A defender who **backdashes** on the grab now escapes it: the throw whiffs (tax 8,
+  `throwWhiffs` +1) and the two end 222 units apart.
+- Clinch tech: pressing an answering grab on observed clinch frames **1–7 breaks the
+  hold** (0 damage, `throw-tech`, `clinchTechs` +1); frame **8 and later does not**
+  and the throw lands for its full 19.7.
+
+The break reads and sounds different from the pre-contact clash so the two are not one
+event: **CLINCH TECH** in green rather than THROW TECH in cyan, a 330 (vs 260) push
+apart, a 24-frame (vs 18) throw-tech flash pose, foot dust off both bodies and a block
+ring at the point the hold came apart. Audio is a new synthesised layer over the
+reviewed `block` take (no take was regenerated, re-encoded or renamed):
+`clinchTechBreakParams` in `engine/shared-sfx.mjs` is a band-passed rip sweeping
+1750→520 Hz — *downward*, the opposite of the dash scuff, so the two never blur — over
+two falling detuned square partials, drawn through `distinctDraw` so two clinch techs
+in a row can never share a pitch.
+
+### The CPU plays both sides of it
+
+`engine/ai.mjs` gains three chances per difficulty — `meatyChance`,
+`clinchTechChance`, `throwWhiffPunishChance` (0 for Passive, rising through the ladder
+to 0.72 / 0.66 / 0.84 at FINAL) — and two pure timing helpers,
+`meatyTiming(observation, frame, startup)` and `whiffedThrowPunish(observation,
+frame)`, which compensate for the reaction delay exactly the way `justDefendHold`
+does. Everything is read off the **visible** observation; the wake option is
+deliberately not observable, because guessing it is the read.
+
+Both new reads are timed windows far inside the 7–18-frame decision cadence, so
+`stepAiBrain` re-decides on the next frame while the intent is `oki-approach` or
+`clinched`. The *take* is latched once per knockdown (`okiTake`) and once per clinch
+(`clinchTake`) — `roll` is a fresh RNG draw every tick in game.js, so re-deciding
+every frame buys timing and never extra probability. The brain also stops grabbing at
+the edge of the commit band: its own throws stay strictly inside `grabRange`, because
+feeding a 50-frame whiffed grab would be free money.
+
+Measured (headless, `__finalBlowQa.oki()`): a FINAL CPU against a static seat over
+9,000 frames converted **5 of 11 meaty attempts across 13 knockdowns** and took the
+whiff risk 7 times; against a scripted grabber over 6,000 frames the clinch-tech rate
+was **2/17 rookie, 1/9 street, 6/9 final** — the authored 0.08 / 0.22 / 0.66.
+
+QA: `__finalBlowQa.oki()` returns the two ranges, both tech windows, and per side the
+wake clock, the meaty window, the live hurtbox count, which throw immunity the riser
+is owed and the live clinch, plus the `meaties` / `clinchTechs` / `throwWhiffs` /
+`wakeupTells` / `clinchTechBreaks` totals. `snapshot().fighters[i]` adds
+`wakeupVulnerable`, `wakeupVulnerableFrames`, `throwKnockdown` and
+`lastThrowInputFrame`, and `__finalBlowQa.fighter(side, …)` can now set
+`throwInvulnerableFrames` for probe setup. Tests: `tests/depth-defense.test.mjs` (the
+hurtbox split, the derived pin, the rise options, the immunity split, the commit band,
+the clinch window, and the game.js wiring pins), `tests/tempo.test.mjs` (the whiffed
+throw's per-kit tax and commitment arithmetic, the band vs the back-walk),
+`tests/ai.test.mjs` (meaty timing, the latches, the whiff punish, and a proof the CPU
+never grabs outside its reach), `tests/shared-sfx.test.mjs` (the break snap).

@@ -25,6 +25,7 @@ import {
   PERFECT_GUARD_RULES,
   STUN_RULES,
   TAUNT_RULES,
+  THROW_RULES,
   WAKEUP_RULES,
   WALL_BOUNCE_RULES,
   canAirRecover,
@@ -33,7 +34,10 @@ import {
   qualifiesForWallBounce,
   guardGainForAttack,
   isPerfectGuard,
+  isStrikeVulnerable,
+  isWakeupVulnerable,
   resolveWakeOption,
+  wakeupVulnerableFrames,
   stunGainForAttack,
   attackFrameData,
   boxesOverlap,
@@ -532,6 +536,7 @@ import {
   dashScuffParams,
   distinctDraw,
   pickSharedVariation,
+  clinchTechBreakParams,
   rearmClickParams,
   weaponClatterParams,
 } from "./engine/shared-sfx.mjs";
@@ -6868,6 +6873,11 @@ function makeFighter(index, side, overrideDef = null) {
     grabbing: null,
     grabbed: null,
     lastThrowInputFrame: -Infinity,
+    // 5.3 CLOSE RANGE: did the knockdown this fighter is in come from a THROW?
+    // Plain boolean, so the rollback snapshot carries it for free. Decides
+    // which throw immunity the wake tick pays (40 frames after a throw so a
+    // throw loop is impossible; 8 after a strike so okizeme exists).
+    throwKnockdown: false,
     lastHitResult: "",
     // v5.1 EXT4 ROUTING: the attack LEVEL of the last contact, kept apart from
     // lastHitResult because that string drops the level on a counter hit
@@ -6972,6 +6982,10 @@ const presentationDebug = {
   // probe can prove a whiff produced a tell rather than trusting the sim
   // field alone.
   whiffFringes: 0, whiffGhosts: 0, rearmFlashes: 0, rearmDropFlashes: 0,
+  // 5.3 OKIZEME: wake-up vulnerable rims drawn THIS FRAME (presentationDebug
+  // is zeroed every rendered frame — these are per-frame draw counts, unlike
+  // the monotonic mechFxDebug/audioFxDebug totals beside them in oki()).
+  wakeupTells: 0,
 };
 
 // Release 1.7A CLEAN HITS: preserve the fighter palette during hit feedback.
@@ -8741,6 +8755,8 @@ const mechFxDebug = {
   guardCrushes: 0, quickRises: 0, wakeDelays: 0, airRecoveries: 0, perfectGuards: 0,
   // Release 1.7 wave 11 offense mechanics, same monotonic resim-guarded pattern.
   wallBounces: 0, exThrowables: 0, commandKicks: 0, taunts: 0,
+  // 5.3 CLOSE RANGE: the two new close-range reads.
+  clinchTechs: 0, meaties: 0, throwWhiffs: 0,
 };
 // Per-side damage-ghost render state: `health` is the last observed fraction,
 // `shown` the ghost bar's current scaleX, `holdMs` the remaining freeze time.
@@ -14224,9 +14240,14 @@ function trackDirectionalPresses(fighter, input) {
   previous.right = Boolean(input.right);
 }
 
-const PROXIMITY_GRAB_RANGE = Math.round(104 * FIGHTER_SCALE);
+// 5.3 CLOSE RANGE: two ranges, not one. `PROXIMITY_GRAB_RANGE` is what a
+// throw REACHES (checked at the press and again at contact); the attempt band
+// is where the press still COMMITS to the grab. Between them the throw comes
+// out and misses — the whiff risk that used to be a free advancing light.
+const PROXIMITY_GRAB_RANGE = THROW_RULES.grabRange;
+const PROXIMITY_GRAB_ATTEMPT_RANGE = THROW_RULES.attemptRange;
 
-function inProximityGrabRange(fighter, opponent) {
+function grabStateEligible(fighter, opponent) {
   return Boolean(opponent)
     && fighter.grounded
     && opponent.grounded
@@ -14234,15 +14255,32 @@ function inProximityGrabRange(fighter, opponent) {
     && opponent.wakeupFrames <= 0
     && opponent.hitstunFrames <= 0
     && opponent.blockstunFrames <= 0
-    && opponent.throwInvulnerableFrames <= 0
+    && opponent.throwInvulnerableFrames <= 0;
+}
+
+function inProximityGrabRange(fighter, opponent) {
+  return grabStateEligible(fighter, opponent)
     && Math.abs(opponent.x - fighter.x) <= PROXIMITY_GRAB_RANGE;
+}
+
+// The commit band. Every state gate is identical — a press during a
+// blockstring is still the frame trap, never a whiffed grab — only the
+// distance is wider.
+function inProximityGrabAttemptRange(fighter, opponent) {
+  return grabStateEligible(fighter, opponent)
+    && Math.abs(opponent.x - fighter.x) <= PROXIMITY_GRAB_ATTEMPT_RANGE;
 }
 
 /**
  * SF2-style proximity throw: touching a valid opponent and pressing toward or
- * away plus LP or LK grabs instead of throwing out the ordinary normal. Outside
- * grab range the same press stays an ordinary normal, so there is no separate
- * grab-whiff animation and no extra button.
+ * away plus LP or LK grabs instead of throwing out the ordinary normal.
+ *
+ * 5.3 CLOSE RANGE: the press commits out to PROXIMITY_GRAB_ATTEMPT_RANGE
+ * (140px scaled) while the throw only reaches PROXIMITY_GRAB_RANGE (104px
+ * scaled), so →+LP just outside the clinch is a whiffed grab with a real
+ * punish window instead of the old no-loss option-select (throw / tech /
+ * safe advancing light). Beyond the attempt band the press is still an
+ * ordinary normal.
  */
 function applyProximityGrab(fighter, normalized) {
   if (state.phase !== "fight") return;
@@ -14250,7 +14288,15 @@ function applyProximityGrab(fighter, normalized) {
   if (fighter.attacking || fighter.hitstunFrames > 0 || fighter.blockstunFrames > 0) return;
   const direction = directionContext(fighter, normalized);
   if (!direction.forwardHeld && !direction.backHeld) return;
-  if (!inProximityGrabRange(fighter, state.fighters[1 - fighter.side])) return;
+  // 5.3 CLOSE RANGE: a fighter already IN a clinch is ANSWERING the hold, and
+  // the shortcut has to convert there too or the reaction tech would be
+  // unreachable from a pad — the victim is lifted off the floor mid-clinch, so
+  // the grounded and range gates below would refuse the very press the tech
+  // window is waiting for. Nothing starts a move: updateFighter returns early
+  // for a grabbed fighter; the press exists only to stamp lastThrowInputFrame,
+  // which is what updateGrabHolds reads.
+  if (!fighter.grabbed
+    && !inProximityGrabAttemptRange(fighter, state.fighters[1 - fighter.side])) return;
   normalized.throw = true;
   normalized.throwBack = direction.backHeld;
   normalized.light = false;
@@ -14710,21 +14756,39 @@ function advanceFighterTimers(fighter) {
       if (fighter.knockdownFrames === 0) {
         fighter.down = false;
         fighter.wakeupFrames = DEFENSE_RULES.wakeupFrames;
-        fighter.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
+        // 5.3 CLOSE RANGE: the throw immunity is no longer a flat 40 on EVERY
+        // knockdown. 40 is the anti-throw-loop rule and belongs to throws and
+        // techs; a strike knockdown pays 8, so a command grab is a legal (and
+        // readable) wake-up option instead of a mechanical impossibility.
+        fighter.throwInvulnerableFrames = fighter.throwKnockdown
+          ? DEFENSE_RULES.throwInvulnerableFrames
+          : DEFENSE_RULES.strikeKnockdownThrowImmuneFrames;
+        fighter.throwKnockdown = false;
       }
     }
   } else if (fighter.wakeupFrames > 0) {
     fighter.wakeupFrames -= 1;
+    // 5.3 OKIZEME: the last rising frames carry hurtboxes, so their stun
+    // clocks have to run too — otherwise a meaty's hitstun would freeze until
+    // the fighter finished standing up and the move's frame data would lie.
+    fighter.hitstunFrames = Math.max(0, fighter.hitstunFrames - 1);
+    fighter.blockstunFrames = Math.max(0, fighter.blockstunFrames - 1);
     if (fighter.wakeupFrames === 0) {
-      fighter.justWoke = true;
+      // A meaty that connected (or was blocked) on the rising frames cancels
+      // the reversal grant: you were touched before you stood up, so there is
+      // no invulnerable window to reverse out of. Without this a landed meaty
+      // handed the victim 4 invulnerable frames mid-hitstun and dropped the
+      // combo it had just earned.
+      const meatied = fighter.hitstunFrames > 0 || fighter.blockstunFrames > 0;
       fighter.juggleCount = 0;
       // The combo is over: the once-per-combo wall bounce re-arms with it.
       fighter.wallBounceUsed = false;
       // Release 1.7: a quick rise trades a slightly shorter reversal window
       // for getting up early. The delay option keeps the full window.
-      const reversalFrames = fighter.wakeOption === "quick"
+      const reversalFrames = meatied ? 0 : fighter.wakeOption === "quick"
         ? Math.max(1, DEFENSE_RULES.reversalWindowFrames - WAKEUP_RULES.quickRiseReversalPenaltyFrames)
         : DEFENSE_RULES.reversalWindowFrames;
+      fighter.justWoke = !meatied;
       fighter.reversalWindowFrames = reversalFrames;
       fighter.invulnerableFrames = reversalFrames;
       fighter.wakeOption = "";
@@ -15261,6 +15325,19 @@ function updateFighter(fighter, opponent, input, dt) {
     }
   } else if (fighter.down || fighter.wakeupFrames > 0 || fighter.landingRecoveryFrames > 0 || fighter.throwTechFlashFrames > 0) {
     fighter.vx *= 0.72;
+    // 5.3 OKIZEME: the vulnerable rising frames can be GUARDED. The riser
+    // still cannot attack, dash, jump or walk — but a held back (or down-back)
+    // makes the wake-up a high/low read instead of a free hit, which is what
+    // keeps the meaty a mix-up rather than a tax on being knocked down.
+    // `crouch` deliberately stays false so the rise animation is untouched;
+    // only guardHeight moves, and getHurtboxes already treats a low guard as
+    // the crouch shape (which is what the rising body wears anyway).
+    if (isWakeupVulnerable(fighter)) {
+      const risingDirection = directionContext(fighter, input);
+      fighter.guardHeight = input.down ? "low" : "high";
+      fighter.guarding = risingDirection.backHeld || Boolean(input.guard);
+      fighter.block = fighter.guarding;
+    }
   } else if (!fighter.attacking) {
     const direction = directionContext(fighter, input);
     if (!fighter.grounded) {
@@ -15462,7 +15539,13 @@ function updateFighter(fighter, opponent, input, dt) {
   const guardTapEdge = backTapped && !fighter.guardInputHeld;
   fighter.guardInputHeld = backTapped;
   if (fighter.guarding && (!wasGuarding || (fighter.blockstunFrames > 0 && guardTapEdge))) {
-    fighter.guardStartedTick = state.simulationTick;
+    // 5.3 OKIZEME: a guard held up on the way OFF THE FLOOR can never be a
+    // just-defend. The rising guard (added this pass) goes from false to true
+    // on the first vulnerable frame, so without this exclusion every meaty
+    // that a riser blocked would land inside the 4-frame Perfect Guard window
+    // and pay the blocker Grit — a knockdown would have been better than
+    // neutral. The rising guard is a real block; it is simply never perfect.
+    fighter.guardStartedTick = fighter.wakeupFrames > 0 ? -Infinity : state.simulationTick;
   }
 
   applyFighterPhysics(fighter, dt);
@@ -15546,6 +15629,7 @@ function triggerPaintTrap(trap, victim) {
     victim.queuedDashDirection = 0;
     if (trap.knockdown) {
       victim.pendingKnockdown = true;
+      victim.throwKnockdown = false;
       victim.grounded = false;
       victim.vy = -245;
       // Trap knockdowns are knockdown-final: no air tech.
@@ -15573,7 +15657,10 @@ function updatePaintTraps() {
     trap.armFrames = Math.max(0, trap.armFrames - 1);
     if (trap.lifeFrames <= 0 || trap.armFrames > 0) continue;
     const victim = state.fighters[1 - trap.ownerSide];
-    if (!victim || !victim.grounded || victim.down || victim.wakeupFrames > 0 || victim.invulnerableFrames > 0) continue;
+    // 5.3 OKIZEME: one predicate for "can a strike touch this body", shared
+    // with getHurtboxes — so a trap is armed against the vulnerable rising
+    // frames exactly like a fist is.
+    if (!victim || !victim.grounded || !isStrikeVulnerable(victim)) continue;
     if (Math.abs(victim.x - trap.x) > trap.radius) continue;
     trap.triggered = true;
     triggerPaintTrap(trap, victim);
@@ -15763,6 +15850,7 @@ function applyThrowableTether(projectile, victim, owner, blocked) {
   if (tether.launch) {
     victim.grounded = false;
     victim.pendingKnockdown = true;
+    victim.throwKnockdown = false;
     victim.vy = Math.round((tether.launchVelocityY ?? -520) * FIGHTER_SCALE);
     victim.airTechArmed = false;
     victim.airHitstunFrames = 0;
@@ -15830,6 +15918,7 @@ function triggerProjectile(projectile, victim) {
     victim.queuedDashDirection = 0;
     if (projectile.knockdown) {
       victim.pendingKnockdown = true;
+      victim.throwKnockdown = false;
       victim.grounded = false;
       victim.vy = -245;
       // Projectile knockdowns are knockdown-final: no air tech.
@@ -15954,7 +16043,9 @@ function updateProjectiles(dt) {
       }
     }
     const victim = state.fighters[1 - projectile.ownerSide];
-    if (!victim || victim.down || victim.wakeupFrames > 0) continue;
+    // 5.3 OKIZEME: a projectile meaty is legal on the vulnerable rising
+    // frames, on the same predicate the hurtboxes use.
+    if (!isStrikeVulnerable(victim)) continue;
     const projectileBox = {
       x: projectile.x - projectile.width * 0.5,
       y: projectile.y - projectile.height * 0.5,
@@ -15993,6 +16084,9 @@ function noteWhiff(fighter, attack, taxFrames) {
     profileId: attack.profileId,
   };
   if (!rollbackResimulating) tempoFxDebug.whiffTells += 1;
+  // 5.3 CLOSE RANGE: a whiffed THROW is the new commitment — count it apart
+  // from the general whiff tell so a probe can prove the risk exists.
+  if (!rollbackResimulating && attack.kind === "throw") mechFxDebug.throwWhiffs += 1;
   // Exempt moves (projectile, trap, hurled object) tax nothing because they
   // connect later through what they spawned — no WHIFF for those.
   if (taxFrames > 0) {
@@ -16058,6 +16152,10 @@ function beginGrabHold(attacker, victim, attack) {
     victim: victim.side,
     frame: 0,
     total: style.hold,
+    // 5.3 CLOSE RANGE: the tick the hold began, so the clinch tech can tell a
+    // FRESH answering grab from the one the victim had already buffered
+    // (which the pre-contact window at hit() has already resolved).
+    startTick: state.simulationTick,
     back,
     damage: attack.damage,
     push: attack.push,
@@ -16065,7 +16163,7 @@ function beginGrabHold(attacker, victim, attack) {
     profileId: attack.profileId,
     moveName: attack.moveName || style.label,
   };
-  victim.grabbed = { attacker: attacker.side, frame: 0, total: style.hold, back };
+  victim.grabbed = { attacker: attacker.side, frame: 0, total: style.hold, back, startTick: state.simulationTick };
   victim.attacking = null;
   victim.attackFrame = 0;
   victim.attackTime = 0;
@@ -16367,6 +16465,20 @@ function updateGrabHolds() {
     const style = throwStyle(attacker);
     grab.frame += 1;
     victim.grabbed.frame = grab.frame;
+    // 5.3 CLOSE RANGE: the REACTION tech. CONTROLS.md has promised since 1.1C
+    // that "a tech cancels any clinch that had already started" and until now
+    // nothing here checked — the only tech was the 6 frames BEFORE contact,
+    // which a human cannot react to. A fresh throw press inside the first
+    // `clinchTechWindowFrames` of the hold breaks it. Keyed on
+    // lastThrowInputFrame (a plain rollback-carried fighter field, still
+    // written for a grabbed fighter because prepareFighterInput runs before
+    // updateFighter drops the victim's buffer), so resimulation agrees.
+    if (grab.frame <= DEFENSE_RULES.clinchTechWindowFrames
+      && Number.isFinite(victim.lastThrowInputFrame)
+      && victim.lastThrowInputFrame >= (grab.startTick ?? -Infinity)) {
+      techThrow(attacker, victim, { clinch: true });
+      continue;
+    }
     const progress = Math.min(1, grab.frame / Math.max(1, grab.total));
     // The victim rides the thrower's hand through the clinch, then gets released.
     const direction = grab.back ? -attacker.facing : attacker.facing;
@@ -16401,6 +16513,11 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   victim.wallBounceUsed = false;
   victim.wallBounceArmed = 0;
   victim.pendingKnockdown = true;
+  // 5.3 CLOSE RANGE: only a knockdown that CAME FROM A THROW pays the long
+  // 40-frame post-throw immunity on the way up — that is what stops the throw
+  // loop. A strike knockdown pays the short one, which is what gives okizeme
+  // back to the grapplers.
+  victim.throwKnockdown = true;
   victim.grounded = false;
   // Throws are never air-techable.
   victim.airTechArmed = false;
@@ -16445,7 +16562,16 @@ function clearGrabState(fighter) {
   }
 }
 
-function techThrow(attacker, victim) {
+/**
+ * 5.3 CLOSE RANGE: the tech has two flavours and they read differently.
+ * `clinch: false` is the pre-contact tech (hands clash before the hold) —
+ * unchanged. `clinch: true` is the new REACTION tech: the victim answered
+ * inside the first `clinchTechWindowFrames` of a hold that had already
+ * started, which is what CONTROLS.md has promised since 1.1C and what the
+ * code never did. It shoves harder, flashes longer, prints its own label and
+ * snaps its own break cue so a player can tell "I got out" from "we clashed".
+ */
+function techThrow(attacker, victim, { clinch = false } = {}) {
   clearGrabState(attacker);
   clearGrabState(victim);
   attacker.attackHit = true;
@@ -16453,18 +16579,31 @@ function techThrow(attacker, victim) {
   victim.attacking = null;
   attacker.inputBuffer.consume("throw", state.simulationTick);
   victim.inputBuffer.consume("throw", state.simulationTick);
-  attacker.vx = -attacker.facing * 260;
-  victim.vx = attacker.facing * 260;
+  const push = clinch ? THROW_RULES.clinchTechPushback : THROW_RULES.techPushback;
+  const flash = clinch ? THROW_RULES.clinchTechFlashFrames : THROW_RULES.techFlashFrames;
+  attacker.vx = -attacker.facing * push;
+  victim.vx = attacker.facing * push;
   attacker.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
   victim.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
-  attacker.throwTechFlashFrames = 18;
-  victim.throwTechFlashFrames = 18;
+  attacker.throwTechFlashFrames = flash;
+  victim.throwTechFlashFrames = flash;
   attacker.lastHitResult = "throw-tech";
   victim.lastHitResult = "throw-tech";
-  state.hitstop = Math.max(state.hitstop, 0.075);
-  state.shake = Math.max(state.shake, 0.11);
-  spawnCombatText((attacker.x + victim.x) * 0.5, Math.min(attacker.y, victim.y) - 205, "THROW TECH", "#68f5ff");
+  state.hitstop = Math.max(state.hitstop, clinch ? 0.095 : 0.075);
+  state.shake = Math.max(state.shake, clinch ? 0.15 : 0.11);
+  const midX = (attacker.x + victim.x) * 0.5;
+  spawnCombatText(midX, Math.min(attacker.y, victim.y) - 205,
+    clinch ? "CLINCH TECH" : "THROW TECH", clinch ? "#9dff9c" : "#68f5ff");
   sound("block", victim);
+  if (clinch) {
+    // The break is visible as well as audible: a burst of sweat off both
+    // bodies and a hit ring at the point the hold came apart.
+    spawnFootDust(attacker, 7, 34, -attacker.facing);
+    spawnFootDust(victim, 7, 34, attacker.facing);
+    spawnHit(midX, Math.min(attacker.y, victim.y) - 118, victim.def, "block", true, { direction: attacker.facing });
+    clinchTechBreak();
+    if (!rollbackResimulating) mechFxDebug.clinchTechs += 1;
+  }
   // Wave 9: tech shout from the escaping fighter (guarded + tick-deduped).
   fighterReactiveCue(victim, "tech");
   // v2.1 PROGRESSION: the escapee's grab-tech tally (guarded meta counter).
@@ -16503,6 +16642,7 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
   incomingFighter.stun = stance.counterHitstunFrames / SIMULATION_HZ;
   incomingFighter.vx = counterFighter.facing * stance.counterPush;
   incomingFighter.pendingKnockdown = true;
+  incomingFighter.throwKnockdown = false;
   incomingFighter.grounded = false;
   // The Southpaw counter launch is knockdown-final: no air tech.
   incomingFighter.airTechArmed = false;
@@ -16604,6 +16744,14 @@ function hit(attacker, victim, attack, collision) {
   if (attack.level === ATTACK_LEVELS.THROW) {
     if (!victim.grounded || victim.throwInvulnerableFrames > 0 || victim.down || victim.wakeupFrames > 0) return;
     if (victim.grabbed || attacker.grabbing) return;
+    // 5.3 CLOSE RANGE: the UNIVERSAL throw (kind "throw") only lands inside
+    // its documented reach at the moment of CONTACT, not merely at the press.
+    // Its authored hitbox reaches 152-167 world units while the grab range is
+    // 119, so before this a throw pressed at 119 still landed after the victim
+    // had walked ~38 units away and a backdash could not escape a grab it had
+    // already seen. Command grabs (level THROW, kind "special") are unaffected
+    // — their reach is authored per move and is the whole point of the move.
+    if (attack.kind === "throw" && Math.abs(victim.x - attacker.x) > PROXIMITY_GRAB_RANGE) return;
     const recentThrowInput = state.simulationTick - victim.lastThrowInputFrame <= DEFENSE_RULES.throwTechWindowFrames;
     if (recentThrowInput
       || victim.attacking?.level === ATTACK_LEVELS.THROW) {
@@ -16644,6 +16792,9 @@ function hit(attacker, victim, attack, collision) {
   attacker.attackConnected = blocked ? "block" : "hit";
   attacker.confirmWindowFrames = 12;
   const counter = !blocked && !armored && attack.level !== ATTACK_LEVELS.THROW && isCounterHit(victim);
+  // 5.3 OKIZEME: this strike landed on the rising frames — read BEFORE the
+  // wake clock is touched anywhere downstream so the label is truthful.
+  const meaty = victim.wakeupFrames > 0;
   const wasJuggle = !victim.grounded || victim.pendingKnockdown;
   // v2.9 FLOW: demo coverage beats — a genuine counter-hit, and a hit landed
   // on an already-launched victim (the strict juggle read). Guarded inside.
@@ -16744,12 +16895,17 @@ function hit(attacker, victim, attack, collision) {
       }
     }
     if (shouldKnockDown) {
+      // 5.3 CLOSE RANGE: a strike knockdown pays the SHORT throw immunity on
+      // the way up (DEFENSE_RULES.strikeKnockdownThrowImmuneFrames), so a
+      // sweep or a launcher is finally worth something to a grappler.
       victim.pendingKnockdown = true;
+      victim.throwKnockdown = false;
       victim.grounded = false;
       victim.vy = attack.level === ATTACK_LEVELS.THROW ? -371
         : attack.launchVelocityY || -259 - attack.damage * 3.5;
     } else if (attack.juggleLift) {
       victim.pendingKnockdown = true;
+      victim.throwKnockdown = false;
       victim.grounded = false;
       victim.vy = attack.juggleLift;
     }
@@ -16804,6 +16960,12 @@ function hit(attacker, victim, attack, collision) {
     // Ordinary hits get a glint, not a whiteout — the full-strength flash is
     // reserved for supers, dizzies and guard crushes so it means something.
     if ($("#flashToggle").checked) state.flash = Math.max(state.flash, attacker.attackHits >= attack.maxHits ? 0.1 : 0.04);
+  }
+  // 5.3 OKIZEME: a strike that lands on the vulnerable rising frames is a
+  // MEATY and says so — the read is worth naming, exactly like COUNTER.
+  if (meaty) {
+    spawnCombatText(impact.x, impact.y - 88, blocked ? "MEATY BLOCKED" : "MEATY", blocked ? "#8fd8ff" : "#ffca4a");
+    if (!rollbackResimulating) mechFxDebug.meaties += 1;
   }
   if (counter) spawnCombatText(impact.x, impact.y - 74, "COUNTER", attacker.def.accent);
   // R1.9 color assist: the two mixup callouts pick up the colorblind-safe
@@ -21894,6 +22056,48 @@ function drawTempoTellUnder(fighter, tell, atlas, frame, renderSize) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 5.3 OKIZEME — the wake-up vulnerable window, on the body.
+//
+// Before this pass a knockdown was 64-76 frames in which nothing could be
+// timed against the riser, so there was nothing to draw. Now the last 4-8
+// rising frames (see wakeupVulnerableFrames — the count moves with the
+// quick-rise / delayed-rise option) carry hurtboxes, and the attacker has to
+// SEE that window open or the meaty is a guess about invisible state.
+//
+// The read is a hot amber rim that pops on the frame the body becomes real
+// and burns brighter as the window closes, plus a low ground arc under the
+// feet — deliberately amber, so it never reads as the whiff fringe's red or
+// the super aura's accent. Gameplay information, so reduced motion and the
+// battery profile keep it (they only ever drop trails); it draws in
+// drawFighter's local space with the origin at the feet, like every other
+// body tell. Counted into presentationDebug so a probe can prove it reached
+// the screen on the same ticks the hurtboxes existed.
+// ---------------------------------------------------------------------------
+const WAKEUP_TELL_COLOR = "#ffb347";
+
+function drawWakeupTell(fighter, atlas, frame, renderSize) {
+  const window = wakeupVulnerableFrames(fighter.wakeOption);
+  // 1 on the first vulnerable frame → ~0 as the fighter finishes standing up.
+  const progress = 1 - (fighter.wakeupFrames - 1) / Math.max(1, window);
+  ctx.save();
+  ctx.globalAlpha = 0.55 + 0.35 * progress;
+  const outline = 1.055 + 0.025 * progress;
+  ctx.scale(outline, outline);
+  drawSilhouetteFrame(atlas, frame, renderSize, WAKEUP_TELL_COLOR);
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.5 + 0.4 * progress;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = WAKEUP_TELL_COLOR;
+  ctx.beginPath();
+  ctx.ellipse(0, -6, renderSize * (0.2 + 0.06 * progress), 11 + 4 * progress, 0, Math.PI, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  presentationDebug.wakeupTells += 1;
+}
+
 function drawTempoTellOver(fighter, tell, atlas, frame, renderSize) {
   const reducedMotion = state.accessibility.reducedMotion;
   if (tell.phase === "rearm") {
@@ -22103,6 +22307,10 @@ function drawFighter(fighter, time) {
   const tempoTell = whiffTellState(fighter, state.simulationTick);
   const tempoTellLive = !reflectionPassActive && !graphicFatality
     && (tempoTell.phase !== "none" || tempoTell.dropFlash > 0)
+    && Boolean(atlas?.complete && atlas.naturalWidth);
+  // 5.3 OKIZEME: is this body inside the meaty window this frame?
+  const wakeupTellLive = !reflectionPassActive && !graphicFatality
+    && isWakeupVulnerable(fighter)
     && Boolean(atlas?.complete && atlas.naturalWidth);
 
   ctx.save();
@@ -22454,6 +22662,9 @@ function drawFighter(fighter, time) {
 
     // v5.1 TEMPO TELLS, under the sprite: whiff fringe + extension-cell ghosts.
     if (tempoTellLive) drawTempoTellUnder(fighter, tempoTell, atlas, frame, renderSize);
+
+    // 5.3 OKIZEME, under the sprite: the wake-up vulnerable rim + ground arc.
+    if (wakeupTellLive) drawWakeupTell(fighter, atlas, frame, renderSize);
 
     if (!reflectionPassActive && hitSmear > 0) {
       // Directional hit-reaction smear: stretched additive ghosts trailing
@@ -28074,6 +28285,8 @@ const audioFxDebug = {
   crowdVoicePlays: 0,
   // v5.1 TEMPO TELLS: re-arm clicks actually voiced.
   rearmClicks: 0,
+  // 5.3 CLOSE RANGE: clinch-break snaps actually voiced.
+  clinchTechBreaks: 0,
 };
 // Live node bookkeeping for the QA node-graph hook: persistent = currently
 // connected long-lived nodes (master bus, beds, music routing), one-shots =
@@ -28433,6 +28646,24 @@ function rearmClick() {
   });
   synthNoiseShot(params.tick);
   synthToneShot(params.pip);
+}
+
+/**
+ * 5.3 CLOSE RANGE: clinch-break snap — the layer that separates the REACTION
+ * tech (a hold broken open) from the pre-contact clash. Sim-path trigger on
+ * the rearmClick pattern: impactAudioAllowed() gates resimulation and the
+ * mute toggle, and the distinctDraw makes two clinch techs in a round sound
+ * different by construction.
+ */
+function clinchTechBreak() {
+  if (!impactAudioAllowed()) return;
+  audioFxDebug.clinchTechBreaks += 1;
+  const params = clinchTechBreakParams({
+    draw: synthVoiceDraw("clinch-tech", audioFxDebug.clinchTechBreaks),
+    level: state.sfxVolume,
+  });
+  synthNoiseShot(params.rip);
+  for (const partial of params.partials) synthToneShot(partial);
 }
 
 // --- Feature: crowd audio bus driven by state.crowdReaction ----------------
@@ -31227,6 +31458,9 @@ window.__finalBlowEngine = {
         whiffGhosts: presentationDebug.whiffGhosts,
         rearmFlashes: presentationDebug.rearmFlashes,
         rearmDropFlashes: presentationDebug.rearmDropFlashes,
+        // 5.3 OKIZEME / CLOSE RANGE.
+        wakeupTells: presentationDebug.wakeupTells,
+        clinchTechBreaks: audioFxDebug.clinchTechBreaks,
         // R1.9 SCHOOL & POCKET counters (trainingFxDebug: monotonic one-shots
         // on the hudFxDebug pattern) for orchestrator smoke tests.
         frameMeterTicks: trainingFxDebug.frameMeterTicks,
@@ -31402,6 +31636,9 @@ window.__finalBlowEngine = {
         // monotonic, resim-guarded at every increment site).
         guardCrushes: mechFxDebug.guardCrushes,
         quickRises: mechFxDebug.quickRises,
+        clinchTechs: mechFxDebug.clinchTechs,
+        meaties: mechFxDebug.meaties,
+        throwWhiffs: mechFxDebug.throwWhiffs,
         wakeDelays: mechFxDebug.wakeDelays,
         airRecoveries: mechFxDebug.airRecoveries,
         perfectGuards: mechFxDebug.perfectGuards,
@@ -31505,6 +31742,12 @@ window.__finalBlowEngine = {
         guardImmuneFrames: fighter.guardImmuneFrames,
         guardStartedTick: fighter.guardStartedTick,
         wakeOption: fighter.wakeOption,
+        // 5.3 CLOSE RANGE / OKIZEME: the meaty window and which immunity the
+        // riser is owed, so a probe can assert the read without inference.
+        wakeupVulnerable: isWakeupVulnerable(fighter),
+        wakeupVulnerableFrames: wakeupVulnerableFrames(fighter.wakeOption),
+        throwKnockdown: fighter.throwKnockdown,
+        lastThrowInputFrame: Number.isFinite(fighter.lastThrowInputFrame) ? fighter.lastThrowInputFrame : null,
         // Release 1.7 wave 11 offense fields.
         wallBounceArmed: fighter.wallBounceArmed,
         wallBounceUsed: fighter.wallBounceUsed,
@@ -32261,6 +32504,44 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         trainingFrames: state.mode === "training" ? trainingFrameDataLabel(state.training.lastMove) : "",
       };
     },
+    // 5.3 CLOSE RANGE: everything the wake-up and throw reads depend on, in
+    // one call — the meaty window per side, which throw immunity the riser is
+    // owed, the live clinch and its tech window, the two ranges, and the
+    // sim/render/audio totals. Presentation counters are monotonic; the
+    // per-side block is a read of snapshotted sim fields only.
+    oki() {
+      return {
+        tick: state.simulationTick,
+        grabRange: PROXIMITY_GRAB_RANGE,
+        attemptRange: PROXIMITY_GRAB_ATTEMPT_RANGE,
+        distance: state.fighters.length === 2
+          ? Math.round(Math.abs(state.fighters[0].x - state.fighters[1].x)) : null,
+        clinchTechWindowFrames: DEFENSE_RULES.clinchTechWindowFrames,
+        throwTechWindowFrames: DEFENSE_RULES.throwTechWindowFrames,
+        sides: state.fighters.map((fighter) => ({
+          side: fighter.side,
+          down: fighter.down,
+          knockdownFrames: fighter.knockdownFrames,
+          wakeupFrames: fighter.wakeupFrames,
+          wakeOption: fighter.wakeOption,
+          vulnerable: isWakeupVulnerable(fighter),
+          vulnerableFrames: wakeupVulnerableFrames(fighter.wakeOption),
+          hurtboxes: getHurtboxes(fighter).length,
+          invulnerableFrames: fighter.invulnerableFrames,
+          reversalWindowFrames: fighter.reversalWindowFrames,
+          throwInvulnerableFrames: fighter.throwInvulnerableFrames,
+          throwKnockdown: fighter.throwKnockdown,
+          grabbing: fighter.grabbing ? { frame: fighter.grabbing.frame, total: fighter.grabbing.total } : null,
+          grabbed: fighter.grabbed ? { frame: fighter.grabbed.frame, total: fighter.grabbed.total } : null,
+          lastHitResult: fighter.lastHitResult,
+        })),
+        meaties: mechFxDebug.meaties,
+        clinchTechs: mechFxDebug.clinchTechs,
+        throwWhiffs: mechFxDebug.throwWhiffs,
+        wakeupTells: presentationDebug.wakeupTells,
+        clinchTechBreaks: audioFxDebug.clinchTechBreaks,
+      };
+    },
     fighter(side, values = {}) {
       const fighter = state.fighters[side];
       if (!fighter) throw new Error(`Unknown fighter side: ${side}`);
@@ -32277,6 +32558,8 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         "rhythmExpiresFrame",
         "dizzyFrames",
         "dizzyTotalFrames",
+        // 5.3 CLOSE RANGE fields, settable for probe setup.
+        "throwInvulnerableFrames",
         // Release 1.7 DEPTH fields, settable for probe setup.
         "guardMeter",
         "guardCrushFrames",
