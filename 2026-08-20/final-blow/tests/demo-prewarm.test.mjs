@@ -348,7 +348,7 @@ test("game.js warms the next pair only inside the demo session, from the directo
   assert.ok(stripped.includes('curtain.hidden = demo || !introArtHold.active;'));
   assert.ok(stripped.includes("chip.textContent = `LOADING · ${progress}`;"));
   // A played match abandons an idle warm-up and releases its 3D banks.
-  assert.match(stripped, /if \(state\.mode !== "demo" && \(demoSession\.pendingDirector \|\| demoSession\.prewarm\)\) \{\s*demoSession\.pendingDirector = null;\s*clearDemoPrewarm\(true\);/);
+  assert.match(stripped, /if \(state\.mode !== "demo" && \(demoSession\.pendingDirector \|\| demoSession\.prewarm\)\) \{\s*demoSession\.pendingDirector = null;\s*demoSession\.pendingDirectorSeed = null;\s*clearDemoPrewarm\(true\);/);
   // The attract loop adopts the countdown's director; a seeded QA demo never does.
   assert.ok(stripped.includes("const pending = seed === null ? demoSession.pendingDirector : null;"));
   // Timers: the pump is cleared at the swap and on exit.

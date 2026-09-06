@@ -142,7 +142,7 @@ test("the boot router, the title button, the attract timer and qa.demo all enter
 });
 
 test("the seed is kept raw on the session and the link is built from it", () => {
-  assert.match(gameSource, /const demoSeed = seed \?\? hashSeed\(Date\.now\(\), performance\.now\(\), state\.rng\.nextUint32\(\)\);/);
+  assert.match(gameSource, /const demoSeed = seed \?\? pendingSeed \?\? hashSeed\(Date\.now\(\), performance\.now\(\), state\.rng\.nextUint32\(\)\);/);
   assert.match(gameSource, /demoSession\.seed = demoSeed;/);
   assert.match(gameSource, /return buildDemoShareUrl\(location\.href, \{ seed: demoSession\.seed, cycle: demoSession\.cycle\?\.cycle \|\| 1 \}\);/);
   // The seed rewind (matchSerial / rng / tick domain) stays exactly where it
@@ -188,7 +188,7 @@ test("a press on the share bug is the one pointer that does not end the demo", (
 
 test("the demo HUD names the exhibition's address and the manifest offers the shortcut", () => {
   assert.match(gameSource, /const seedLabel = demoSession\.seed === null \? "" : ` · SEED \$\{demoSession\.seed\}`;/);
-  assert.match(gameSource, /`CYCLE \$\{demoSession\.cycle\.cycle\} · \$\{stages\[demoSession\.cycle\.stage\]\.name\}\$\{seedLabel\}`/);
+  assert.match(gameSource, /`CYCLE \$\{demoSession\.cycle\.cycle\} · \$\{stages\[demoSession\.cycle\.stage\]\.name\}\$\{onTheClock\}\$\{seedLabel\}`/);
   const shortcut = manifest.shortcuts.find((entry) => entry.url === "./?mode=demo");
   assert.ok(shortcut, "manifest.webmanifest must list the Watch Demo shortcut");
   assert.equal(shortcut.name, "Watch Demo");
