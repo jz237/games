@@ -283,7 +283,7 @@ test("the listeners arm on the gesture: exit key, any press, the chip, and a tou
   // The chip lives on the demo HUD, is the one thing on it that takes a pointer, and survives the phone layout.
   assert.match(indexSource, /<button type="button" id="demoHudSound" class="demo-hud-sound" hidden>TAP FOR SOUND<\/button>/);
   assert.match(stylesSource, /\.demo-hud-sound \{[^}]*pointer-events: auto;/);
-  assert.match(stylesSource, /\.demo-hud small \{ display: none; \}\n(?:[^\n]*\n){1,3}\s+\.demo-hud-sound \{ font-size/);
+  assert.match(stylesSource, /\.demo-hud \{ left: 2\.2%;[^\n]*\n(?:[^\n]*\n){1,4}\s+\.demo-hud-sound \{ font-size/);
   // gestureArmsAudio reads the sticky flag; play() is never attempted on a synthetic event.
   assert.match(functionBody("armAttractAudio"), /navigator\.userActivation\?\.hasBeenActive/);
   assert.match(functionBody("armAttractAudio"), /trusted: Boolean\(event\?\.isTrusted\)/);

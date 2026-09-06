@@ -366,9 +366,11 @@ test("the 3D bridge, the HUD chip and the doc carry the feature", () => {
   assert.match(mainSource, /prewarmFighters: renderer3d\.prewarmFighters,\s*releasePrewarm: renderer3d\.releasePrewarm,/);
   assert.match(fightersSource, /const PREWARM_PRIORITY = 20;/);
   assert.match(fightersSource, /prewarm: this\.prewarmReport\(\),/);
-  assert.ok(indexSource.includes('<i id="demoHudLoading" hidden>LOADING</i>'));
-  assert.match(cssSource, /\.demo-hud i \{ color: var\(--amber\);/);
-  assert.match(cssSource, /\.demo-hud i\[hidden\] \{ display: none !important; \}/);
+  assert.ok(indexSource.includes('<i id="demoHudLoading" class="demo-hud-loading" hidden>LOADING</i>'));
+  // (5.4 integration: the chip rule is scoped to its own class — the demo-hud
+  // item's speed tag is an <i> on the same panel and must not pulse amber.)
+  assert.match(cssSource, /\.demo-hud-loading \{ color: var\(--amber\);/);
+  assert.match(cssSource, /\.demo-hud-loading\[hidden\] \{ display: none !important; \}/);
   assert.ok(demoDoc.includes("## Prewarming the next pair (5.4"), "DEMO.md documents the warm-up");
   assert.ok(demoDoc.includes("director.peek()"));
 });

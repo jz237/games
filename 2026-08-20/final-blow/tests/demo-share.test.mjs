@@ -188,7 +188,7 @@ test("a press on the share bug is the one pointer that does not end the demo", (
 
 test("the demo HUD names the exhibition's address and the manifest offers the shortcut", () => {
   assert.match(gameSource, /const seedLabel = demoSession\.seed === null \? "" : ` · SEED \$\{demoSession\.seed\}`;/);
-  assert.match(gameSource, /`CYCLE \$\{demoSession\.cycle\.cycle\} · \$\{stages\[demoSession\.cycle\.stage\]\.name\}\$\{onTheClock\}\$\{seedLabel\}`/);
+  assert.match(gameSource, /`\$\{text\.cycle\}\$\{onTheClock\}\$\{seedLabel\}`/);
   const shortcut = manifest.shortcuts.find((entry) => entry.url === "./?mode=demo");
   assert.ok(shortcut, "manifest.webmanifest must list the Watch Demo shortcut");
   assert.equal(shortcut.name, "Watch Demo");
