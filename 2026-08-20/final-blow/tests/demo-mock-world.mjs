@@ -75,6 +75,15 @@ function makeMockFighter(x, facing, kitId = "") {
     // when the next attack starts. The choreographer's chain links are gated
     // on it, so the sim-lite world has to honour the same contract.
     attackConnected: false,
+    // 5.4 FIGHT NIGHT (neutral budget / okizeme): the sim-lite model of the
+    // close-range package — a throw HOLD the victim can tech inside the two
+    // windows (6 pre-contact + 8 clinch, as engine/defense), the whiff tell
+    // and the re-arm gap on a swing that closed on nothing, the tech flash,
+    // and whether the last fall was a throw.
+    grabbed: false, grabbedFrame: 0, grabbing: false, holdLeft: 0,
+    lastThrowTick: -Infinity, throwTechFlashFrames: 0,
+    whiffTick: -1, whiffKind: null, attackRearmFrames: 0, attackLevel: null,
+    throwKnockdown: false,
     lastTap: { left: -Infinity, right: -Infinity },
     prevDir: { left: false, right: false },
     airFrames: 0,
@@ -118,12 +127,25 @@ function mockView(world) {
       health: fighter.health,
       juggleCount: fighter.juggleCount,
       wallBounceUsed: fighter.wallBounceUsed,
+      // 5.4 FIGHT NIGHT: the okizeme / tech family's visible fields (see
+      // game.js demoChoreoFighterView). The sim-lite world models the
+      // knockdown clock, the throw fall, the live swing's level, the whiff
+      // tell / re-arm gap, the hold frame and the tech flash well enough for
+      // the choreographer's reads to run.
+      knockdownFrames: fighter.down,
+      throwKnockdown: Boolean(fighter.throwKnockdown),
+      attackLevel: fighter.busyFrames > 0 ? fighter.attackLevel || null : null,
+      attackRearmFrames: fighter.attackRearmFrames || 0,
+      whiffTick: fighter.whiffTick ?? -1,
+      whiffKind: fighter.whiffKind || null,
+      grabbedFrame: fighter.grabbedFrame || 0,
+      throwTechFlashFrames: fighter.throwTechFlashFrames || 0,
     })),
   };
 }
 
 function actionableMock(fighter) {
-  return fighter.grounded && fighter.busyFrames <= 0 && fighter.down <= 0
+  return fighter.grounded && fighter.busyFrames <= 0 && fighter.down <= 0 && !fighter.grabbed
     && fighter.wakeupFrames <= 0 && fighter.hitstunFrames <= 0
     && fighter.blockstunFrames <= 0 && fighter.dizzyFrames <= 0
     && fighter.tauntFrames <= 0 && !fighter.grabbed;
@@ -151,6 +173,7 @@ export function createMockWorld({
   function noteKnockdown(side) {
     world.choreo.noteBeat(side, "knockdown");
     world.fighters[side].down = 45;
+    world.fighters[side].throwKnockdown = false;
     world.fighters[side].pendingKnockdown = false;
     world.fighters[side].grounded = true;
     world.fighters[side].airFrames = 0;
@@ -161,16 +184,31 @@ export function createMockWorld({
     const attacker = world.fighters[hit.side];
     const victim = world.fighters[1 - hit.side];
     const distance = Math.abs(attacker.x - victim.x);
-    if (distance > hit.reach || victim.down > 0) return;
+    const throwable = hit.action !== "throw"
+      || (victim.grounded && victim.wakeupFrames <= 0 && !victim.grabbed);
+    if (distance > hit.reach || victim.down > 0 || !throwable) {
+      // Closed on nothing: the whiff tell and the re-arm gap (v5.1 tempo).
+      attacker.whiffTick = world.tick;
+      attacker.whiffKind = hit.action;
+      attacker.attackRearmFrames = 4;
+      return;
+    }
     if (confirmHits) attacker.attackConnected = true;
     if (hit.action === "throw") {
-      if (!victim.grounded) return;
-      world.choreo.noteBeat(hit.side, "throw");
-      victim.x += attacker.facing * 60;
-      // A throw clears the combo, so the corner conversion re-arms with it.
-      victim.wallBounceUsed = false;
-      victim.juggleCount = 0;
-      noteKnockdown(1 - hit.side);
+      // The pre-contact tech: a grab of the victim's own inside the window.
+      if (world.tick - victim.lastThrowTick <= 6) {
+        techThrow(attacker, victim);
+        return;
+      }
+      // The hold: the victim is caught for 12 ticks and can still tech inside
+      // the first 8 with a fresh throw press (see applyInput).
+      attacker.grabbing = true;
+      attacker.busyFrames = 12;
+      attacker.startupLeft = 0;
+      victim.grabbed = true;
+      victim.grabbedFrame = 0;
+      victim.holdLeft = 12;
+      victim.pendingThrowSide = hit.side;
       return;
     }
     if (victim.guardHeld && victim.grounded) {
@@ -226,10 +264,42 @@ export function createMockWorld({
     victim.x = clamped;
   }
 
+  function techThrow(attacker, victim) {
+    attacker.throwTechFlashFrames = 18;
+    victim.throwTechFlashFrames = 18;
+    attacker.grabbing = false;
+    victim.grabbed = false;
+    victim.holdLeft = 0;
+    attacker.busyFrames = Math.min(attacker.busyFrames, 8);
+    victim.busyFrames = 8;
+    victim.x += attacker.facing * 40;
+    attacker.x -= attacker.facing * 40;
+  }
+
+  function landThrow(attackerSide) {
+    const attacker = world.fighters[attackerSide];
+    const victim = world.fighters[1 - attackerSide];
+    attacker.grabbing = false;
+    victim.grabbed = false;
+    world.choreo.noteBeat(attackerSide, "throw");
+    victim.x += attacker.facing * 60;
+    // A throw clears the combo, so the corner conversion re-arms with it.
+    victim.wallBounceUsed = false;
+    victim.juggleCount = 0;
+    noteKnockdown(1 - attackerSide);
+    victim.throwKnockdown = true;
+  }
+
   function applyInput(side, input) {
     const fighter = world.fighters[side];
     const opponent = world.fighters[1 - side];
     fighter.guardHeld = false;
+    // The clinch tech: a fresh throw press inside the first frames of the hold.
+    if (fighter.grabbed) {
+      if (input && input.throw && fighter.grabbedFrame <= 8) techThrow(world.fighters[fighter.pendingThrowSide], fighter);
+      return;
+    }
+    if (input && input.throw) fighter.lastThrowTick = world.tick;
     if (fighter.grounded) fighter.vx = 0;
     if (!input) input = {};
     // dash double-tap edges (12-tick window, genuine release required)
@@ -390,6 +460,8 @@ export function createMockWorld({
     };
     world.choreo.noteMove(side, action, context);
     fighter.attackConnected = false;
+    fighter.attackLevel = action === "throw" ? "throw" : "mid";
+    if (action === "throw") fighter.lastThrowTick = world.tick;
     fighter.meter -= cost;
     if (action === "throwObject" || action === "enhancedThrowObject") fighter.throwableUses -= 1;
     const light = action === "light";
@@ -422,6 +494,13 @@ export function createMockWorld({
         if (fighter.busyFrames === 0) fighter.attackConnected = false;
       }
       if (fighter.startupLeft > 0) fighter.startupLeft -= 1;
+      if (fighter.throwTechFlashFrames > 0) fighter.throwTechFlashFrames -= 1;
+      if (fighter.attackRearmFrames > 0) fighter.attackRearmFrames -= 1;
+      if (fighter.grabbed) {
+        fighter.grabbedFrame += 1;
+        fighter.holdLeft -= 1;
+        if (fighter.holdLeft <= 0) landThrow(fighter.pendingThrowSide);
+      }
       if (fighter.hitstunFrames > 0) fighter.hitstunFrames -= 1;
       if (fighter.blockstunFrames > 0) fighter.blockstunFrames -= 1;
       if (fighter.dizzyFrames > 0) fighter.dizzyFrames -= 1;
@@ -478,7 +557,7 @@ export function createMockWorld({
   // barely moving. Accumulated here so the coverage tests can pin a ceiling
   // on both the fraction and the longest continuous run.
   function inertMock(fighter) {
-    return fighter.grounded && fighter.busyFrames <= 0 && fighter.down <= 0
+    return fighter.grounded && fighter.busyFrames <= 0 && fighter.down <= 0 && !fighter.grabbed
       && fighter.wakeupFrames <= 0 && fighter.hitstunFrames <= 0
       && fighter.blockstunFrames <= 0 && fighter.dizzyFrames <= 0
       // A taunt is a 45-frame ANIMATION with vx pinned at zero. The critic's

@@ -15267,6 +15267,20 @@ function demoChoreoFighterView(fighter) {
     health: fighter.health,
     juggleCount: fighter.juggleCount,
     wallBounceUsed: Boolean(fighter.wallBounceUsed),
+    // 5.4 FIGHT NIGHT (sweep #4 / #5): the okizeme / tech family and the
+    // neutral budget read the same VISIBLE fields a human reads off the
+    // animation — the knockdown clock, whether the fall was a throw, the live
+    // swing's level, the tempo tells (a whiff tell and the re-arm gap), the
+    // hold's frame and the tech flash. The hidden wake option is deliberately
+    // NOT here: the rise is the thing the attacker is supposed to guess.
+    knockdownFrames: fighter.knockdownFrames,
+    throwKnockdown: Boolean(fighter.throwKnockdown),
+    attackLevel: fighter.attacking?.level || null,
+    attackRearmFrames: fighter.attackRearmFrames || 0,
+    whiffTick: Number.isFinite(fighter.whiffTell?.tick) ? fighter.whiffTell.tick : -1,
+    whiffKind: fighter.whiffTell?.kind || null,
+    grabbedFrame: fighter.grabbed ? fighter.grabbed.frame || 0 : 0,
+    throwTechFlashFrames: fighter.throwTechFlashFrames || 0,
   };
 }
 

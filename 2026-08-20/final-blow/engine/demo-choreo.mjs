@@ -153,12 +153,14 @@
 
 import { DeterministicRng, hashSeed } from "./foundation.mjs";
 import {
-  FIGHTER_SCALE, MOVEMENT_RULES, STUN_RULES, WALL_BOUNCE_RULES,
-  qualifiesForWallBounce, stunGainForAttack,
+  DEFENSE_RULES, FIGHTER_SCALE, MOVEMENT_RULES, STUN_RULES, THROW_RULES, WAKEUP_RULES,
+  WALL_BOUNCE_RULES, qualifiesForWallBounce, stunGainForAttack, wakeupVulnerableFrames,
 } from "./defense.mjs";
-import { createFighterMove, getKitMoveProfile, selectKitMoveKey } from "./fighter-kits.mjs";
+import { createFighterMove, getFighterKit, getKitMoveProfile, selectKitMoveKey } from "./fighter-kits.mjs";
 import { getThrowable } from "./throwables.mjs";
 import { CANCEL_ROUTES, COMBO_RULES, GRIT_RULES } from "./combos.mjs";
+import { resolveAiSettings } from "./ai.mjs";
+import { demoPersonaFor } from "./demo.mjs";
 
 // Coverage share of the pick policy: the rest of the time the choreographer
 // deliberately stands down and lets the archetype AI play a natural window.
@@ -193,6 +195,13 @@ export const DEMO_BEATS = Object.freeze([
   // covers both edges), airAttack falls out of the staged air normals, and
   // turnaround is actively staged as a close-range cross-up jump.
   "crouchTrans", "turnaround", "airAttack",
+  // 5.4 FIGHT NIGHT (sweep #4): the OKIZEME / TECH family. All four are
+  // OBSERVED off the view (observe()), never reported by a sim call site: a
+  // hit that lands on a rising fighter, a grab that lands on the wake, a
+  // throw broken by a tech flash, a throw that closed on nothing. meaty and
+  // meatyThrow are staged by the knockdown plan (okizeme), throwTech and
+  // throwWhiff as duet beats.
+  "meaty", "meatyThrow", "throwTech", "throwWhiff",
 ]);
 
 // The beats the choreographer actively stages (the others fall out of normal
@@ -201,7 +210,240 @@ const STAGED_BEATS = Object.freeze([
   "taunt", "throw", "counterhit", "dizzy", "juggle", "wallsplat",
   "dashForward", "dashBack", "jumpForward", "jumpNeutral", "jumpBack",
   "weaponPickup", "guardedContact", "turnaround",
+  "throwTech", "throwWhiff",
 ]);
+
+// ---------------------------------------------------------------------------
+// 5.4 FIGHT NIGHT — THE NEUTRAL BUDGET and the OKIZEME / TECH beat family
+// (sweep #5's neutral half and #4).
+//
+// Measured at the 5.4 personas head over 6 exhibitions (15,467 fight ticks,
+// seeds 237 / 1234 / 9001 × 2): both fighters free on the same tick 15.9% of
+// the fight, first contact a median 42 ticks (0.7 s) after the bell on the
+// three contact openers, 34 knockdowns → 18 presses over a rise, 4 hits on a
+// rising fighter, 1 meaty throw, 1 clinch tech, 11 throws pressed across the
+// twelve fighter-slots (six of them never threw). The pipeline is deliberately
+// back-to-back (finishDirective's 0-3 tick gap) and the approach phase walks
+// straight into each move's band, so there was never a moment for two
+// fighters to WALK THE EDGE OF RANGE — the part of a 2D fighter that reads as
+// decisions. And every knockdown was handed either to the taunt moment beat
+// or to a lead directive that started the instant the attacker was stageable,
+// so the brain's okizeme path (ai.mjs meaty / meaty-throw) almost never owned
+// the rise.
+//
+// THE NEUTRAL BUDGET. A per-round footsies window — both lanes refused, both
+// sides scripted — 60..120 ticks (seeded), armed:
+//   - at the bell (the first fight tick the choreographer sees: round 2/3
+//     immediately, round 1 the moment the opener's exchange has resolved);
+//   - after every knockdown the plan below decides is a RESET (the attacker
+//     walks off the body instead of standing over it), starting on the rise;
+//   - by the BUDGET: when the round's both-free share falls under
+//     NEUTRAL_TARGET_SHARE and the last window ended NEUTRAL_REARM_FRAMES ago.
+// The script: each side walks to ITS OWN band (the kit's preferredRange
+// scaled by the persona — the grappler walks in, the zoner walks out — see
+// neutralBandFor), rocks in and out of it on two different periods so the
+// pair never mirrors, one side throws a deliberate WHIFF just outside its
+// derived reach (the bait), and the other reads the tempo tells: a fresh
+// whiff tell / re-arm gap on the opponent is a WALK-FORWARD read (step in and
+// punish with a heavy inside its band), an opponent walking in on the band is
+// a WALK-BACK read (step out, or a poke at the edge). The window closes with
+// the aggressor's commit (a dash-in where the persona dashes) and hands both
+// lanes back.
+//
+// THE KNOCKDOWN PLAN (demoKnockdownPlan, drawn the tick the sim reports a
+// knockdown). Persona-driven — the attacker's meatyChance /
+// grabPressureChance and the victim's clinchTechChance /
+// wakeupReversalChance come straight off the registered demo-<persona>
+// tier (demoOkiProfile), so the grappler pressures the rise and grabs on it
+// where the zoner mostly resets:
+//   kind    OKIZEME (attacker walks in during the knockdown, holds the meaty
+//           range rocking, presses on the rise) or RESET (walks off to the
+//           neutral band; a footsies window starts on the rise). The two
+//           existing moment beats keep their windows: an unshown taunt or a
+//           weapon on the floor still take the knockdown.
+//   option  meaty STRIKE (the kit's fastest normal) or meaty THROW (refused
+//           after a throw knockdown — the 40-frame immunity makes it a whiff
+//           by construction).
+//   rise    the victim's option, scripted through the same inputs a human
+//           uses (Up pulse = quick rise, Down held = delay): DEMO_RISE_MIX.
+//   guess   the attacker's READ of that option. The press is timed for the
+//           guessed rise (quick −14 / delay +12 frames), so a wrong guess is
+//           a swing into a body that is still down (whiff, tax, the victim
+//           rises into a free punish) or into a fighter who is already up
+//           (block or reversal). DEMO_OKI_READ_ACCURACY is the director's
+//           choice of how often the read pays off.
+//   answer  the victim's: reversal (EX launcher on the last wake frames, meter
+//           permitting) or block against a strike; tech (a grab of its own
+//           inside the two tech windows) or eat against a throw; and a PUNISH
+//           whenever the attacker is caught in its whiff tail on the rise.
+// Fairness: the first knockdown of an exhibition is always okizeme and the
+// first after that a reset, so both reads are on screen before the dice run.
+//
+// THROWS. `throw` was a PAIR beat (one throw per exhibition, whichever side
+// got there first) and a single least-shown checklist item. It is now a
+// per-side beat on a cooldown whose repeat share is the persona's throwChance
+// (deathblow comes back for another at 0.66, Donald at 0.11), and the family
+// gains two duet beats: THROW TECH (lead grabs in reach, feed breaks it) and
+// THROW WHIFF (lead grabs just outside reach, feed punishes the tail).
+//
+// Every draw comes from the private rng in the order the sim reports events,
+// so a seed replays the same show; the choreographer only exists in a demo.
+// ---------------------------------------------------------------------------
+export const NEUTRAL_WINDOW_FRAMES = Object.freeze({ min: 90, max: 150 });
+// Besides the bait, a window allows ONE read-attack in total (the punish of
+// the bait's whiff, or an edge poke): measured with a poke AND a punish per
+// side, half the window's ticks had someone swinging and it read as another
+// exchange rather than two fighters walking the edge of range.
+const NEUTRAL_READ_ATTACKS = 1;
+// The both-free share of a round the budget defends. Measured 15.9% before;
+// the 4.3 spacing pass's own target for readable range was a third.
+export const NEUTRAL_TARGET_SHARE = 0.3;
+const NEUTRAL_REARM_FRAMES = 240;
+// A round has to be this old before the budget arm can fire (the bell window
+// and the openers own the first seconds).
+const NEUTRAL_BUDGET_MIN_ROUND_FRAMES = 240;
+// ...and fires at most this often in one round: the checklist owns the rest.
+// (Measured uncapped on the sim-lite harness — one endless round — the budget
+// re-armed every 300 ticks and took a quarter of the pipeline, which is
+// exactly the coverage the exhibition exists to show.)
+const NEUTRAL_BUDGET_MAX_PER_ROUND = 3;
+// Each side's own footsies band is its kit's preferredRange × persona spacing,
+// clamped to a couch-readable range.
+const NEUTRAL_BAND = Object.freeze({ min: 170, max: 340, slack: 38 });
+// The bait's whiff distance beyond the derived reach of the poke it throws.
+const NEUTRAL_WHIFF_MARGIN = 22;
+// Who rises how: quick / delay / plain. The persona tiers inherit pro's
+// 0.55 / 0.16, which the sweep measured as quick-rise in 29 of 36 rises — a
+// read needs all three on screen.
+export const DEMO_RISE_MIX = Object.freeze({ quick: 0.4, delay: 0.3 });
+// How often the attacker's guess of the rise option is right.
+export const DEMO_OKI_READ_ACCURACY = 0.6;
+// The share of strike okizeme the victim answers with a wake-up button (plus
+// up to 0.15 for an impatient persona): the read the meaty exists to punish.
+export const DEMO_WAKE_PRESS_SHARE = 0.25;
+// Where the attacker holds while the victim is down: the meaty strike's range
+// (the brain's own 118) and, for the meaty throw, inside the grab reach.
+const OKI_STRIKE_HOLD = 118;
+const OKI_THROW_HOLD = THROW_RULES.grabRange - 16;
+// How long the victim's scripted answer owns the rise after the wake tick.
+const OKI_ANSWER_FRAMES = 22;
+// The oki attacker keeps the stage this long past the wake at most.
+const OKI_TIMEOUT_FRAMES = DEFENSE_RULES.knockdownFrames + WAKEUP_RULES.delayFrames
+  + DEFENSE_RULES.wakeupFrames + 60;
+// The knockdown plan is staged at most this many times per round; later
+// knockdowns go to the ordinary pipeline. A real attract round has 1-2
+// knockdowns that are not the KO (measured 44 knockdowns over 16 rounds, 16
+// of them round-ending), so the cap never binds on the cabinet; it bounds
+// the family's cost on the sim-lite harness, which knocks down every ~150
+// ticks in one endless round.
+const OKI_PLANS_MAX_PER_ROUND = 4;
+// The tech duet's grab spacing and the whiff duet's (just outside the reach
+// the sim checks at contact).
+const THROW_TECH_RANGE = THROW_RULES.grabRange - 14;
+// The throw family is staged at most once per side per this many ticks, and
+// at most `throwFamilyCap` times per side per exhibition (2 + the persona's
+// throwChance × 8: the grappler 4, the zoner 2). Measured without the cap, the
+// opportunity fired on every clinch and a counter-puncher teched ten throws
+// in one card.
+const THROW_FAMILY_REARM_FRAMES = 300;
+function throwFamilyCap(profile) {
+  return 2 + Math.round(profile.throwChance * 8);
+}
+const THROW_WHIFF_RANGE = Object.freeze({ min: THROW_RULES.grabRange + 8, max: THROW_RULES.attemptRange - 4 });
+
+/**
+ * The okizeme / throw knobs a fighter plays the demo with: read off the
+ * registered demo-<persona> tier its kit names (engine/demo.mjs), so the
+ * choreographer and the brain agree by construction. Pure lookup.
+ */
+export function demoOkiProfile(fighterId) {
+  const settings = resolveAiSettings(demoPersonaFor(fighterId));
+  const kitAi = getFighterKit(fighterId)?.ai || {};
+  return Object.freeze({
+    persona: settings.persona || "demo",
+    meatyChance: settings.meatyChance || 0,
+    grabPressureChance: settings.grabPressureChance || 0,
+    throwChance: settings.throwChance || 0,
+    clinchTechChance: settings.clinchTechChance ?? settings.throwTechChance ?? 0,
+    throwWhiffPunishChance: settings.throwWhiffPunishChance || 0,
+    wakeupReversalChance: settings.wakeupReversalChance || 0,
+    dashInChance: settings.dashInChance || 0,
+    patience: settings.patience || 0,
+    spacing: settings.spacing || 1,
+    preferredRange: kitAi.preferredRange || 180,
+  });
+}
+
+/** A side's own footsies band for the neutral window: [near, far]. */
+export function neutralBandFor(profile) {
+  const centre = Math.max(NEUTRAL_BAND.min, Math.min(NEUTRAL_BAND.max,
+    Math.round(profile.preferredRange * profile.spacing)));
+  return Object.freeze({ near: centre - NEUTRAL_BAND.slack, far: centre + NEUTRAL_BAND.slack, centre });
+}
+
+/**
+ * The knockdown plan. Pure on the two profiles, the knockdown's cause, the
+ * victim's meter, the two moment-beat windows, the exhibition's ledger and
+ * five rolls in [0, 1), so a test can enumerate it and a seed replays it.
+ */
+export function demoKnockdownPlan({
+  attacker, victim, throwKnockdown = false, victimMeter = 0,
+  taunt = false, weapon = false, shown = { oki: 0, reset: 0 }, rolls = [],
+} = {}) {
+  const roll = (index) => (Number.isFinite(rolls[index]) ? rolls[index] : 0.5);
+  if (weapon) return Object.freeze({ kind: "weapon" });
+  if (taunt) return Object.freeze({ kind: "taunt" });
+  const okiShown = Number(shown?.oki) || 0;
+  const resetShown = Number(shown?.reset) || 0;
+  const oki = okiShown === 0 ? true
+    : resetShown === 0 ? false
+      : roll(0) < attacker.meatyChance;
+  if (!oki) return Object.freeze({ kind: "reset" });
+  const option = !throwKnockdown && roll(1) < attacker.grabPressureChance ? "meatyThrow" : "meaty";
+  const riseRoll = roll(2);
+  const rise = riseRoll < DEMO_RISE_MIX.quick ? "quick"
+    : riseRoll < DEMO_RISE_MIX.quick + DEMO_RISE_MIX.delay ? "delay" : "plain";
+  const guessRoll = roll(3);
+  let guess = rise;
+  if (guessRoll >= DEMO_OKI_READ_ACCURACY) {
+    const others = ["quick", "delay", "plain"].filter((name) => name !== rise);
+    const t = (guessRoll - DEMO_OKI_READ_ACCURACY) / (1 - DEMO_OKI_READ_ACCURACY);
+    guess = others[Math.min(1, Math.floor(t * 2))];
+  }
+  // Against a strike: the reversal (meter permitting), a wake-up BUTTON (the
+  // jab a meaty is built to counter-hit — the impatient personas press more),
+  // or the block. Against a throw: the tech or the hold.
+  let answer;
+  if (option === "meatyThrow") {
+    answer = roll(4) < victim.clinchTechChance ? "tech" : "eat";
+  } else {
+    const reversalCut = victimMeter >= GRIT_RULES.enhancedSpecialCost ? victim.wakeupReversalChance * 0.6 : 0;
+    const pressCut = reversalCut + DEMO_WAKE_PRESS_SHARE + (1 - victim.patience) * 0.15;
+    answer = roll(4) < reversalCut ? "reversal" : roll(4) < pressCut ? "press" : "block";
+  }
+  return Object.freeze({ kind: "oki", option, rise, guess, answer });
+}
+
+// The knockdown-relative frame a rise option gets the victim up on (the sim:
+// 48 frames down −14 quick / +12 delay, then 16 rising).
+export function riseFrameFor(option) {
+  const delta = option === "quick" ? -WAKEUP_RULES.quickRiseFrames
+    : option === "delay" ? WAKEUP_RULES.delayFrames : 0;
+  return DEFENSE_RULES.knockdownFrames + delta + DEFENSE_RULES.wakeupFrames;
+}
+
+/** The knockdown-relative press frame for a meaty timed for `guess`. */
+export function meatyPressFrameFor(guess, { option = "meaty", startup = 5 } = {}) {
+  const up = riseFrameFor(guess);
+  if (option === "meatyThrow") {
+    // A throw cannot touch a downed or rising fighter, and a strike knockdown
+    // hands the riser strikeKnockdownThrowImmuneFrames on top — so the grab
+    // is timed to be active on the first throwable tick.
+    return up + DEFENSE_RULES.strikeKnockdownThrowImmuneFrames + 1 - startup;
+  }
+  // Active on the first vulnerable rising frame.
+  return up - wakeupVulnerableFrames(guess) - startup + 1;
+}
 
 // A spectacle that keeps failing must not re-chase forever: each staged beat
 // gets a small attempt budget and an escalating cooldown, so a wall splat the
@@ -235,6 +477,12 @@ const BEAT_BACKOFF_OVERRIDE = Object.freeze({ wallsplat: 70, dizzy: 80 });
 // the right to come back sooner.
 const BEAT_REPEAT_FRAMES = Object.freeze({
   turnaround: 165, dashForward: 190, dashBack: 190,
+  // 5.4 FIGHT NIGHT (sweep #4): the throw family repeats per side — measured,
+  // a throw happened once per fighter per match even for the grappler, because
+  // `throw` was a one-shot PAIR beat and a single checklist item. The repeat
+  // SHARE is the persona's own throwChance (see throwRepeatShare), so the
+  // grappler comes back for another and the zoner mostly does not.
+  throw: 150, throwTech: 260, throwWhiff: 260,
 });
 // ...and a repeat is only OFFERED this often. The checklist owns the pipeline;
 // a repeat is a garnish, and letting every cooled-down repeat into the lottery
@@ -879,8 +1127,52 @@ export function createDemoChoreographer({
     // 5.4 SESSION LAYER diagnostics: the showboat's staged taunts, and the
     // ticks a seat with no yield tolerance would have yielded on the 2.9 rule.
     showboatTaunts: 0, yieldRefused: 0,
+    // 5.4 FIGHT NIGHT (sweep #5 / #4) — the neutral budget and the okizeme
+    // family. Every counter here is a DECISION the director took or an
+    // outcome it observed, so a trace can say which reads reached the screen.
+    //   neutralWindows / neutralTicks — footsies windows armed, ticks scripted
+    //   neutralBy       — why each window was armed (bell / reset / budget)
+    //   neutralBaits    — deliberate whiffs thrown at the edge of range
+    //   neutralReads    — walk-forward (punish) and walk-back reads taken
+    //   neutralPreempts — approach-phase leads set aside for a window
+    //   okiPlans        — knockdown plans by kind (oki / reset / taunt / weapon)
+    //   okiOptions      — meaty strike vs meaty throw
+    //   okiRises        — the victim's scripted rise option
+    //   okiGuesses      — the attacker's read: right / wrong
+    //   okiAnswers      — the victim's scripted answer on the rise
+    //   okiPresses      — meaty presses actually made on the rise
+    //   okiPunishes     — rises that punished a whiffed meaty
+    neutralWindows: 0, neutralTicks: 0, neutralBy: {}, neutralBaits: 0,
+    neutralReads: { forward: 0, back: 0 }, neutralPreempts: 0,
+    okiPlans: {}, okiOptions: {}, okiRises: {}, okiGuesses: { right: 0, wrong: 0 },
+    okiAnswers: {}, okiPresses: 0, okiPunishes: 0,
+    //   throwOpportunities — throw-family beats staged on an in-reach opponent
+    throwOpportunities: 0,
   };
   const previous = [null, null];
+  // 5.4 FIGHT NIGHT: the two persona profiles this pair plays the okizeme
+  // family with, and each side's own footsies band (see the header).
+  const profiles = pair.map((fighterId) => demoOkiProfile(fighterId));
+  const neutralBands = profiles.map((profile) => neutralBandFor(profile));
+  // The neutral budget's round bookkeeping and the live window.
+  const neutral = {
+    roundStart: -1, roundTicks: 0, freeTicks: 0, budgetWindows: 0, okiPlans: 0,
+    pending: null, until: 0, plan: null, lastEnd: -Infinity, since: 0,
+  };
+  // The live knockdown plan (one per knockdown; cleared when the rise is
+  // answered, on timeout, and whenever the round leaves the fight phase).
+  const oki = { active: false, plan: null, attacker: 0, victim: 1, since: 0, pressed: false, punished: false, answered: 0, tick: 0 };
+  const okiShown = { oki: 0, reset: 0 };
+  // The tick each side last finished rising (the meaty-throw observation).
+  const lastWake = [-Infinity, -Infinity];
+  // Reporting only: the last few hundred inputs the knockdown plan issued
+  // (qa.demoCoverage().stats.okiTrace), so a probe can see which script owned
+  // a fighter on a given tick. Never read back.
+  const okiTrace = [];
+  function traceOki(side, view, source, input) {
+    if (okiTrace.length >= 400) okiTrace.shift();
+    okiTrace.push({ tick: view.tick, side, source, keys: input ? Object.keys(input).filter((key) => input[key] === true).join("+") : "null" });
+  }
 
   // Two independent lanes: each side either LEADS a directive of its own,
   // FEEDS the partner's directive, or is handed back to the archetype brain.
@@ -961,17 +1253,476 @@ export function createDemoChoreographer({
     for (const lane of lanes) {
       if (lane?.role === "lead" && lane.beat === beat) lane.executed = true;
     }
+    // 5.4 FIGHT NIGHT (sweep #4): every knockdown is a DECISION — the plan is
+    // drawn the tick the sim reports it (the victim's side), before either
+    // lane can start a new showcase over the body.
+    if (beat === "knockdown") planKnockdown(side);
+  }
+
+  // --- 5.4 FIGHT NIGHT: the knockdown plan ---------------------------------
+  // The last view observe() saw: noteBeat has none of its own, and the plan
+  // needs the knockdown's cause, the victim's meter and the two moment-beat
+  // windows. One tick stale at most, which is exactly what a human sees.
+  let lastView = null;
+
+  function bothFree(view) {
+    return Boolean(view?.fighters?.[0] && view.fighters[1])
+      && actionable(view.fighters[0]) && actionable(view.fighters[1]);
+  }
+
+  // Set a lane aside for a window the director is opening. A lead that has
+  // not started its move is a REORDER (its item stays least-shown and is
+  // picked again the moment the pipeline resumes — exactly the stun/Grit
+  // pre-emption rule); a lead whose move is out is booked completed; a feed
+  // is simply released. Returns false when a lead is mid-press and the window
+  // has to wait a few ticks.
+  function releaseLanes(view, counter, force = false) {
+    const idleLead = (lane) => ["approach", "space"].includes(lane.phase)
+      || (lane.phase === "act" && lane.frames < 3);
+    // Dry run first: a window that has to wait must leave every lane exactly
+    // as it found it (measured without this, a budget window that kept
+    // retrying behind a mid-press lead finished every executed showcase in
+    // its confirm window and the exhibition chained nothing at all).
+    if (!force) {
+      for (const lane of lanes) {
+        if (lane?.role === "lead" && !lane.executed && !idleLead(lane)) return false;
+      }
+    }
+    for (let side = 0; side < 2; side += 1) {
+      const lane = lanes[side];
+      if (!lane) continue;
+      if (lane.role === "feed") { lanes[side] = null; continue; }
+      if (lane.executed) { finishDirective(lane, view, true, ""); continue; }
+      lanes[side] = null;
+      stats[counter] += 1;
+    }
+    return true;
+  }
+
+  function planKnockdown(victim) {
+    if (victim !== 0 && victim !== 1 || !lastView || lastView.phase !== "fight") return;
+    const attacker = 1 - victim;
+    const view = lastView;
+    const self = view.fighters[attacker];
+    const fallen = view.fighters[victim];
+    // The rolls are ALWAYS drawn, whatever the plan — the rng stream must not
+    // depend on which branch a knockdown takes.
+    const rolls = [rng.nextFloat(), rng.nextFloat(), rng.nextFloat(), rng.nextFloat(), rng.nextFloat()];
+    const plan = demoKnockdownPlan({
+      attacker: profiles[attacker],
+      victim: profiles[victim],
+      throwKnockdown: Boolean(fallen.throwKnockdown),
+      victimMeter: fallen.meter,
+      taunt: blend > 0 && beatOpen("taunt", view),
+      // The weapon on the floor only takes the knockdown while the pickup
+      // moment beat could actually stage it (its budget and backoff) — a cup
+      // nobody is going to fetch must not shut the okizeme off for a round.
+      weapon: hasStageWeapon && view.weapon?.phase === "ground" && !self.carriedWeapon
+        && beatOpen("weaponPickup", view),
+      shown: okiShown,
+      rolls,
+    });
+    stats.okiPlans[plan.kind] = (stats.okiPlans[plan.kind] || 0) + 1;
+    // A CLOCK card (blend 0) belongs to the patient brains: the plan is
+    // recorded, never staged, so the measured clock rounds stay brain-only.
+    if (blend <= 0 || plan.kind === "taunt" || plan.kind === "weapon") return;
+    if (neutral.okiPlans >= OKI_PLANS_MAX_PER_ROUND) {
+      stats.okiPlans.capped = (stats.okiPlans.capped || 0) + 1;
+      return;
+    }
+    neutral.okiPlans += 1;
+    if (neutral.until > view.tick) endNeutral(view);
+    // The plan owns both fighters: the victim is down and the attacker's
+    // press is the move that put it there, so nothing is mid-showcase that
+    // the pipeline could still finish.
+    releaseLanes(view, "neutralPreempts", true);
+    if (plan.kind === "oki") {
+      okiShown.oki += 1;
+      stats.okiOptions[plan.option] = (stats.okiOptions[plan.option] || 0) + 1;
+      stats.okiRises[plan.rise] = (stats.okiRises[plan.rise] || 0) + 1;
+      stats.okiGuesses[plan.guess === plan.rise ? "right" : "wrong"] += 1;
+      stats.okiAnswers[plan.answer] = (stats.okiAnswers[plan.answer] || 0) + 1;
+    } else {
+      okiShown.reset += 1;
+    }
+    Object.assign(oki, {
+      active: true, plan, attacker, victim, tick: view.tick, pressed: false,
+      punished: false, attackerDone: false, victimDone: false, wakeTick: -1,
+      pressAt: -1, elapsed: 0, victimClock: -1, risenSeen: false, victimPressed: false,
+    });
+  }
+
+  function endOki() {
+    oki.active = false;
+    oki.plan = null;
+  }
+
+  // The fast normals a meaty strike is thrown from: the kit's lights, standing
+  // or crouching (a meaty low is a legitimate read).
+  // MOTION HYGIENE (the same rule the command normals follow, see
+  // SPACE_SETTLE_FRAMES): every one of these presses follows a rock — a
+  // back / forward alternation — and the recogniser bridges an 18-frame gap,
+  // so a KICK pressed there resolves as ←→+KICK (the drive heavy: measured,
+  // a "crouch light" meaty came out as a drive heavy every time). The punch
+  // normals are safe after a rock (their motions all need a fresh ↓ token),
+  // the drive heavy is pressed as itself, and the meaty crouches for the
+  // settle so both crouch lights stay legal.
+  const MEATY_IDS = new Set(["crouchLight", "crouchLightKick"]);
+  const PUNISH_IDS = new Set(["standHeavy", "crouchHeavy", "driveHeavy"]);
+  // The window's pokes are coverage too: the bait and the edge poke throw the
+  // least-shown of the plain punch normals (no forward command normal — those
+  // need a settled direction and convert to a throw inside grab range).
+  const POKE_IDS = new Set(["standLight", "crouchLight"]);
+  // (Lights only: a whiffed heavy is 40+ ticks of tail, and the window is
+  // for walking.)
+  const BAIT_IDS = new Set(["standLight", "crouchLight"]);
+
+  function throwPress(self, opponent) {
+    return Object.assign(towardInput(self, opponent), { throw: true });
+  }
+
+  function okiInput(side, view) {
+    if (!oki.active) return null;
+    const plan = oki.plan;
+    const self = view.fighters[side];
+    const opponent = view.fighters[1 - side];
+    const distance = Math.abs(opponent.x - self.x);
+    const age = view.tick - oki.tick;
+    if (age > OKI_TIMEOUT_FRAMES || (oki.attackerDone && oki.victimDone)) {
+      endOki();
+      return null;
+    }
+    const risen = !opponent.down && opponent.wakeupFrames <= 0;
+    if (side === oki.attacker) {
+      if (oki.attackerDone) return null;
+      if (plan.kind === "reset") {
+        // Walk off the body to the neutral band; the footsies window opens on
+        // the rise (observe() sees both free with `pending` set).
+        if (risen) {
+          oki.attackerDone = true;
+          oki.victimDone = true;
+          neutral.pending = "reset";
+          return null;
+        }
+        if (!actionable(self)) return emptyInput();
+        const band = neutralBands[side];
+        const cornered = Math.min(self.x - view.stageMinX, view.stageMaxX - self.x) < 90;
+        if (distance < band.near && !cornered) return awayInput(self, opponent);
+        return rockInput(side, view, band.near, band.far, { guard: true });
+      }
+      // OKIZEME. Walk in during the knockdown, hold the meaty range rocking,
+      // press for the GUESSED rise.
+      const hold = plan.option === "meatyThrow" ? OKI_THROW_HOLD : OKI_STRIKE_HOLD;
+      // THE VICTIM'S CLOCK, as a human counts it: ticks since the fall on
+      // which the visible knockdown / wake countdown actually advanced. The
+      // sim freezes both fighters for the hit's hitstop (measured: a sweep's
+      // knockdown reached its rise 61 ticks after the fall, not 48), so a
+      // schedule on the sim tick would always be late. The guess is already
+      // committed, so the option's visible jump on the clock is deliberately
+      // counted as one advance like any other tick.
+      const victimClock = (opponent.knockdownFrames || 0) + (opponent.wakeupFrames || 0);
+      if (oki.pressAt < 0) {
+        const startup = plan.option === "meatyThrow"
+          ? (moveProfileFor(pair[side], "throw")?.startupFrames ?? 5)
+          : (moveProfileFor(pair[side], "standLight")?.startupFrames ?? 5);
+        oki.pressAt = meatyPressFrameFor(plan.guess, { option: plan.option, startup });
+        oki.elapsed = opponent.down ? Math.max(0, DEFENSE_RULES.knockdownFrames - (opponent.knockdownFrames || 0)) : 0;
+        oki.victimClock = victimClock;
+      } else if (victimClock !== oki.victimClock || (risen && !oki.risenSeen)) {
+        oki.elapsed += 1;
+        oki.victimClock = victimClock;
+        if (risen) oki.risenSeen = true;
+      } else if (risen) {
+        oki.elapsed += 1;
+      }
+      if (!oki.pressed) {
+        if (oki.elapsed < oki.pressAt) {
+          if (!actionable(self)) return emptyInput();
+          if (distance > hold + 12) return towardInput(self, opponent);
+          // The strike crouches over the body for the settle before its
+          // press (motion hygiene, above): the low meaty is the read.
+          if (plan.option === "meaty" && oki.elapsed >= oki.pressAt - SPACE_SETTLE_FRAMES) {
+            return { ...emptyInput(), down: true };
+          }
+          return rockInput(side, view, hold - 14, hold + 12);
+        }
+        // A guess that was wrong the OTHER way (the victim is already up and
+        // swinging) or a fighter still stuck in its own recovery past the
+        // window: the meaty is off — hand back rather than press into a punish.
+        if (oki.elapsed > oki.pressAt + 12 || (risen && opponent.attacking)) {
+          oki.attackerDone = true;
+          return null;
+        }
+        if (distance > hold + 40) return towardInput(self, opponent);
+        oki.pressed = true;
+        stats.okiPresses += 1;
+        if (plan.option === "meatyThrow") return throwPress(self, opponent);
+        return beatPress(side, view, MEATY_IDS) || { ...emptyInput(), light: true };
+      }
+      // The press is out: ride the swing, then hand the lane back.
+      if (self.attacking || !actionable(self)) return emptyInput();
+      if (oki.elapsed >= oki.pressAt + 6) oki.attackerDone = true;
+      return oki.attackerDone ? null : emptyInput();
+    }
+    // THE VICTIM.
+    if (oki.victimDone) return null;
+    if (plan.kind === "reset") {
+      // Rise plainly and walk to the band once up (the window takes over).
+      if (self.down) return emptyInput();
+      return null;
+    }
+    if (self.down) {
+      // The rise option, through the same inputs a human uses.
+      if (plan.rise === "quick") return { ...emptyInput(), jump: true };
+      if (plan.rise === "delay") return { ...emptyInput(), down: true };
+      return emptyInput();
+    }
+    if (self.wakeupFrames > 0) {
+      if (oki.wakeTick < 0) oki.wakeTick = view.tick + self.wakeupFrames;
+      // The reversal is buffered on the last rising frames (the brain's own
+      // rule: justWoke || wakeupFrames <= 4).
+      if (plan.answer === "reversal" && self.wakeupFrames <= 4
+        && self.meter >= GRIT_RULES.enhancedSpecialCost) {
+        return { ...emptyInput(), enhancedLauncher: true };
+      }
+      // The pre-contact tech: a grab of your own buffered as the throw comes.
+      if (plan.answer === "tech" && opponent.attackLevel === "throw") return throwPress(self, opponent);
+      return { ...emptyInput(), guard: true };
+    }
+    if (oki.wakeTick < 0) oki.wakeTick = view.tick;
+    const up = view.tick - oki.wakeTick;
+    if (up > OKI_ANSWER_FRAMES) {
+      oki.victimDone = true;
+      return null;
+    }
+    if (!actionable(self)) {
+      // The clinch tech: a fresh grab inside the first frames of the hold.
+      if (self.grabbed && plan.answer === "tech"
+        && (self.grabbedFrame ?? 0) <= DEFENSE_RULES.clinchTechWindowFrames) {
+        return throwPress(self, opponent);
+      }
+      return emptyInput();
+    }
+    // The attacker is caught in its whiff tail (the guess was wrong): PUNISH.
+    const tail = (opponent.whiffTick >= 0 && view.tick - opponent.whiffTick <= 26)
+      || opponent.attackRearmFrames > 0;
+    if (tail && !oki.punished && !opponent.attacking) {
+      oki.punished = true;
+      stats.okiPunishes += 1;
+      if (distance <= THROW_RULES.grabRange - 10) return throwPress(self, opponent);
+      return beatPress(side, view, PUNISH_IDS) || { ...emptyInput(), heavy: true };
+    }
+    if (oki.punished) return self.attacking ? emptyInput() : null;
+    if (plan.answer === "reversal" && up <= 2 && self.meter >= GRIT_RULES.enhancedSpecialCost) {
+      return { ...emptyInput(), enhancedLauncher: true };
+    }
+    // The wake-up button: pressed on the first free tick, once.
+    if (plan.answer === "press") {
+      if (up <= 1 && !oki.victimPressed) {
+        oki.victimPressed = true;
+        return beatPress(side, view, POKE_IDS) || { ...emptyInput(), light: true };
+      }
+      if (self.attacking || oki.victimPressed) { oki.victimDone = oki.victimDone || !self.attacking; return self.attacking ? emptyInput() : null; }
+    }
+    if (plan.answer === "tech" && opponent.attackLevel === "throw") return throwPress(self, opponent);
+    if (plan.answer === "reversal" && up > 2) {
+      // The reversal is out (or was refused): the answer is over.
+      oki.victimDone = true;
+      return null;
+    }
+    // Against the grab the victim stands its ground behind the guard — a
+    // guard with a direction held both blocks and walks, so it steps INTO
+    // the attacker rather than freezing (measured stepping back, the grab
+    // reached nothing: 0 of 4 meaty throws landed). The throw beating the
+    // block is the read. Against the strike, block and step back.
+    if (plan.option === "meatyThrow") return { ...towardInput(self, opponent), guard: true };
+    return rockInput(side, view, 60, 140, { guard: true });
+  }
+
+  // --- 5.4 FIGHT NIGHT: the neutral budget ---------------------------------
+  function observeNeutral(view) {
+    if (view.phase !== "fight") {
+      neutral.roundStart = -1;
+      neutral.pending = null;
+      if (neutral.until > 0) endNeutral(view);
+      if (oki.active) endOki();
+      return;
+    }
+    if (neutral.roundStart < 0) {
+      neutral.roundStart = view.tick;
+      neutral.roundTicks = 0;
+      neutral.freeTicks = 0;
+      neutral.budgetWindows = 0;
+      neutral.okiPlans = 0;
+      neutral.lastEnd = -Infinity;
+      neutral.pending = blend > 0 ? "bell" : null;
+    }
+    neutral.roundTicks += 1;
+    const free = bothFree(view);
+    if (free) neutral.freeTicks += 1;
+    if (neutral.until > 0) {
+      if (view.tick >= neutral.until) endNeutral(view);
+      return;
+    }
+    if (blend <= 0 || oki.active || !free) return;
+    let reason = neutral.pending;
+    if (!reason && neutral.roundTicks >= NEUTRAL_BUDGET_MIN_ROUND_FRAMES
+      && neutral.budgetWindows < NEUTRAL_BUDGET_MAX_PER_ROUND
+      && neutral.freeTicks / neutral.roundTicks < NEUTRAL_TARGET_SHARE
+      && view.tick >= neutral.lastEnd + NEUTRAL_REARM_FRAMES) reason = "budget";
+    if (!reason) return;
+    if (!releaseLanes(view, "neutralPreempts")) return;
+    startNeutral(reason, view);
+  }
+
+  function startNeutral(reason, view) {
+    const ticks = NEUTRAL_WINDOW_FRAMES.min
+      + Math.floor(rng.nextFloat() * (NEUTRAL_WINDOW_FRAMES.max - NEUTRAL_WINDOW_FRAMES.min + 1));
+    const bait = rng.nextFloat() < 0.5 ? 0 : 1;
+    const baitAt = view.tick + 14 + Math.floor(rng.nextFloat() * ticks * 0.45);
+    // The aggressor closes the window: the less patient persona, a coin when
+    // they tie; it dashes in at its persona's dash share (boosted — this is
+    // the one commit the window shows).
+    const [p0, p1] = profiles;
+    const aggressor = p0.patience === p1.patience ? (rng.nextFloat() < 0.5 ? 0 : 1)
+      : (rng.nextFloat(), p0.patience < p1.patience ? 0 : 1);
+    const dash = rng.nextFloat() < Math.min(0.8, profiles[aggressor].dashInChance * 1.6 + 0.2);
+    const backRead = [rng.nextFloat() < 0.5 ? "poke" : "step", rng.nextFloat() < 0.5 ? "poke" : "step"];
+    neutral.plan = {
+      reason, bait, baitAt, baitDone: false, aggressor, dash, dashStart: -1, backRead,
+      read: [null, null], spent: [false, false], backDone: [false, false], attacksLeft: NEUTRAL_READ_ATTACKS, baitId: null,
+      closingTicks: [0, 0], backSteps: [0, 0], offset: [0, 5],
+    };
+    neutral.until = view.tick + ticks;
+    neutral.since = view.tick;
+    neutral.pending = null;
+    if (reason === "budget") neutral.budgetWindows += 1;
+    stats.neutralWindows += 1;
+    stats.neutralBy[reason] = (stats.neutralBy[reason] || 0) + 1;
+  }
+
+  function endNeutral(view) {
+    neutral.until = 0;
+    neutral.plan = null;
+    neutral.lastEnd = view?.tick ?? clock;
+    nextDecision[0] = neutral.lastEnd + 1;
+    nextDecision[1] = neutral.lastEnd + 2;
+  }
+
+  function footsiesInput(side, view) {
+    const plan = neutral.plan;
+    const self = view.fighters[side];
+    const opponent = view.fighters[1 - side];
+    if (!plan || !actionable(self)) return emptyInput();
+    const distance = Math.abs(opponent.x - self.x);
+    const band = neutralBands[side];
+    const cornered = Math.min(self.x - view.stageMinX, view.stageMaxX - self.x) < 90;
+    // WALK-FORWARD READ: the opponent has just closed a swing on nothing (a
+    // whiff tell / re-arm gap is showing) — step in and punish inside a heavy's
+    // band. Once per side per window.
+    const tail = (opponent.whiffTick >= 0 && view.tick - opponent.whiffTick <= 26)
+      || opponent.attackRearmFrames > 0;
+    // (One read-attack per side per window: a window is for walking, and
+    // measured with a poke AND a punish allowed per side half its ticks had
+    // someone swinging.)
+    if (tail && !opponent.attacking && !plan.spent[side] && plan.attacksLeft > 0) {
+      if (plan.read[side] !== "forward") { plan.read[side] = "forward"; stats.neutralReads.forward += 1; }
+      const heavy = bands[side].standHeavy || { min: MIN_SEPARATION, max: 150 };
+      if (distance > heavy.max) return towardInput(self, opponent);
+      plan.spent[side] = true;
+      plan.attacksLeft -= 1;
+      return beatPress(side, view, PUNISH_IDS) || { ...emptyInput(), heavy: true };
+    }
+    // THE BAIT: one deliberate whiff just outside the real reach of the
+    // least-shown plain normal (the swing is chosen first so the spacing is
+    // that swing's own).
+    if (side === plan.bait && !plan.baitDone && view.tick >= plan.baitAt) {
+      if (!plan.baitId) plan.baitId = beatChoice(side, view, BAIT_IDS) || "standLight";
+      const poke = bands[side][plan.baitId] || { min: MIN_SEPARATION, max: 120 };
+      const whiffMin = poke.max + NEUTRAL_WHIFF_MARGIN;
+      const whiffMax = whiffMin + 44;
+      if (distance < whiffMin && !cornered) return awayInput(self, opponent);
+      if (distance > whiffMax) return towardInput(self, opponent);
+      plan.baitDone = true;
+      stats.neutralBaits += 1;
+      const spec = directiveForMove(side, plan.baitId);
+      return Object.assign(holdInput(spec, self, opponent), spec.press);
+    }
+    // THE COMMIT: the aggressor closes the window walking (or dashing) in.
+    if (side === plan.aggressor && view.tick >= neutral.until - 24) {
+      if (plan.dash) {
+        if (plan.dashStart < 0) plan.dashStart = view.tick;
+        const step = view.tick - plan.dashStart;
+        if (step === 2 || (step >= 5 && step <= 8)) return towardInput(self, opponent);
+        if (step <= 8) return emptyInput();
+      }
+      return towardInput(self, opponent);
+    }
+    // WALK-BACK READ: the opponent is walking in on the band — step out
+    // behind the guard, or meet it with one poke at the edge.
+    // A rock step is not a walk-in: the read needs the opponent to have been
+    // closing for six straight ticks, and it is taken once per side per
+    // window (the poke variant only inside the poke's real reach).
+    const closing = (opponent.vx * (self.x > opponent.x ? 1 : -1)) > 40;
+    plan.closingTicks[side] = closing ? plan.closingTicks[side] + 1 : 0;
+    if (plan.closingTicks[side] >= 6 && distance < band.near + 20 && !plan.backDone[side]) {
+      if (plan.read[side] === null) { plan.read[side] = "back"; stats.neutralReads.back += 1; }
+      const poke = bands[side].standLight || { min: MIN_SEPARATION, max: 120 };
+      if (plan.backRead[side] === "poke" && !plan.spent[side] && plan.attacksLeft > 0 && distance <= poke.max) {
+        plan.backDone[side] = true;
+        plan.spent[side] = true;
+        plan.attacksLeft -= 1;
+        return beatPress(side, view, POKE_IDS) || { ...emptyInput(), light: true };
+      }
+      if (!cornered) {
+        plan.backSteps[side] += 1;
+        if (plan.backSteps[side] >= 14) plan.backDone[side] = true;
+        return { ...awayInput(self, opponent), guard: true };
+      }
+    }
+    // SPACING: hold the kit's own band, rocking in and out of it on this
+    // side's own period so the pair never mirrors.
+    if (distance > band.far) return towardInput(self, opponent);
+    if (distance < band.near) return cornered ? towardInput(self, opponent) : awayInput(self, opponent);
+    const out = Math.floor((view.tick + plan.offset[side]) / 11) % 2 === 0;
+    return out && !cornered ? awayInput(self, opponent) : towardInput(self, opponent);
   }
 
   // --- per-tick movement/state observation (edge detection) ----------------
   function observe(view) {
     if (!view || !Array.isArray(view.fighters)) return;
     clock = view.tick || clock;
+    lastView = view;
+    // 5.4 FIGHT NIGHT: the neutral budget's per-tick bookkeeping (and the
+    // round edge that arms the bell window). Before the beat edges so a
+    // window armed on this tick sees the lanes as they are now.
+    observeNeutral(view);
     for (let side = 0; side < 2; side += 1) {
       const fighter = view.fighters[side];
       if (!fighter) continue;
       const before = previous[side];
       if (before && view.phase === "fight") {
+        // 5.4 FIGHT NIGHT (sweep #4): the okizeme / tech family, observed off
+        // the view. A hit taken on a rising frame is the partner's MEATY; a
+        // hold that begins within the rise's own throw immunity is a MEATY
+        // THROW; a tech flash on the fighter who was being grabbed is a
+        // THROW TECH; a throw closing on nothing is a THROW WHIFF.
+        const rival = view.fighters[1 - side];
+        const gotHit = (fighter.hitstunFrames > 0 && before.hitstunFrames <= 0)
+          || (fighter.pendingKnockdown && !before.pendingKnockdown)
+          || (fighter.down && !before.down);
+        if (gotHit && before.wakeupFrames > 0) noteBeat(1 - side, "meaty");
+        if (fighter.grabbed && !before.grabbed
+          && view.tick - (lastWake[side] ?? -Infinity) <= DEFENSE_RULES.strikeKnockdownThrowImmuneFrames + 6) {
+          noteBeat(1 - side, "meatyThrow");
+        }
+        if ((fighter.throwTechFlashFrames || 0) > 0 && !(before.throwTechFlashFrames > 0)
+          && (before.grabbed || rival.attackLevel === "throw" || previous[1 - side]?.attackLevel === "throw")) {
+          noteBeat(side, "throwTech");
+        }
+        if ((fighter.whiffTick ?? -1) >= 0 && fighter.whiffTick !== before.whiffTick
+          && fighter.whiffKind === "throw") noteBeat(side, "throwWhiff");
+        if (before.wakeupFrames > 0 && fighter.wakeupFrames <= 0) lastWake[side] = view.tick;
         if (fighter.dashFrames > 0 && before.dashFrames <= 0) {
           noteBeat(side, fighter.dashDirection === fighter.facing ? "dashForward" : "dashBack");
         }
@@ -1020,6 +1771,14 @@ export function createDemoChoreographer({
         facing: fighter.facing,
         crouch: Boolean(fighter.crouch),
         attacking: Boolean(fighter.attacking),
+        // 5.4 FIGHT NIGHT: the okizeme / tech family's edges.
+        hitstunFrames: fighter.hitstunFrames,
+        pendingKnockdown: Boolean(fighter.pendingKnockdown),
+        down: Boolean(fighter.down),
+        grabbed: Boolean(fighter.grabbed),
+        throwTechFlashFrames: fighter.throwTechFlashFrames || 0,
+        whiffTick: fighter.whiffTick ?? -1,
+        attackLevel: fighter.attackLevel || null,
       };
     }
   }
@@ -1137,10 +1896,20 @@ export function createDemoChoreographer({
     if (beatsFor(side)[beat] !== 0) {
       const repeat = BEAT_REPEAT_FRAMES[beat];
       if (!repeat || view.tick < sideBeatTick[side][beat] + repeat) return false;
-      if (rng.nextFloat() >= (BEAT_REPEAT_SHARE[beat] ?? BEAT_REPEAT_DEFAULT)) return false;
+      if (rng.nextFloat() >= repeatShareFor(side, beat)) return false;
     }
     if (beatAttempts[beat] >= (BEAT_BUDGETS[beat] ?? BEAT_ATTEMPT_BUDGET)) return false;
     return view.tick >= beatBlockedUntil[beat];
+  }
+
+  // 5.4 FIGHT NIGHT (sweep #4): the throw family's repeat share is the
+  // PERSONA's — its throwChance scaled onto the beat lottery, so the grappler
+  // (0.3 → 0.66) keeps coming back for the grab and the zoner (0.05 → 0.11)
+  // mostly does not; the two duet beats repeat at half that.
+  function repeatShareFor(side, beat) {
+    if (beat === "throw") return Math.min(0.7, Math.max(0.1, profiles[side].throwChance * 2.2));
+    if (beat === "throwTech" || beat === "throwWhiff") return Math.min(0.4, Math.max(0.08, profiles[side].throwChance * 1.1));
+    return BEAT_REPEAT_SHARE[beat] ?? BEAT_REPEAT_DEFAULT;
   }
 
   // Moment beats: their staging window is NOW (a knockdown to disrespect, a
@@ -1204,6 +1973,49 @@ export function createDemoChoreographer({
     return null;
   }
 
+  // The throw family's opportunistic staging (see maybeStart). Least-shown
+  // among the side's open throw beats; the two duets only with a free
+  // partner. The rng draw happens only when the geometry is right, so the
+  // stream is untouched everywhere else.
+  const throwStagedAt = [-Infinity, -Infinity];
+  const throwStaged = [0, 0];
+  function throwOpportunity(side, view) {
+    const self = view.fighters[side];
+    const opponent = view.fighters[1 - side];
+    if (opponent.down || !stageable(self)) return null;
+    if (view.tick < throwStagedAt[side] + THROW_FAMILY_REARM_FRAMES) return null;
+    if (throwStaged[side] >= throwFamilyCap(profiles[side])) return null;
+    const distance = Math.abs(opponent.x - self.x);
+    if (distance > THROW_RULES.attemptRange + 20) return null;
+    const partnerFree = !leadOf(1 - side) && actionable(opponent);
+    const open = [];
+    if (sideBeatOpen(side, "throw", view)) open.push("throw");
+    if (partnerFree && sideBeatOpen(side, "throwTech", view)) open.push("throwTech");
+    if (partnerFree && sideBeatOpen(side, "throwWhiff", view)) open.push("throwWhiff");
+    if (!open.length) return null;
+    if (rng.nextFloat() >= Math.min(0.9, profiles[side].throwChance * 2.5 + 0.1)) return null;
+    const beats = beatsFor(side);
+    const low = Math.min(...open.map((beat) => beats[beat]));
+    const beat = pick(open.filter((name) => beats[name] === low));
+    throwStagedAt[side] = view.tick;
+    throwStaged[side] += 1;
+    stats.throwOpportunities += 1;
+    if (beat === "throwTech") {
+      return { beat, spec: { kind: "ground", press: { throw: true }, hold: {}, band: { min: MIN_SEPARATION, max: THROW_TECH_RANGE }, feed: "tech" } };
+    }
+    if (beat === "throwWhiff") {
+      return { beat, spec: { kind: "ground", press: { throw: true }, hold: {}, band: { min: THROW_WHIFF_RANGE.min, max: THROW_WHIFF_RANGE.max }, feed: "punish" } };
+    }
+    return {
+      beat,
+      spec: {
+        kind: "ground", press: { throw: true }, hold: {},
+        band: bands[side].throw || { min: MIN_SEPARATION, max: 120 },
+        feed: leadOf(1 - side) ? null : "close",
+      },
+    };
+  }
+
   function eligibleBeatDirective(side, view) {
     const self = view.fighters[side];
     const opponent = view.fighters[1 - side];
@@ -1243,13 +2055,42 @@ export function createDemoChoreographer({
       if (beatOpen("counterhit", view) && !opponent.down) {
         candidates.push({ beat: "counterhit", make: () => ({ kind: "counter", feed: feedIf("swing") }) });
       }
-      if (beatOpen("throw", view) && !opponent.down) {
+      // 5.4 FIGHT NIGHT (sweep #4): the throw is a PER-SIDE beat now (it was
+      // a pair beat — one throw per exhibition, whichever side got there
+      // first), repeatable at the persona's share (see repeatShareFor)...
+      if (sideBeatOpen(side, "throw", view) && !opponent.down) {
         candidates.push({
           beat: "throw",
           make: () => ({
             kind: "ground", press: { throw: true }, hold: {},
             band: bands[side].throw || { min: MIN_SEPARATION, max: 120 },
             feed: feedIf("close"),
+          }),
+        });
+      }
+      // ...and the family gains the two duet reads the 5.3 close-range pass
+      // authored: the THROW TECH (the lead grabs inside reach, the feed breaks
+      // it with a grab of its own inside the tech windows) and the THROW WHIFF
+      // (the lead grabs from the commit band just outside reach, the feed
+      // punishes the 42-51 frame tail). Both need the partner's hands, so
+      // they are only offered while the partner is free to feed.
+      if (!partnerBusy && sideBeatOpen(side, "throwTech", view) && !opponent.down && actionable(opponent)) {
+        candidates.push({
+          beat: "throwTech",
+          make: () => ({
+            kind: "ground", press: { throw: true }, hold: {},
+            band: { min: MIN_SEPARATION, max: THROW_TECH_RANGE },
+            feed: "tech",
+          }),
+        });
+      }
+      if (!partnerBusy && sideBeatOpen(side, "throwWhiff", view) && !opponent.down && actionable(opponent)) {
+        candidates.push({
+          beat: "throwWhiff",
+          make: () => ({
+            kind: "ground", press: { throw: true }, hold: {},
+            band: { min: THROW_WHIFF_RANGE.min, max: THROW_WHIFF_RANGE.max },
+            feed: "punish",
           }),
         });
       }
@@ -1645,10 +2486,14 @@ export function createDemoChoreographer({
     // press a fighter that is BEHIND on its own checklist into the role.
     const longBrace = mode === "brace"
       && (lead?.spec?.kind === "pressure" || lead?.spec?.kind === "wallsplat");
+    // 5.4 FIGHT NIGHT: the two throw duets need the partner's hands until the
+    // grab actually comes, which is a walk-in plus the lead's own spacing.
+    const throwDuet = mode === "tech" || mode === "punish";
     const lease = mode === "guard" ? GUARD_FEED_FRAMES
       : mode === "plant" ? CROSSUP_FEED_FRAMES
         : longBrace ? SPECTACLE_FEED_FRAMES
-          : FEED_LEASE_FRAMES;
+          : throwDuet ? CROSSUP_FEED_FRAMES
+            : FEED_LEASE_FRAMES;
     lanes[partner] = { role: "feed", mode, lead, sticky, until: view.tick + lease };
   }
 
@@ -1659,8 +2504,17 @@ export function createDemoChoreographer({
     let spec = null;
     let item = null;
     let beat = null;
-    const moment = gritOnly ? null : momentBeatDirective(side, view);
+    let moment = gritOnly ? null : momentBeatDirective(side, view);
     if (momentOnly && !moment) return null;
+    // 5.4 FIGHT NIGHT (sweep #4): a THROW OPPORTUNITY — the opponent inside
+    // grab reach and free — is taken at the persona's throwChance ahead of
+    // the blend, the way the brain takes its own throw roll in the clinch.
+    // Measured through the beat lottery alone (one candidate in ten or so,
+    // 22% of picks) the per-side throw beat made no difference at all: 11
+    // throws pressed in 6 exhibitions before and after.
+    // (Not on a CLOCK card — blend 0 — where the choreographer stands down
+    // and the measured clock rounds are brain-only.)
+    if (!moment && !gritOnly && !momentOnly && blend > 0) moment = throwOpportunity(side, view);
     // v2.9 round 4 — THE TRAILING SIDE DOES NOT STAND DOWN. A fighter that is
     // losing the exhibition is exactly the fighter that needs every window it
     // can get; rolling it into an archetype-AI natural window on top of that
@@ -2499,9 +3353,37 @@ export function createDemoChoreographer({
     const self = view.fighters[side];
     const opponent = view.fighters[1 - side];
     stats.feedTicks += 1;
+    // 5.4 FIGHT NIGHT (sweep #4): the CLINCH tech is pressed while grabbed —
+    // the one feed input a fighter that is not actionable can still give.
+    if (lane.mode === "tech" && self.grabbed
+      && (self.grabbedFrame ?? 0) <= DEFENSE_RULES.clinchTechWindowFrames) {
+      return throwPress(self, opponent);
+    }
     if (!actionable(self)) return emptyInput();
     const distance = Math.abs(opponent.x - self.x);
     switch (lane.mode) {
+      // 5.4 FIGHT NIGHT (sweep #4): the THROW TECH feed walks into reach and
+      // answers the grab with a grab of its own — buffered as the throw comes
+      // (the 6-frame pre-contact window) and again inside the hold (the
+      // 8-frame clinch window, above).
+      case "tech":
+        if (opponent.attackLevel === "throw") return throwPress(self, opponent);
+        if (distance > 92) return towardInput(self, opponent);
+        return rockInput(side, view, MIN_SEPARATION + 8, 92, { guard: true });
+      // ...and the THROW WHIFF feed holds the commit band, just outside the
+      // reach the sim checks at contact, then punishes the tail.
+      case "punish": {
+        const tail = (opponent.whiffTick >= 0 && view.tick - opponent.whiffTick <= 30)
+          || opponent.attackRearmFrames > 0;
+        if (tail && !opponent.attacking) {
+          const heavy = bands[side].standHeavy || { min: MIN_SEPARATION, max: 150 };
+          if (distance > heavy.max) return towardInput(self, opponent);
+          return beatPress(side, view, PUNISH_IDS) || { ...emptyInput(), heavy: true };
+        }
+        if (opponent.attacking) return rockInput(side, view, THROW_WHIFF_RANGE.min + 4, THROW_WHIFF_RANGE.max, { guard: true });
+        if (distance > THROW_WHIFF_RANGE.max + 40) return towardInput(self, opponent);
+        return rockInput(side, view, THROW_WHIFF_RANGE.min + 8, THROW_WHIFF_RANGE.max + 8);
+      }
       // v2.9 round 2: every one of these used to answer `{ guard: true }` —
       // no direction, so the sim left vx at zero and the partner stood at
       // attention for the whole lease (up to 70 ticks, and the feed roles ran
@@ -2607,7 +3489,26 @@ export function createDemoChoreographer({
         nextDecision[0] = (view?.tick || 0) + 20;
         nextDecision[1] = (view?.tick || 0) + 20;
       }
+      // 5.4 FIGHT NIGHT: a round end (or a KO mid-plan) drops the live
+      // knockdown plan and the footsies window with the lanes.
+      if (oki.active) endOki();
+      if (neutral.until > 0) endNeutral(view);
+      neutral.roundStart = -1;
+      neutral.pending = null;
       return null;
+    }
+    // 5.4 FIGHT NIGHT (sweep #4): a live knockdown plan owns both fighters —
+    // the attacker's okizeme (or its walk-off) and the victim's rise — ahead
+    // of every lane. It hands each side back the moment its part is over.
+    if (oki.active) {
+      const scripted = okiInput(side, view);
+      traceOki(side, view, scripted ? "oki" : "pipeline", scripted);
+      if (scripted) return liveliness(side, view, scripted);
+    }
+    // 5.4 FIGHT NIGHT (sweep #5): a footsies window refuses both lanes.
+    if (neutral.until > view.tick && neutral.plan) {
+      if (side === 0) stats.neutralTicks += 1;
+      return liveliness(side, view, footsiesInput(side, view));
     }
     const lane = lanes[side];
     if (lane?.role === "lead") {
@@ -2744,7 +3645,29 @@ export function createDemoChoreographer({
     noteMove,
     noteBeat,
     coverage: coverageSnapshot,
-    stats: () => ({ ...stats, itemPicks: { ...itemPicks } }),
+    stats: () => ({
+      ...stats,
+      itemPicks: { ...itemPicks },
+      neutralBy: { ...stats.neutralBy },
+      neutralReads: { ...stats.neutralReads },
+      okiPlans: { ...stats.okiPlans },
+      okiOptions: { ...stats.okiOptions },
+      okiRises: { ...stats.okiRises },
+      okiGuesses: { ...stats.okiGuesses },
+      okiAnswers: { ...stats.okiAnswers },
+      // 5.4 FIGHT NIGHT: the round's own neutral share so far, and the live
+      // window / knockdown plan (reporting only).
+      neutralShare: neutral.roundTicks ? neutral.freeTicks / neutral.roundTicks : 0,
+      neutralLive: neutral.until > clock,
+      okiLive: oki.active ? {
+        kind: oki.plan.kind, option: oki.plan.option || null, rise: oki.plan.rise || null,
+        guess: oki.plan.guess || null, answer: oki.plan.answer || null,
+        attacker: oki.attacker, elapsed: oki.elapsed, pressAt: oki.pressAt, pressed: oki.pressed,
+        attackerDone: oki.attackerDone, victimDone: oki.victimDone, punished: oki.punished,
+      } : null,
+      personas: profiles.map((profile) => profile.persona),
+      okiTrace: okiTrace.slice(-400),
+    }),
     directive: () => {
       const active = lanes.filter((lane) => lane?.role === "lead").map((lane) => ({
         side: lane.side, item: lane.item, beat: lane.beat,

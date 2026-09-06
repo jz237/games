@@ -1212,3 +1212,216 @@ tests/browser-smoke.mjs
 (demo-mode forces `bout: "co-main"` on card 1 and reads the story and
 `roundsToWin` off the snapshot; demo-seed-url's ledger pin is "at least
 one round" because card 1 is a quick bout).
+
+## The neutral budget and the okizeme family (5.4 Fight Night, sweep #5 / #4)
+
+The Fight Night sweep traced two things a TV viewer never saw. There was no
+neutral game: both fighters free on the same tick 7.4% of the fight in the
+sweep's trace (15.9% at the personas head — the personas gave the brains
+their own bands, the choreographer still walked straight into each move's),
+first contact 0.3-1.5 s after every bell, and each side swinging or being hit
+60% of the time. And the 5.3 okizeme / close-range package was almost
+invisible: 48 knockdowns produced 7 meaties, 1 meaty throw and 3 clinch
+techs; a throw happened once per fighter per match, even for the grappler.
+Two causes in the pipeline. `finishDirective` restarts the next showcase 0-3
+ticks later and the approach phase walks into the band, so there was never
+a moment for two fighters to walk the edge of range; and every knockdown
+was handed either to the taunt moment beat or to a lead directive that
+started the instant the attacker was `stageable` — `runPressure` paced at
+96-168 px over the body — so the brain's okizeme path (`ai.mjs` meaty /
+meaty-throw) almost never owned the rise. `throw` was a PAIR beat (one per
+exhibition, whichever side got there first) and one least-shown checklist
+item.
+
+**Measured before, on the 5.4 personas head** (headless Chrome, a per-tick
+sampler over `qa.demo(seed)` → `qa.step(1/60)` → `engine.snapshot()`, seeds
+237 / 1234 / 9001 × 2 exhibitions, 15,967 fight ticks; the harness is
+`trace-demo.mjs` in the sweep's scratchpad and every number below comes
+from it): both free 16.2% of fight ticks (12.3% at >150 px); first contact
+median 42 ticks after the bell (min 16, max 284 — the footsies opener);
+rounds a median 983 ticks (16 s); 34 knockdowns → 16 presses over a rise, 4
+hits on a rising fighter, 2 meaty throws, 2 clinch techs; 13 throws pressed
+across the twelve fighter-slots, six of them never threw; rises quick 21 /
+delay 7 / plain 6.
+
+**THE NEUTRAL BUDGET** (`engine/demo-choreo.mjs`, the header block above
+`demoOkiProfile`). A per-round FOOTSIES WINDOW — both lanes refused, both
+sides scripted — of 90..150 ticks (seeded), armed three ways:
+
+- at the bell: the first fight tick the choreographer sees. Round 2 and 3
+  open on it directly; round 1 gets it the moment the opener's exchange has
+  resolved, because the openers item deliberately makes three of the four
+  openers land their contact 30-40 ticks after the bell and that decision
+  stands;
+- after every knockdown the plan below decides is a RESET, starting on the
+  rise;
+- by the budget: while the round's both-free share is under
+  `NEUTRAL_TARGET_SHARE` (0.3) and the last window ended 240+ ticks ago, at
+  most three budget windows a round (`NEUTRAL_BUDGET_MAX_PER_ROUND`).
+
+The script: each side walks to ITS OWN band — the kit's `preferredRange` ×
+the persona's spacing, clamped to 170..340 px (`neutralBandFor`; the
+grappler's 82 px clamps up to 170, Donald's 276 × 1.3 down to 340), so the
+grappler walks in and the zoner walks out — and rocks in and out of it on two
+different periods so the pair never mirrors. One side (seeded) throws a
+deliberate WHIFF just outside the real reach of its least-shown plain punch
+normal: the bait. The other side reads the tempo tells the 5.1 pass painted:
+a fresh whiff tell or a re-arm gap on the opponent is a WALK-FORWARD read
+(step in, punish inside a heavy's band with the least-shown of standHeavy /
+crouchHeavy / driveHeavy); an opponent that has been walking in for six
+straight ticks is a WALK-BACK read (step out behind the guard, or — a seeded
+choice — meet it with one poke at the edge). A window allows ONE read-attack
+in total besides the bait: measured with a poke and a punish per side, half
+the window's ticks had someone swinging and it read as another exchange. The
+aggressor (the less patient persona) closes the window walking or dashing
+in. A lead that has not started its move is set aside for a window as a
+REORDER (its item stays least-shown — the stun / Grit pre-emption rule); a
+lead mid-press makes the window wait. The window's presses are coverage:
+`noteMove` counts them like any other.
+
+**MOTION HYGIENE, found the hard way.** Every press inside a window or over a
+body follows a rock — a back / forward alternation — and the recogniser
+bridges an 18-frame gap, so a KICK pressed there resolves as ←→+KICK: the
+first traced "crouch light" meaty came out as a drive heavy every time. The
+bait, the pokes and the punish are therefore punch normals (their motions
+all need a fresh ↓ token) or the drive heavy pressed as itself, and the
+meaty is a crouching light thrown after the attacker has crouched over the
+body for `SPACE_SETTLE_FRAMES` — the low meaty is the read anyway.
+
+**THE KNOCKDOWN PLAN** (`demoKnockdownPlan`, drawn in `noteBeat` the tick
+`enterKnockdown` reports the fall, five rng draws whatever the branch).
+Persona-driven: `demoOkiProfile(kitId)` reads the attacker's `meatyChance` /
+`grabPressureChance` and the victim's `clinchTechChance` /
+`wakeupReversalChance` / `patience` straight off the registered
+`demo-<persona>` tier, so the choreographer and the brain agree by
+construction — deathblow pressures the rise at 0.7 and grabs on it at 0.4;
+Donald resets half the time and grabs at 0.1.
+
+- kind — an unshown taunt or a weapon the pickup beat can still stage keep
+  their knockdown (the moment beats are unchanged); otherwise OKIZEME or
+  RESET. The first knockdown of an exhibition is always okizeme and the
+  first after that a reset, so both reads are on screen before the dice run;
+  at most four plans a round (`OKI_PLANS_MAX_PER_ROUND` — a real round has
+  one or two knockdowns that are not the KO; the cap bound 1 of 87 in the
+  trace and exists for the sim-lite harness, which knocks down every ~150
+  ticks).
+- option — a meaty STRIKE, or a meaty THROW at `grabPressureChance`, refused
+  after a throw knockdown (the 40-frame immunity makes it a whiff by
+  construction). A throw cannot touch a downed or rising fighter, and a
+  strike knockdown hands the riser eight more immune frames, so the grab is
+  timed to be active on the first throwable tick.
+- rise — the victim's option, scripted through the same inputs a human uses
+  (Up pulse = quick rise, Down held = delay) at `DEMO_RISE_MIX` 0.4 / 0.3 /
+  plain 0.3. The persona tiers inherit pro's 0.55 / 0.16, which the sweep
+  measured as quick-rise in 29 of 36 rises; a read needs all three.
+- guess — the attacker's READ of that option, right at
+  `DEMO_OKI_READ_ACCURACY` (0.6). The press is timed for the guessed rise
+  (`meatyPressFrameFor`: 48 down −14 quick / +12 delay, 16 rising, active on
+  the first vulnerable frame — 54 / 38 / 68 for a 5-frame light), so a wrong
+  guess is a swing into a body still on the floor (a WHIFF, the tax, the
+  victim rises into a free punish) or into a fighter already up (block or
+  reversal). The clock it is timed on is the victim's VISIBLE one — ticks on
+  which the knockdown / wake countdown advanced — because the sim freezes
+  both fighters for the hit's hitstop: traced, a sweep's knockdown reached
+  its rise 61 ticks after the fall, not 48, and a schedule on the sim tick
+  was late every time.
+- answer — the victim's: the EX-launcher reversal on the last rising frames
+  (meter permitting, at 0.6 × `wakeupReversalChance`), a wake-up BUTTON (the
+  jab a meaty exists to counter-hit, 0.25 + up to 0.15 for an impatient
+  persona), or the block; against a throw, the tech (a grab of its own
+  buffered as the throw comes for the 6-frame pre-contact window and again
+  inside the 8-frame clinch window) at `clinchTechChance`, or the hold. A
+  victim expecting the grab stands its ground behind a walking guard (a
+  guard with a direction held blocks and walks — stepping back, 0 of 4 meaty
+  throws reached anything). And whenever the attacker is caught in its whiff
+  tail on the rise, the victim PUNISHES: the throw inside grab reach, a heavy
+  outside it.
+
+The taunt beat, the weapon pickup, the dizzy and wall-splat moment beats and
+the CLOCK card are untouched: on a clock card (blend 0) the plan is recorded
+for the ledger and never staged, no window arms and no throw is offered, so
+the measured brain-only clock rounds stand.
+
+**THROWS.** `throw` is a PER-SIDE beat on a 150-tick cooldown whose repeat
+share is the persona's `throwChance` × 2.2 (deathblow 0.66, Donald 0.11),
+and the family gains two duet beats the 5.3 pass authored: THROW TECH (the
+lead grabs inside reach, the feed breaks it inside the tech windows) and
+THROW WHIFF (the lead grabs from the commit band 8-24 px outside reach, the
+feed holds the band and punishes the 42-51 frame tail). Through the beat
+lottery alone (one candidate in ten, 22% of picks) none of this made a
+measurable difference — 11 throws pressed in six exhibitions before and
+after — so a THROW OPPORTUNITY is taken ahead of the blend the way the
+brain takes its own throw roll in the clinch: opponent inside
+`attemptRange` + 20 and free, at `throwChance` × 2.5 + 0.1, once per side
+per 300 ticks and at most 2 + `throwChance` × 8 times a side per exhibition
+(the grappler 4, the zoner 2 — measured without the cap a counter-puncher
+teched ten throws in one card). All four new beats — meaty, meatyThrow,
+throwTech, throwWhiff — are OBSERVED off the view in `observe()` (a hit
+taken on a rising frame, a hold beginning inside the rise's throw immunity,
+a tech flash on the fighter who was being grabbed, a throw closing on
+nothing); no sim call site reports them.
+
+**Measured after, 12 exhibitions** (seeds 237 / 1234 / 9001 / 4242 × 3, 32
+rounds, 39,764 fight ticks, same sampler):
+
+    both free            16.2% → 25.1% of fight ticks (>150 px: 12.3% → 18.5%)
+    first contact        median 42 → 78 ticks after the bell (max 284 → 466)
+    round length         median 983 → 1223 ticks (16 s → 20 s), mean 1064 → 1243
+    distance             <150 px 51% → 48%, 150-300 39% → 42%, ≥300 10% → 10%
+    per-side state       walking 21% → 32%, attacking 36% → 30%, in hitstun 23% → 19%, still 6% → 5%
+    footsies windows     62 (bell 24 · reset 17 · budget 21), 7,059 ticks = 18% of the fight,
+                         61 baits, 105 reads (17 walk-forward punishes, 88 walk-back)
+    knockdown plans      87 knockdowns: okizeme 48 · reset 29 · taunt 11 · weapon 3 · capped 1
+                         options meaty 28 · meaty throw 6; the guess right 23 / wrong 11;
+                         rises quick 14 · delay 10 · plain 10; answers block 12 · press 10 ·
+                         reversal 6 · eat 4 · tech 2
+    meaties              hits on a rising fighter 4 of 34 knockdowns → 18 of 87
+                         (0.12 → 0.21 per knockdown; 18 meaty beats in the ledger)
+    throws               13 pressed / 6 landed over 12 slots → 64 / 28 over 24 slots
+                         (six slots never threw → three); tech flashes 4 → 28
+                         (throwTech 14, throwWhiff 18, throw 28 in the ledger); clinch techs 2 → 5
+    moves shown          per fighter per exhibition, standard cards: median 19.5 → 18.5
+                         (13-22; the exhibition got 25% longer, so the windows cost the
+                         checklist under a move a side, and the cumulative ledger carries it)
+
+The meaty throw is still the family's weak beat (6 planned, 1 in the ledger
+over these twelve cards — the hold has to begin inside 14 ticks of the wake,
+and the victim's walking guard was the last fix); the read is on screen as
+the grab attempt, but a probe that wants it landed should force the plan.
+Follow-up.
+
+**A played match is byte-identical.** The only game.js change is eight
+visible fields on `demoChoreoFighterView` — the knockdown clock, whether the
+fall was a throw, the live swing's level, the re-arm gap, the whiff tell's
+tick and kind, the hold's frame and the tech flash; the hidden wake option
+is deliberately not among them, because the rise is the thing the attacker
+is supposed to be guessing — and that view is built on `aiInput`'s demo
+branch only (pinned from source in `tests/demo-neutral-okizeme.test.mjs`).
+Three CPU-vs-CPU matches hashed in headless Chrome (`qa.aiFight`, 7,200
+ticks, FNV of every fighter's x / y / health / meter / action / state per
+tick) are identical before and after: pro deathblow-jez 3259556714, street
+post-benny 659240027, final ali-alan 749667803. `qa.demo(237)` twice in one
+page hashes to 2766973502 both times, and the sim-lite harness pins two
+worlds on one seed to identical stats, coverage and plans.
+
+Verification: `node --test tests/demo-neutral-okizeme.test.mjs
+tests/demo-coverage.test.mjs` — the new file enumerates the plan on a roll
+grid (the fairness rule, the persona shares, the throw-knockdown refusal, the
+rise mix, the guess accuracy, the answers with and without meter), pins the
+meaty timing to the sim's wake-up rules (active on the first vulnerable
+frame of the guessed rise; the 26-frame spread between quick and delayed),
+and runs the sim-lite world for windows (armed, lanes refused, bait and
+reads taken), plans (one per knockdown, presses on the rise), the throw
+family's cap, liveliness inside windows, the clock card standing down, and
+determinism. `tests/demo-mock-world.mjs` gained the close-range model the
+family needs — a throw hold the victim can tech inside the two windows, the
+whiff tell and re-arm gap, the tech flash, the throw fall. The coverage
+file's exhibition length moved 2400 → 3200 ticks with the reason above (the
+real exhibition got 25-32% longer; a fixed budget would have measured the
+windows against an exhibition that no longer ends that early — the sim-lite
+world also knocks down 3-4× as often as the sim), its Grit-policy floor 26 →
+24 (the single-exhibition floor), and the air-row pin allows one late entry
+across the six runs (deathblow's airHeavy on seed 237 lands at 3600 ticks).
+`node tests/browser-smoke.mjs --only=fighter-framing-desktop,demo-mode,demo-seed-url,demo-hud,demo-hold`
+passes unchanged: the seed-url probe's tick-for-tick pin holds because every
+draw is the choreographer's own rng in sim order.
