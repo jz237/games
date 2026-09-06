@@ -586,6 +586,97 @@ is a `demo-*` persona and matches `demoPersonaFor` in the page).
   authored bronze trials plus the six generated from the kit), and each demo was
   run through the real sim to completion before shipping.
 
+## Prewarming the next pair (5.4 "Fight Night", sweep #26 / #27)
+
+Two faults the demo sweep measured, both at the exhibition swap, both because
+the pair was only known at the boundary (`startNextDemoMatch` was the first
+and only place `director.next()` ran):
+
+- **CINEMA 3D rebuilt both fighter rigs on gameplay frames at every swap.**
+  Headless Chrome on the box's Radeon 8060S, balanced tier, five forced
+  cycles: the cycle-start rAF callback cost 250 / 103 / 146 / 251 / 100 ms of
+  main-thread JS and the first two seconds of each new pair had 15 / 7 / 10 /
+  5 / 4 frames over 33 ms — pixel reads, alpha bleeds, mirror smears, normal
+  maps and texture uploads for two fighters the 3D world had had ~40 s of
+  idle roundover-and-result time to prepare. A returning fighter who swapped
+  sides was rebuilt from nothing as well (side 0's disposal evicted his
+  caches before side 1 asked for them: 22 banks built on that boundary
+  against 11 for a same-side return).
+- **On a cold host the first seconds of a new fighter were base fallbacks.**
+  25 Mbps / 40 ms RTT with the cache off: cycle 1 fetched 23 MB and reported
+  the pair's unified family ready 4.9 s after the cycle started, 214 fight
+  ticks in; cycle 2 (both new) 2.1 s / 101 ticks; a cycle with one new
+  fighter 1.5 s / 70 ticks. `armIntroArtHold` refused the demo outright, so
+  there was not even the 1.5 s curtain a played match gets — the opening
+  super guarantee played on the wrong generation of art.
+
+**The director now answers `director.peek()`** — the next unordered pair, stage and
+track without consuming them. Bag semantics are untouched: a refill `peek()`
+performs is the refill `next()` would have performed a moment later, from the
+same rng draws in the same order, and the side coin flip stays in `next()`, so
+a director that peeks before every `next()` produces the identical cycle
+stream and the identical rng state as one that never peeks (pinned across two
+bag boundaries in `tests/demo.test.mjs`). Sides are deliberately not part of
+the answer: a warm-up is per fighter, not per seat.
+
+**The running exhibition warms that pair in its second half.** The trigger is
+the top of round 2 (`resetRound`, demo-gated and resim-guarded), the result
+hold is the fallback for a bout that never got there, and the 45 s idle
+countdown is the first exhibition's window: the attract director is created
+`DEMO_IDLE_PREWARM_LEAD_MS` (20 s) before the demo would start, its first pair
+warms through the rest of the countdown, and `startDemo({ attract })` adopts
+it (a cursor twitch re-arms the countdown but keeps the pending director, so
+the demo that eventually starts is the one that was warmed; a played match
+abandons it and releases its 3D banks). What a warm-up does, in order:
+
+1. `preloadAuthoredBanks(ids)` — the 5.1 request-ordered plan (unified family
+   first at `fetchPriority: high`, the per-beat motion banks, then the bonus
+   banks), decode tracking included, so `qa.artReadiness(pair)` can say when
+   the next pair is drawable.
+2. `warmFighterAudio(ids)` — the voice pools from the audio manifest
+   (`preload="metadata"`, then `auto` on the top-up) plus the announcer's
+   `<id>-name` and `<id>-wins` banks. Existing takes only; nothing generated.
+3. In CINEMA 3D, `renderer.prewarmFighters(descriptors)` every 250 ms until
+   the swap: `FighterLayer.prewarmFighters` is incremental (a sheet that
+   decodes later gets its bank on a later pass, a bank already held is left
+   alone), keyed by fighter id, built through the same idle-slice chain as a
+   live bank but at `PREWARM_PRIORITY` (20) so it always sorts behind live
+   work, and with one extra step — the GPU upload (`renderer.initTexture`)
+   on an idle slice instead of the first frame that draws the texture.
+   `buildRig` adopts a matching set whole at the swap (the rig then owns the
+   prewarm key too, so disposal cancels both), the outgoing pair is evicted
+   after it, and a set that was declared and never adopted is swept once
+   nobody declares it. A returning fighter is never duplicated: his rig
+   trades seats in `update()` when the pair crosses sides.
+
+**The demo honours the intro art hold like a played match.** With the warm-up
+this is the cold first cycle's safety net rather than the attract loop's
+rhythm; it wears a `LOADING · n / m SHEETS` chip on the demo HUD instead of
+the full-screen curtain (a LOADING FIGHTERS card over an attract loop reads as
+a broken cabinet from across the room), and it still hands the fixed-step
+clock zero seconds, so the tick stream — and a seeded `qa.demo(seed)`, which
+drives the clock itself — is untouched.
+
+Everything here is render/network-side and gated on the demo session: the
+sim never reads `demoSession.prewarm`, no warm-up timer touches the clock,
+and `tests/demo-prewarm.test.mjs` pins every call site's gate from source, the
+fighter layer's adoption / sweep / side swap through the mock host, and the
+bridge. A played match on the base build and on this one hashes identically
+after 30 s of `qa.aiFight` (three pairs), as does `qa.demo(237)` after 30 s
+and `qa.demo(555)` across three cycles — measured in the same headless Chrome
+as the numbers above.
+
+The QA read is `qa.demoPrewarm()` — the peeked pair, its art readiness, the
+active / last warm-up (reason, passes, when the art became ready, how many 3D
+banks were started) and the 3D layer's report (`stats().banks.prewarm`,
+`adoptedSides`, `sideSwaps`, `uploaded`).
+
+Measured after (same harness, same box, the exhibition allowed to reach round
+2 before the result was forced): see the numbers in the release notes /
+commit body of this item — the swap-frame JS, the first-two-seconds long
+frames, the boundary bank builds and the cold-profile first-fallback-cell
+ticks are the four before/after pairs.
+
 ## "What just happened" — the last-fight digest (5.3, sweep #30 / #31)
 
 The records store has always answered *how have I done overall*. Nothing

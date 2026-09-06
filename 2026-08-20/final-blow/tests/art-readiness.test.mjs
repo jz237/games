@@ -163,9 +163,15 @@ test("game.js wiring: family-first preload, select-screen warm, the hold and the
   const armAt = startMatch.indexOf("armIntroArtHold(state.fighters.map(");
   assert.ok(armAt > startMatch.indexOf('showScreen("fight")'), "hold armed after the fight screen shows");
   assert.ok(armAt < startMatch.indexOf("scheduleFightAnnouncement("), "hold armed before the FIGHT! timer");
-  // The hold is presentation only: offline modes, never online/demo/replay,
-  // and the loop freezes the clock rather than the sim touching phaseTime.
-  assert.ok(game.includes('state.mode !== "online" && state.mode !== "demo" && !replayPlayback.active'));
+  // The hold is presentation only: offline modes, never online/replay, and
+  // the loop freezes the clock rather than the sim touching phaseTime.
+  // 5.4 FIGHT NIGHT (prewarm, sweep #27): the demo is no longer exempt — it
+  // honours the hold like a played match (its next pair is prewarmed a whole
+  // exhibition early, so the hold is the cold first cycle's safety net, and
+  // the curtain is the demo HUD's LOADING chip rather than the full-screen
+  // one). The pin moved from "demo excluded" to "demo included" for that.
+  assert.ok(game.includes('state.mode !== "online" && !replayPlayback.active'));
+  assert.ok(!game.includes('const holdable = introArtHold.enabled && state.mode !== "online" && state.mode !== "demo"'), "the demo honours the hold (5.4)");
   assert.match(game, /const artHeld = updateIntroArtHold\(now\);[\s\S]{0,400}?simulationClock\.advance\(artHeld \? 0 : simSeconds, runSimulationStep\)/);
   assert.ok(game.includes("if (introArtHold.active) return;"), "a FIGHT! timer that fires mid-hold defers to the release");
   assert.ok(game.includes("shiftFightAnnouncement(introArtHold.heldMs, now)"));

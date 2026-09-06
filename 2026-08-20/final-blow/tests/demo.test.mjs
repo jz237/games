@@ -67,3 +67,44 @@ test("the stage bag reaches every stage before repeating any of them", () => {
   }
   assert.deepEqual([...seen].sort(), [...stages].sort(), "every stage must appear in the rotation");
 });
+
+// ---------------------------------------------------------------------------
+// 5.4 FIGHT NIGHT (sweep #26/#27) — director.peek(): the next pair without
+// consuming the bag. The contract is "bag semantics unchanged": a director that
+// peeks before every next() produces the identical cycle stream and the
+// identical rng state as one that never peeks, including across the shuffle-
+// bag boundary (where peek performs the refill next() would have performed).
+// ---------------------------------------------------------------------------
+test("peek() names the next pair, stage and track without consuming them, and never perturbs next()", () => {
+  const plain = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 237 });
+  const peeking = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 237 });
+  // 28 unordered pairs for 8 fighters: 70 cycles cross the bag boundary twice.
+  for (let index = 0; index < 70; index += 1) {
+    const first = peeking.peek();
+    const again = peeking.peek();
+    assert.deepEqual(again, first, "peek is idempotent");
+    assert.equal(first.cycle, index + 1);
+    const cycle = peeking.next();
+    assert.deepEqual(plain.next(), cycle, `cycle ${index + 1} identical with and without a peek`);
+    assert.equal(cycle.cycle, first.cycle);
+    assert.equal(demoMatchupKey(...cycle.picks), demoMatchupKey(...first.pair), "the peeked pair is the pair next() seats");
+    assert.equal(cycle.stage, first.stage);
+    assert.equal(cycle.track, first.track);
+    assert.deepEqual(peeking.snapshot(), plain.snapshot(), "rng state and bag counts agree after every cycle");
+  }
+});
+
+test("peek() at a bag boundary refills the way next() would, and a peeked pair is frozen data", () => {
+  const director = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 99 });
+  for (let index = 0; index < 28; index += 1) director.next();
+  assert.equal(director.snapshot().remainingMatchups, 0, "the bag is empty at the boundary");
+  const last = director.snapshot().lastMatchup;
+  const next = director.peek();
+  assert.equal(director.snapshot().remainingMatchups, 28, "peek refilled the bag early");
+  assert.notEqual(demoMatchupKey(...next.pair), demoMatchupKey(...last), "the refill keeps the no-immediate-repeat rule");
+  assert.ok(Object.isFrozen(next) && Object.isFrozen(next.pair));
+  assert.throws(() => { next.pair[0] = "nobody"; }, TypeError);
+  const cycle = director.next();
+  assert.equal(demoMatchupKey(...cycle.picks), demoMatchupKey(...next.pair));
+  assert.equal(director.snapshot().remainingMatchups, 27);
+});

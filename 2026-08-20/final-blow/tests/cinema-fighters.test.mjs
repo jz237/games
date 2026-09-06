@@ -839,7 +839,9 @@ test("fighters.mjs builds nothing synchronously past the raw shell, and game.js 
     const before = buildBody.slice(0, at);
     assert.ok(before.lastIndexOf("step(\"") > before.lastIndexOf("const bank = {"), `${kernel} runs in a step`);
   }
-  assert.match(fightersSource, /this\.queue\.cancel\(rig\.key\);/);
+  // 5.4 FIGHT NIGHT (prewarm): a rig may own two queue keys (its own and an
+  // adopted prewarm set's), so disposal cancels every key it carries.
+  assert.match(fightersSource, /for \(const key of rig\.keys \|\| \[rig\.key\]\) this\.queue\.cancel\(key\);/);
   assert.match(fightersSource, /this\.bankStats\.evicted \+= releaseAtlasCaches\(image\);/);
   assert.match(gameSource, /fighterBankSheet: \(fighterId, bank\) => altAtlasSource\(fighterId, bank\)\.image \|\| null,/);
   assert.match(gameSource, /downTiltRadians: DOWN_TILT_RADIANS,/);

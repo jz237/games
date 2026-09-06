@@ -1806,18 +1806,32 @@ function artReadinessSnapshot() {
 function renderArtHoldCurtain(pending) {
   const curtain = $("#artHold");
   if (!curtain) return;
-  curtain.hidden = !introArtHold.active;
+  // 5.4 FIGHT NIGHT (sweep #27): in the demo the hold wears a chip on the
+  // demo HUD, never the curtain — a LOADING FIGHTERS card over an attract
+  // loop reads as a broken cabinet from across the room.
+  const demo = state.mode === "demo";
+  const chip = $("#demoHudLoading");
+  curtain.hidden = demo || !introArtHold.active;
+  if (chip) chip.hidden = !demo || !introArtHold.active;
   if (!introArtHold.active) return;
   const total = introArtHold.ids.reduce((sum, id) => sum + (fighterArtReadiness(id).family?.length || 0), 0);
-  curtain.querySelector("span").textContent = total
-    ? `${Math.max(0, total - pending.length)} / ${total} SHEETS`
-    : "MANIFEST";
+  const progress = total ? `${Math.max(0, total - pending.length)} / ${total} SHEETS` : "MANIFEST";
+  if (demo) {
+    if (chip) chip.textContent = `LOADING · ${progress}`;
+    return;
+  }
+  curtain.querySelector("span").textContent = progress;
 }
 
 /** Arm the hold for this matchup at the top of an offline intro. */
 function armIntroArtHold(ids) {
   releaseIntroArtHold("rearmed", performance.now());
-  const holdable = introArtHold.enabled && state.mode !== "online" && state.mode !== "demo" && !replayPlayback.active;
+  // 5.4 FIGHT NIGHT (sweep #27): the demo is no longer exempt. Its next pair
+  // is prewarmed a whole exhibition early (demoPrewarmNextPair), so on a warm
+  // cabinet this never engages; on a cold host it is the same capped 1.5 s
+  // safety net a played match gets, and the curtain is the demo HUD's
+  // LOADING chip (renderArtHoldCurtain) rather than the full-screen one.
+  const holdable = introArtHold.enabled && state.mode !== "online" && !replayPlayback.active;
   preloadAuthoredBanks(ids);
   const pending = holdable ? matchupArtPending(ids) : [];
   if (!pending.length) {
@@ -2556,6 +2570,14 @@ const demoSession = {
   // cabinet has NOT shown for it yet. Bounded by the roster (10 fighters x
   // 30 ids), reset with the session, and never read by the sim.
   coverageCarry: {},
+  // 5.4 FIGHT NIGHT (sweep #26/#27): the NEXT pair's warm-up — see
+  // demoPrewarmNextPair. `pendingDirector` is the attract loop's director
+  // created early in the idle countdown so its first pair can be warmed
+  // before the demo even starts; startDemo adopts it.
+  prewarm: null,
+  lastPrewarm: null,
+  pendingDirector: null,
+  idlePrewarmTimer: 0,
 };
 
 // v3.2 — the demo speed transport. See engine/demo-speed.mjs for why
@@ -4335,6 +4357,8 @@ function demoSnapshot() {
     resultScheduled: Boolean(demoSession.resultTimer),
     idleScheduled: Boolean(demoSession.idleTimer),
     director: demoSession.director?.snapshot() || null,
+    // 5.4 (sweep #26/#27): what is warming for the next swap.
+    prewarm: demoPrewarmSnapshot(),
   };
 }
 
@@ -4378,6 +4402,8 @@ function clearDemoResultTimer() {
 function clearIdleDemoTimer() {
   window.clearTimeout(demoSession.idleTimer);
   demoSession.idleTimer = 0;
+  window.clearTimeout(demoSession.idlePrewarmTimer);
+  demoSession.idlePrewarmTimer = 0;
 }
 
 function updateDemoUi() {
@@ -4393,11 +4419,14 @@ function updateDemoUi() {
   // clock is the story of this one.
   const onTheClock = demoSession.show?.format === "clock" ? " · ON THE CLOCK" : "";
   $("#demoHudCycle").textContent = `CYCLE ${demoSession.cycle.cycle} · ${stages[demoSession.cycle.stage].name}${onTheClock}`;
+  const chip = $("#demoHudLoading");
+  if (chip) chip.hidden = !(activeFight && introArtHold.active);
 }
 
 function endDemoSession() {
   clearDemoResultTimer();
   cancelFightAnnouncement();
+  clearDemoPrewarm(true);
   demoSession.active = false;
   demoSession.attract = false;
   demoSession.qa = false;
@@ -4504,6 +4533,10 @@ function startNextDemoMatch() {
   if (!demoSession.active || !demoSession.director) return false;
   clearDemoResultTimer();
   cancelFightAnnouncement();
+  // 5.4 (sweep #26/#27): the warm-up for THIS swap is over; its report
+  // survives as lastPrewarm so qa.demoPrewarm() can say what it bought. The
+  // 3D rigs it built are adopted on the next rendered frame (buildRig).
+  clearDemoPrewarm(false);
   // v2.9 FLOW: bank the outgoing exhibition's coverage before it is replaced,
   // so the attract cycle is CUMULATIVE — the next time this fighter is
   // featured it leads with the part of its kit the cabinet has not shown yet.
@@ -4615,7 +4648,15 @@ function startDemo({ attract = false, qa = false, seed = null } = {}) {
     state.simulationTick = 0;
     simulationClock.tick = 0;
   }
-  demoSession.director = createDemoDirector({
+  // 5.4 (sweep #27): an unseeded demo (the attract loop, or the WATCH DEMO
+  // button pressed during the countdown) adopts the director the idle
+  // countdown created early — its first pair has been warming for up to
+  // 20 s; an explicit seed is the QA reproduction path and always builds
+  // its own.
+  const pending = seed === null ? demoSession.pendingDirector : null;
+  demoSession.pendingDirector = null;
+  if (!pending) clearDemoPrewarm(true);
+  demoSession.director = pending || createDemoDirector({
     fighterIds: roster.map(({ id }) => id),
     stageIds: Object.keys(stages),
     trackCount: musicTracks.length,
@@ -4639,6 +4680,10 @@ function scheduleNextDemoMatch() {
       modeFxDebug.attractScoreBoards += 1;
     }
   }
+  // 5.4 (sweep #26/#27): a bout that never reached round 2 (a QA
+  // demoResult, a double-perfect) still gets the result hold's five seconds
+  // of warm-up; a no-op when round 2 already started it.
+  demoPrewarmNextPair("result");
   demoSession.resultTimer = window.setTimeout(() => {
     demoSession.resultTimer = 0;
     startNextDemoMatch();
@@ -4655,6 +4700,146 @@ function scheduleIdleDemo() {
     demoSession.idleTimer = 0;
     if ((state.attractEnabled || state.cabinetMode) && state.screen === "title" && !document.hidden && !$("#controlsDialog").open) startDemo({ attract: true });
   }, DEMO_IDLE_DELAY_MS);
+  // 5.4 (sweep #27): the attract loop's FIRST pair used to be the one pair
+  // nothing could warm — the director only existed once the demo started.
+  // Now the director is drawn DEMO_IDLE_PREWARM_LEAD_MS before the demo
+  // would start and its first pair warms through the rest of the countdown;
+  // startDemo({ attract }) adopts it. A cursor twitch re-arms the countdown
+  // but keeps the pending director (and the sheets it warmed), so the demo
+  // that eventually starts is the one that was warmed.
+  demoSession.idlePrewarmTimer = window.setTimeout(() => {
+    demoSession.idlePrewarmTimer = 0;
+    if (!(state.attractEnabled || state.cabinetMode) || demoSession.active || state.screen !== "title" || document.hidden) return;
+    if (!demoSession.pendingDirector) {
+      demoSession.pendingDirector = createDemoDirector({
+        fighterIds: roster.map(({ id }) => id),
+        stageIds: Object.keys(stages),
+        trackCount: musicTracks.length,
+        seed: hashSeed(Date.now(), performance.now(), state.rng.nextUint32()),
+      });
+    }
+    demoPrewarmNextPair("idle", demoSession.pendingDirector);
+  }, Math.max(0, DEMO_IDLE_DELAY_MS - DEMO_IDLE_PREWARM_LEAD_MS));
+}
+
+// ---------------------------------------------------------------------------
+// 5.4 FIGHT NIGHT (sweep #26 / #27) — PREWARM THE NEXT PAIR.
+//
+// Measured (headless Chrome, Radeon 8060S, balanced tier): in CINEMA 3D every
+// exhibition swap cost 130-362 ms of main-thread JS on the cycle-start frame
+// and 12-26 frames over 33 ms in the new pair's first two seconds, all of it
+// fighter-rig bank builds for a pair the world had 40 s of idle time to
+// prepare; and on a cold host (25 Mbps, cache off) a new fighter's first
+// 1.6-4.2 s were drawn from base fallbacks, because the demo was exempt from
+// the 5.1 intro art hold and the pair was only known at the boundary.
+//
+// The director now answers peek() — the next pair without consuming the
+// bag — and the running exhibition warms that pair at the top of round 2 (its
+// second half), with the result hold as the fallback for a bout that never
+// got there, and the idle countdown as the first exhibition's window:
+//   - the unified family and motion banks through preloadAuthoredBanks (the
+//     5.1 request-ordered plan, fetchPriority and decode tracking included);
+//   - the voice banks through warmFighterAudio (the audio manifest's pools,
+//     preload=metadata then auto) plus the announcer's "<id>-name" and
+//     "<id>-wins" takes;
+//   - in CINEMA 3D the fighter rigs' banks and textures, built on idle slices
+//     behind every live step (renderer/three/fighters.mjs prewarmFighters),
+//     pumped every DEMO_PREWARM_PUMP_MS so a sheet that decodes later still
+//     gets its bank before the swap, adopted whole at the swap and the
+//     outgoing pair evicted after it.
+// Everything here is render/network-side and gated on the demo session: the
+// sim never reads demoSession.prewarm, no timer here touches the clock, and
+// a played match runs byte-identical (tests/demo-prewarm.test.mjs pins the
+// call sites). The QA read is qa.demoPrewarm().
+// ---------------------------------------------------------------------------
+const DEMO_PREWARM_PUMP_MS = 250;
+const DEMO_IDLE_PREWARM_LEAD_MS = 20_000;
+// The pump outlives no exhibition (the swap clears it); this is the cap for
+// a title screen nobody comes back to.
+const DEMO_PREWARM_PUMP_MAX_MS = 180_000;
+
+function demoPrewarmDescriptors(ids) {
+  return ids.map((id, side) => {
+    const def = roster.find((fighter) => fighter.id === id);
+    return def ? { def, side } : null;
+  }).filter(Boolean);
+}
+
+function clearDemoPrewarm(release) {
+  const prewarm = demoSession.prewarm;
+  if (prewarm) {
+    window.clearInterval(prewarm.timer);
+    prewarm.timer = 0;
+    prewarm.endedAt = Math.round(performance.now() - prewarm.startedAt);
+    demoSession.lastPrewarm = prewarm;
+  }
+  demoSession.prewarm = null;
+  // A released warm-up (the demo exited, a played match started) also drops
+  // the 3D banks it built; a swap keeps them for buildRig to adopt.
+  if (release) cinema3dBridge.renderer?.releasePrewarm?.();
+}
+
+function demoPrewarmNextPair(reason, director = demoSession.director) {
+  if (!director || typeof director.peek !== "function") return null;
+  const next = director.peek();
+  const current = demoSession.prewarm;
+  if (current && current.director === director && current.cycle === next.cycle) return current;
+  clearDemoPrewarm(false);
+  const ids = [...next.pair];
+  const prewarm = {
+    director, cycle: next.cycle, ids, reason,
+    startedAt: performance.now(), endedAt: null, timer: 0,
+    passes: 0, artReadyAt: null, threeBanks: 0,
+  };
+  demoSession.prewarm = prewarm;
+  preloadAuthoredBanks(ids);
+  warmFighterAudio(ids);
+  for (const id of ids) {
+    announcerBank(`${id}-name`);
+    announcerBank(`${id}-wins`);
+  }
+  pumpDemoPrewarm();
+  prewarm.timer = window.setInterval(pumpDemoPrewarm, DEMO_PREWARM_PUMP_MS);
+  return prewarm;
+}
+
+function pumpDemoPrewarm() {
+  const prewarm = demoSession.prewarm;
+  if (!prewarm) return;
+  prewarm.passes += 1;
+  if (prewarm.timer && performance.now() - prewarm.startedAt > DEMO_PREWARM_PUMP_MAX_MS) {
+    window.clearInterval(prewarm.timer);
+    prewarm.timer = 0;
+  }
+  if (prewarm.artReadyAt === null && unifiedBankState.masks && !matchupArtPending(prewarm.ids).length) {
+    prewarm.artReadyAt = Math.round(performance.now() - prewarm.startedAt);
+  }
+  // CINEMA 3D: hand the pair over again on every pass — prewarmFighters is
+  // incremental, so each sheet that has decoded since the last pass gets its
+  // bank now, on idle slices, and the ones already built are left alone.
+  if (cinema3dBridge.renderer?.ready && state.cinema3d && cinema3dAllowed()) {
+    prewarm.threeBanks += cinema3dBridge.renderer.prewarmFighters?.(demoPrewarmDescriptors(prewarm.ids)) || 0;
+  }
+}
+
+function demoPrewarmSnapshot() {
+  const report = (prewarm) => (prewarm ? {
+    cycle: prewarm.cycle,
+    ids: [...prewarm.ids],
+    reason: prewarm.reason,
+    passes: prewarm.passes,
+    artReadyAt: prewarm.artReadyAt,
+    threeBanks: prewarm.threeBanks,
+    elapsedMs: prewarm.endedAt ?? Math.round(performance.now() - prewarm.startedAt),
+    ended: prewarm.endedAt !== null,
+  } : null);
+  return {
+    active: report(demoSession.prewarm),
+    last: report(demoSession.lastPrewarm),
+    pendingDirector: Boolean(demoSession.pendingDirector),
+    idlePrewarmScheduled: Boolean(demoSession.idlePrewarmTimer),
+    three: cinema3dBridge.renderer?.ready ? (cinema3dBridge.renderer.stats?.().banks?.prewarm ?? null) : null,
+  };
 }
 
 function noteUserActivity() {
@@ -11942,6 +12127,13 @@ function startMatch(resetSet = true) {
   commandHistory[1].length = 0;
   updateHud();
   showScreen("fight");
+  // 5.4 (sweep #27): a played match abandons the idle countdown's warm-up —
+  // its director is dropped and any 3D banks it built are released, so a
+  // 3D match never carries a phantom pair's textures.
+  if (state.mode !== "demo" && (demoSession.pendingDirector || demoSession.prewarm)) {
+    demoSession.pendingDirector = null;
+    clearDemoPrewarm(true);
+  }
   // v5.1 #35: hold the intro clock (offline only, capped) until both
   // fighters' unified family has decoded — see armIntroArtHold. Armed BEFORE
   // the FIGHT! timer below so a release can shift it.
@@ -12139,6 +12331,10 @@ function resetRound() {
   // viewer fighting, not four seconds of ROUND 2 per exhibition. Every other
   // mode keeps the full 2.1s presentation.
   state.phaseTime = state.mode === "demo" ? DEMO_ROUND_INTRO_SECONDS : 2.1;
+  // 5.4 FIGHT NIGHT (sweep #26/#27): round 2 is the exhibition's second half
+  // — the next pair starts warming here (render/network-side only; see
+  // demoPrewarmNextPair). Demo-gated, and never on a resimulation.
+  if (state.mode === "demo" && demoSession.active && !rollbackResimulating) demoPrewarmNextPair("round2");
   state.hitstop = 0;
   state.lastImpactSide = -1;
   state.finishWinner = -1;
@@ -33571,6 +33767,18 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.finisherType = 0;
       showResult(side);
       return window.__finalBlowEngine.snapshot();
+    },
+    // 5.4 (sweep #26/#27): the next pair's warm-up — the director's peek,
+    // the art readiness of that pair, the 3D prewarm report. `force` starts
+    // the warm-up now (the round-2 / result-hold sites are the natural ones).
+    demoPrewarm({ force = false } = {}) {
+      if (force && demoSession.active) demoPrewarmNextPair("qa");
+      const next = demoSession.director?.peek?.() || null;
+      return {
+        ...demoPrewarmSnapshot(),
+        next: next ? { cycle: next.cycle, pair: [...next.pair], stage: next.stage, track: next.track } : null,
+        art: next ? window.__finalBlowQa.artReadiness([...next.pair]) : null,
+      };
     },
     demoCycles(count = 1) {
       if (!demoSession.active || state.mode !== "demo") throw new Error("Start a QA demo first");

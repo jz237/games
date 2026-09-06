@@ -300,11 +300,43 @@ export function createDemoDirector({ fighterIds, stageIds, trackCount = 0, seed 
     return bag;
   }
 
-  function next() {
+  // The three bags are refilled in one fixed order (matchup, stage, track) so
+  // that peek() — which may refill early — draws from the rng exactly what a
+  // later next() would have drawn, in the same order.
+  function refillBags() {
     if (!matchupBag.length) matchupBag = refillBag(matchups, rng, previousMatchup, ([a, b]) => demoMatchupKey(a, b));
     if (!stageBag.length) stageBag = refillBag(stages, rng, previousStage);
     if (!trackBag.length) trackBag = refillBag(tracks, rng, previousTrack);
+    // The SHOW stream's format bag rides its own rng (showRng), so a refill
+    // here never touches the matchup/stage/track draw; it is in this one
+    // place so peek() and next() see the same head.
     if (!formatBag.length) formatBag = refillFormats();
+  }
+
+  // 5.4 FIGHT NIGHT (sweep #26/#27) — PEEK. The next exhibition's unordered
+  // pair, stage and track WITHOUT consuming them, so the running exhibition
+  // can warm the next pair's sheets, voice banks and CINEMA 3D rigs while the
+  // 3D world is idle and the network has 60-120 s to hide 6-10 MB per new
+  // fighter. Bag semantics are untouched: a refill peek() performs is the
+  // refill next() would have performed a moment later, from the same rng
+  // draws in the same order, and the side coin flip stays in next() — so
+  // next() with or without a preceding peek() returns the identical cycle and
+  // leaves the identical rng state (pinned in tests/demo.test.mjs). Sides are
+  // deliberately not part of the answer: a prewarm is per fighter, not per
+  // seat, and revealing the flip early would mean drawing it early.
+  function peek() {
+    refillBags();
+    return Object.freeze({
+      cycle: cycle + 1,
+      pair: Object.freeze([...matchupBag[0]]),
+      stage: stageBag[0],
+      track: trackBag[0],
+      format: formatBag[0],
+    });
+  }
+
+  function next() {
+    refillBags();
     const matchup = matchupBag.shift();
     const stage = stageBag.shift();
     const track = trackBag.shift();
@@ -353,5 +385,5 @@ export function createDemoDirector({ fighterIds, stageIds, trackCount = 0, seed 
     };
   }
 
-  return Object.freeze({ next, snapshot });
+  return Object.freeze({ next, peek, snapshot });
 }

@@ -111,6 +111,10 @@ const DOWN_TILT_RADIANS_FALLBACK = 1.35;
 // 5.1 (#40): rigs whose fighters have been gone this long (menus after a
 // match, the arcade ladder's next pair not yet built) release their banks.
 const IDLE_EVICT_SEC = 3;
+// 5.4 FIGHT NIGHT (sweep #26): a prewarmed bank's chain runs BEHIND every
+// live rig's steps (live priorities are 0..2+AUTHORED_BANKS.length), so a
+// fighter still on screen never waits for one who is not yet on it.
+const PREWARM_PRIORITY = 20;
 // 5.1 SUPER-READY: the 2D aura's ember count at trailScale 1 (7; the balanced
 // tier rounds down to its share, never below 3).
 const AURA_EMBERS = 7;
@@ -616,7 +620,17 @@ export class FighterLayer {
     // QA tallies: how many banks were built, how many chains finished, and
     // how many sheets were evicted (drives the "no growth across a ladder"
     // probe).
-    this.bankStats = { built: 0, ready: 0, evicted: 0, warmed: 0, lateFallbacks: 0 };
+    this.bankStats = { built: 0, ready: 0, evicted: 0, warmed: 0, lateFallbacks: 0, prewarmed: 0, adopted: 0, uploaded: 0, sideSwaps: 0 };
+    // 5.4 FIGHT NIGHT (sweep #26): banks built AHEAD of a matchup, keyed by
+    // fighter id — the attract demo's director can name the next pair a whole
+    // exhibition early, so their rigs are assembled on idle slices while the
+    // current pair fights and simply ADOPTED at the swap instead of rebuilt
+    // on the boundary frame. main.mjs hands over `uploadTexture` (the
+    // renderer's initTexture) so the GPU upload lands on an idle slice too,
+    // not on the first frame the texture is drawn.
+    this.prewarmed = new Map();
+    this.prewarmSerial = 0;
+    this.uploadTexture = null;
     // 5.3 SPECTACLE (#48): per-side battle-damage decal (canvas + texture +
     // the cache key it was painted at). Built on the first mark, repainted
     // only when the revision moves — capped at 10 marks, so a rebuild is ten
@@ -744,7 +758,7 @@ export class FighterLayer {
   // each: foot metrics -> bled colour map -> smeared mirror map -> normal
   // map (-> HD composite). Each step checks `disposed` first, so a rig torn
   // down mid-chain leaves nothing behind.
-  buildBank(image, hdPath = null, { key = null, priority = 0, warm = false } = {}) {
+  buildBank(image, hdPath = null, { key = null, priority = 0, warm = false, upload = false } = {}) {
     const raw = new THREE.CanvasTexture(image);
     raw.colorSpace = THREE.SRGBColorSpace;
     raw.anisotropy = 8;
@@ -797,7 +811,7 @@ export class FighterLayer {
       // per-foot contact shadows): null until the metrics step has run —
       // poseRig falls back to the quad bottom for those first frames.
       footMetrics: null,
-      frame: 0, disposed: false, ready: false, stage: "raw", warm,
+      frame: 0, disposed: false, ready: false, stage: "raw", warm, upload,
     };
     this.bankStats.built += 1;
     if (warm) this.bankStats.warmed += 1;
@@ -841,6 +855,23 @@ export class FighterLayer {
       bank.ready = true;
       this.bankStats.ready += 1;
     });
+    // 5.4 (sweep #26): a prewarmed bank also pushes its textures to the GPU
+    // on an idle slice — texSubImage2D of a 1280x1280 sheet was ~80 ms of
+    // every swap's first frames, paid the moment the material first drew.
+    // Only prewarm asks for it: a live bank's raw upload has already
+    // happened on the frame that drew it.
+    const uploadNow = (texture) => {
+      if (!texture || bank.disposed || typeof this.uploadTexture !== "function") return;
+      this.uploadTexture(texture);
+      this.bankStats.uploaded += 1;
+    };
+    if (upload) {
+      step("upload", () => {
+        uploadNow(bank.map);
+        uploadNow(bank.reflMap);
+        uploadNow(bank.normalMap);
+      });
+    }
     // HD swap: once the 2x atlas arrives, replace the colour/emissive/depth
     // map with the HD composite. Alpha is byte-identical NN-2x, so pose,
     // shadow silhouette and rim sampling stay aligned — only fb.texel moves
@@ -866,6 +897,7 @@ export class FighterLayer {
             material.needsUpdate = true;
             depthMaterial.needsUpdate = true;
             if (old !== bank.rawMap) old.dispose();
+            if (upload) uploadNow(hdTexture);
           });
         });
       });
@@ -922,8 +954,19 @@ export class FighterLayer {
     const hdFor = (bank) => (paletteKey || !host.hdSheetPath ? null : host.hdSheetPath(id, bank));
     this.rigSerial += 1;
     const key = `rig:${this.rigSerial}:${id}`;
-    const banks = { base: this.buildBank(baseImage, hdFor("base"), { key, priority: 0 }) };
-    if (moveImage?.complete && moveImage.naturalWidth) {
+    // 5.4 (sweep #26): a prewarmed set for this fighter (same palette) is
+    // adopted whole — its banks keep their chains (under the prewarm key,
+    // which the rig now owns too) and whatever has already run stays run.
+    // Anything the prewarm did not get to (a sheet that decoded after the
+    // last prewarm pass) is built here as before.
+    const prewarmed = this.prewarmed.get(id);
+    const adopted = prewarmed && prewarmed.paletteKey === paletteKey && prewarmed.banks.base ? prewarmed : null;
+    if (adopted) {
+      this.prewarmed.delete(id);
+      this.bankStats.adopted += Object.keys(adopted.banks).length;
+    }
+    const banks = adopted ? { ...adopted.banks } : { base: this.buildBank(baseImage, hdFor("base"), { key, priority: 0 }) };
+    if (!banks.specials && moveImage?.complete && moveImage.naturalWidth) {
       banks.specials = this.buildBank(moveImage, hdFor("specials"), { key, priority: 1 });
     }
 
@@ -1026,6 +1069,10 @@ export class FighterLayer {
     const rig = {
       id, key, paletteKey, banks, mesh, root, reflMesh, reflRoot, shadow, footA, footB, coreA, coreB, penumbra,
       aura, embers,
+      // Every queue key this rig's bank chains run under (its own, plus the
+      // prewarm key of an adopted set): disposal cancels them all.
+      keys: adopted ? [key, adopted.key] : [key],
+      adopted: adopted ? Object.keys(adopted.banks).length : 0,
       currentBank: "base", lastHitFlash: 0, hitWhiteTtl: 0, hitToneTtl: 0,
     };
     this.warmAuthoredBanks(rig, fighter);
@@ -1051,27 +1098,15 @@ export class FighterLayer {
         }
       }
     }
-    this.queue.cancel(rig.key);
+    for (const key of rig.keys || [rig.key]) this.queue.cancel(key);
     this.group.remove(rig.root);
     this.group.remove(rig.reflRoot);
     this.group.remove(rig.shadow);
     const other = this.rigs.find((candidate) => candidate && candidate !== rig);
-    const stillDrawn = (image) => Boolean(other && image
-      && Object.values(other.banks).some((bank) => atlasKey(bank.image) === atlasKey(image)
-        || (bank.hdImage && atlasKey(bank.hdImage) === atlasKey(image))));
-    for (const bank of Object.values(rig.banks)) {
-      bank.disposed = true; // cancels any in-flight HD swap
-      bank.material.dispose();
-      bank.depthMaterial.dispose();
-      bank.reflMaterial.dispose();
-      bank.map.dispose();
-      if (bank.reflMap !== bank.map) bank.reflMap.dispose();
-      if (bank.rawMap && bank.rawMap !== bank.map && bank.rawMap !== bank.reflMap) bank.rawMap.dispose();
-      for (const image of [bank.image, bank.hdImage]) {
-        if (!image || stillDrawn(image)) continue;
-        this.bankStats.evicted += releaseAtlasCaches(image);
-      }
-    }
+    // 5.4 (sweep #26): a sheet a PREWARMED set is building from is pinned —
+    // the returning fighter's caches must survive the rig he is leaving.
+    const stillDrawn = (image) => Boolean(image && (this.banksDraw(other?.banks, image) || this.prewarmPins(image)));
+    this.disposeBanks(rig.banks, stillDrawn);
     rig.mesh.geometry.dispose();
     rig.reflMesh.geometry.dispose();
     if (rig.aura) {
@@ -1088,8 +1123,160 @@ export class FighterLayer {
     }
   }
 
+  banksDraw(banks, image) {
+    if (!banks) return false;
+    const key = atlasKey(image);
+    return Object.values(banks).some((bank) => atlasKey(bank.image) === key
+      || (bank.hdImage && atlasKey(bank.hdImage) === key));
+  }
+
+  prewarmPins(image) {
+    for (const entry of this.prewarmed.values()) {
+      if (this.banksDraw(entry.banks, image)) return true;
+    }
+    return false;
+  }
+
+  disposeBanks(banks, stillDrawn) {
+    for (const bank of Object.values(banks)) {
+      bank.disposed = true; // cancels any in-flight HD swap
+      bank.material.dispose();
+      bank.depthMaterial.dispose();
+      bank.reflMaterial.dispose();
+      bank.map.dispose();
+      if (bank.reflMap !== bank.map) bank.reflMap.dispose();
+      if (bank.rawMap && bank.rawMap !== bank.map && bank.rawMap !== bank.reflMap) bank.rawMap.dispose();
+      for (const image of [bank.image, bank.hdImage]) {
+        if (!image || stillDrawn(image)) continue;
+        this.bankStats.evicted += releaseAtlasCaches(image);
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 5.4 FIGHT NIGHT (sweep #26) — PREWARM. The attract demo knows its next
+  // pair a whole exhibition early (engine/demo.mjs director.peek()); the
+  // measured cost of NOT knowing was 130-362 ms of main-thread JS on the
+  // cycle-start frame and 12-26 frames over 33 ms in every new pair's first
+  // two seconds, all of it bank builds (pixel read, bleed, smear, normal map,
+  // texture upload) for fighters the world had 40 s of idle time to prepare.
+  //
+  // prewarmFighters(fighters) is idempotent and incremental: called again as
+  // sheets decode, it adds the banks whose sheet has arrived since the last
+  // call and never rebuilds one it already holds. Each fighter's set is keyed
+  // by id (not seat — a returning fighter who swaps sides is the same set)
+  // and carries its own palette key. buildRig adopts a matching set whole;
+  // sweepPrewarm drops any set that was declared and never adopted (a demo
+  // that exited, a pair that changed) once it is neither live nor declared.
+  // A fighter whose rig is ALREADY live (either side) is not prewarmed: the
+  // side swap in update() keeps his rig, so a second bank set would be pure
+  // waste. Nothing here reads the sim; the host decides when to call it.
+  // -------------------------------------------------------------------------
+  prewarmFighters(fighters = []) {
+    const host = this.host;
+    const declared = new Set();
+    let started = 0;
+    for (const fighter of fighters) {
+      const id = fighter?.def?.id;
+      if (!id) continue;
+      const paletteKey = host.fighterPaletteKey ? host.fighterPaletteKey(fighter) : "";
+      declared.add(id);
+      const live = this.rigs.find((rig) => rig && rig.id === id && (rig.paletteKey || "") === paletteKey);
+      if (live) continue;
+      let entry = this.prewarmed.get(id);
+      if (entry && entry.paletteKey !== paletteKey) {
+        this.disposePrewarmEntry(id);
+        entry = null;
+      }
+      if (!entry) {
+        this.prewarmSerial += 1;
+        entry = { id, paletteKey, key: `prewarm:${this.prewarmSerial}:${id}`, banks: {} };
+        this.prewarmed.set(id, entry);
+      }
+      const hdFor = (bank) => (paletteKey || !host.hdSheetPath ? null : host.hdSheetPath(id, bank));
+      const decoded = (image) => Boolean(image?.complete && image.naturalWidth);
+      const add = (bankName, image, hdPath, priority) => {
+        if (entry.banks[bankName] || !decoded(image)) return;
+        entry.banks[bankName] = this.buildBank(image, hdPath, { key: entry.key, priority, warm: true, upload: true });
+        this.bankStats.prewarmed += 1;
+        started += 1;
+      };
+      const baseImage = host.fighterAtlasFor ? host.fighterAtlasFor(fighter, "base") : host.fighterAtlases?.[id];
+      const moveImage = host.fighterAtlasFor ? host.fighterAtlasFor(fighter, "specials") : host.fighterMoveAtlases?.[id];
+      add("base", baseImage, hdFor("base"), PREWARM_PRIORITY);
+      add("specials", moveImage, hdFor("specials"), PREWARM_PRIORITY + 1);
+      if (host.fighterAtlasFor && host.fighterBankSheet) {
+        AUTHORED_BANKS.forEach((bankName, index) => {
+          const own = host.fighterBankSheet(id, bankName);
+          if (!decoded(own)) return;
+          add(bankName, host.fighterAtlasFor(fighter, bankName), null, PREWARM_PRIORITY + 2 + index);
+        });
+      }
+    }
+    this.prewarmDeclared = declared;
+    return started;
+  }
+
+  disposePrewarmEntry(id) {
+    const entry = this.prewarmed.get(id);
+    if (!entry) return false;
+    this.prewarmed.delete(id);
+    this.queue.cancel(entry.key);
+    const stillDrawn = (image) => Boolean(image
+      && (this.rigs.some((rig) => rig && this.banksDraw(rig.banks, image)) || this.prewarmPins(image)));
+    this.disposeBanks(entry.banks, stillDrawn);
+    return true;
+  }
+
+  // Drop every prewarmed set that is neither declared by the latest
+  // prewarmFighters() call nor live. releasePrewarm() (declared = nothing)
+  // is the host's "the demo is over" call.
+  sweepPrewarm(liveIds = []) {
+    const declared = this.prewarmDeclared || new Set();
+    let dropped = 0;
+    for (const id of [...this.prewarmed.keys()]) {
+      if (declared.has(id) || liveIds.includes(id)) continue;
+      if (this.disposePrewarmEntry(id)) dropped += 1;
+    }
+    return dropped;
+  }
+
+  releasePrewarm() {
+    this.prewarmDeclared = new Set();
+    return this.sweepPrewarm([]);
+  }
+
+  prewarmReport() {
+    const sets = {};
+    for (const [id, entry] of this.prewarmed) {
+      sets[id] = Object.fromEntries(Object.entries(entry.banks).map(([name, bank]) => [name, bank.ready ? "ready" : bank.stage]));
+    }
+    return {
+      declared: [...(this.prewarmDeclared || [])],
+      sets,
+      ready: [...this.prewarmed.values()].every((entry) => Object.values(entry.banks).every((bank) => bank.ready)),
+    };
+  }
+
   update(state, dtSec, timeSec) {
     const fighters = state.fighters || [];
+    // 5.4 (sweep #26): a fighter who comes back on the OTHER side keeps his
+    // rig — the two seats' rigs trade places before the per-side check
+    // below, which would otherwise dispose him on side 0 (evicting his
+    // caches, since side 1's old rig does not draw them) and rebuild him
+    // cold on side 1. Measured: a side-swapped return built 22 banks on the
+    // boundary against 11 for a same-side return. Render-only bookkeeping;
+    // the rig carries nothing seat-specific that poseRig does not reset.
+    if (fighters[0] && fighters[1]) {
+      const paletteOf = (fighter) => (this.host.fighterPaletteKey ? this.host.fighterPaletteKey(fighter) : "");
+      const fits = (rig, fighter) => Boolean(rig && fighter && rig.id === fighter.def.id && (rig.paletteKey || "") === paletteOf(fighter));
+      const crossed = (fits(this.rigs[0], fighters[1]) && !fits(this.rigs[0], fighters[0]))
+        || (fits(this.rigs[1], fighters[0]) && !fits(this.rigs[1], fighters[1]));
+      if (crossed) {
+        [this.rigs[0], this.rigs[1]] = [this.rigs[1], this.rigs[0]];
+        this.bankStats.sideSwaps += 1;
+      }
+    }
     // 5.1 (#40): no fighters for a while (menus, the ladder between pairs)
     // releases both rigs — the next pair's banks rebuild off the frame.
     if (!fighters[0] && !fighters[1]) {
@@ -1131,6 +1318,9 @@ export class FighterLayer {
     // After the rigs are posed: the ghosts read rig.currentBank's live frame
     // window and the rig's mirror sign, both of which poseRig has just set.
     this.updateGhosts(state);
+    // 5.4 (sweep #26): a prewarmed set the swap did not adopt and nobody
+    // declares any more goes now — never on the boundary frame itself.
+    if (this.prewarmed.size) this.sweepPrewarm(fighters.map((fighter) => fighter?.def?.id).filter(Boolean));
   }
 
   // v2.7 FRAMES: the SD motion sheet becomes a bank the first time a motion
@@ -1167,6 +1357,10 @@ export class FighterLayer {
         .map(([name, bank]) => [name, bank.ready ? "ready" : bank.stage])) : null)),
       caches: atlasCacheStats(),
       stageLight: this.spriteLight?.id ?? null,
+      // 5.4 (sweep #26): what is being warmed for the next pair, and how many
+      // of each live rig's banks were adopted rather than built at the swap.
+      prewarm: this.prewarmReport(),
+      adoptedSides: this.rigs.map((rig) => (rig ? rig.adopted : null)),
       // 5.3: dash ghosts drawn this frame, damage decals live, and how many
       // times a decal has been repainted (a probe's proof it rebuilds on the
       // mark push and not per frame).

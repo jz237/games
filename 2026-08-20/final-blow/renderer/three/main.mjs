@@ -166,6 +166,9 @@ export function createRenderer(host) {
       const fighters = new FighterLayer(host);
       scene.add(fighters.group);
       layers.set("fighters", fighters);
+      // 5.4 FIGHT NIGHT (sweep #26): prewarmed banks push their textures to
+      // the GPU on an idle slice instead of the first frame that draws them.
+      fighters.uploadTexture = (texture) => renderer.initTexture(texture);
       fighters.setStageLight(stage.spriteLight || spriteLightFor(stageId));
       // v4.3 MESH FIGHTERS: rigged 3D characters stand in for the sprite
       // billboards per side whenever renderer/rigs/<id>/ is present. The
@@ -451,6 +454,15 @@ export function createRenderer(host) {
   // browser probe warms, then measures frame times with nothing pending).
   renderer3d.drainBankQueue = () => layers.get("fighters")?.drainBankQueue?.() ?? 0;
 
+  // 5.4 FIGHT NIGHT (sweep #26): the attract demo names its NEXT pair a whole
+  // exhibition early and hands them here as fighter-shaped descriptors
+  // ({ def, side }); the fighter layer builds their banks on idle slices,
+  // keyed by fighter id, and adopts them at the swap. Incremental — the host
+  // calls it again as sheets decode. releasePrewarm() drops what was never
+  // adopted (the demo exited). Both are no-ops before init() has run.
+  renderer3d.prewarmFighters = (fighters) => layers.get("fighters")?.prewarmFighters?.(fighters) ?? 0;
+  renderer3d.releasePrewarm = () => layers.get("fighters")?.releasePrewarm?.() ?? 0;
+
   renderer3d.forceTime = (ms) => {
     clockSec = ms / 1000;
     frozenAt = clockSec;
@@ -482,6 +494,8 @@ export function createRenderer(host) {
     setQuality: renderer3d.setQuality,
     forceTime: renderer3d.forceTime,
     drainBankQueue: renderer3d.drainBankQueue,
+    prewarmFighters: renderer3d.prewarmFighters,
+    releasePrewarm: renderer3d.releasePrewarm,
     registerStage,
     registerLayer: renderer3d.registerLayer,
     registerImpactEffect: renderer3d.registerImpactEffect,

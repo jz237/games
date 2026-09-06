@@ -1071,6 +1071,11 @@ kbd,
 .demo-hud b { color: var(--amber); }
 .demo-hud em { color: var(--cyan); font-style: normal; }
 .demo-hud small { color: #fff; font-size: inherit; animation: demo-prompt .7s ease-in-out infinite alternate; }
+/* 5.4 FIGHT NIGHT (prewarm): the demo honours the intro art hold like a played
+   match, but wears a chip on its own HUD instead of the LOADING FIGHTERS
+   curtain — a curtain over the attract loop reads as a broken cabinet. */
+.demo-hud i { color: var(--amber); font-style: normal; animation: demo-prompt .55s ease-in-out infinite alternate; }
+.demo-hud i[hidden] { display: none !important; }
 @keyframes demo-prompt { to { opacity: .5; } }
 
 .online-interruption {
