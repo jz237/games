@@ -23,7 +23,8 @@ test("Final Blow service worker stays small and Cloudflare-navigation safe", asy
 
   // 5.1: six engine modules joined the shell (announcer, audio manifest, ambient,
   // crowd voice, shared sfx, swing resolve) — all imported by game.js at boot.
-  assert.ok(shell.length <= 32, `worker shell grew to ${shell.length} entries`);
+  // (5.4 Fight Night: the attract loop's six demo modules joined the shell — 34 entries.)
+  assert.ok(shell.length <= 36, `worker shell grew to ${shell.length} entries`);
   assert.equal(new Set(shell).size, shell.length, "worker shell contains duplicate entries");
   assert.ok(shell.includes("./"), "worker shell must cache the directory URL");
   assert.ok(shell.includes("./game.js"), "worker shell must cache game.js");

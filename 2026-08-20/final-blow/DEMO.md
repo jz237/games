@@ -2,6 +2,14 @@
 
 Final Blow 1.0E can run a complete CPU-vs-CPU exhibition from the title screen.
 
+> **5.4 "Fight Night"** (2026-09-06): the attract show became a card of fights —
+> the seeded closer and the CLOCK card, per-archetype personas and the Grit
+> policy, the attract audio gate, the TV-safe broadcast bug and the hidden-tab
+> hold, the next pair's warm-up, `?demo=<seed>` links, the camera and cadence
+> director, the versus card and ring introduction, the session layer (tonight's
+> card, stories, the ledger and standings), the lower third, and the neutral
+> budget with the okizeme family. Each has its own section below.
+
 ## Player experience
 
 - `WATCH DEMO · CPU VS CPU` starts immediately.

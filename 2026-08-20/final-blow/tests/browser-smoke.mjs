@@ -432,8 +432,8 @@ probe('title-menu', async () => {
       simHz: window.__finalBlowEngine?.simulationHz,
     }))()`);
     assert.match(title.title, /Final Blow/);
-    assert.match(title.build, /5\.3/);
-    assert.equal(title.version.text, 'VERSION 5.3');
+    assert.match(title.build, /5\.4/);
+    assert.equal(title.version.text, 'VERSION 5.4');
     assert.notEqual(title.version.display, 'none');
     assert.ok(title.version.left >= 0 && title.version.top >= 0);
     assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -470,7 +470,7 @@ probe('title-menu', async () => {
     assert.equal(title.engine.demo.idleScheduled, true);
     assert.equal(title.onlineSecurityBadges, 4);
     assert.equal(title.aiDifficulty, 'street');
-    assert.equal(title.engineVersion, '5.3-spectacle');
+    assert.equal(title.engineVersion, '5.4-fightnight');
     assert.deepEqual(title.engine.presentationRules, {
       hitFlashFilter: 'brightness(1.55) saturate(1.12)',
       attackNamePopups: false,
@@ -4267,6 +4267,12 @@ probe('demo-versus', async () => {
 // shot, opens the slow-motion beat and drops the letterbox bars; the same
 // seed draws the same shots; a played match draws nothing.
 probe('demo-camera', async () => {
+    // Reduced motion keeps the demo camera's tempo and bars but drops the
+    // moves, and the finisher probes above leave the persisted toggle ON —
+    // start from a clean page with it off so the shots can be measured.
+    await navigate(client, gameUrl);
+    await evaluate(client, `localStorage.removeItem('final-blow-reduced-motion')`);
+    await navigate(client, gameUrl);
     const demoCameraProbe = await evaluate(client, `(async () => {
       const qa = window.__finalBlowQa;
       const frames = (count) => new Promise((resolve) => { let left = count; const tick = () => (left -= 1) <= 0 ? resolve() : requestAnimationFrame(tick); requestAnimationFrame(tick); });
@@ -4368,12 +4374,13 @@ probe('offline-cache', async () => {
       };
     })()`);
     assert.equal(offlineCache.controlled, true);
-    assert.match(offlineCache.name, /final-blow-shell-5\.3/);
+    assert.match(offlineCache.name, /final-blow-shell-5\.4/);
     // 1.9E added engine/atlas-facing.mjs to the shell: game.js imports it, so
     // offline boot needs it cached.
     // 5.1 added engine/{audio-manifest, ambient, announcer, crowd-voice, shared-sfx,
     // swing-resolve}.mjs to the shell: game.js imports them at boot.
-    assert.equal(offlineCache.entries, 28);
+    // (5.4 Fight Night: the attract loop's six demo modules joined the shell.)
+    assert.equal(offlineCache.entries, 34);
     assert.equal(offlineCache.hasAtlasFacing, true);
     assert.equal(offlineCache.hasIndex, false);
     assert.equal(offlineCache.rootRedirected, false);
@@ -4394,8 +4401,8 @@ probe('offline-cache', async () => {
       version: window.__finalBlowEngine?.version,
     }))()`);
     assert.match(controlledReload.title, /Final Blow/);
-    assert.match(controlledReload.build, /5\.3/);
-    assert.equal(controlledReload.version, '5.3-spectacle');
+    assert.match(controlledReload.build, /5\.4/);
+    assert.equal(controlledReload.version, '5.4-fightnight');
 
     await client.send('Network.emulateNetworkConditions', {
       offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -4412,8 +4419,8 @@ probe('offline-cache', async () => {
       badge: document.querySelector('#offlineBadge').textContent,
     }))()`);
     assert.match(offlineBoot.title, /Final Blow/);
-    assert.match(offlineBoot.build, /5\.3/);
-    assert.equal(offlineBoot.version, '5.3-spectacle');
+    assert.match(offlineBoot.build, /5\.4/);
+    assert.equal(offlineBoot.version, '5.4-fightnight');
     assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
     await client.send('Network.emulateNetworkConditions', {
       offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -4459,7 +4466,7 @@ probe('mobile-landscape', async () => {
     assert.equal(landscape.mobileLandscape, true);
     assert.equal(landscape.orientationBlocked, false);
     assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-    assert.equal(landscape.version.text, 'VERSION 5.3');
+    assert.equal(landscape.version.text, 'VERSION 5.4');
     assert.notEqual(landscape.version.display, 'none');
     assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
     assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
