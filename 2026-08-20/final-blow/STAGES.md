@@ -385,3 +385,115 @@ the flinch curve; `__finalBlowQa.crowd()` returns every member's favourite,
 mood, painted column, lean and phone flag plus the mood totals and the flash
 picks, and `__finalBlowQa.crowdStir(amount, side, splatX)` drives a stir so a
 probe can script "side 0 landed a heavy here" without landing one.
+## 5.3 — the stage reaches into the fight
+
+Two things the stages did badly were really the same thing: the arena was
+scenery the fight happened in front of, rather than something the fight
+touched. The weapon arrived out of nowhere (and never arrived at all on
+Janney Street), and the floor kept one grey crack no matter what had hit it.
+
+### Janney Street gets its weapon: the loose brick
+
+`STAGE_WEAPONS` had five entries for six stages, so `getStageWeapon('janney')`
+answered null and a Janney round simply never had the pickup beat. The lot now
+carries a **LOOSE BRICK** — the half brick knocked off the rowhouse party wall
+at the end of the lot.
+
+It is the heaviest object in the set and the shortest throw: damage 14, chip 2,
+hitstun 24 (all three at the ceiling of the audited stage-weapon envelope in
+`engine/polish.mjs`), a 12-frame stagger, push 350 — against a launch of only
+470 px/s under 1420 gravity, which is the strongest pull of any weapon, so it
+drops fast and dies about 200 px from the hand (measured: thrown from x 600 it
+dented the ground at x 805). Pickup is 7 frames, the same one-handed scoop as
+the bottle. It has its own painter (fired clay with a snapped end, a lit top
+face, mortar crumbs along the bottom and three aggregate pits), its own clatter
+material in `engine/shared-sfx.mjs` (no rings at all — a dead 98 Hz masonry
+thud, two lowpassed bounces off the rubble and a gritty bandpass scrape, the
+heaviest thud in the set at 0.055 against the pigeon's 0.045), and its own
+pickup sound. So do the other five: `OBJECT_SOUNDS` had no entry for **any**
+stage-weapon style, so picking a weapon up off the floor had been silent on
+every stage since weapons shipped.
+
+### Arrival choreography: the object comes off something
+
+Every arrival used to be the same warm scorch mark with the object dropped
+150 px straight down onto it, while the cue text promised something physical.
+Each stage now has a source anchored to its plate and its own path from there
+to the landing slot (`STAGE_WEAPON_ARRIVALS` / `weaponArrivalPose` in
+`engine/stage-weapons.mjs`), and the cue names the same piece of furniture:
+
+| Stage | Source (sim px) | Choreography | Cue |
+| --- | --- | --- | --- |
+| Somerset | the station stairs (516, FLOOR-240) | three treads: flat along, hop, drop to the next | A NEEDLE CLATTERS DOWN THE STATION STAIRS |
+| Vet | the stands, far side of the frame (FLOOR-430) | a high spinning lob with a 120 px apex over the whole lot | SOMEBODY LOBS A BOTTLE OUT OF THE STANDS |
+| Wildwood | the boardwalk rail, 78 px behind the slot (FLOOR-196) | tips over the rail for a third of the telegraph, then falls | A PIGEON TOPPLES OFF THE BOARDWALK RAIL |
+| Buffet | the steam counter (300, FLOOR-240) | slides the length of the tray line, tips off the end, falls end over end | TONGS SLIDE OFF THE STEAM COUNTER |
+| Cruise | the nearest lounger (164 px in from that end, FLOOR-190) | slides down the tilted back, then flops across the wet deck | A SOUVENIR CUP SLIDES OFF A DECK CHAIR |
+| Janney | the lot wall, far side (FLOOR-300) | falls, one hard bounce off the rubble, then skitters flat | A BRICK KNOCKS LOOSE OFF THE LOT WALL |
+
+The heights are measured off the plates (the buffet's 240 puts the tongs on the
+crab-leg tray lip; the rail's 196 puts the pigeon on the top rail; Somerset's
+240 is the top tread of the entrance steps). Three things ride the path: a
+**source flourish** at the origin (five strokes kicking off the furniture in
+the stage's arrival colour, fading over the first third), the object itself at
+its pose, and a **ghost trail** of six puffs sampled backward along the same
+path — so a lob draws its arc, a slide draws the counter line and a skitter
+draws the scrape it just made. The vertical gold drop-streak is gone in both
+renderers (it only survives for a stage with no choreography, of which there
+are none). Debris comes off the source when the object is knocked loose and
+again, bigger, where it lands — grit, feathers, steam, spray or brick dust per
+stage.
+
+This is presentation only. `planStageWeapon`, `canWeaponArrive`, the landing x,
+the spawn frame and `telegraphFrames` are untouched, and `weaponArrivalPose`
+at progress 1 is exactly the 5.2 grounded draw on every kind, so replays and
+rollback peers land the object on the same pixel on the same tick. The audio
+moved with the beat: the clatter now fires when the object actually hits the
+floor (with the object's own scrape at the source when it is knocked loose)
+instead of at the announcement 48 frames earlier. CINEMA 3D rides the same
+`weaponArrivalPose`, so the two renderers show the same arrival.
+
+### Battle scars: what the floor, the walls and the weapons leave
+
+`pushStageScar` had exactly one caller (the knockdown floor impact) and drew
+exactly one thing — a chalky scuff and a dark crack — on asphalt, tile, planks
+and a wet pool deck alike. The model now lives in `engine/stage-scars.mjs`:
+
+- **Materials.** Somerset and the Vet are asphalt, Janney is rubble, the buffet
+  is tile, Wildwood is planks, the cruise deck is painted wet deck.
+- **Flavours.** Seven kinds — crack, skid, splash, dent, shards, splinter,
+  spill — with the colours in one shared table, so a scar looks the same in
+  both renderers. Every floor draws from at least two: cracks and skids on
+  asphalt, splinters and skids on the boards, splashes and skids on the wet
+  deck, cracked tile and spilled food and broken plates at the buffet, ruts and
+  dents in Janney's rubble. Only the wet deck puddles; only the boards
+  splinter.
+- **Causes.** Knockdowns (as before), **wall splats** (the arena edge keeps the
+  bruise, standing up on the wall at the height the body hit it, inside the
+  splat's own 22-tick cooldown so a wall grind still marks once) and **stage
+  weapons** — both where a thrown one lands or connects and where the arriving
+  one touches down. A thrown weapon leaves ITS mess wherever it lands: glass is
+  glass on tile, slush is slush on planks, the brick and the tongs dent.
+- **Where.** The 5.2 band (FLOOR+8..FLOOR+66) sat on the dark apron below the
+  floor line where the plates stop drawing ground: measured on the canvas, ten
+  heavy marks there moved the mean brightness of the lit floor by 0.0 on every
+  stage. The band is now FLOOR-46..FLOOR+8, the ground the fighters stand on —
+  ten marks move a 480x40 rect of it by +7.4 (cruise), +6.0 (Janney), +5.1
+  (Wildwood), +4.0 (buffet). `drawStageScars` still runs before the fighters,
+  so a body always passes in front of its own scar.
+- **In 3D.** The list rides the host bridge as decal descriptors
+  (`host.stageScars()`, declared in `renderer/three/host-contract.mjs`) and
+  `renderer/three/scar-decals.mjs` lays each one down as a quad: floor marks on
+  the ground plane, pushed toward the camera by how far below the floor line
+  the 2D pass put them; wall marks standing at the arena edge. One texture per
+  kind, painted once from the shared palette, so a scarred arena is 40 quads on
+  seven textures. `__finalBlowThree.stats().scars` / `.scarKinds` report what
+  was drawn (measured: 18 decals, 14 splash / 3 skid / 1 dent, on a scarred
+  cruise deck).
+
+The list is still module-level and never snapshotted, still guarded against
+rollback resimulation, still deduped by (tick, wall, x) so one impact can never
+double-mark, still capped at 24 (10 on the battery profile) and still cleared
+on match start. `__finalBlowQa.scars()`, `.pushScar()`, `.scarsClear()` and
+`.weaponArrival()` are the probes; `forceStageWeapon(x, { phase, frames })`
+parks the weapon mid-arrival so the choreography can be photographed.

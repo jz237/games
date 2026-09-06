@@ -155,6 +155,15 @@ export const STAGE_WEAPON_CLATTER = Object.freeze({
     bounces: { count: 3, filterType: "bandpass", freq: 3200, q: 1.5, seconds: 0.028, peak: 0.03, gap: 0.085 },
     roll: null,
   }),
+  // 5.3: a half brick. No ring at all — a dead masonry slap, two dull
+  // bounces off the rubble and a gritty scrape as it skids to rest. The
+  // heaviest thud in the set (0.055 against the pigeon's 0.045).
+  brick: Object.freeze({
+    rings: [],
+    thud: [98, 38, 0.13, 0.055],
+    bounces: { count: 2, filterType: "lowpass", freq: 700, q: 0.6, seconds: 0.045, peak: 0.034, gap: 0.13 },
+    roll: { delay: 0.26, seconds: 0.28, filterType: "bandpass", freq: 1800, freqEnd: 900, peak: 0.011 },
+  }),
   // A souvenir cup: a hollow plastic clunk that bounces twice and rolls.
   cup: Object.freeze({
     rings: [["triangle", 620, 480, 0.12, 0.04]],

@@ -31,6 +31,10 @@
 import * as THREE from "three";
 import { PX, SIM_FLOOR, worldX, worldY, hash01 } from "./shared.mjs";
 import { softDotTexture, canvasTexture } from "./textures.mjs";
+// 5.3 SPECTACLE: the same arrival choreography the 2D telegraph draws — the
+// object comes off the stairs / the stands / the rail / the counter / a deck
+// chair / the lot wall, not straight down out of the sky.
+import { getWeaponArrival, weaponArrivalPose } from "../../engine/stage-weapons.mjs";
 
 const SUPERSAMPLE = 2;
 const OBJECT_Z = 0.1;
@@ -397,19 +401,26 @@ export class WorldObjectsLayer {
       this.scorch.scale.set(markReach * 2.2 * PX, markReach * 2.2 * PX * FLOOR_DEPTH * 0.45, 1);
       this.scorch.material.opacity = markPulse * 0.85;
       this.scorch.visible = true;
-      if (telegraphing) {
+      // 5.3: the vertical drop-streak only survives on a stage with no
+      // arrival choreography (there are none shipped) — otherwise the object
+      // travels its own path and the streak would contradict it.
+      const arrival = getWeaponArrival(weapon.stageId);
+      const pose = telegraphing
+        ? weaponArrivalPose(weapon.stageId, weapon.x, progress, { floor: SIM_FLOOR })
+        : { x: weapon.x, y: SIM_FLOOR, angle: 0 };
+      if (telegraphing && !arrival) {
         this.streak.position.set(wx, 20 * PX, 0.03);
         this.streak.scale.set(7 * PX, 170 * PX, 1);
         this.streak.material.opacity = 0.5 * markPulse;
         this.streak.visible = true;
       }
-      const drop = telegraphing ? -150 * (1 - progress) : Math.sin(timeMs * 0.006) * 2;
+      const drop = telegraphing ? 0 : Math.sin(timeMs * 0.006) * 2;
       const descriptor = {
         throwable: true,
         style: profile.style,
         width: profile.width * fighterScale,
         height: profile.height * fighterScale,
-        spinAngle: telegraphing ? timeMs * 0.01 : 0,
+        spinAngle: telegraphing ? pose.angle : 0,
         vx: 1,
         vy: 0,
         color: "#ffd54a",
@@ -432,8 +443,8 @@ export class WorldObjectsLayer {
           }
         }
       });
-      entry.place(weapon.x, SIM_FLOOR - profile.height * 0.5 * fighterScale + drop, OBJECT_Z, 1,
-        telegraphing ? progress : 1);
+      entry.place(pose.x, pose.y - profile.height * 0.5 * fighterScale + drop, OBJECT_Z, 1,
+        telegraphing ? Math.min(1, progress * 4) : 1);
       shown += 1;
     }
     let carried = 0;

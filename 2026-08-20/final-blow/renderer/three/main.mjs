@@ -23,6 +23,7 @@ import { MeshFighterLayer } from "./mesh-fighters.mjs";
 import { ImpactVfxLayer } from "./vfx.mjs";
 import { CrowdLayer } from "./crowd-layer.mjs";
 import { WorldObjectsLayer } from "./world-objects.mjs";
+import { ScarDecalLayer } from "./scar-decals.mjs";
 import { buildSomersetStage } from "./stage-somerset.mjs";
 import { buildGenericStage } from "./stage-generic.mjs";
 // 5.1 (#45): per-stage sprite lighting — a stage builder may return its own
@@ -193,6 +194,12 @@ export function createRenderer(host) {
       scene.add(worldObjects.group);
       layers.set("worldObjects", worldObjects);
       renderer3d.worldObjects = worldObjects;
+      // 5.3 SPECTACLE: the arena wears the fight in 3D too — the 2D scar
+      // list as ground and arena-edge decals.
+      const scarDecals = new ScarDecalLayer(host);
+      scene.add(scarDecals.group);
+      layers.set("scarDecals", scarDecals);
+      renderer3d.scarDecals = scarDecals;
       // Silhouette guard: fighter sprites darken their edges while an impact
       // flash is live, so bursts never erase the characters.
       fighters.getFlashLevel = () => vfx.flashLevel();
@@ -403,6 +410,9 @@ export function createRenderer(host) {
     // pizza / grounded weapon / wire trap actually reached the 3D frame).
     objects: renderer3d.worldObjects?.visibleCount ?? 0,
     objectKinds: renderer3d.worldObjects?.lastKinds ?? null,
+    // 5.3: battle scars drawn as decals this frame, and the tally by kind.
+    scars: renderer3d.scarDecals?.visibleCount ?? 0,
+    scarKinds: renderer3d.scarDecals?.lastKinds ?? null,
     tris: lastStatsFrame.triangles,
     fps: Math.round(fpsEstimate),
     quality,

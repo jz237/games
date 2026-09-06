@@ -1455,15 +1455,33 @@ try {
     return {
       repeat: JSON.stringify(plan('somerset', 1)) === JSON.stringify(first),
       perRound: JSON.stringify(plan('somerset', 2)) !== JSON.stringify(first),
-      stages: ['somerset', 'vet', 'wildwood', 'buffet', 'cruise'].map((stage) => plan(stage, 1)),
+      stages: ['somerset', 'vet', 'wildwood', 'buffet', 'cruise', 'janney'].map((stage) => plan(stage, 1)),
+      // 5.3 SPECTACLE (#18): the arrival choreography per stage — where the
+      // object leaves from, and the path it takes to the slot.
+      arrivals: ['somerset', 'vet', 'wildwood', 'buffet', 'cruise', 'janney']
+        .map((stage) => window.__finalBlowQa.weaponArrival(stage, 640, 8)),
       first,
     };
   })()`);
   assert.equal(weaponPlans.repeat, true, "the same seed and round must always plan the same arrival");
   assert.equal(weaponPlans.perRound, true, "each round gets its own arrival");
   const weaponIds = weaponPlans.stages.map((plan) => plan.weaponId);
-  assert.deepEqual(weaponIds, ["needle", "bottle", "pigeon", "tongs", "souvenir-cup"]);
-  assert.equal(new Set(weaponIds).size, 5, "every stage has its own weapon type");
+  // 5.3 SPECTACLE (#18): Janney Street finally gets one — a loose brick.
+  assert.deepEqual(weaponIds, ["needle", "bottle", "pigeon", "tongs", "souvenir-cup", "brick"]);
+  assert.equal(new Set(weaponIds).size, 6, "every stage has its own weapon type");
+  // Every stage's weapon comes off a named piece of that stage, on its own
+  // path, and the cue text names the same piece of furniture.
+  assert.deepEqual(weaponPlans.arrivals.map((arrival) => arrival.kind),
+    ["stairs", "lob", "rail", "counter", "chair", "wall"]);
+  for (const arrival of weaponPlans.arrivals) {
+    assert.ok(arrival.origin.x >= 76 && arrival.origin.x <= 1204, `${arrival.stageId} source is on the plate`);
+    assert.ok(arrival.origin.y < 520, `${arrival.stageId} source is off the floor`);
+    const last = arrival.path[arrival.path.length - 1];
+    assert.equal(last.x, 640, `${arrival.stageId} arrival ends on the landing slot`);
+    assert.equal(last.y, 600, `${arrival.stageId} arrival ends on the floor`);
+    assert.ok(arrival.path.some((step) => step.x !== 640), `${arrival.stageId} arrival actually travels`);
+    assert.ok(arrival.path.some((step) => step.airborne), `${arrival.stageId} arrival leaves the ground`);
+  }
   for (const plan of weaponPlans.stages) {
     assert.ok(plan.spawnFrame > 60 * 10, "a weapon must not arrive off the opening bell");
     assert.ok(plan.spawnFrame < 99 * 60, "a weapon must arrive inside the round");
@@ -1549,6 +1567,53 @@ try {
   assert.equal(weaponRules.disabled, null, "turning stage weapons off removes them");
   assert.equal(weaponRules.stored, "0", "the STAGE WEAPONS setting persists");
   assert.equal(weaponRules.toggle, true, "there is a STAGE WEAPONS option");
+
+  // 5.3 SPECTACLE (#19): battle scars — more than one flavour per floor, from
+  // knockdowns AND wall splats AND stage-weapon impacts, on the walls where
+  // the stage has them, and mirrored to CINEMA 3D as decal descriptors.
+  const scars = await evaluate(client, `(() => {
+    const out = {};
+    const sample = (stage) => {
+      window.__finalBlowQa.stage(stage);
+      window.__finalBlowQa.scarsClear();
+      for (let index = 0; index < 12; index += 1) window.__finalBlowQa.pushScar(300 + index * 40, 'knockdown');
+      const floor = window.__finalBlowQa.scars();
+      window.__finalBlowQa.pushScar(76, 'wall', { wall: -1, y: 430 });
+      window.__finalBlowQa.pushScar(1204, 'wall', { wall: 1, y: 415 });
+      const withWalls = window.__finalBlowQa.scars();
+      return { surface: floor.surface, kinds: Object.keys(floor.kinds), walls: withWalls.walls, decals: withWalls.decals.length };
+    };
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    out.buffet = sample('buffet');
+    out.wildwood = sample('wildwood');
+    out.cruise = sample('cruise');
+    out.janney = sample('janney');
+    // A weapon leaves ITS mess wherever it lands: glass is glass on tile.
+    window.__finalBlowQa.scarsClear();
+    out.bottle = window.__finalBlowQa.pushScar(600, 'weapon', { weaponStyle: 'bottle' });
+    out.cup = window.__finalBlowQa.pushScar(700, 'weapon', { weaponStyle: 'cup' });
+    out.brick = window.__finalBlowQa.pushScar(800, 'weapon', { weaponStyle: 'brick' });
+    out.decal = window.__finalBlowQa.scars().decals[0];
+    out.dedupe = window.__finalBlowQa.pushScar(800, 'weapon', { weaponStyle: 'brick' });
+    return out;
+  })()`);
+  assert.equal(scars.buffet.surface, "tile");
+  assert.equal(scars.wildwood.surface, "planks");
+  assert.equal(scars.cruise.surface, "poolDeck");
+  assert.equal(scars.janney.surface, "rubble");
+  for (const stage of ["buffet", "wildwood", "cruise", "janney"]) {
+    assert.ok(scars[stage].kinds.length >= 2, `${stage} floor wears more than one flavour of scar`);
+    assert.equal(scars[stage].walls, 2, `${stage} keeps a mark on both walls`);
+    // (the battery profile caps the list at 10, so this is the low bound)
+    assert.ok(scars[stage].decals >= 10, `${stage} hands its scars to CINEMA 3D`);
+  }
+  assert.ok(!scars.wildwood.kinds.includes("splash"), "the boardwalk never puddles");
+  assert.ok(scars.cruise.kinds.includes("splash"), "the wet deck splashes");
+  assert.equal(scars.bottle.kind, "shards");
+  assert.equal(scars.cup.kind, "splash");
+  assert.equal(scars.brick.kind, "dent");
+  assert.equal(scars.dedupe, null, "one impact can never double-mark the same spot on the same tick");
+  assert.ok(scars.decal.width > 0 && typeof scars.decal.kind === "string", "decals carry a size and a kind");
 
   // Cyraxx's rebuilt art: every atlas cell must carry a sprite, the alpha must be
   // clean, and the palette must read as a blue-shirted man rather than the old

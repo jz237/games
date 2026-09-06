@@ -514,9 +514,21 @@ import {
   canPickUpWeapon,
   canWeaponArrive,
   getStageWeapon,
+  getWeaponArrival,
   planStageWeapon,
+  weaponArrivalOrigin,
+  weaponArrivalPose,
   weaponSnapshot,
 } from "./engine/stage-weapons.mjs";
+// 5.3 SPECTACLE: the battle-scar model (which material each stage's floor is,
+// which flavour of mark a knockdown / wall splat / weapon impact leaves on it,
+// and the decal view CINEMA 3D draws).
+import {
+  SCAR_KINDS,
+  makeStageScar,
+  scarDecals,
+  stageSurface,
+} from "./engine/stage-scars.mjs";
 import {
   FIGHTER_THROWABLES,
   THROWABLE_COMMAND,
@@ -9427,57 +9439,62 @@ function drawRackFocus(parallax) {
 }
 
 // --- Stage battle scars: the arena wears the fight ------------------------
-// Cheap stroked crack polylines + scuff ellipses under the fighters. Stored
-// module-level (never snapshotted), guarded against rollback resimulation AND
-// deduped by (tick, x) so no impact can double-mark, survives resetRound on
-// purpose and clears on match start.
+// 5.3 SPECTACLE (#19): through 5.2 this was ONE flavour — a chalky scuff and
+// a dark crack — pushed from ONE call site (the knockdown floor impact) onto
+// six different floors: the same grey crack on the Vet's asphalt, the
+// buffet's tile, the boardwalk's planks and a wet pool deck, while the arena
+// edge that had just taken a wall splat kept nothing at all.
+//
+// Now the MODEL lives in engine/stage-scars.mjs (surfaces, kinds, which kind
+// a cause leaves on which material, the geometry builder and the CINEMA 3D
+// decal view) and this file keeps only the list: the module-level array
+// (never snapshotted), the rollback guard, the (tick, x) dedupe, the cap, and
+// the 2D painter. Three causes push now — knockdowns, wall splats (at the
+// arena edge, standing UP on the wall) and stage-weapon impacts — and the
+// same list rides the host bridge into CINEMA 3D as ground/wall decals.
 const STAGE_SCAR_CAP = 24;
 const STAGE_SCAR_CAP_BATTERY = 10;
 const stageScars = [];
 
-function pushStageScar(x, force = 1) {
-  if (rollbackResimulating) return;
+function pushStageScar(x, force = 1, options = {}) {
+  if (rollbackResimulating) return null;
   const tick = state.simulationTick;
-  if (stageScars.some((scar) => scar.tick === tick && Math.abs(scar.x - x) < 1)) return;
-  const heavy = force > 1.02;
-  const points = [[0, 0]];
-  const branch = [];
-  const segments = 3 + Math.floor(visualRandom() * 3);
-  const baseAngle = visualRandom() * Math.PI * 2;
-  let px = 0;
-  let py = 0;
-  for (let index = 0; index < segments; index += 1) {
-    const angle = baseAngle + (visualRandom() - 0.5) * 1.9;
-    const length = 9 + visualRandom() * (heavy ? 24 : 15);
-    px += Math.cos(angle) * length;
-    py += Math.sin(angle) * length * 0.34; // squashed into the floor perspective
-    points.push([px, py]);
-    if (index === 1 && visualRandom() < 0.7) {
-      const branchAngle = angle + (visualRandom() < 0.5 ? 1 : -1) * (0.9 + visualRandom() * 0.8);
-      branch.push([px, py], [
-        px + Math.cos(branchAngle) * (8 + visualRandom() * 12),
-        py + Math.sin(branchAngle) * (8 + visualRandom() * 12) * 0.34,
-      ]);
-    }
-  }
-  stageScars.push({
-    tick,
+  const wall = options.wall || 0;
+  if (stageScars.some((scar) => scar.tick === tick && scar.wall === wall && Math.abs(scar.x - x) < 1)) return null;
+  const scar = makeStageScar({
     x: clamp(x, 70, W - 70),
-    y: FLOOR + 8 + visualRandom() * 58,
-    points,
-    branch,
-    scuffW: 26 + force * 22 + visualRandom() * 16,
-    scuffH: 5 + visualRandom() * 5,
-    rot: (visualRandom() - 0.5) * 0.5,
-    alpha: 0.45 + visualRandom() * 0.22,
-    heavy,
+    // A floor mark lies in the band just below the floor line (the 5.2
+    // spread, kept); a wall mark sits at the height the body hit the edge.
+    // 5.3: the 5.2 band (FLOOR+8..FLOOR+66) sat on the dark apron BELOW the
+    // floor line, where the plates stop drawing ground — measured on the
+    // canvas, ten heavy marks there moved the mean brightness of the lit
+    // floor by 0.0 on every stage. The band is now FLOOR-46..FLOOR+8, the
+    // lit ground the fighters actually stand on (+2.2 to +4.0 mean over a
+    // 480x40 rect for ten marks). drawStageScars still runs before the
+    // fighters, so a body always passes in front of its own scar.
+    y: wall ? clamp(options.y ?? FLOOR - 150, 180, FLOOR - 20) : FLOOR - 46 + visualRandom() * 54,
+    stageId: state.stage,
+    cause: options.cause || "knockdown",
+    weaponStyle: options.weaponStyle || null,
+    force,
+    tick,
+    wall,
+    random: visualRandom,
   });
+  stageScars.push(scar);
   const cap = state.performance.trailScale === 0 ? STAGE_SCAR_CAP_BATTERY : STAGE_SCAR_CAP;
   if (stageScars.length > cap) stageScars.splice(0, stageScars.length - cap);
+  return scar;
 }
 
 function clearStageScars() {
   stageScars.length = 0;
+}
+
+// The bridge view: CINEMA 3D draws these as decal quads (ground plane and
+// arena-edge walls) so the 3D arena wears the fight the same way.
+function stageScarDecals() {
+  return scarDecals(stageScars);
 }
 
 function drawStageScars() {
@@ -9486,34 +9503,65 @@ function drawStageScars() {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   for (const scar of stageScars) {
+    const spec = SCAR_KINDS[scar.kind] || SCAR_KINDS.crack;
     ctx.save();
     ctx.translate(scar.x, scar.y);
     ctx.rotate(scar.rot);
-    // Chalky scuff first so the cracks sit on a pale bruised patch — reads on
-    // dark asphalt and light tile alike.
-    ctx.globalAlpha = scar.alpha * 0.34;
-    ctx.fillStyle = "rgba(196,184,164,0.55)";
+    // The stain / scuff / puddle first, in the kind's own colour, so the
+    // marks above it sit on a bruised patch. A splash and a spill ARE this
+    // ellipse (they carry no crack), which is why the alpha is higher for
+    // the kinds that draw no lines.
+    ctx.globalAlpha = scar.alpha * (spec.lines ? 0.34 : 0.6);
+    ctx.fillStyle = spec.scuff;
     ctx.beginPath();
     ctx.ellipse(0, 0, scar.scuffW, scar.scuffH, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = scar.alpha;
-    // Pale chipped edge offset one pixel up, then the dark crack itself.
-    for (const [style, width, offsetY] of [
-      ["rgba(188,176,156,0.42)", scar.heavy ? 3 : 2.2, -1.4],
-      ["rgba(10,9,8,0.92)", scar.heavy ? 2.2 : 1.5, 0],
-    ]) {
-      ctx.strokeStyle = style;
-      ctx.lineWidth = width;
+    // Wet kinds get a bright rim: the read that says "this is liquid".
+    if (!spec.lines) {
+      ctx.globalAlpha = scar.alpha * 0.5;
+      ctx.strokeStyle = spec.edge;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(scar.points[0][0], scar.points[0][1] + offsetY);
-      for (let index = 1; index < scar.points.length; index += 1) {
-        ctx.lineTo(scar.points[index][0], scar.points[index][1] + offsetY);
-      }
-      if (scar.branch.length === 2) {
-        ctx.moveTo(scar.branch[0][0], scar.branch[0][1] + offsetY);
-        ctx.lineTo(scar.branch[1][0], scar.branch[1][1] + offsetY);
-      }
+      ctx.ellipse(0, 0, scar.scuffW * 0.94, scar.scuffH * 0.9, 0, 0, Math.PI * 2);
       ctx.stroke();
+    }
+    ctx.globalAlpha = scar.alpha;
+    // Cracks / splits / glass stars: a pale chipped edge one pixel up, then
+    // the dark line itself. `lines` is how many times the polyline is drawn
+    // rotated about the centre — 1 for a crack, 3 for a glass star.
+    for (let line = 0; line < spec.lines; line += 1) {
+      ctx.save();
+      if (line) ctx.rotate((line * Math.PI * 2) / spec.lines);
+      for (const [style, width, offsetY] of [
+        [spec.edge, scar.heavy ? 3 : 2.2, -1.4],
+        [spec.ink, scar.heavy ? 2.2 : 1.5, 0],
+      ]) {
+        ctx.strokeStyle = style;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(scar.points[0][0], scar.points[0][1] + offsetY);
+        for (let index = 1; index < scar.points.length; index += 1) {
+          ctx.lineTo(scar.points[index][0], scar.points[index][1] + offsetY);
+        }
+        if (scar.branch.length === 2) {
+          ctx.moveTo(scar.branch[0][0], scar.branch[0][1] + offsetY);
+          ctx.lineTo(scar.branch[1][0], scar.branch[1][1] + offsetY);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    // Loose bits left behind: glass chips, splinters, crab legs, slush.
+    if (scar.debris.length) {
+      ctx.fillStyle = spec.debrisColor;
+      for (const bit of scar.debris) {
+        ctx.globalAlpha = scar.alpha * 0.85;
+        ctx.save();
+        ctx.translate(bit.x, bit.y);
+        ctx.rotate(bit.a);
+        ctx.fillRect(-bit.r, -bit.r * 0.42, bit.r * 2, bit.r * 0.84);
+        ctx.restore();
+      }
     }
     ctx.restore();
   }
@@ -14908,8 +14956,11 @@ function spawnKnockdownImpact(fighter, landingVelocity) {
     kind: "floorImpact", x: fighter.x, y: FLOOR - 4,
     width: 62 + force * 74, life: 0.44, max: 0.44, color: "#b7a99a",
   });
-  // The arena wears the fight: a persistent crack + scuff under the impact.
-  pushStageScar(fighter.x, force);
+  // The arena wears the fight: a persistent mark under the impact, in the
+  // flavour this stage's floor leaves (5.3: crack/skid on asphalt, splinter
+  // on the boards, splash on the wet deck, cracked tile and spilled food at
+  // the buffet, a dented rut in Janney's rubble).
+  pushStageScar(fighter.x, force, { cause: "knockdown" });
   if (state.graphicFatalities) {
     const life = 2.4 + force;
     state.effects.push({
@@ -14955,6 +15006,16 @@ function spawnWallImpact(fighter, wallDirection) {
     : MOVEMENT_RULES.stageMaxX + 30;
   const impactY = fighter.y - fighter.height * 0.55;
   const force = clamp(Math.abs(fighter.vx) / 640, 0.6, 1.3);
+  // 5.3 SPECTACLE (#19): the arena EDGE wears the fight too. Until now a
+  // wall splat left dust that blew away in half a second and nothing else,
+  // even though it is the loudest thing that happens to the geometry. The
+  // mark stands up on the wall (wall: ±1) at the height the body hit it,
+  // in the stage material's own flavour.
+  pushStageScar(
+    wallDirection < 0 ? MOVEMENT_RULES.stageMinX : MOVEMENT_RULES.stageMaxX,
+    force,
+    { cause: "wall", wall: wallDirection, y: impactY },
+  );
   const dustCount = Math.max(5, Math.round(15 * force * state.performance.particleScale));
   for (let index = 0; index < dustCount; index += 1) {
     state.particles.push({
@@ -15987,6 +16048,11 @@ function triggerProjectile(projectile, victim) {
   victim.meter = clamp(victim.meter + 15 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   state.effects.push({ kind: projectile.style === "feedback" ? "feedbackBurst" : "projectileBurst", x: projectile.x, y: projectile.y, life: 0.5, max: 0.5, color: projectile.color });
   const impactTier = projectile.stageWeapon ? "weapon" : projectile.throwable ? "heavy" : "special";
+  // 5.3 SPECTACLE (#19): a stage weapon that connects sprays its own mess
+  // onto the floor under the impact as well as bruising the victim.
+  if (projectile.stageWeapon) {
+    pushStageScar(projectile.x, blocked ? 0.9 : 1.1, { cause: "weapon", weaponStyle: projectile.style });
+  }
   if (!blocked && !armored) pushBattleDamageMark(victim, impactTier);
   spawnHit(projectile.x, projectile.y, owner.def, impactTier, blocked, { direction: hitDirection, counter });
   if (projectile.style === "feedback") spawnCombatText(projectile.x, projectile.y - 86, blocked ? "ECHO BLOCK" : "FEEDBACK ECHO!", projectile.color);
@@ -16026,6 +16092,17 @@ function updateProjectiles(dt) {
         maxX: MOVEMENT_RULES.stageMaxX + 140,
       });
       if (phase === "bounce" && !rollbackResimulating) objectSound(projectile.style);
+      // 5.3 SPECTACLE (#19): a thrown stage weapon that hits the floor
+      // leaves ITS mark, not the floor's — glass where the bottle burst,
+      // slush where the cup went, a dent where the brick landed. A stage
+      // weapon carries bounces: 0 and no hazard frames, so stepThrowable
+      // answers "expired" the instant it touches down (only "bounce" for a
+      // weapon that ever gets bounces); the floor check keeps a weapon that
+      // simply flew off the side of the stage from marking anything.
+      if ((phase === "bounce" || phase === "expired") && projectile.stageWeapon
+        && projectile.y >= FLOOR - projectile.height * 0.5 - 1) {
+        pushStageScar(projectile.x, 1.05, { cause: "weapon", weaponStyle: projectile.style });
+      }
       if (phase === "settle") {
         projectile.armFrames = projectile.hazardArmFrames || 0;
         projectile.maxArmFrames = projectile.armFrames;
@@ -16258,6 +16335,41 @@ function stageWeaponProfile() {
   return state.stageWeapon ? getStageWeapon(state.stageWeapon.stageId) : null;
 }
 
+// 5.3 SPECTACLE (#18): what comes off the furniture with the weapon. One
+// entry per arrival `debris` kind — the puff at the source when the object is
+// knocked loose, and the bigger burst where it finally lands.
+const WEAPON_ARRIVAL_DEBRIS = Object.freeze({
+  grit: { colors: ["#7d7468", "#4c463f"], count: 9, speed: 160, size: 7, gravity: 520, drag: 0.95 },
+  feathers: { colors: ["#cfd6e2", "#9aa3b2"], count: 12, speed: 95, size: 9, gravity: 70, drag: 0.9 },
+  steam: { colors: ["#e6eef8", "#b9c9dc"], count: 8, speed: 80, size: 13, gravity: -70, drag: 0.93 },
+  spray: { colors: ["#9fe4ff", "#d9f6ff"], count: 11, speed: 175, size: 6, gravity: 640, drag: 0.96 },
+  brickdust: { colors: ["#c98a5a", "#7a4a30"], count: 12, speed: 185, size: 8, gravity: 560, drag: 0.95 },
+});
+
+function spawnWeaponArrivalDebris(kind, x, y, scale = 1) {
+  if (rollbackResimulating) return 0;
+  const spec = WEAPON_ARRIVAL_DEBRIS[kind] || WEAPON_ARRIVAL_DEBRIS.grit;
+  const count = Math.max(3, Math.round(spec.count * scale * state.performance.particleScale));
+  for (let index = 0; index < count; index += 1) {
+    const angle = -Math.PI * 0.5 + (visualRandom() - 0.5) * 2.4;
+    const speed = spec.speed * scale * (0.45 + visualRandom() * 0.85);
+    state.particles.push({
+      kind: "dust",
+      x: x + (visualRandom() - 0.5) * 26 * scale,
+      y: y - visualRandom() * 12,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      gravity: spec.gravity,
+      drag: spec.drag,
+      life: 0.3 + visualRandom() * 0.5,
+      max: 0.8,
+      size: spec.size * (0.6 + visualRandom() * 0.8),
+      color: spec.colors[visualRandom() < 0.5 ? 0 : 1],
+    });
+  }
+  return count;
+}
+
 function announceWeaponArrival(profile) {
   spawnCombatText(state.stageWeapon.x, FLOOR - 210, profile.cue, "#ffd54a");
   state.effects.push({
@@ -16270,6 +16382,34 @@ function announceWeaponArrival(profile) {
     max: 0.5,
     color: "#ffd54a",
   });
+  // 5.3: the arrival now STARTS at a piece of the stage — the station stairs,
+  // the stands, the boardwalk rail, the steam counter, a deck chair, the lot
+  // wall — so the beat opens with that furniture being disturbed (a puff at
+  // the source plus the object's own scrape) and the clatter is saved for the
+  // moment it actually hits the floor.
+  const arrival = getWeaponArrival(state.stageWeapon.stageId);
+  if (arrival) {
+    const origin = weaponArrivalOrigin(state.stageWeapon.stageId, state.stageWeapon.x, {
+      floor: FLOOR,
+      minX: MOVEMENT_RULES.stageMinX,
+      maxX: MOVEMENT_RULES.stageMaxX,
+    });
+    spawnWeaponArrivalDebris(arrival.debris, origin.x, origin.y, 0.7);
+  }
+  if (!rollbackResimulating) objectSound(profile.style);
+}
+
+// The moment the arrival path reaches the floor: the burst, the clatter and
+// the first battle scar of the beat, all on the landing slot.
+function landWeaponArrival(profile) {
+  const weapon = state.stageWeapon;
+  const arrival = getWeaponArrival(weapon.stageId);
+  spawnWeaponArrivalDebris(arrival?.debris || "grit", weapon.x, FLOOR - 4, 1.25);
+  state.effects.push({
+    kind: "floorImpact", x: weapon.x, y: FLOOR - 4,
+    width: 58, life: 0.4, max: 0.4, color: arrival?.tint || "#b7a99a",
+  });
+  pushStageScar(weapon.x, 0.95, { cause: "weapon", weaponStyle: profile.style });
   if (!rollbackResimulating) sound("stage-weapon");
 }
 
@@ -16328,6 +16468,7 @@ function updateStageWeapon() {
     if (weapon.frames >= profile.telegraphFrames) {
       weapon.phase = "ground";
       weapon.frames = 0;
+      landWeaponArrival(profile);
     }
     return;
   }
@@ -21684,6 +21825,43 @@ function drawThrowableWith(c, projectile, time, life, options = {}) {
       c.stroke();
       break;
     }
+    // 5.3 SPECTACLE: Janney's half brick. A fired-clay block with a broken
+    // end (the half it snapped at), a mortar crumb line along the bottom and
+    // a lit top face, so it reads as masonry at 48x26 rather than a red bar.
+    case "brick": {
+      c.rotate(angle);
+      const bw = w * 0.5;
+      const bh = h * 0.5;
+      c.fillStyle = "#8d4432";
+      c.beginPath();
+      c.moveTo(-bw, -bh);
+      c.lineTo(bw * 0.78, -bh);
+      // the snapped end: a ragged vertical break
+      c.lineTo(bw, -bh * 0.42);
+      c.lineTo(bw * 0.84, 0);
+      c.lineTo(bw, bh * 0.5);
+      c.lineTo(bw * 0.8, bh);
+      c.lineTo(-bw, bh);
+      c.closePath();
+      c.fill();
+      // sunlit top face
+      c.fillStyle = "rgba(214,132,92,0.85)";
+      c.fillRect(-bw, -bh, bw * 1.72, bh * 0.42);
+      // shadowed underside + clinging mortar crumbs
+      c.fillStyle = "rgba(48,24,16,0.55)";
+      c.fillRect(-bw, bh * 0.46, bw * 1.7, bh * 0.54);
+      c.fillStyle = "rgba(206,198,182,0.75)";
+      for (let crumb = 0; crumb < 4; crumb += 1) {
+        const cx = -bw + bw * 0.42 * crumb + bw * 0.1;
+        c.fillRect(cx, bh * 0.52, bw * 0.2, bh * 0.24);
+      }
+      // pitted face: three dark aggregate specks
+      c.fillStyle = "rgba(58,28,18,0.5)";
+      for (let pit = 0; pit < 3; pit += 1) {
+        c.fillRect(-bw * 0.6 + pit * bw * 0.52, -bh * 0.1 + (pit % 2) * bh * 0.3, bw * 0.14, bh * 0.18);
+      }
+      break;
+    }
     default: {
       c.fillStyle = projectile.color;
       c.beginPath();
@@ -21704,14 +21882,32 @@ function drawStageWeapon(time) {
   const telegraphing = weapon.phase === "telegraph";
   const progress = telegraphing ? clamp(weapon.frames / Math.max(1, profile.telegraphFrames), 0, 1) : 1;
   const remaining = telegraphing ? 1 : 1 - clamp(weapon.frames / Math.max(1, profile.groundFrames), 0, 1);
+  // 5.3 SPECTACLE (#18): the arrival comes off a named piece of this stage
+  // and travels its own path to the slot. The landing MARK stays exactly
+  // where and when it was (the pickup has to be as contestable as it was in
+  // 5.2) but wears the stage's colour, and the vertical gold drop-streak is
+  // gone — the object's real path is the telegraph now.
+  const arrival = getWeaponArrival(weapon.stageId);
+  const tint = arrival?.tint || "#ffd54a";
+  const origin = arrival ? weaponArrivalOrigin(weapon.stageId, weapon.x, {
+    floor: FLOOR,
+    minX: MOVEMENT_RULES.stageMinX,
+    maxX: MOVEMENT_RULES.stageMaxX,
+  }) : null;
+  const poseAt = (p) => (telegraphing
+    ? weaponArrivalPose(weapon.stageId, weapon.x, p, {
+      floor: FLOOR,
+      minX: MOVEMENT_RULES.stageMinX,
+      maxX: MOVEMENT_RULES.stageMaxX,
+    })
+    : { x: weapon.x, y: FLOOR, angle: 0, leg: "rest", airborne: false });
   ctx.save();
   ctx.translate(weapon.x, FLOOR);
 
-  // MOTION FIX 9: the landing marker is a ground SCORCH/SCUFF now — a warm
+  // MOTION FIX 9: the landing marker is a ground SCORCH/SCUFF — a warm
   // irregular burn patch with ragged scuff strokes in the stage-scar visual
-  // language — instead of the clean gold vector ellipse + dashed drop line
-  // (which read as UI decal, not world). Same pulse, same footprint, so the
-  // pickup stays exactly as contestable/readable as before.
+  // language — instead of a clean gold vector ellipse. Same pulse, same
+  // footprint, so the pickup stays exactly as contestable/readable as before.
   const markPulse = telegraphing ? 0.35 + 0.4 * Math.abs(Math.sin(time * 0.012)) : 0.28 + remaining * 0.3;
   const markReach = 46 * FIGHTER_SCALE * (telegraphing ? 0.6 + progress * 0.6 : 1);
   ctx.save();
@@ -21730,7 +21926,9 @@ function drawStageWeapon(time) {
   ctx.restore();
   ctx.restore();
   // Ragged scuff strokes: short charred flecks at hashed angles/reach — the
-  // irregular edge that makes it a burn mark, not a ring.
+  // irregular edge that makes it a burn mark, not a ring. Every third fleck
+  // takes the stage's arrival colour (feather grey, slush blue, brick red)
+  // so the slot is already wearing what is about to land on it.
   ctx.lineCap = "round";
   for (let fleck = 0; fleck < 7; fleck += 1) {
     const angle = fleck * 0.9 + presentationHash01(Math.round(weapon.x), fleck) * 0.8;
@@ -21738,38 +21936,72 @@ function drawStageWeapon(time) {
     const fx = Math.cos(angle) * reach;
     const fy = 4 + Math.sin(angle) * reach * 0.28;
     ctx.globalAlpha = markPulse * (0.5 + (fleck % 3) * 0.18);
-    ctx.strokeStyle = fleck % 2 ? "#c98a2e" : "#3a2c16";
+    ctx.strokeStyle = fleck % 3 === 2 ? tint : fleck % 2 ? "#c98a2e" : "#3a2c16";
     ctx.lineWidth = 2.5 + (fleck % 3);
     ctx.beginPath();
     ctx.moveTo(fx, fy);
     ctx.lineTo(fx + Math.cos(angle) * 10, fy + Math.sin(angle) * 3);
     ctx.stroke();
   }
-  if (telegraphing) {
-    // Incoming-drop streak: a soft gradient column instead of the dashed line.
+  ctx.restore();
+
+  if (telegraphing && arrival && origin) {
+    // The source flourish: the furniture being disturbed. Short strokes
+    // kicking off the stairs / rail / counter / chair / wall, fading out over
+    // the first third of the arrival, so the eye starts THERE and follows the
+    // object down instead of watching a column of light.
+    const kick = clamp(1 - progress / 0.35, 0, 1);
+    if (kick > 0.01) {
+      ctx.save();
+      ctx.translate(origin.x, origin.y);
+      ctx.globalAlpha = kick * 0.75;
+      ctx.strokeStyle = tint;
+      ctx.lineCap = "round";
+      for (let spoke = 0; spoke < 5; spoke += 1) {
+        const angle = -Math.PI * 0.5 + (spoke - 2) * 0.42;
+        const reach = 10 + (1 - kick) * 22 + presentationHash01(spoke, 7) * 10;
+        ctx.lineWidth = 3 - spoke * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * 6, Math.sin(angle) * 6);
+        ctx.lineTo(Math.cos(angle) * reach, Math.sin(angle) * reach);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = kick * 0.4;
+      ctx.fillStyle = tint;
+      ctx.beginPath();
+      ctx.ellipse(0, 6, 20, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    // The path itself: ghost puffs sampled BACKWARD along the choreography,
+    // so a lob draws its arc, a slide draws the counter line and a skitter
+    // draws the scrape it just made.
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = 0.5 * markPulse;
-    const dropStreak = ctx.createLinearGradient(0, -190, 0, -14);
-    dropStreak.addColorStop(0, "rgba(255,213,74,0)");
-    dropStreak.addColorStop(1, "rgba(255,213,74,0.55)");
-    ctx.strokeStyle = dropStreak;
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(0, -190);
-    ctx.lineTo(0, -20);
-    ctx.stroke();
+    ctx.fillStyle = tint;
+    for (let step = 1; step <= 6; step += 1) {
+      const p = progress - step * 0.05;
+      if (p <= 0) break;
+      const ghost = poseAt(p);
+      ctx.globalAlpha = 0.34 * (1 - step / 7);
+      ctx.beginPath();
+      ctx.ellipse(ghost.x, ghost.y - 12, 10 - step, (10 - step) * (ghost.airborne ? 1 : 0.45), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
-  ctx.globalAlpha = telegraphing ? progress : 1;
-  const drop = telegraphing ? -150 * (1 - progress) : Math.sin(time * 0.006) * 2;
-  ctx.translate(0, -profile.height * 0.5 * FIGHTER_SCALE + drop);
+  // The object, on its path (or resting on the slot once it has landed).
+  const pose = poseAt(progress);
+  ctx.save();
+  ctx.globalAlpha = telegraphing ? clamp(progress * 4, 0, 1) : 1;
+  ctx.translate(pose.x, pose.y - profile.height * 0.5 * FIGHTER_SCALE
+    + (telegraphing ? 0 : Math.sin(time * 0.006) * 2));
   drawThrowable({
     style: profile.style,
     width: profile.width * FIGHTER_SCALE,
     height: profile.height * FIGHTER_SCALE,
-    spinAngle: telegraphing ? time * 0.01 : 0,
+    spinAngle: telegraphing ? pose.angle : 0,
     vx: 1,
     vy: 0,
     color: "#ffd54a",
@@ -21791,7 +22023,9 @@ function drawStageWeapon(time) {
   }
   ctx.restore();
 
-  // Name tag so the object is identifiable without knowing the stage.
+  // Name tag so the object is identifiable without knowing the stage. It
+  // stays over the SLOT, never over the travelling object: the tag is the
+  // contest read ("it lands there"), not a label stuck to the prop.
   ctx.save();
   ctx.globalAlpha = telegraphing ? progress : 0.55 + remaining * 0.45;
   ctx.font = "900 15px system-ui, sans-serif";
@@ -28325,6 +28559,19 @@ const OBJECT_SOUNDS = Object.freeze({
   vinyl: [520, 90, 0.26, "sawtooth", 0.08, 0.34, 0.2, 1800],
   // Steel cane: a hard metallic ring with a short clatter tail.
   cane: [980, 240, 0.16, "triangle", 0.07, 0.28, 0.12, 5200],
+  // 5.3 SPECTACLE: the five stage-weapon styles had no entry at all, so
+  // picking one up off the floor made no sound whatsoever — objectSound()
+  // returned on the missing key. Each is the sound of the object being
+  // SCOOPED (a scrape and a knock), not the clatter it makes when it lands
+  // (that is weaponClatterParams in engine/shared-sfx.mjs).
+  needle: [3400, 2100, 0.07, "triangle", 0.04, 0.14, 0.05, 7000],
+  bottle: [420, 180, 0.13, "sine", 0.06, 0.3, 0.1, 2200],
+  pigeon: [190, 90, 0.15, "sine", 0.05, 0.5, 0.14, 1100],
+  tongs: [1250, 520, 0.12, "triangle", 0.06, 0.26, 0.09, 4600],
+  cup: [520, 240, 0.11, "triangle", 0.05, 0.3, 0.1, 1800],
+  // The brick is the heaviest scoop in the game: a gritty drag off the
+  // rubble and a dead knock, nothing rings.
+  brick: [140, 62, 0.17, "sine", 0.075, 0.62, 0.16, 800],
 });
 
 function noiseBurst(now, amount, seconds, filterHz) {
@@ -31647,6 +31894,12 @@ window.__finalBlowEngine = {
         // 1.9E facing probe: numeric facing × authored atlas facing per side.
         fighterMirrors: presentationDebug.lastFighterMirror.map((entry) => (entry ? { ...entry } : null)),
         stageScars: stageScars.length,
+        // 5.3: the scars are no longer one flavour — the probe reads the mix.
+        stageScarKinds: stageScars.reduce((tally, scar) => {
+          tally[scar.kind] = (tally[scar.kind] || 0) + 1;
+          return tally;
+        }, {}),
+        stageWallScars: stageScars.filter((scar) => scar.wall).length,
         rackFocus: Number(rackFocusLevel.toFixed(3)),
         practicalLights: presentationDebug.practicalLights,
         weatherParticles: presentationDebug.weatherParticles,
@@ -32126,11 +32379,14 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       setStageWeapons(Boolean(enabled));
       return state.stageWeaponsEnabled;
     },
-    forceStageWeapon(x = null) {
+    // 5.3: `options.phase` / `options.frames` park the weapon mid-ARRIVAL so a
+    // probe can photograph the choreography (the default is still the 5.2
+    // behaviour — drop it straight onto the floor, ready to contest).
+    forceStageWeapon(x = null, options = {}) {
       if (!state.stageWeapon) resetStageWeapon();
       if (!state.stageWeapon) return null;
-      state.stageWeapon.phase = "ground";
-      state.stageWeapon.frames = 0;
+      state.stageWeapon.phase = options.phase || "ground";
+      state.stageWeapon.frames = options.frames || 0;
       state.stageWeapon.holder = -1;
       state.stageWeapon.roundStartTick = state.simulationTick;
       if (Number.isFinite(x)) state.stageWeapon.x = clamp(x, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
@@ -32145,6 +32401,56 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         minX: MOVEMENT_RULES.stageMinX,
         maxX: MOVEMENT_RULES.stageMaxX,
       });
+    },
+    // 5.3 SPECTACLE (#18): the arrival choreography — where the object leaves
+    // from and where it is at any point of the telegraph, so a probe can
+    // prove the brick came off the wall rather than out of the sky.
+    weaponArrival(stageId = state.stage, landingX = state.stageWeapon?.x ?? 640, samples = 5) {
+      const arrival = getWeaponArrival(stageId);
+      if (!arrival) return null;
+      const options = { floor: FLOOR, minX: MOVEMENT_RULES.stageMinX, maxX: MOVEMENT_RULES.stageMaxX };
+      const path = [];
+      for (let index = 0; index <= samples; index += 1) {
+        const p = index / samples;
+        const pose = weaponArrivalPose(stageId, landingX, p, options);
+        path.push({ p: Number(p.toFixed(3)), x: Math.round(pose.x), y: Math.round(pose.y), leg: pose.leg, airborne: pose.airborne });
+      }
+      return {
+        stageId,
+        kind: arrival.kind,
+        from: arrival.from,
+        debris: arrival.debris,
+        cue: getStageWeapon(stageId)?.cue ?? null,
+        origin: weaponArrivalOrigin(stageId, landingX, options),
+        path,
+      };
+    },
+    // 5.3 SPECTACLE (#19): the battle-scar list, and a direct push so a probe
+    // can plant a wall or weapon scar without staging the whole slam.
+    scars() {
+      return {
+        stage: state.stage,
+        surface: stageSurface(state.stage),
+        count: stageScars.length,
+        kinds: stageScars.reduce((tally, scar) => {
+          tally[scar.kind] = (tally[scar.kind] || 0) + 1;
+          return tally;
+        }, {}),
+        walls: stageScars.filter((scar) => scar.wall).length,
+        decals: stageScarDecals(),
+        list: stageScars.map((scar) => ({
+          cause: scar.cause, kind: scar.kind, wall: scar.wall,
+          x: Math.round(scar.x), y: Math.round(scar.y), heavy: scar.heavy,
+        })),
+      };
+    },
+    pushScar(x = 640, cause = "knockdown", options = {}) {
+      const scar = pushStageScar(x, options.force ?? 1.1, { cause, ...options });
+      return scar ? { cause: scar.cause, kind: scar.kind, wall: scar.wall, x: Math.round(scar.x), y: Math.round(scar.y) } : null;
+    },
+    scarsClear() {
+      clearStageScars();
+      return stageScars.length;
     },
     fighterScale() {
       return FIGHTER_SCALE;
@@ -33663,6 +33969,9 @@ function ensureCinema3d() {
       // v5.2 LOCOMOTION (bookends): the cinematic rotation a prone cell
       // actually draws under (the victim's KO lie sheds its own lie first).
       cinematicDrawRotation,
+      // 5.3 SPECTACLE (#19): the battle-scar list as decal descriptors, so
+      // the 3D arena wears the fight the same way the canvas does.
+      stageScars: stageScarDecals,
       crowdBillboards,
       crowdSheetImage: (name) => crowdSheets.images.get(name) || null,
       crowdMediaRequest: ensureCrowdMedia,

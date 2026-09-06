@@ -151,7 +151,9 @@ function testFullTournamentAudit() {
   // Wave 16: the Commissioner's steel cane joins the audited object set.
   // Wave 17: the Devil's hex charm makes ten.
   assert.equal(audit.items.personalObjects, 10);
-  assert.equal(audit.items.stageWeapons, 5);
+  // 5.3 SPECTACLE (#18): Janney Street's loose brick makes six — every stage
+  // now has a weapon, so this pin moves 5 -> 6.
+  assert.equal(audit.items.stageWeapons, 6);
   assert.equal(audit.identities.fighters.length, 8);
   assert.deepEqual(audit.violations, []);
   assert.ok(Object.values(AI_DIFFICULTIES).filter(({ inert }) => !inert).every(({ repeatLimit }) => repeatLimit >= 2));
