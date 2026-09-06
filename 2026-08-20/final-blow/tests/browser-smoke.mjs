@@ -1767,7 +1767,9 @@ try {
   }
   assert.equal(tailgate.street.variant, "somerset", "Somerset keeps its photographic background actors");
   assert.equal(tailgate.street.embeddedPeople, 9);
-  assert.equal(tailgate.street.scuffles, 0, "the Somerset sidewalks have no tailgate scuffles");
+  // 5.3 (#20): the hero stage gained a living crowd — bystanders that react
+  // and one sidewalk scuffle, where before it had nine frozen plate actors.
+  assert.equal(tailgate.street.scuffles, 1, "Somerset's sidewalks carry one scuffle since 5.3");
   assert.equal(tailgate.art.asset, "assets/veterans-stadium.webp");
   assert.equal(tailgate.art.loaded, true);
   assert.equal(tailgate.art.style, "photorealistic-eagles-tailgate");
