@@ -5,7 +5,7 @@ Final Blow 1.0E can run a complete CPU-vs-CPU exhibition from the title screen.
 ## Player experience
 
 - `WATCH DEMO · CPU VS CPU` starts immediately.
-- Both sides use the same delayed-observation, archetype-aware `Pro` AI available to normal play.
+- Both sides use the same delayed-observation, archetype-aware AI available to normal play, each on its kit's demo persona (5.4 — see below).
 - Each exhibition is a normal best-of-three match: the timer, rounds, Grit, enhanced attacks, supers, knockouts, and character-specific Final Blows are unchanged.
 - The director alternates a full-Grit showcase side and opens every card on one of four seeded OPENERS (walk-in super, throw, dash-in heavy, or a footsies feel-out) before the choreographer and the archetype AI take over; one card in four is ON THE CLOCK (see 5.4 below).
 - Rounds end four ways — Final Blow A, Final Blow B, a plain knockout with the collapse and curtain call, or a decision at the buzzer — chosen per round by a seeded closer (5.4).
@@ -448,6 +448,129 @@ when deep in the clinch with nothing incoming). `selectKitAiIntent` takes
 AI is unchanged. Measured with the session's `fb-gap.mjs` probe (60 s, seed
 237): mean gap 149 → ~155–205 px, time under 150 px 70% → ~30–57% depending on
 the matchup — attacks still lunge in; that is the game's pushback doing its job.
+
+## 5.4 — personas and the Grit policy (Fight Night sweep #2 / #5 / #6)
+
+The 4.3 spacing pass made the attract loop readable and, measured a year
+later, anonymous. Three findings from the Fight Night sweep, all against the
+same trace (headless, seeds 237 / 1234 / 9001, two exhibitions each, 15,205
+fight ticks):
+
+- **One brain for ten fighters.** Sampling `decideAiIntent` 3000 rolls per
+  fighter per distance on the flat `demo` tier: EVERY fighter's top intent at
+  90-200 px was `retreat` (50-78%) and at 260-520 px `advance` (50-62%). The
+  1.6x widening plus its 230/130/340 px floors had folded the grappler, the
+  zoner and the counter-puncher into the same yo-yo — deathblow backed out of
+  the clinch he is built for, Donald walked in on the band his golf ball was
+  authored for, and alan's authored counter (`backSpecial`, counterRange 172)
+  fired on 12% of the swings he saw because the block roll ran first.
+- **The exhibition was a moves reel.** 87.5% of executed moves were
+  choreographer `lead` directives, each id fired once (no id more than 5 times
+  in a match); the brain executed 33 of 313.
+- **Grit sat unspent.** A side was at 100 Grit for 28-41% of the fight and
+  14 of 32 round-ends (this trace's count; the sweep's 20 of 32 sampled at the
+  roundover) still had the bar full. `super` waited its turn behind 29 other
+  least-shown ids and the brain's standalone super was 0.26 per decision.
+
+**Personas** (`engine/demo.mjs DEMO_PERSONAS`). Each kit's `ai` table now
+names an archetype persona — grappler (deathblow), rushdown (benny, ali),
+counter (alan), zoner (post, donald), footsies (jez, commissioner), trickster
+(cyraxx), skirmisher (devil) — and `demoPersonaFor(kitId)` resolves it to a
+registered `demo-<persona>` tier. `makeFighter` picks it under
+`state.mode === "demo"` only; the flat `demo` tier stays registered as the
+fallback for a kit that names none. A persona is a PRO brain with:
+
+- the kit's OWN ranges (`spacingFloors: null`) and its own clinch line
+  (`spaceRange` — 0 for the grappler and the rushdown, whose game is the
+  clinch; 190 for the zoner);
+- band weights that `selectKitAiIntent` now takes — `rangedWeight` opens a
+  ranged share inside the mid and preferred bands (Donald's golf ball and
+  Post's trap fire ON the band they were authored for, not only past
+  `approachRange`), `pokeWeight`, `throwWeight`, `closeWeight`, `holdSlack`
+  (a wider hold hysteresis so a zoner holds its range instead of stepping in
+  and out of it every decision), `counterChance` and `counterFirstChance`
+  (the authored counter answers the swing before the block roll);
+- a `dashInChance` — an empty-handed walk-in from the approach band becomes
+  a →→ dash pressed as a real double tap (neutral / toward / neutral / toward)
+  inside `dashTapWindowFrames`;
+- its own reaction / decision cadence, so the two seats stop deciding on the
+  same tick by construction.
+
+The 1.6x widening survives in exactly one place: the APPROACH band of the
+three close-range kits (deathblow 82 px, alan 96 px, benny 92 px). They still
+open from a readable distance and walk in — the walk-in is the point of all
+three — but they fight at their authored range.
+
+**The blend.** `DEMO_COVERAGE_BLEND` 0.8 → 0.55. The cumulative attract
+ledger (`priorShown` / `carryover`) finishes the checklist ACROSS cycles —
+pinned: three carried exhibitions of the same pair reach 30/30 for both
+fighters where one falls short — so a single exhibition no longer has to,
+and nearly half its windows go to the persona brain.
+
+**The Grit policy** (shared by every persona; every knob is undefined on the
+player tiers):
+
+- `comboFollowup`: a full bar on a CONFIRMED hit is the super
+  (`superConfirmChance` 0.92), ahead of the combo roll. The gate is the same
+  confirm window the sim opens for a human (`fighter.confirmWindowFrames`,
+  set at every contact site); the intent reads `grit-confirm`.
+- the standalone super's share rises from 0.38 to 0.6 of `meterChance`
+  inside `superRange`; a half bar converts the band's own action to its EX
+  version at 0.8 instead of 0.5 — EX at the band, because it is the band's
+  action.
+- the choreographer: with a full bar the next pick is a CONFIRM OPENER — the
+  least-shown normal that cancels into the super (`demoSuperConfirmIds`, read
+  off the kit's cancel routes) — and `recoverStep` chains `super` into the
+  sim's confirm window. A plain unstarted showcase is pre-empted for it the
+  same narrow way the near-full stun bar pre-empts, and the steer is
+  rate-limited to one per `GRIT_STEER_FRAMES` (240) so a bar that stays full
+  can never starve the free lane or the air row. `stats.gritOpeners /
+  gritLinks / gritPreempts` count it.
+
+**Measured** (same harness, same seeds, 12,139 fight ticks after):
+
+- brain-lane share of executed moves 10.5% → 24.9% (33 of 313 → 59 of 237);
+  22 dash-in decisions where there were none.
+- per-band identity, 3000 rolls: deathblow at 90 px `throw` 29% /
+  `driveHeavy` 23% (was `retreat` 50%), at 140 px `driveHeavy` 43% (was
+  `retreat` 77%); Donald at 420 px `commandSpecial` 48% and at 520 px 77%
+  (was `hold` 62% / `commandSpecial` 15%), at 140 px `retreat` 70%; Post at
+  420-520 px `backSpecial` 37-79%; benny/ali at 260-520 px `commandSpecial`
+  45% + dash-in 13-20%, `retreat` under 4%; alan on a swing at 140 px
+  `backSpecial` 60% (was 13%).
+- Grit at 100: 27.8% / 41.4% of fight ticks → 23.0% / 22.8%; round-ends with
+  a full bar 14 of 32 → 7 of 32; all 13 supers now come off the brain's
+  confirm (40 `grit-confirm` decisions in the trace).
+- walk reversals per fighter-minute on the sweep's metric: 28.5 → 29.1 —
+  unchanged, and the breakdown says why. Split by lane it is brain 8.9 → 10.7,
+  choreographer lead 16.5 → 11.7, feed 3.2 → 6.7; and of the 46 brain-lane
+  "reversals" after, 23 are two walk ticks ≤2 frames apart with the same
+  held intent (a cross-up or a slide flipping the sign, not a decision) and
+  12 resume walking after a 60+ tick exchange. The brain's genuine step-in /
+  step-out reversals are 11 in 12,139 ticks. The remaining number lives in the
+  choreographer's approach / rock / alive scripts — finding #5's neutral
+  budget, not the persona half.
+- distance under 150 px 54.5% → 51.1%; Donald's brain decisions in his own
+  260-450 px band 7% → 21%, Post's 4% → 14%. The choreographer's approach
+  phase still walks straight into each move's band (finding #5).
+
+Byte-identity for a played match: `tests/demo-personas.test.mjs` compares
+`selectKitAiIntent` at default knobs against an inlined copy of the 5.3 body
+over a 100k-cell grid (and the 4.3 spacing path), asserts every built-in tier
+carries none of the persona / Grit knobs, that no player tier ever emits a
+`grit-confirm`, `dash-in` or `counter-read`, and reads the `state.mode ===
+"demo"` gate off `game.js`. A node pin of `stepAiBrain` over 4000 scripted
+frames per fighter per built-in tier hashed identically before and after.
+Determinism: `qa.demo(237)` twice in one page replays identical rows, coverage
+and stats.
+
+Verification: `node --test tests/demo-personas.test.mjs tests/demo-coverage.test.mjs`
+(the coverage file gained the confirm-opener derivation, the Grit spend, the
+cross-cycle ledger and a steer rate-limit pin; its single-exhibition blend pin
+moved from `> 0.5` to `0.5..0.6` and the free-lane pin from every exhibition
+to a majority, both with the reason in the comment) and
+`node tests/browser-smoke.mjs --only=demo-mode` (each seat's `ai.difficulty`
+is a `demo-*` persona and matches `demoPersonaFor` in the page).
 
 ## CPU Block War and the authored trial demos (5.1, sweep #32 / #33)
 
