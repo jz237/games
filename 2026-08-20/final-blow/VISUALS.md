@@ -100,6 +100,16 @@ contest. The reads now exist in both renderers, from ONE set of drawings:
   body, and the seven shoulder embers from the 2D formula verbatim (hashed
   from the sim tick — nothing to rewind). Gated like 2D: reduced motion holds
   the pulse, battery `trailScale` drops the embers.
+- **Tempo / Re-Arm tells in 3D (5.1)**: `uFbWhiffRim` (hot red — never the
+  accent, so it cannot be mistaken for the super aura) strokes the edge term
+  through a whiffed swing's tail and fades across the re-arm gap;
+  `uFbRearmDim` washes the body toward pale grey for the gap and pops paler
+  for a press the gap ate. Both are driven by `whiffTellState()` from
+  `engine/tempo-tells.mjs` — the same function `drawFighter`'s 2D pass reads
+  (fringe + extension-cell ghosts + dust crescent under/over the sprite) —
+  so the tells land on identical ticks in both worlds. The `WHIFF` combat
+  text reaches 3D through the overlay pass like every other label. Program
+  cache key `fb-sprite-grade-v12`. See COMBAT.md "Tempo and Re-Arm tells".
 - **Host contract is explicit**: `renderer/three/host-contract.mjs` lists
   every member (16 required, 18 optional); `createRenderer` asserts it first
   and the loader's catch reports a missing member by name instead of a black

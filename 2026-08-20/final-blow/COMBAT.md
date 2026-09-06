@@ -255,3 +255,37 @@ measurement, cancel budget, Grit rates, Shockwave arithmetic, clamp + neutral
 gate pins), `tests/fighter-kits.test.mjs` (the invariant over every kit, and a
 proof that the clamp never fires on authored data), `tests/combos.test.mjs`
 (changed pin), `tests/depth-defense.test.mjs` (re-arm case).
+
+## Tempo and Re-Arm tells (5.1)
+
+4.4 Tempo (`WHIFF_RECOVERY_TAX`: light 0.5, heavy 0.35, special 0.3, throw
+0.25 of the move's recovery, minimum 2f) and 4.5 Re-Arm (`ATTACK_REARM_FRAMES`
+= 4) were measurable and invisible: a whiffed jez jab ran R12 + 6 tax + 4
+re-arm and the lab still printed `R12`, because the FRAME DATA line was
+snapshotted at attack start; a press inside the 4-frame gap was consumed by
+`tryStartBufferedAttack` and refused by `beginAttack` with nothing on screen
+or in the speakers. Now (`engine/tempo-tells.mjs`, pure and shared by both
+renderers):
+
+| Moment | Sim record | 2D body | CINEMA 3D body | Lab |
+| --- | --- | --- | --- | --- |
+| Active window closes on nothing (the tax lands) | `attack.whiffTaxed` + `attack.whiffTaxFrames`; `fighter.whiffTell = { tick, taxFrames, rearmFrames, kind, profileId }`; `WHIFF` combat text at the hand (tax > 0 only — projectile / trap / hurled swings connect later and tax nothing) | solid hot-red fringe (enlarged red silhouette under the sprite, 0.6 → 0.9 alpha into the taxed tail), 1–2 red ghosts of the extension cell falling back, a thin dust crescent in front of the fist | `uFbWhiffRim` — the same red as a stroke on the sprite's edge term; the combat text comes through the overlay pass | FRAME DATA becomes `JAB · S4 A3 R12+6 WHIFF · RE-ARM 4F`; the frame meter paints the taxed tail **magenta** (`whiff`) after the blue recovery |
+| Re-arm gap (swing over, `attackRearmFrames` > 0) | — | fringe fading across the gap, the remembered extension cell dropping away behind the idle body, and a pale grey wash over the body (disarmed) | rim fades, `uFbRearmDim` desaturates the body toward pale grey | meter paints the gap **grey** (`rearm`) instead of idle |
+| A press the gap eats (`beginAttack` refused with only the gap in the way) | `fighter.rearmDropTick`; `snapshot().violence.rearmDrops` | a sharper white pop for 6 ticks (outlives the gap) | `uFbRearmDim` pop | — |
+
+The eaten press also clicks: `rearmClickParams` in `engine/shared-sfx.mjs` is
+a dry lowpassed tick over a falling pip at 0.02 peak (under the dash scuff's
+0.055), pitch-jittered through `distinctDraw` so two eaten presses in one gap
+never share a pitch; human seats only (`sideIsCpuControlled`), never during
+resimulation. The tells are gameplay information, so reduced motion and high
+contrast keep the fringe, wash, pop and text and drop only the ghosts and the
+crescent; the battery profile's `trailScale` drops the ghosts.
+
+QA: `snapshot().violence.{whiffTells, rearmDrops, whiffFringes, whiffGhosts,
+rearmFlashes, rearmDropFlashes, rearmClicks}`, `snapshot().fighters[i].{
+attackRearmFrames, whiffTaxed, whiffTaxFrames, whiffTell}`, and
+`__finalBlowQa.tempo()` (per-side phase/strength/taxLeft/rearmLeft/dropFlash,
+the meter phase, the totals, what the last frame drew, the lab line). Tests:
+`tests/tempo-tells.test.mjs` (phase arithmetic, meter, readout, source pins in
+both renderers), `tests/shared-sfx.test.mjs` (click), `tests/cinema-host.test.mjs`
+(program cache key v12 for the two new uniforms).
