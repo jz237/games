@@ -1,0 +1,1656 @@
+{
+ "format": {
+  "sheet": "1280x1280 RGBA WebP, 4x4 grid, 320px cells, right-facing. The KIT bank: engine/fighter-kits.mjs addresses it as four rows of four (wind-up / strike / second strike / recover) \u2014 row 0 the main special and its EX, row 1 the throw release and the back special, row 2 the launcher, row 3 the super \u2014 with cell 15 the victory pose.",
+  "generation": "v5.3. Regenerated image-to-image (openai/gpt-image-2 edit via fal, tools/swing/gen_specials.py) with IMAGE 1 the fighter's unified sheet (identity) and IMAGE 2 his shipped specials sheet (poses), then sliced by tools/swing/build_sheet.py --bank specials at the unified sheet's own scale: feet on row 314, torso column on 160, colours pulled onto the unified sheet by color_match.py. The bank is now the same generation as unified/ext/ext2/ext3/ext4/ext5, so a special no longer crosses generations twice.",
+  "acceptGate": "accept:false is a cell whose ACTION drifted from the shipped sheet in the regeneration. game.js draws assets/moves/legacy/<id>-specials.webp for that frame instead (bank 'specials-legacy'), so a rejected cell keeps the shipped drawing and can never break a move.",
+  "commissioner": "has no specials sheet \u2014 his kit poses address his combat atlas \u2014 so he is absent here and keeps MOVE_SHEET_ADJUST 1.02.",
+  "encoding": {
+   "tool": "tools/swing/encode_sheets.py",
+   "settings": "PIL 12.3.0 WebP lossy, method 6, alpha_quality 100, exact=True; quality ladder [92]; gate: measure_de weighted dE < 1.7 against the lossless master AND byte-identical alpha, else the sheet keeps its lossless bytes",
+   "why": "5.1 #36 -- lossless VP8L sheets were 5-7x the bytes of the lossy 4.0 ext sheets at the same cell size; every byte is on the wire for the first fight of a session on a phone. Alpha is exact so the cell metrics, foot rows and 3D UVs are unchanged.",
+   "sheets": {
+    "alan-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 386138,
+     "quality": 92,
+     "weightedDe": 0.661,
+     "perCluster": [
+      0.44,
+      0.354,
+      0.676,
+      0.543,
+      1.434,
+      0.984
+     ],
+     "pixelDe": 3.018,
+     "losslessBytes": 1103208
+    },
+    "ali-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 476116,
+     "quality": 92,
+     "weightedDe": 1.649,
+     "perCluster": [
+      1.211,
+      0.998,
+      2.233,
+      1.27,
+      4.88,
+      1.756
+     ],
+     "pixelDe": 5.621,
+     "losslessBytes": 1256266
+    },
+    "benny-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 393152,
+     "quality": 92,
+     "weightedDe": 1.358,
+     "perCluster": [
+      0.669,
+      0.887,
+      0.27,
+      3.856,
+      0.772,
+      2.818
+     ],
+     "pixelDe": 4.355,
+     "losslessBytes": 1055174
+    },
+    "cyraxx-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 355158,
+     "quality": 92,
+     "weightedDe": 0.846,
+     "perCluster": [
+      0.757,
+      0.786,
+      0.905,
+      0.745,
+      0.801,
+      1.24
+     ],
+     "pixelDe": 3.487,
+     "losslessBytes": 931228
+    },
+    "deathblow-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 322970,
+     "quality": 92,
+     "weightedDe": 0.956,
+     "perCluster": [
+      0.487,
+      0.402,
+      1.007,
+      1.768,
+      0.39,
+      4.998
+     ],
+     "pixelDe": 3.54,
+     "losslessBytes": 910314
+    },
+    "devil-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 426926,
+     "quality": 92,
+     "weightedDe": 1.308,
+     "perCluster": [
+      0.502,
+      0.986,
+      1.58,
+      1.383,
+      4.262,
+      2.45
+     ],
+     "pixelDe": 4.031,
+     "losslessBytes": 1045746
+    },
+    "donald-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 339996,
+     "quality": 92,
+     "weightedDe": 1.256,
+     "perCluster": [
+      0.752,
+      0.475,
+      1.827,
+      1.834,
+      3.145,
+      1.74
+     ],
+     "pixelDe": 4.409,
+     "losslessBytes": 916772
+    },
+    "jez-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 515266,
+     "quality": 92,
+     "weightedDe": 0.821,
+     "perCluster": [
+      0.499,
+      0.344,
+      0.556,
+      1.494,
+      1.553,
+      2.089
+     ],
+     "pixelDe": 4.818,
+     "losslessBytes": 1298010
+    },
+    "post-specials.webp": {
+     "codec": "VP8",
+     "action": "encoded",
+     "bytes": 383154,
+     "quality": 92,
+     "weightedDe": 1.38,
+     "perCluster": [
+      0.797,
+      1.79,
+      0.961,
+      0.552,
+      2.289,
+      2.428
+     ],
+     "pixelDe": 4.952,
+     "losslessBytes": 998534
+    }
+   }
+  }
+ },
+ "fighters": {
+  "deathblow": {
+   "sheet": "assets/moves/deathblow-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/deathblow-specials.webp",
+   "scale": 1.2697,
+   "floorRow": 315,
+   "sheetAdjust": 1.155,
+   "sheetAdjustFrom": "shipped 1.14 x median(shipped drawn height / new drawn height) 1.0131 over 16 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 1.54,
+    "vsUnifiedCostumeOnly": 1.45,
+    "effectPixelShare": 0.032
+   },
+   "deShipped": {
+    "vsUnified": 5.6,
+    "vsUnifiedCostumeOnly": 5.31,
+    "effectPixelShare": 0.018
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 246,
+     "bodyCentre": 192,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 255,
+     "bodyCentre": 187,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 223,
+     "bodyCentre": 203,
+     "bottom": 314,
+     "drawAdjust": 1.1543
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 263,
+     "bodyCentre": 183,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 190,
+     "bodyCentre": 220,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 245,
+     "bodyCentre": 192,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 301,
+     "bodyCentre": 164,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 225,
+     "bodyCentre": 202,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 169,
+     "bodyCentre": 230,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 268,
+     "bodyCentre": 180,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 278,
+     "bodyCentre": 176,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 246,
+     "bodyCentre": 192,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 245,
+     "bodyCentre": 192,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 200,
+     "bodyCentre": 214,
+     "bottom": 314,
+     "drawAdjust": 1.2253
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 239,
+     "bodyCentre": 195,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 254,
+     "bodyCentre": 188,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    }
+   ]
+  },
+  "jez": {
+   "sheet": "assets/moves/jez-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/jez-specials.webp",
+   "scale": 1.4037,
+   "floorRow": 315,
+   "sheetAdjust": 1.012,
+   "sheetAdjustFrom": "shipped 1.03 x median(shipped drawn height / new drawn height) 0.9823 over 16 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 4.43,
+    "vsUnifiedCostumeOnly": 2.79,
+    "effectPixelShare": 0.202
+   },
+   "deShipped": {
+    "vsUnified": 8.71,
+    "vsUnifiedCostumeOnly": 4.59,
+    "effectPixelShare": 0.379
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 284,
+     "bodyCentre": 172,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 224,
+     "bodyCentre": 202,
+     "bottom": 314,
+     "drawAdjust": 1.2148
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 220,
+     "bodyCentre": 204,
+     "bottom": 314,
+     "drawAdjust": 1.2377
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 300,
+     "bodyCentre": 164,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 227,
+     "bodyCentre": 201,
+     "bottom": 314,
+     "drawAdjust": 1.0283
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 208,
+     "bodyCentre": 210,
+     "bottom": 314,
+     "drawAdjust": 1.1925
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 306,
+     "bodyCentre": 162,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 309,
+     "bodyCentre": 160,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 241,
+     "bodyCentre": 194,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0494
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0001
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 237,
+     "bodyCentre": 196,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 310,
+     "bodyCentre": 160,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 275,
+     "bodyCentre": 177,
+     "bottom": 314,
+     "drawAdjust": 1.1235
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 307,
+     "bodyCentre": 161,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0135
+    }
+   ]
+  },
+  "alan": {
+   "sheet": "assets/moves/alan-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/alan-specials.webp",
+   "scale": 1.3304,
+   "floorRow": 315,
+   "sheetAdjust": 1.005,
+   "sheetAdjustFrom": "shipped 1.06 x median(shipped drawn height / new drawn height) 0.9486 over 16 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 1.69,
+    "vsUnifiedCostumeOnly": 1.56,
+    "effectPixelShare": 0.044
+   },
+   "deShipped": {
+    "vsUnified": 15.11,
+    "vsUnifiedCostumeOnly": 8.79,
+    "effectPixelShare": 0.367
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 271,
+     "bodyCentre": 179,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 266,
+     "bodyCentre": 182,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 262,
+     "bodyCentre": 184,
+     "bottom": 314,
+     "drawAdjust": 1.0309
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 278,
+     "bodyCentre": 176,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 273,
+     "bodyCentre": 178,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 263,
+     "bodyCentre": 183,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 274,
+     "bodyCentre": 178,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 281,
+     "bodyCentre": 174,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 225,
+     "bodyCentre": 202,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0159
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 267,
+     "bodyCentre": 181,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 221,
+     "bodyCentre": 204,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 293,
+     "bodyCentre": 168,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 290,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 289,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0006
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    }
+   ]
+  },
+  "post": {
+   "sheet": "assets/moves/post-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/post-specials.webp",
+   "scale": 1.36,
+   "floorRow": 315,
+   "sheetAdjust": 1.024,
+   "sheetAdjustFrom": "shipped 1.02 x median(shipped drawn height / new drawn height) 1.0041 over 16 matched actions",
+   "slice": "--keyLow 25 --keySpan 55 --hueSafe 60 --matchShift 5: his paint IS magenta, so the 4.9 key band (60..170 dE) read his spray as half background and the 5.2 despill refilled what survived \u2014 the default slice came out with his whole pink vocabulary washed to dust",
+   "de": {
+    "vsUnified": 6.35,
+    "vsUnifiedCostumeOnly": 2.14,
+    "effectPixelShare": 0.189
+   },
+   "deShipped": {
+    "vsUnified": 7.8,
+    "vsUnifiedCostumeOnly": 3.56,
+    "effectPixelShare": 0.18
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 290,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 275,
+     "bodyCentre": 177,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 191,
+     "bodyCentre": 219,
+     "bottom": 314,
+     "drawAdjust": 1.3862
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 279,
+     "bodyCentre": 175,
+     "bottom": 314,
+     "drawAdjust": 1.0276
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 208,
+     "bodyCentre": 210,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 190,
+     "bodyCentre": 220,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 168,
+     "bodyCentre": 230,
+     "bottom": 314,
+     "drawAdjust": 1.6875
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 264,
+     "bodyCentre": 182,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 193,
+     "bodyCentre": 218,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 291,
+     "bodyCentre": 169,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 265,
+     "bodyCentre": 182,
+     "bottom": 314,
+     "drawAdjust": 1.0848
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 249,
+     "bodyCentre": 190,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 240,
+     "bodyCentre": 194,
+     "bottom": 314,
+     "drawAdjust": 1.1424
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 213,
+     "bodyCentre": 208,
+     "bottom": 314,
+     "drawAdjust": 1.173
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 223,
+     "bodyCentre": 203,
+     "bottom": 314,
+     "drawAdjust": 1.3434
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 296,
+     "bodyCentre": 166,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    }
+   ]
+  },
+  "donald": {
+   "sheet": "assets/moves/donald-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/donald-specials.webp",
+   "scale": 1.2389,
+   "floorRow": 315,
+   "sheetAdjust": 1.081,
+   "sheetAdjustFrom": "shipped 1.04 x median(shipped drawn height / new drawn height) 1.0398 over 16 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 1.74,
+    "vsUnifiedCostumeOnly": 1.78,
+    "effectPixelShare": 0.123
+   },
+   "deShipped": {
+    "vsUnified": 8.39,
+    "vsUnifiedCostumeOnly": 7.62,
+    "effectPixelShare": 0.098
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 284,
+     "bodyCentre": 172,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 189,
+     "bodyCentre": 220,
+     "bottom": 314,
+     "drawAdjust": 1.3577
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 210,
+     "bodyCentre": 210,
+     "bottom": 314,
+     "drawAdjust": 1.2406
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 281,
+     "bodyCentre": 174,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 287,
+     "bodyCentre": 171,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 263,
+     "bodyCentre": 183,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 167,
+     "bodyCentre": 231,
+     "bottom": 314,
+     "drawAdjust": 1.5756
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 194,
+     "bodyCentre": 218,
+     "bottom": 314,
+     "drawAdjust": 1.3696
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 208,
+     "bodyCentre": 210,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 289,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 296,
+     "bodyCentre": 166,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 235,
+     "bodyCentre": 197,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 294,
+     "bodyCentre": 168,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 231,
+     "bodyCentre": 199,
+     "bottom": 314,
+     "drawAdjust": 1.2471
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 246,
+     "bodyCentre": 192,
+     "bottom": 314,
+     "drawAdjust": 1.0092
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 295,
+     "bodyCentre": 167,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    }
+   ]
+  },
+  "devil": {
+   "sheet": "assets/moves/devil-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/devil-specials.webp",
+   "scale": 1.3722,
+   "floorRow": 315,
+   "sheetAdjust": 1.005,
+   "sheetAdjustFrom": "shipped 1.04 x median(shipped drawn height / new drawn height) 0.9664 over 15 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 2.08,
+    "vsUnifiedCostumeOnly": 2.06,
+    "effectPixelShare": 0.032
+   },
+   "deShipped": {
+    "vsUnified": 2.74,
+    "vsUnifiedCostumeOnly": 2.71,
+    "effectPixelShare": 0.006
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 288,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 198,
+     "bodyCentre": 216,
+     "bottom": 314,
+     "drawAdjust": 1.0606
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 217,
+     "bodyCentre": 206,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 205,
+     "bodyCentre": 212,
+     "bottom": 314,
+     "drawAdjust": 1.0693
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 156,
+     "bodyCentre": 236,
+     "bottom": 314,
+     "drawAdjust": 1.1794
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 171,
+     "bodyCentre": 229,
+     "bottom": 314,
+     "drawAdjust": 1.1235
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 167,
+     "bodyCentre": 231,
+     "bottom": 314,
+     "drawAdjust": 1.1494
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 202,
+     "bodyCentre": 214,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": false,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0,
+     "reject": "shipped 8 is the four-legged crouched gather (content height 178); the regeneration reared him upright onto one leg (313) \u2014 a different action AND a foot off the street on a grounded wind-up"
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 278,
+     "bodyCentre": 176,
+     "bottom": 314,
+     "drawAdjust": 1.0616
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 301,
+     "bodyCentre": 164,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 172,
+     "bodyCentre": 228,
+     "bottom": 314,
+     "drawAdjust": 1.0985
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 298,
+     "bodyCentre": 166,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 254,
+     "bodyCentre": 188,
+     "bottom": 314,
+     "drawAdjust": 1.0682
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 169,
+     "bodyCentre": 230,
+     "bottom": 314,
+     "drawAdjust": 1.0906
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 275,
+     "bodyCentre": 177,
+     "bottom": 314,
+     "drawAdjust": 1.081
+    }
+   ]
+  },
+  "ali": {
+   "sheet": "assets/moves/ali-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/ali-specials.webp",
+   "scale": 1.319,
+   "floorRow": 315,
+   "sheetAdjust": 0.96,
+   "sheetAdjustFrom": "shipped 1.04 x median(shipped drawn height / new drawn height) 0.9228 over 16 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 1.73,
+    "vsUnifiedCostumeOnly": 2.84,
+    "effectPixelShare": 0.061
+   },
+   "deShipped": {
+    "vsUnified": 5.0,
+    "vsUnifiedCostumeOnly": 3.83,
+    "effectPixelShare": 0.092
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 281,
+     "bodyCentre": 174,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 286,
+     "bodyCentre": 172,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 251,
+     "bodyCentre": 189,
+     "bottom": 314,
+     "drawAdjust": 1.0917
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 290,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 278,
+     "bodyCentre": 176,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 295,
+     "bodyCentre": 167,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 285,
+     "bodyCentre": 172,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 265,
+     "bodyCentre": 182,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 210,
+     "bodyCentre": 210,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 288,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 226,
+     "bodyCentre": 202,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 194,
+     "bodyCentre": 218,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 290,
+     "bodyCentre": 170,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 276,
+     "bodyCentre": 176,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 241,
+     "bodyCentre": 194,
+     "bottom": 314,
+     "drawAdjust": 1.1491
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 306,
+     "bodyCentre": 162,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    }
+   ]
+  },
+  "benny": {
+   "sheet": "assets/moves/benny-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/benny-specials.webp",
+   "scale": 1.4037,
+   "floorRow": 315,
+   "sheetAdjust": 0.862,
+   "sheetAdjustFrom": "shipped 1.02 x median(shipped drawn height / new drawn height) 0.8453 over 16 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 9.85,
+    "vsUnifiedCostumeOnly": 3.27,
+    "effectPixelShare": 0.283
+   },
+   "deShipped": {
+    "vsUnified": 15.33,
+    "vsUnifiedCostumeOnly": 3.56,
+    "effectPixelShare": 0.373
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 295,
+     "bodyCentre": 167,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 285,
+     "bodyCentre": 172,
+     "bottom": 314,
+     "drawAdjust": 1.0235
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 249,
+     "bodyCentre": 190,
+     "bottom": 314,
+     "drawAdjust": 1.025
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 293,
+     "bodyCentre": 168,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 199,
+     "bodyCentre": 215,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 236,
+     "bodyCentre": 196,
+     "bottom": 314,
+     "drawAdjust": 1.0185
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 240,
+     "bodyCentre": 194,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 279,
+     "bodyCentre": 175,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 185,
+     "bodyCentre": 222,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 292,
+     "bodyCentre": 168,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 299,
+     "bodyCentre": 165,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 178,
+     "bodyCentre": 226,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 293,
+     "bodyCentre": 168,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 291,
+     "bodyCentre": 169,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 266,
+     "bodyCentre": 182,
+     "bottom": 314,
+     "drawAdjust": 1.1012
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 299,
+     "bodyCentre": 165,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    }
+   ]
+  },
+  "cyraxx": {
+   "sheet": "assets/moves/cyraxx-specials.webp",
+   "fallbackSheet": "assets/moves/legacy/cyraxx-specials.webp",
+   "scale": 1.4712,
+   "floorRow": 315,
+   "sheetAdjust": 0.956,
+   "sheetAdjustFrom": "shipped 1.05 x median(shipped drawn height / new drawn height) 0.9103 over 16 matched actions",
+   "slice": "build_sheet.py defaults",
+   "de": {
+    "vsUnified": 1.74,
+    "vsUnifiedCostumeOnly": 1.96,
+    "effectPixelShare": 0.039
+   },
+   "deShipped": {
+    "vsUnified": 4.49,
+    "vsUnifiedCostumeOnly": 4.55,
+    "effectPixelShare": 0.008
+   },
+   "cells": [
+    {
+     "frame": 0,
+     "id": "special-r0-f0",
+     "accept": true,
+     "height": 312,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 1,
+     "id": "special-r0-f1",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.02
+    },
+    {
+     "frame": 2,
+     "id": "special-r0-f2",
+     "accept": true,
+     "height": 296,
+     "bodyCentre": 166,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 3,
+     "id": "special-r0-f3",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0153
+    },
+    {
+     "frame": 4,
+     "id": "special-r1-f0",
+     "accept": true,
+     "height": 196,
+     "bodyCentre": 216,
+     "bottom": 314,
+     "drawAdjust": 1.1177
+    },
+    {
+     "frame": 5,
+     "id": "special-r1-f1",
+     "accept": true,
+     "height": 215,
+     "bodyCentre": 207,
+     "bottom": 314,
+     "drawAdjust": 1.2384
+    },
+    {
+     "frame": 6,
+     "id": "special-r1-f2",
+     "accept": true,
+     "height": 236,
+     "bodyCentre": 196,
+     "bottom": 314,
+     "drawAdjust": 1.1803
+    },
+    {
+     "frame": 7,
+     "id": "special-r1-f3",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0341
+    },
+    {
+     "frame": 8,
+     "id": "special-r2-f0",
+     "accept": true,
+     "height": 268,
+     "bodyCentre": 180,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 9,
+     "id": "special-r2-f1",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0623
+    },
+    {
+     "frame": 10,
+     "id": "special-r2-f2",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0294
+    },
+    {
+     "frame": 11,
+     "id": "special-r2-f3",
+     "accept": true,
+     "height": 257,
+     "bodyCentre": 186,
+     "bottom": 314,
+     "drawAdjust": 1.0
+    },
+    {
+     "frame": 12,
+     "id": "special-r3-f0",
+     "accept": true,
+     "height": 279,
+     "bodyCentre": 175,
+     "bottom": 314,
+     "drawAdjust": 1.0587
+    },
+    {
+     "frame": 13,
+     "id": "special-r3-f1",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0623
+    },
+    {
+     "frame": 14,
+     "id": "special-r3-f2",
+     "accept": true,
+     "height": 181,
+     "bodyCentre": 224,
+     "bottom": 314,
+     "drawAdjust": 1.308
+    },
+    {
+     "frame": 15,
+     "id": "special-r3-f3",
+     "accept": true,
+     "height": 313,
+     "bodyCentre": 158,
+     "bottom": 314,
+     "drawAdjust": 1.0764
+    }
+   ]
+  }
+ }
+}
