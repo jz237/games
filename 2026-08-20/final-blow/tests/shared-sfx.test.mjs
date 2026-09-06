@@ -10,6 +10,7 @@ import {
   dashScuffParams,
   distinctDraw,
   pickSharedVariation,
+  rearmClickParams,
   weaponClatterParams,
 } from "../engine/shared-sfx.mjs";
 import { STAGE_WEAPONS } from "../engine/stage-weapons.mjs";
@@ -144,4 +145,22 @@ test("game.js routes the shared pool through the variation and the two cues thro
     assert.match(body, /synthVoiceDraw\(/, `${name} must draw a no-repeat jitter`);
   }
   assert.match(game, /presentationHash01\(state\.simulationTick, serial, 41 \+ salt\+\+\)/);
+});
+
+// v5.1 TEMPO TELLS: the re-arm click — the press the 4-frame gap ate.
+test("the re-arm click is a dry muted tick under every swing and impact", () => {
+  const click = rearmClickParams({ draw: 0, level: 1 });
+  assert.equal(click.tick.filterType, "lowpass");
+  assert.ok(click.tick.seconds < 0.05, "a tick, not a beat");
+  assert.ok(click.pip.seconds < 0.06);
+  assert.ok(click.pip.from > click.pip.to, "the pip falls");
+  // Quieter than the dash scuff (0.055) and far under the impact layers.
+  assert.ok(click.tick.peak < dashScuffParams({ forward: true }).hiss.peak);
+  assert.ok(click.tick.peak <= 0.02 && click.pip.peak <= 0.02);
+  // The draw moves the pitch so two eaten presses in one gap differ.
+  const low = rearmClickParams({ draw: -1 });
+  const high = rearmClickParams({ draw: 1 });
+  assert.ok(high.tick.freq > low.tick.freq);
+  assert.ok(high.pip.from > low.pip.from);
+  assert.equal(rearmClickParams({ level: 0.5 }).tick.peak, click.tick.peak * 0.5);
 });

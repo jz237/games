@@ -42,6 +42,10 @@ import { FIGHTER_MASK_LAYER } from "./post.mjs";
 // v3.0: ...and on the unified bank's name, so the sheet-adjust branch below
 // cannot drift from the sim's idea of what that bank is called.
 import { AUTHORED_BANKS, UNIFIED_BANK } from "../../engine/fighter-kits.mjs";
+// v5.1 TEMPO TELLS: the SAME phase/strength function drawFighter's 2D pass
+// reads, so the whiff fringe and the re-arm wash land on identical ticks in
+// both renderers (no host member: it is pure engine code, not a game.js read).
+import { whiffTellState } from "../../engine/tempo-tells.mjs";
 
 // HD (2x) atlas variants for 3D mode only (renderer/hd/MANIFEST.json).
 // Loaded lazily per fighter; on any failure the bank silently keeps the
@@ -162,6 +166,12 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     // same read is the edge term itself, so it wraps every pose exactly.
     readyRim: { value: 0 },
     readyColor: new THREE.Color(0xffffff),
+    // v5.1 TEMPO TELLS: 0..1 hot-red silhouette stroke while a swing is
+    // paying its whiff tax / re-arming (the 2D pass draws an enlarged red
+    // silhouette behind the sprite), and 0..1 pale desaturating wash for the
+    // re-arm gap and an eaten press (the 2D "screen" grey/white flash).
+    whiffRim: { value: 0 },
+    rearmDim: { value: 0 },
     texel: new THREE.Vector2(1 / atlasWidth, 1 / atlasHeight),
   };
   material.userData.fb = fb;
@@ -188,6 +198,8 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     shader.uniforms.uFbSpecStrength = fb.specStrength;
     shader.uniforms.uFbReadyRim = fb.readyRim;
     shader.uniforms.uFbReadyColor = { value: fb.readyColor };
+    shader.uniforms.uFbWhiffRim = fb.whiffRim;
+    shader.uniforms.uFbRearmDim = fb.rearmDim;
     shader.uniforms.uFbTexel = { value: fb.texel };
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vFbWorld;\nvarying vec2 vFbLocal;")
@@ -219,6 +231,8 @@ uniform float uFbLampDx;
 uniform float uFbSpecStrength;
 uniform float uFbReadyRim;
 uniform vec3 uFbReadyColor;
+uniform float uFbWhiffRim;
+uniform float uFbRearmDim;
 uniform vec2 uFbTexel;`)
       // 1px-ERODED matte + derivative-smoothed cut at 0.5: the alpha is taken
       // as the MIN of this texel and its 4 neighbours, which shrinks the matte
@@ -324,7 +338,18 @@ diffuseColor.rgb += uFbFloorBounce * fbLow * (vec3(1.0) - diffuseColor.rgb) * (0
 // Super freeze: the body drops toward a silhouette (rims boosted in JS).
 // The VICTIM digs deeper — a dark shape against the duotone stage, the way
 // SF6 keeps the super's owner lit while time stops around the other guy.
-diffuseColor.rgb *= 1.0 - uFbSuperDim * (0.62 + uFbSuperVictim * 0.24);`)
+diffuseColor.rgb *= 1.0 - uFbSuperDim * (0.62 + uFbSuperVictim * 0.24);
+// 5.1 TEMPO TELLS: re-arm wash — the body drops toward a pale grey for the
+// 4-frame gap (disarmed) and pops paler for an eaten press; luminance-
+// preserving so the pose stays readable under it.
+diffuseColor.rgb = mix(diffuseColor.rgb,
+  vec3(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11))) * 0.55 + 0.42, uFbRearmDim);
+// ...and the whiff casts the body red from the inside as well as the edge:
+// on Somerset the K&A magenta rims and a super-ready accent aura sit right
+// on top of a red edge stroke (measured: the stroke alone was hard to pick
+// out of the stage's own pink), so the 2D fringe+ghost mass gets its 3D
+// counterpart as a warm interior tint that no stage light supplies.
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.35, 0.5, 0.55), uFbWhiffRim * 0.4);`)
       .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
 // --- Directional silhouette rims -------------------------------------------
 // Tight 1-2px edge strokes from outward alpha sampling, converted to SCREEN
@@ -420,6 +445,11 @@ totalEmissiveRadiance += vec3(1.0, 0.56, 0.2)
 // a super — gameplay information (the opponent can cash a super NOW), so it
 // rides above the flash guard and the freeze dim rather than under them.
 totalEmissiveRadiance += uFbReadyColor * (uFbReadyRim * (fbEdgeAny * 1.35 + 0.05));
+// 5.1 TEMPO TELLS: the whiff fringe — a hot red stroke on the same edge
+// term, NOT the fighter's accent, so it never reads as the super aura. It
+// rides above the flash guard like the ready rim: "that swing is costing
+// you" is gameplay information the opponent needs to see too (punish).
+totalEmissiveRadiance += vec3(1.0, 0.25, 0.33) * (uFbWhiffRim * (fbEdgeAny * 1.7 + 0.08));
 // --- Flash guard (SF6 Drive-Impact discipline): while a burst is live the
 // interior keeps its OWN contrast (deepened S-curve, not a flat wash) and
 // the silhouette carries a hot high-contrast rim — the character must stay
@@ -451,8 +481,9 @@ if (uFbHitTone > 0.001) {
 }`);
   };
   // Distinct program per patched material (uniforms differ per bank).
-  // v12 (5.1): uFbTopTint joined the uniform set.
-  material.customProgramCacheKey = () => "fb-sprite-grade-v12";
+  // v12 (5.1): uFbTopTint joined the uniform set; v13 (5.1): uFbWhiffRim /
+  // uFbRearmDim (the tempo tells) joined it — both landed in the same wave.
+  material.customProgramCacheKey = () => "fb-sprite-grade-v13";
   return fb;
 }
 
@@ -1243,6 +1274,18 @@ export class FighterLayer {
     const accent = fighter.def.accent || "#ff8040";
     bank.fb.readyColor.set(accent);
     bank.fb.readyRim.value = superReady ? 0.55 + readyPulse * 0.45 : 0;
+    // 5.1 TEMPO TELLS (parity with drawTempoTellUnder / Over): the fringe
+    // burns at 0.6-1.0 through the whiff and fades across the re-arm gap;
+    // the wash is the gap's grey (0.42 × strength) or the eaten-press pop
+    // (0.55 × its 6-tick fade), whichever is stronger.
+    const tempoTell = whiffTellState(fighter, state.simulationTick || 0);
+    bank.fb.whiffRim.value = tempoTell.phase === "whiff"
+      ? 0.6 + 0.4 * tempoTell.strength
+      : tempoTell.phase === "rearm" ? 0.7 * tempoTell.strength : 0;
+    bank.fb.rearmDim.value = Math.max(
+      tempoTell.phase === "rearm" ? 0.42 * tempoTell.strength : 0,
+      0.55 * tempoTell.dropFlash,
+    );
     if (rig.aura) {
       if (superReady) {
         const auraReach = renderSize * 0.6;

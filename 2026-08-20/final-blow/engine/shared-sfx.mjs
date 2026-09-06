@@ -211,6 +211,36 @@ export function weaponClatterParams(style, { draw = 0, level = 1 } = {}) {
   return { style: STAGE_WEAPON_CLATTER[style] ? style : "cup", tones, noises };
 }
 
+/**
+ * v5.1 TEMPO TELLS: the re-arm click — a press the 4-frame re-arm gap ate.
+ * A dry, muted tick (short lowpassed noise over a falling sine pip), well
+ * under every swing and impact peak (0.02 vs the scuff's 0.055) so a mash
+ * reads as "not yet" by ear without adding a beat to the fight. `draw` is a
+ * distinctDraw() value so two eaten presses in one gap never share a pitch.
+ */
+export function rearmClickParams({ draw = 0, level = 1 } = {}) {
+  const spread = clamp(draw, -1, 1);
+  return {
+    tick: {
+      seconds: round4(0.028 * (1 + spread * 0.12)),
+      filterType: "lowpass",
+      freq: round4(1400 * (1 + spread * 0.2)),
+      freqEnd: 0,
+      q: 0.9,
+      peak: round4(0.02 * level),
+      attack: 0.002,
+    },
+    pip: {
+      wave: "sine",
+      from: round4(520 * (1 + spread * 0.14)),
+      to: 260,
+      seconds: 0.045,
+      peak: round4(0.016 * level),
+      attack: 0.002,
+    },
+  };
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
 }

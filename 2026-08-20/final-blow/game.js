@@ -378,6 +378,16 @@ import {
   pulseAmbientLatch,
   stirPulseKind,
 } from "./engine/ambient.mjs";
+// v5.1 TEMPO TELLS: the whiff-tax / re-arm tell phases, the lab's frame
+// phase and its frame-data line — pure, shared with the CINEMA 3D fighter
+// layer so both renderers agree on when the fringe burns.
+import {
+  TEMPO_TELL_RULES,
+  noteWhiffOnMove,
+  trainingFrameDataLabel,
+  trainingFramePhase as tempoTrainingFramePhase,
+  whiffTellState,
+} from "./engine/tempo-tells.mjs";
 import {
   ONLINE_QOL_LEVEL,
   SET_LENGTHS,
@@ -487,6 +497,7 @@ import {
   dashScuffParams,
   distinctDraw,
   pickSharedVariation,
+  rearmClickParams,
   weaponClatterParams,
 } from "./engine/shared-sfx.mjs";
 import {
@@ -1953,6 +1964,7 @@ const soundCaptionLabels = Object.freeze({
   fatal: "GRAPHIC FATALITY",
   finish: "FINAL BLOW READY",
   "stage-weapon": "STAGE WEAPON DROPS",
+  "rearm-drop": "NOT RE-ARMED",
   final: "FINAL BLOW",
   ko: "KNOCKOUT",
   pause: "GAME PAUSED",
@@ -2446,16 +2458,19 @@ const ASSIST_CANVAS_PALETTES = Object.freeze({
     hurtboxP1: "#39a9ff", hurtboxP2: "#ffffff", pushbox: "#b9a5ff", hitbox: "#ff8c00",
     low: "#ffd166", overhead: "#ff6b35", dizzy: "#ffe066", dizzyAlt: "#ffffff", crush: "#82cfff",
     frameStartup: "#39a9ff", frameActive: "#ff8c00", frameRecovery: "#9aa5b1", frameStun: "#ffd166",
+    frameWhiff: "#f4f4f4", frameRearm: "#5f6878",
   }),
   protanopia: Object.freeze({
     hurtboxP1: "#36c8d8", hurtboxP2: "#ffffff", pushbox: "#c5b3ff", hitbox: "#f0a01e",
     low: "#ffe066", overhead: "#f08a24", dizzy: "#ffe680", dizzyAlt: "#ffffff", crush: "#7cd4e8",
     frameStartup: "#36c8d8", frameActive: "#f0a01e", frameRecovery: "#9aa5b1", frameStun: "#ffe066",
+    frameWhiff: "#f4f4f4", frameRearm: "#5f6878",
   }),
   tritanopia: Object.freeze({
     hurtboxP1: "#4ce6c4", hurtboxP2: "#ff4f8b", pushbox: "#d8e34a", hitbox: "#ff5c39",
     low: "#d8e34a", overhead: "#ff4f8b", dizzy: "#ffb3c8", dizzyAlt: "#ffffff", crush: "#4ce6c4",
     frameStartup: "#4ce6c4", frameActive: "#ff5c39", frameRecovery: "#9aa5b1", frameStun: "#d8e34a",
+    frameWhiff: "#f4f4f4", frameRearm: "#5f6878",
   }),
 });
 
@@ -2479,17 +2494,11 @@ const frameMeter = {
   lastTick: -1,
 };
 
+// v5.1 TEMPO TELLS: the phase logic lives in engine/tempo-tells.mjs so the
+// taxed tail ("whiff") and the re-arm gap ("rearm") are unit-tested; before
+// this the meter painted the tax as plain recovery and the gap as idle.
 function trainingFramePhase(fighter) {
-  if (!fighter) return "idle";
-  if (fighter.dizzyFrames > 0 || fighter.hitstunFrames > 0) return "hitstun";
-  if (fighter.blockstunFrames > 0) return "blockstun";
-  const move = fighter.attacking;
-  if (move) {
-    if (fighter.attackFrame < move.activeStartFrame) return "startup";
-    if (fighter.attackFrame < move.activeEndFrame) return "active";
-    return "recovery";
-  }
-  return "idle";
+  return tempoTrainingFramePhase(fighter);
 }
 
 function feedFrameMeter() {
@@ -6558,6 +6567,12 @@ function makeFighter(index, side, overrideDef = null) {
     dashFrames: 0,
     dashCooldownFrames: 0,
     attackRearmFrames: 0,
+    // v5.1 TEMPO TELLS: the last whiff (tick, tax and re-arm lengths) and the
+    // tick of the last press the re-arm gap ate. Plain sim fields, rollback-
+    // cloned like attackRearmFrames; read by both renderers through
+    // whiffTellState() and by the training lab, never by the sim itself.
+    whiffTell: null,
+    rearmDropTick: -Infinity,
     // BLOCK ECONOMY: blocked special-into-special cancels spent in the
     // current string (reset by any non-cancel attack start) and whether the
     // guard input was held last tick, for the Perfect Guard tap re-arm. Both
@@ -6698,6 +6713,11 @@ const presentationDebug = {
   // probe can prove a read reached the screen in 3D rather than trusting the
   // sim field alone.
   cinema3dOverlayReads: 0,
+  // v5.1 TEMPO TELLS: per-frame draws of the whiff fringe, the extension-cell
+  // ghosts, the re-arm flash and the eaten-press flash (2D draw path), so a
+  // probe can prove a whiff produced a tell rather than trusting the sim
+  // field alone.
+  whiffFringes: 0, whiffGhosts: 0, rearmFlashes: 0, rearmDropFlashes: 0,
 };
 
 // Release 1.7A CLEAN HITS: preserve the fighter palette during hit feedback.
@@ -6709,6 +6729,10 @@ const HIT_FLASH_FILTER = "brightness(1.55) saturate(1.12)";
 // draw path, so rollback resimulation cannot touch it.
 const gritFlareLevel = [0, 0];
 const gritReadyLatched = [false, false];
+// v5.1 TEMPO TELLS: the extension cell each side was drawing when its swing
+// whiffed, so the re-arm gap can show that cell falling away behind the
+// idle body. Render-only, same class of state as gritReadyLatched.
+const whiffGhostCells = [null, null];
 // Accumulating battle damage: MK3-style bruise/cut smudges baked onto each
 // fighter's sprite. Module-level per-side arrays on the superDimLevel pattern —
 // render-only, never snapshotted, so rollback checksums are untouched. Mark
@@ -13147,9 +13171,9 @@ function updateTrainingUi(input = {}) {
   const move = snapshot.lastMove;
   $("#trainingDamage").textContent = Number(snapshot.lastDamage).toFixed(1).replace(/\.0$/, "");
   $("#trainingCombo").textContent = `${combo.hits} HIT`;
-  $("#trainingFrames").textContent = move
-    ? `${move.name} · S${move.startup} A${move.active} R${move.recovery}`
-    : "—";
+  // v5.1 TEMPO TELLS: the line grows `R12+6 WHIFF · RE-ARM 4F` once the
+  // swing whiffs (noteWhiff merges the tax into lastMove at the tax site).
+  $("#trainingFrames").textContent = trainingFrameDataLabel(move);
   $("#trainingAdvantage").textContent = snapshot.lastAdvantage === null
     ? move ? `${move.onHit >= 0 ? "+" : ""}${move.onHit} HIT · ${move.onBlock >= 0 ? "+" : ""}${move.onBlock} BLOCK` : "—"
     : `${snapshot.lastAdvantage >= 0 ? "+" : ""}${snapshot.lastAdvantage} ACTUAL`;
@@ -13470,7 +13494,16 @@ const advancedActions = new Set([
 ]);
 
 function beginAttack(fighter, action, input = {}, { reversal = false, force = false, cancelledFrom = "", limb = "", backThrow = null } = {}) {
-  if (!force && (fighter.attacking || fighter.attackRearmFrames > 0 || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0)) return false;
+  if (!force && (fighter.attacking || fighter.attackRearmFrames > 0 || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0)) {
+    // v5.1 TEMPO TELLS: a press that reaches here with ONLY the re-arm gap in
+    // the way is the press the 4.5 rule eats (tryStartBufferedAttack has
+    // already consumed the buffer entry). Stamp it so the body can flash
+    // "not yet" and the mash is audible: before this the drop was silent.
+    if (!fighter.attacking && fighter.attackRearmFrames > 0 && fighter.stun <= 0 && !fighter.down && fighter.wakeupFrames <= 0) {
+      noteRearmDrop(fighter);
+    }
+    return false;
+  }
   const actionGroup = fighterActionGroup(action);
   if (actionGroup === "throw" && !fighter.grounded) return false;
   if (advancedActions.has(action) && !fighter.grounded) return false;
@@ -14819,7 +14852,12 @@ function updateFighter(fighter, opponent, input, dt) {
     // is deterministic and the follow-through pose simply holds longer.
     if (!attack.whiffTaxed && fighter.attackFrame >= attack.activeEndFrame && !fighter.attackConnected) {
       attack.whiffTaxed = true;
-      attack.totalFrames += whiffRecoveryFrames(attack);
+      const whiffTax = whiffRecoveryFrames(attack);
+      attack.whiffTaxFrames = whiffTax;
+      attack.totalFrames += whiffTax;
+      // v5.1 TEMPO TELLS: the moment the tax lands is the moment the tell
+      // starts (fringe, ghost, WHIFF text, lab readout).
+      noteWhiff(fighter, attack, whiffTax);
     }
     const cancelled = tryStartupChordOverride(fighter, input) || tryAttackCancel(fighter, input);
     if (!cancelled && fighter.attackFrame >= attack.totalFrames) {
@@ -15347,6 +15385,50 @@ function updateProjectiles(dt) {
 
 function spawnCombatText(x, y, label, color = "#fff") {
   state.effects.push({ kind: "combatText", label, x, y, life: 0.72, max: 0.72, color });
+}
+
+// v5.1 TEMPO TELLS: monotonic sim-side totals (guarded against resimulation
+// like progressionMatch) so a smoke probe can prove a scripted whiff was
+// noticed and that a mash inside the gap was eaten. snapshot().violence and
+// qa.tempo() read them; nothing in the sim does.
+const tempoFxDebug = { whiffTells: 0, rearmDrops: 0 };
+
+// The moment the tax lands (the active window closed on nothing). Stamps the
+// fighter's whiffTell for both renderers, floats WHIFF at the hand, and
+// merges the real tail into the lab's lastMove — which used to be snapshotted
+// at attack START and so always showed the authored R.
+function noteWhiff(fighter, attack, taxFrames) {
+  fighter.whiffTell = {
+    tick: state.simulationTick,
+    taxFrames,
+    rearmFrames: ATTACK_REARM_FRAMES,
+    kind: attack.kind,
+    profileId: attack.profileId,
+  };
+  if (!rollbackResimulating) tempoFxDebug.whiffTells += 1;
+  // Exempt moves (projectile, trap, hurled object) tax nothing because they
+  // connect later through what they spawned — no WHIFF for those.
+  if (taxFrames > 0) {
+    spawnCombatText(
+      fighter.x + fighter.facing * 44,
+      fighter.y - fighter.height * 0.74,
+      TEMPO_TELL_RULES.textLabel,
+      TEMPO_TELL_RULES.textColor,
+    );
+  }
+  if (state.mode === "training" && fighter.side === 0 && state.training.lastMove) {
+    state.training.lastMove = noteWhiffOnMove(state.training.lastMove, taxFrames, ATTACK_REARM_FRAMES);
+  }
+}
+
+// A press the re-arm gap ate (beginAttack refused it with only the gap in
+// the way). The stamp drives the eaten-press flash; the click is voiced for
+// human seats only — the CPU's own mash is not feedback anyone needs.
+function noteRearmDrop(fighter) {
+  fighter.rearmDropTick = state.simulationTick;
+  if (rollbackResimulating) return;
+  tempoFxDebug.rearmDrops += 1;
+  if (!sideIsCpuControlled(fighter.side)) sound("rearm-drop", fighter);
 }
 
 /**
@@ -21009,6 +21091,126 @@ function emberHash(seed) {
   return scrambled - Math.floor(scrambled);
 }
 
+// ---------------------------------------------------------------------------
+// v5.1 TEMPO TELLS — the whiff tax and the re-arm gap, on the body.
+//
+// Both draw inside drawFighter's local space (origin at the feet, +x toward
+// the opponent after the mirror, the same space the super-ready outline and
+// the dizzy ghosts use). Phase and strength come from whiffTellState()
+// (engine/tempo-tells.mjs), the one function the CINEMA 3D fighter layer
+// reads too, so the fringe burns on the same ticks in both worlds.
+//
+// UNDER the sprite (drawTempoTellUnder):
+//   whiff — a solid red fringe (an enlarged red silhouette; the sprite covers
+//           all but a ~4-6 px rim) that burns hotter through the taxed tail,
+//           plus 1-2 red ghosts of the extension cell falling back behind
+//           the follow-through. The cell is remembered for the gap.
+//   rearm — the fringe fading across the 4-frame gap, and the remembered
+//           extension cell dropping away behind the idle body: "the swing
+//           is still costing you".
+// OVER the sprite (drawTempoTellOver):
+//   rearm — a muted pale wash: the body goes grey for the gap (disarmed).
+//   eaten press — a sharper white pop for 6 ticks, so a mash reads as
+//           "not yet" even after the gap has closed.
+//   whiff — a thin dust crescent in front of the fist that fades through
+//           the taxed tail (the swipe of a swing that met air).
+// Reduced motion keeps the fringe, wash and pop (gameplay information, like
+// the super-ready aura) and drops the ghosts and the swipe; the battery
+// profile's trailScale drops the ghosts. Counted into presentationDebug so
+// a probe can prove a whiff reached the screen.
+// ---------------------------------------------------------------------------
+function drawTempoTellUnder(fighter, tell, atlas, frame, renderSize) {
+  const reducedMotion = state.accessibility.reducedMotion;
+  const trailScale = state.performance.trailScale;
+  const red = TEMPO_TELL_RULES.whiffColor;
+  if (tell.phase === "whiff") {
+    whiffGhostCells[fighter.side] = { atlas, frame, renderSize, tick: state.simulationTick };
+    ctx.save();
+    ctx.globalAlpha = 0.6 + 0.3 * tell.strength;
+    const outline = 1.05 + 0.02 * tell.strength;
+    ctx.scale(outline, outline);
+    drawSilhouetteFrame(atlas, frame, renderSize, red);
+    ctx.restore();
+    presentationDebug.whiffFringes += 1;
+    if (!reducedMotion && trailScale > 0) {
+      const copies = Math.max(1, Math.round(TEMPO_TELL_RULES.ghostTrailCopies * trailScale));
+      for (let copy = 1; copy <= copies; copy += 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = (0.36 / copy) * (0.6 + 0.4 * tell.strength);
+        ctx.translate(-copy * 17, copy * 2);
+        drawSilhouetteFrame(atlas, frame, renderSize, red);
+        ctx.restore();
+        presentationDebug.whiffGhosts += 1;
+      }
+    }
+    return;
+  }
+  if (tell.phase === "rearm") {
+    ctx.save();
+    ctx.globalAlpha = 0.7 * tell.strength;
+    ctx.scale(1.045, 1.045);
+    drawSilhouetteFrame(atlas, frame, renderSize, red);
+    ctx.restore();
+    presentationDebug.whiffFringes += 1;
+    const ghost = whiffGhostCells[fighter.side];
+    if (ghost && !reducedMotion && trailScale > 0
+      && state.simulationTick - ghost.tick <= 40 && ghost.atlas?.complete && ghost.atlas.naturalWidth) {
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = 0.34 * tell.strength;
+      ctx.translate(-10 - (1 - tell.strength) * 18, 3);
+      drawSilhouetteFrame(ghost.atlas, ghost.frame, ghost.renderSize, red);
+      ctx.restore();
+      presentationDebug.whiffGhosts += 1;
+    }
+  }
+}
+
+function drawTempoTellOver(fighter, tell, atlas, frame, renderSize) {
+  const reducedMotion = state.accessibility.reducedMotion;
+  if (tell.phase === "rearm") {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.42 * tell.strength;
+    drawSilhouetteFrame(atlas, frame, renderSize, TEMPO_TELL_RULES.rearmColor);
+    ctx.restore();
+    presentationDebug.rearmFlashes += 1;
+  }
+  if (tell.dropFlash > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.55 * tell.dropFlash;
+    drawSilhouetteFrame(atlas, frame, renderSize, "#ffffff");
+    ctx.restore();
+    presentationDebug.rearmDropFlashes += 1;
+  }
+  if (tell.phase === "whiff" && !reducedMotion) {
+    // The swipe: a crescent about the same shoulder pivot the heavy limb
+    // wedge uses, on the fist side, thinning and fading through the tail.
+    const tailProgress = tell.taxed && tell.taxFrames > 0 ? 1 - tell.taxLeft / tell.taxFrames : 0;
+    const fade = 1 - tailProgress * 0.85;
+    const pivotX = 8;
+    const pivotY = -renderSize * 0.62;
+    const reach = renderSize * (0.5 + tailProgress * 0.06);
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.globalAlpha = 0.7 * fade;
+    ctx.strokeStyle = "rgba(255,244,236,0.9)";
+    ctx.lineWidth = 3.5 * fade + 0.5;
+    ctx.beginPath();
+    ctx.arc(pivotX, pivotY, reach, -0.95 + tailProgress * 0.25, 0.45 + tailProgress * 0.2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.55 * fade;
+    ctx.strokeStyle = TEMPO_TELL_RULES.whiffColor;
+    ctx.lineWidth = 2 * fade + 0.5;
+    ctx.beginPath();
+    ctx.arc(pivotX, pivotY, reach * 0.9, -0.8 + tailProgress * 0.25, 0.4 + tailProgress * 0.2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function hexToRgbChannels(hex) {
   const value = parseInt(hex.slice(1, 7), 16);
   return `${(value >> 16) & 255},${(value >> 8) & 255},${value & 255}`;
@@ -21169,6 +21371,12 @@ function drawFighter(fighter, time) {
   const hitSmear = state.performance.trailScale > 0 && !reducedMotion
     ? clamp(fighter.hitFlash / 0.14, 0, 1)
     : 0;
+  // v5.1 TEMPO TELLS: which tell (whiff tail / re-arm gap / eaten press) this
+  // body wears this frame. Render-only read of snapshotted sim fields.
+  const tempoTell = whiffTellState(fighter, state.simulationTick);
+  const tempoTellLive = !reflectionPassActive && !graphicFatality
+    && (tempoTell.phase !== "none" || tempoTell.dropFlash > 0)
+    && Boolean(atlas?.complete && atlas.naturalWidth);
 
   ctx.save();
   ctx.translate(fighter.x, fighter.y);
@@ -21510,6 +21718,9 @@ function drawFighter(fighter, time) {
       }
     }
 
+    // v5.1 TEMPO TELLS, under the sprite: whiff fringe + extension-cell ghosts.
+    if (tempoTellLive) drawTempoTellUnder(fighter, tempoTell, atlas, frame, renderSize);
+
     if (!reflectionPassActive && hitSmear > 0) {
       // Directional hit-reaction smear: stretched additive ghosts trailing
       // opposite the knockback on the frames the white hit flash is live.
@@ -21573,6 +21784,9 @@ function drawFighter(fighter, time) {
       presentationDebug.battleDamage += battleDamageMarks[fighter.side].length;
     } else drawAtlasFrame(atlas, frame, renderSize);
     ctx.restore();
+
+    // v5.1 TEMPO TELLS, over the sprite: re-arm wash, eaten-press pop, swipe.
+    if (tempoTellLive) drawTempoTellOver(fighter, tempoTell, atlas, frame, renderSize);
 
     // v2.6 MOTION pose cross-fade (spec 3): the previous atlas cell lingers
     // 2-3 sim frames at falling alpha OVER the fresh pose (keeps the fighter
@@ -24498,6 +24712,11 @@ const FRAME_PHASE_ROLES = Object.freeze({
   recovery: ["frameRecovery", "#3fa7ff"],
   hitstun: ["frameStun", "#ffd54a"],
   blockstun: ["frameStun", "#b8985a"],
+  // v5.1 TEMPO TELLS: the taxed whiff tail (magenta — neither the active red
+  // nor the recovery blue, so "that was the tax" reads at a glance) and the
+  // re-arm gap (grey: the fighter is free to move but not to swing).
+  whiff: ["frameWhiff", "#ff4fd8"],
+  rearm: ["frameRearm", "#8f98a8"],
 });
 
 function framePhaseColor(phase) {
@@ -26930,6 +27149,8 @@ function nextSharedVariation(kind) {
 const SHARED_SYNTH_VOICES = Object.freeze({
   dash: (fighter) => dashScuff(fighter),
   "stage-weapon": () => weaponClatter(),
+  // v5.1 TEMPO TELLS: the press the re-arm gap ate.
+  "rearm-drop": () => rearmClick(),
 });
 
 function sharedSynthVoice(kind, fighter) {
@@ -27099,6 +27320,8 @@ const audioFxDebug = {
   koHorns: 0,
   // v5.1 KO MOMENT: voiced crowd takes actually started (post every gate).
   crowdVoicePlays: 0,
+  // v5.1 TEMPO TELLS: re-arm clicks actually voiced.
+  rearmClicks: 0,
 };
 // Live node bookkeeping for the QA node-graph hook: persistent = currently
 // connected long-lived nodes (master bus, beds, music routing), one-shots =
@@ -27441,6 +27664,23 @@ function weaponClatter() {
   });
   for (const tone of params.tones) synthToneShot(tone);
   for (const noise of params.noises) synthNoiseShot(noise);
+}
+
+/**
+ * v5.1 TEMPO TELLS: re-arm click — the dry tick a press makes when the
+ * 4-frame re-arm gap eats it (engine/shared-sfx.mjs rearmClickParams). Sim-
+ * path trigger like the scuff; the distinctDraw keeps two eaten presses in
+ * one gap from sharing a pitch.
+ */
+function rearmClick() {
+  if (!impactAudioAllowed()) return;
+  audioFxDebug.rearmClicks += 1;
+  const params = rearmClickParams({
+    draw: synthVoiceDraw("rearm-drop", audioFxDebug.rearmClicks),
+    level: state.sfxVolume,
+  });
+  synthNoiseShot(params.tick);
+  synthToneShot(params.pip);
 }
 
 // --- Feature: crowd audio bus driven by state.crowdReaction ----------------
@@ -30190,6 +30430,14 @@ window.__finalBlowEngine = {
         breathingFighters: presentationDebug.breathing,
         contactShadows: presentationDebug.contactShadows,
         gritAuras: presentationDebug.gritAuras,
+        // v5.1 TEMPO TELLS: sim totals (whiffs noticed, presses the re-arm
+        // gap ate) and the per-frame draws of each tell.
+        whiffTells: tempoFxDebug.whiffTells,
+        rearmDrops: tempoFxDebug.rearmDrops,
+        whiffFringes: presentationDebug.whiffFringes,
+        whiffGhosts: presentationDebug.whiffGhosts,
+        rearmFlashes: presentationDebug.rearmFlashes,
+        rearmDropFlashes: presentationDebug.rearmDropFlashes,
         // R1.9 SCHOOL & POCKET counters (trainingFxDebug: monotonic one-shots
         // on the hudFxDebug pattern) for orchestrator smoke tests.
         frameMeterTicks: trainingFxDebug.frameMeterTicks,
@@ -30321,6 +30569,7 @@ window.__finalBlowEngine = {
         // scuff / stage-weapon clatter totals (monotonic, resim-guarded).
         sharedVariations: audioFxDebug.sharedVariations,
         dashScuffs: audioFxDebug.dashScuffs,
+        rearmClicks: audioFxDebug.rearmClicks,
         weaponClatters: audioFxDebug.weaponClatters,
         koHorns: audioFxDebug.koHorns,
         musicIntensity: Number(musicIntensityLevel.toFixed(3)),
@@ -30484,6 +30733,11 @@ window.__finalBlowEngine = {
         grabbed: fighter.grabbed ? { ...fighter.grabbed } : null,
         throwInvulnerableFrames: fighter.throwInvulnerableFrames,
         throwTechFlashFrames: fighter.throwTechFlashFrames,
+        // v5.1 TEMPO TELLS: the live swing's tax and the re-arm countdown.
+        attackRearmFrames: fighter.attackRearmFrames,
+        whiffTaxed: Boolean(fighter.attacking?.whiffTaxed),
+        whiffTaxFrames: fighter.attacking?.whiffTaxFrames || 0,
+        whiffTell: fighter.whiffTell ? { ...fighter.whiffTell } : null,
         combo: fighter.combo.snapshot(state.simulationTick),
         hurtboxes: getHurtboxes(fighter),
         hitboxes: getActiveHitboxes(fighter),
@@ -31153,6 +31407,32 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         surge: ambientSurge(level, beat),
         stage: state.stage,
         tick: state.simulationTick,
+      };
+    },
+    // v5.1 TEMPO TELLS: each side's tell phase at the current tick (the same
+    // whiffTellState both renderers draw from), the frame-meter phase, the
+    // sim totals and what the last rendered frame actually drew — so a probe
+    // can script a whiff and assert it produced a tell, not just a tax.
+    tempo() {
+      return {
+        tick: state.simulationTick,
+        sides: state.fighters.map((fighter) => ({
+          side: fighter.side,
+          ...whiffTellState(fighter, state.simulationTick),
+          framePhase: trainingFramePhase(fighter),
+          attackRearmFrames: fighter.attackRearmFrames,
+          whiffTell: fighter.whiffTell ? { ...fighter.whiffTell } : null,
+        })),
+        whiffTells: tempoFxDebug.whiffTells,
+        rearmDrops: tempoFxDebug.rearmDrops,
+        rearmClicks: audioFxDebug.rearmClicks,
+        drawn: {
+          fringes: presentationDebug.whiffFringes,
+          ghosts: presentationDebug.whiffGhosts,
+          rearmFlashes: presentationDebug.rearmFlashes,
+          dropFlashes: presentationDebug.rearmDropFlashes,
+        },
+        trainingFrames: state.mode === "training" ? trainingFrameDataLabel(state.training.lastMove) : "",
       };
     },
     fighter(side, values = {}) {
