@@ -50,10 +50,13 @@ export function swingContext(fighter, { roundDecided = false } = {}) {
     falling: victimAirborne && fighter.vy > 0 && Boolean(fighter.pendingKnockdown),
     // v5.1 EXT4 ROUTING — the three reads that pick a reaction drawing. All
     // are snapshotted sim state, so a rollback resim and both renderers agree.
-    //   bodyBlow  a landed MID/LOW (the level of the last contact) or a
-    //             crouched victim opens on the doubled-over body blow, not
-    //             the head snap. Gated on real hitstun so the clinch flinch
-    //             stays a head snap.
+    //   bodyBlow  a landed LOW (the level of the last contact) or a crouched
+    //             victim opens on the doubled-over body blow, not the head
+    //             snap. MID is the level nearly every normal carries (127 of
+    //             the kits' 154 levelled moves; there is no HIGH), so a MID
+    //             jab is a face hit — routing MID here made every light a body
+    //             blow and starved the head snap. Gated on real hitstun so the
+    //             clinch flinch stays a head snap.
     //   reeling   the first REEL_ONSET_TICKS of a dizzy or guard crush wear
     //             the backward reel before the authored sway takes the loop.
     //   ko        the round is decided against this fighter (`roundDecided`
@@ -61,10 +64,14 @@ export function swingContext(fighter, { roundDecided = false } = {}) {
     //             knockdown drawing once he is down. Never a plain
     //             knockdown's cell, so the wake-up chain is untouched.
     bodyBlow: fighter.hitstunFrames > 0
-      && (Boolean(fighter.crouch) || fighter.lastHitLevel === ATTACK_LEVELS.MID || fighter.lastHitLevel === ATTACK_LEVELS.LOW),
+      && (Boolean(fighter.crouch) || fighter.lastHitLevel === ATTACK_LEVELS.LOW),
     reeling: (fighter.dizzyFrames > 0 && fighter.dizzyFrames > (fighter.dizzyTotalFrames || STUN_RULES.dizzyFrames) - REEL_ONSET_TICKS)
       || (fighter.guardCrushFrames > 0 && fighter.guardCrushFrames > (fighter.guardCrushTotalFrames || GUARD_RULES.crushFrames) - REEL_ONSET_TICKS),
     ko: Boolean(roundDecided) && fighter.health <= 0,
+    // In blockstun the settle band's fallback is the light-hit cell (motion3
+    // block-settle is not accepted on every sheet); the table keeps the flinch
+    // for a blocking fighter rather than snapping his head on a block.
+    blocking: fighter.blockstunFrames > 0,
     // A kit-less crouching normal inside its active window. That window has
     // no motion cell at all (it draws a base cell), so the table never sees
     // it; the resolver stands the crouch extension / sweep in directly.

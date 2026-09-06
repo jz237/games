@@ -3120,7 +3120,9 @@ try {
   assert.match(offlineCache.name, /final-blow-shell-5\.0/);
   // 1.9E added engine/atlas-facing.mjs to the shell: game.js imports it, so
   // offline boot needs it cached.
-  assert.equal(offlineCache.entries, 22);
+  // 5.1 added engine/{audio-manifest, ambient, announcer, crowd-voice, shared-sfx,
+  // swing-resolve}.mjs to the shell: game.js imports them at boot.
+  assert.equal(offlineCache.entries, 28);
   assert.equal(offlineCache.hasAtlasFacing, true);
   assert.equal(offlineCache.hasIndex, false);
   assert.equal(offlineCache.rootRedirected, false);

@@ -3803,7 +3803,10 @@ export function swingSubstitute(bank, frame, ctx = {}) {
       // A crouching fighter's block flinch is the ext3 crouch guard, never the
       // standing cover (the reason the standing branch was gated on !crouch).
       case MOTION2_CELLS.blockHit: return ctx.crouching ? { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard } : { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch };
-      case MOTION2_CELLS.lightHit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.bodyBlow ? E4.bodyBlow : E4.headSnap };
+      case MOTION2_CELLS.lightHit:
+        // A blocked hit's settle fallback lands here too: keep the flinch.
+        if (ctx.blocking) return ctx.crouching ? { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard } : { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch };
+        return { bank: UNIFIED_EXT4_BANK, frame: ctx.bodyBlow ? E4.bodyBlow : E4.headSnap };
       case MOTION2_CELLS.dizzy: return { bank: UNIFIED_EXT4_BANK, frame: ctx.reeling ? E4.stagger : E4.dizzy };
       case MOTION2_CELLS.getupA: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupA };
       case MOTION2_CELLS.getupB: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupB };

@@ -117,6 +117,8 @@ function testSubstitutionTable() {
   assert.deepEqual(sub("motion2", MOTION2_CELLS.blockHit, { crouching: true }), { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard },
     "a crouched block flinch is the crouch guard, never the standing cover");
   assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.headSnap });
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, { blocking: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch }, "a blocked hit's settle fallback keeps the flinch");
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, { blocking: true, crouching: true }), { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, { bodyBlow: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.bodyBlow });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, { reeling: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.stagger },
@@ -235,7 +237,8 @@ function testRegistryAndWiring() {
   const resolverSource = readFileSync(join(testDir, "..", "engine", "swing-resolve.mjs"), "utf8");
   const resolveBody = resolverSource.slice(resolverSource.indexOf("export function swingContext("), resolverSource.indexOf("export function swingContext(") + 3600);
   assert.match(resolveBody, /bodyBlow: fighter\.hitstunFrames > 0/);
-  assert.match(resolveBody, /fighter\.lastHitLevel === ATTACK_LEVELS\.MID \|\| fighter\.lastHitLevel === ATTACK_LEVELS\.LOW/);
+  assert.match(resolveBody, /Boolean\(fighter\.crouch\) \|\| fighter\.lastHitLevel === ATTACK_LEVELS\.LOW\)/);
+  assert.ok(!/lastHitLevel === ATTACK_LEVELS\.MID/.test(resolveBody), "a MID jab is a face hit, not a body blow");
   assert.match(resolveBody, /reeling: \(fighter\.dizzyFrames > 0/);
   assert.match(resolveBody, /ko: Boolean\(roundDecided\) && fighter\.health <= 0/);
   assert.match(gameSource, /"lastHitResult",\s*(\/\/[^\n]*\n\s*)?"lastHitLevel",/, "lastHitLevel is a snapshotted presentation field");

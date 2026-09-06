@@ -26,6 +26,11 @@ const SHELL = [
   "./engine/fighter-audio.mjs",
   "./engine/atlas-facing.mjs",
   "./engine/audio-manifest.mjs",
+  "./engine/ambient.mjs",
+  "./engine/announcer.mjs",
+  "./engine/crowd-voice.mjs",
+  "./engine/shared-sfx.mjs",
+  "./engine/swing-resolve.mjs",
 ];
 
 self.addEventListener("install", (event) => {

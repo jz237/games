@@ -75,10 +75,12 @@ function testContextFromSnapshot() {
   assert.deepEqual(swingContext(snapshot()), {
     limb: "punch", heavy: false, crouching: false, attacking: false, airborne: false,
     victimAirborne: false, falling: false, crouchActive: false,
-    bodyBlow: false, reeling: false, ko: false,
+    bodyBlow: false, reeling: false, ko: false, blocking: false,
   });
+  assert.equal(swingContext(snapshot({ blockstunFrames: 5 })).blocking, true);
   // v5.1 reaction reads.
   assert.equal(swingContext(snapshot({ hitstunFrames: 6, lastHitLevel: "low" })).bodyBlow, true);
+  assert.equal(swingContext(snapshot({ hitstunFrames: 6, lastHitLevel: "mid" })).bodyBlow, false, "a MID jab snaps the head");
   assert.equal(swingContext(snapshot({ hitstunFrames: 6, crouch: true })).bodyBlow, true);
   assert.equal(swingContext(snapshot({ hitstunFrames: 0, crouch: true })).bodyBlow, false, "no hitstun, no body blow");
   assert.equal(swingContext(snapshot({ dizzyFrames: 120, dizzyTotalFrames: 128 })).reeling, true);
