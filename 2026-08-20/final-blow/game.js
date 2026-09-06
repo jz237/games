@@ -16767,20 +16767,27 @@ function crowdSpriteCharacter(person) {
 // alternate stride and stand on the gait clock (the classic two-frame crowd
 // step); idlers shift their weight on a personal timer; a stirred crowd
 // throws its arms up person by person past each one's own threshold.
-function drawCrowdSprite(person, layer, x, gait, paused, reaction) {
-  if (!person.sprite) return false;
-  const resolved = crowdSpriteCharacter(person);
-  if (!resolved) return false;
-  const { character, image } = resolved;
+// Which painted cell a person wears this tick, and their walk bob — shared by
+// the 2D draw and the CINEMA 3D billboards so both renderers agree.
+function crowdSpriteFrame(person, gait, paused, reaction) {
   const reducedMotion = state.accessibility.reducedMotion;
   const frame = state.simulationTick;
   let column = 0;
   if (reaction > person.sprite.reactThreshold) column = 2;
   else if (!paused && !reducedMotion) column = Math.sin(gait) > 0 ? 3 : 0;
   else if (!reducedMotion && ((frame + person.sprite.shiftOffset) % person.sprite.shiftPeriod) < person.sprite.shiftLength) column = 1;
-  const cell = character.cells[column] || character.cells[0];
   const posture = POSTURE_BY_ID[person.posture] || POSTURES[0];
   const bob = paused || reducedMotion ? 0 : Math.abs(Math.sin(gait)) * posture.bob * 2.4;
+  return { column, bob };
+}
+
+function drawCrowdSprite(person, layer, x, gait, paused, reaction) {
+  if (!person.sprite) return false;
+  const resolved = crowdSpriteCharacter(person);
+  if (!resolved) return false;
+  const { character, image } = resolved;
+  const { column, bob } = crowdSpriteFrame(person, gait, paused, reaction);
+  const cell = character.cells[column] || character.cells[0];
   const scale = layer.scale * person.height;
   // The vector figure stands ~134px tall at scale 1; match it so the crowd's
   // depth bands and the 25/35-visible framing tests keep their meaning.
@@ -17013,10 +17020,64 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
 
 // One rowdy background scuffle. Readable and physical, never graphic: shoving,
 // shirt-grabbing, wild misses, wrestling, friends pulling people apart.
-function drawScuffle(group, frame, centre, reaction) {
+// The choreography of one scuffle / pool-incident loop on a frame: where each
+// member stands in group space, how they lean and reach, and which painted
+// cell they wear. Shared by drawScuffle and the CINEMA 3D billboards.
+function scuffleMembers(group, frame, reaction) {
   const phase = scufflePhase(group, frame);
   const beat = Math.sin(phase * Math.PI * 2);
   const clash = Math.max(0, Math.sin(phase * Math.PI * 2 - 0.6));
+  const swing = group.reach * (0.4 + clash * 0.6) * (1 + reaction * 0.25);
+  const members = [];
+  const add = (offsetX, lean, armReach, tilt = 0) => members.push({ offsetX, lean, armReach, tilt });
+  switch (group.kind) {
+    case "argue":
+      add(-16, 0.2 + beat * 0.06, swing * 0.7);
+      add(18, -0.2 - beat * 0.06, -swing * 0.7, 0.04);
+      break;
+    case "shove":
+      add(-18 - clash * 8, 0.26, swing);
+      add(20 + clash * 12, -0.3, -swing * 0.4, -clash * 0.16);
+      break;
+    case "shirtgrab":
+      add(-13, 0.3, swing * 0.55);
+      add(14, -0.32, -swing * 0.55, beat * 0.08);
+      break;
+    case "swing":
+      add(-20, 0.16 + clash * 0.2, swing * 1.3);
+      add(24, -0.34, -swing * 0.3, -clash * 0.22);
+      break;
+    case "wrestle":
+      add(-10, 0.44, swing * 0.4, beat * 0.1);
+      add(11, -0.46, -swing * 0.4, -beat * 0.1);
+      break;
+    case "separate":
+      add(-26, 0.3, swing);
+      add(26, -0.3, -swing);
+      // The friend in the middle, arms out, holding them apart.
+      add(0, -0.05, swing * 0.9, 0);
+      break;
+    case "tableflip":
+      add(-24, 0.34, swing);
+      add(26, -0.24, -swing * 0.5, clash * 0.2);
+      break;
+    default:
+      // celebrate
+      add(-22, -0.1, -swing * 1.2);
+      add(0, -0.06, swing * 1.2);
+      add(23, -0.12, -swing);
+  }
+  members.forEach((member, index) => {
+    const reaching = Math.abs(member.armReach) > group.reach * 0.55;
+    const armsUp = group.kind === "celebrate" || (group.kind === "separate" && index === 2) || (clash > 0.5 && group.kind !== "wrestle");
+    member.column = armsUp ? (reaching ? 3 : 2) : reaching ? 3 : 0;
+    member.character = group.characters ? group.characters[index % group.characters.length] : null;
+  });
+  return { phase, beat, clash, swing, members };
+}
+
+function drawScuffle(group, frame, centre, reaction) {
+  const { phase, clash, members } = scuffleMembers(group, frame, reaction);
   const drawX = group.x + (centre - W * 0.5) * -0.2;
   if (drawX < -110 || drawX > W + 110) return;
 
@@ -17027,21 +17088,16 @@ function drawScuffle(group, frame, centre, reaction) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // v4.7 BYSTANDERS: with the painted bank in, each participant is one of the
+  // v4.7 BYSTANDERS: with the painted bank in, each member is one of the
   // stage's painted characters — lunging on the stride cell while reaching,
   // standing between beats, arms up for the peacemaker and the celebrants —
   // facing the way the arm reaches, leaning about the feet. The vector
   // brawler stays as the fallback until the sheets land.
-  const painted = group.characters && crowdSheets.manifest ? group.characters.map((character) => crowdSpriteCharacter({ sprite: { character } })) : null;
-  let member = -1;
-  const brawler = (offsetX, lean, armReach, shirt, tilt = 0) => {
-    member += 1;
-    const resolved = painted?.[member % painted.length];
+  const brawler = (member, shirt) => {
+    const { offsetX, lean, armReach, tilt } = member;
+    const resolved = member.character !== null && crowdSheets.manifest ? crowdSpriteCharacter({ sprite: { character: member.character } }) : null;
     if (resolved) {
-      const reaching = Math.abs(armReach) > group.reach * 0.55;
-      const column = group.kind === "celebrate" || (group.kind === "separate" && member === 2) || clash > 0.5 && group.kind !== "wrestle"
-        ? (reaching ? 3 : 2) : reaching ? 3 : 0;
-      const cell = resolved.character.cells[column] || resolved.character.cells[0];
+      const cell = resolved.character.cells[member.column] || resolved.character.cells[0];
       const drawScale = 112 / Math.max(1, cell.h);
       ctx.save();
       ctx.translate(offsetX, 0);
@@ -17086,57 +17142,21 @@ function drawScuffle(group, frame, centre, reaction) {
     ctx.restore();
   };
 
-  const swing = group.reach * (0.4 + clash * 0.6) * (1 + reaction * 0.25);
-  switch (group.kind) {
-    case "argue":
-      brawler(-16, 0.2 + beat * 0.06, swing * 0.7, group.shirts[0]);
-      brawler(18, -0.2 - beat * 0.06, -swing * 0.7, group.shirts[1], 0.04);
-      break;
-    case "shove":
-      brawler(-18 - clash * 8, 0.26, swing, group.shirts[0]);
-      brawler(20 + clash * 12, -0.3, -swing * 0.4, group.shirts[1], -clash * 0.16);
-      break;
-    case "shirtgrab":
-      brawler(-13, 0.3, swing * 0.55, group.shirts[0]);
-      brawler(14, -0.32, -swing * 0.55, group.shirts[1], beat * 0.08);
-      break;
-    case "swing":
-      brawler(-20, 0.16 + clash * 0.2, swing * 1.3, group.shirts[0]);
-      brawler(24, -0.34, -swing * 0.3, group.shirts[1], -clash * 0.22);
-      break;
-    case "wrestle":
-      brawler(-10, 0.44, swing * 0.4, group.shirts[0], beat * 0.1);
-      brawler(11, -0.46, -swing * 0.4, group.shirts[1], -beat * 0.1);
-      break;
-    case "separate":
-      brawler(-26, 0.3, swing, group.shirts[0]);
-      brawler(26, -0.3, -swing, group.shirts[1]);
-      // The friend in the middle, arms out, holding them apart.
-      brawler(0, -0.05, swing * 0.9, group.shirts[2], 0);
-      break;
-    case "tableflip": {
-      brawler(-24, 0.34, swing, group.shirts[0]);
-      brawler(26, -0.24, -swing * 0.5, group.shirts[1], clash * 0.2);
-      const lift = clash * 26;
-      ctx.save();
-      ctx.translate(2, -22 - lift);
-      ctx.rotate(clash * 0.5);
-      ctx.fillStyle = "#6b7078";
-      ctx.fillRect(-30, -6, 60, 7);
-      ctx.strokeStyle = "#4e545b";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(-22, 1); ctx.lineTo(-26, 20);
-      ctx.moveTo(22, 1); ctx.lineTo(26, 20);
-      ctx.stroke();
-      ctx.restore();
-      break;
-    }
-    default:
-      // celebrate
-      brawler(-22, -0.1, -swing * 1.2, group.shirts[0]);
-      brawler(0, -0.06, swing * 1.2, group.shirts[1]);
-      brawler(23, -0.12, -swing, group.shirts[2]);
+  members.forEach((member, index) => brawler(member, group.shirts[index % group.shirts.length]));
+  if (group.kind === "tableflip") {
+    const lift = clash * 26;
+    ctx.save();
+    ctx.translate(2, -22 - lift);
+    ctx.rotate(clash * 0.5);
+    ctx.fillStyle = "#6b7078";
+    ctx.fillRect(-30, -6, 60, 7);
+    ctx.strokeStyle = "#4e545b";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-22, 1); ctx.lineTo(-26, 20);
+    ctx.moveTo(22, 1); ctx.lineTo(26, 20);
+    ctx.stroke();
+    ctx.restore();
   }
   // A puff of dust at the peak of the clash so the scuffle reads as a fight
   // rather than two people standing close together.
@@ -17153,6 +17173,47 @@ function drawScuffle(group, frame, centre, reaction) {
   }
   ctx.globalAlpha = 1;
   ctx.restore();
+}
+
+// v4.8 CINEMA 3D CROWD: the painted crowd resolved for this tick as billboard
+// specs — sim-space feet position, cell, facing, alpha — so the 3D world draws
+// exactly the people, poses and reactions the 2D canvas draws.
+function crowdBillboards() {
+  const crowd = state.crowd;
+  const out = [];
+  const variant = crowdSheets.manifest?.variants?.[crowd?.variant];
+  if (!crowd || !variant || state.screen !== "fight") return out;
+  const frame = state.simulationTick;
+  const reaction = state.crowdReaction;
+  const holdDim = 1 - fatalitySpotLevel * 0.62;
+  crowd.people.forEach((person, index) => {
+    if (!person.sprite) return;
+    const layer = CROWD_LAYERS.find((entry) => entry.id === person.layer);
+    const { x, gait, paused } = crowdPosition(person, layer, frame, crowd.span, crowd.minX);
+    if (x < -70 || x > W + 70) return;
+    const character = variant.characters[person.sprite.character];
+    if (!character) return;
+    const { column, bob } = crowdSpriteFrame(person, gait, paused, reaction);
+    out.push({
+      key: `p${index}`, x, y: person.y - bob, layer: layer.id, height: person.height,
+      direction: person.direction, alpha: layer.alpha * holdDim, tilt: 0,
+      sheet: variant.sheets[character.sheet], cell: character.cells[column] || character.cells[0],
+    });
+  });
+  (crowd.scuffles || []).forEach((group, groupIndex) => {
+    const { members } = scuffleMembers(group, frame, reaction);
+    members.forEach((member, index) => {
+      const character = member.character === null ? null : variant.characters[member.character];
+      if (!character) return;
+      out.push({
+        key: `s${groupIndex}-${index}`, x: group.x + member.offsetX * group.scale * group.flip, y: group.y,
+        layer: "scuffle", height: group.scale * 0.84, direction: (member.armReach < 0 ? -1 : 1) * group.flip,
+        alpha: 0.82 * holdDim, tilt: (member.tilt + member.lean * 0.35) * group.flip,
+        sheet: variant.sheets[character.sheet], cell: character.cells[member.column] || character.cells[0],
+      });
+    });
+  });
+  return out;
 }
 
 // Six tapped steel kegs plus tables, coolers and grills. The split placement
@@ -27211,7 +27272,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.7");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-4.8");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -28511,7 +28572,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "4.7-crowdwork",
+  version: "4.8-frontrow",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -30373,6 +30434,9 @@ function ensureCinema3d() {
       unifiedSheetAdjust: UNIFIED_SHEET_ADJUST,
       isUnifiedFighter: unifiedFighterReady,
       downTiltFor,
+      crowdBillboards,
+      crowdSheetImage: (name) => crowdSheets.images.get(name) || null,
+      crowdMediaRequest: ensureCrowdMedia,
       // v2.9 critic round: the per-cell corrections travel the same bridge so
       // CINEMA 3D plants and scales identically to the 2D path (M3 oversized
       // crouch cells, M5 the Commissioner's base-bank floor registration).

@@ -21,6 +21,7 @@ import { buildPostStack } from "./post.mjs";
 import { FighterLayer } from "./fighters.mjs";
 import { MeshFighterLayer } from "./mesh-fighters.mjs";
 import { ImpactVfxLayer } from "./vfx.mjs";
+import { CrowdLayer } from "./crowd-layer.mjs";
 import { buildSomersetStage } from "./stage-somerset.mjs";
 import { buildGenericStage } from "./stage-generic.mjs";
 
@@ -163,6 +164,13 @@ export function createRenderer(host) {
       const vfx = new ImpactVfxLayer(host);
       scene.add(vfx.group);
       layers.set("vfx", vfx);
+      // v4.8 CINEMA 3D CROWD: the painted bystanders as fogged billboards on
+      // the stage floor, resolved by the 2D crowd code over the bridge.
+      const crowd = new CrowdLayer(host);
+      scene.add(crowd.group);
+      layers.set("crowd", crowd);
+      renderer3d.crowd = crowd;
+      host.crowdMediaRequest?.();
       // Silhouette guard: fighter sprites darken their edges while an impact
       // flash is live, so bursts never erase the characters.
       fighters.getFlashLevel = () => vfx.flashLevel();
@@ -368,6 +376,7 @@ export function createRenderer(host) {
 
   renderer3d.stats = () => ({
     drawcalls: lastStatsFrame.calls,
+    crowd: renderer3d.crowd?.visibleCount ?? 0,
     tris: lastStatsFrame.triangles,
     fps: Math.round(fpsEstimate),
     quality,

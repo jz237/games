@@ -201,3 +201,15 @@ sodium lamp, TV flicker in the rowhouses, headlights sweeping the far street, a
 plane; Somerset — a cycling corner signal, a car coming up the side street,
 pigeons that scatter. Everything is a pure function of the simulation tick,
 frozen under reduced motion and skipped on the battery profile.
+
+### 4.8 — the crowd in CINEMA 3D
+
+The painted crowd now stands in the 3D world too. The 2D crowd code resolves
+every person and scuffle member each tick and hands the result over the
+renderer bridge (`host.crowdBillboards()`); `renderer/three/crowd-layer.mjs`
+places one fogged billboard per spec on the stage floor — the far, mid and
+near bands at their own depths behind the fight plane, x spread scaled by
+depth so the crowd fills the frame, feet on the ground, mirrored by facing,
+the same cell, cheer and fatality-hold dim as the canvas. Stages without a
+painted bank hand over nothing, so Somerset's bespoke silhouettes are never
+doubled. `__finalBlowThree.stats().crowd` reports the billboard count.
