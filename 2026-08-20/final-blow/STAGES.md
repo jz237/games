@@ -123,14 +123,14 @@ cameras frame identically. Backgrounds are original art generated for this
 project and follow the small-shell PWA policy: code boots offline, while media is
 loaded on demand.
 
-### Blocker
+### Blocker (cleared in 5.3 for music; ambience is still visual)
 
-Dedicated original music per stage is blocked on the same ElevenLabs
-misconfiguration that blocked the object SFX — the MCP server holds an API key ID
-rather than an API key. Both stages currently draw from the existing four original
-soundtracks through the normal rotation, and their ambience is rendered visually
-rather than as an audio bed. Rotating the ElevenLabs key would unblock a dedicated
-track and ambience mix for each.
+Dedicated original music per stage was blocked on the ElevenLabs
+misconfiguration that also blocked the object SFX — the MCP server held an API
+key ID rather than an API key. **That key was rotated, and 5.3 composed the two
+missing beds** (see *Music — the two missing beds, the stingers and the danger
+stem* below). Ambience on these stages is still rendered visually rather than as
+an audio bed; the per-stage ambience engine in `game.js` covers that separately.
 
 ## Cruise-Ship Pool Deck
 
@@ -497,3 +497,133 @@ double-mark, still capped at 24 (10 on the battery profile) and still cleared
 on match start. `__finalBlowQa.scars()`, `.pushScar()`, `.scarsClear()` and
 `.weaponArrival()` are the probes; `forceStageWeapon(x, { phase, frames })`
 parks the weapon mid-arrival so the choreography can be photographed.
+
+## 5.3 — Music: the two missing beds, the stingers and the danger stem
+
+Release 1.6 wrote a stage → soundtrack map with six stages in it and four songs
+to fill them, so `STAGE_MUSIC` carried two `todoTrack` entries —
+`wildwood-boardwalk-night` and `cruise-deck-disco` — and
+`stageMusicTrackIndex()` has preferred them over the fallback title since the
+day it was written. The files never arrived, so **two of six stages wore another
+stage's identity**: the Wildwood boardwalk opened on NEON SIGN WAR, the cruise
+pool deck on SUBWAY AFTER MIDNIGHT. The blocker note above says why. It is
+gone now, and the rest of the music layer went with it.
+
+Nothing here touches the four approved soundtracks. They are not regenerated,
+not re-encoded, not renamed, not reordered — `tests/music.test.mjs` pins their
+byte counts and durations so a future pass over `assets/audio/` cannot quietly
+change them, and the two new beds *append* to `musicTracks` so every saved
+manual track index still means the song it meant before.
+
+### The two beds
+
+Composed with ElevenLabs `music_v2`, instrumental, then encoded to the shipped
+format (44.1 kHz, 128 kbps CBR, stereo) and loudness-matched to the four:
+
+| track | file | length | integrated | true peak |
+| --- | --- | --- | --- | --- |
+| PHILLY AFTER DARK | `assets/audio/philly-after-dark.mp3` | 80.091 s | −11.2 LUFS | +0.5 dBFS |
+| VET PARKING LOT | `assets/audio/vet-parking-lot.mp3` | 80.091 s | −10.7 LUFS | +0.2 dBFS |
+| NEON SIGN WAR | `assets/audio/neon-sign-war.mp3` | 80.065 s | −11.3 LUFS | +1.1 dBFS |
+| SUBWAY AFTER MIDNIGHT | `assets/audio/subway-after-midnight.mp3` | 80.091 s | −12.2 LUFS | −0.2 dBFS |
+| **BOARDWALK NEON** (new) | `assets/audio/music/wildwood-boardwalk-night.mp3` | 80.091 s | −11.1 LUFS | +0.1 dBFS |
+| **DECK PARTY DISASTER** (new) | `assets/audio/music/cruise-deck-disco.mp3` | 80.091 s | −12.9 LUFS | +0.1 dBFS |
+
+**BOARDWALK NEON** is the boardwalk written as a fight: 104 BPM breakbeat, a
+fat distorted bass riff in F minor, a detuned saw hook, and an FM-bell
+carousel counter-melody that suggests the pier without ever turning cute —
+cheap seaside glamour with menace under it. **DECK PARTY DISASTER** is the
+same brief in daylight: 116 BPM four-on-the-floor, slap bass, wah clav, brass
+punches and a plastic steel-drum topline. Fun on the surface, sweaty
+underneath; it still has to make you want to hit someone.
+
+The cruise track lands 0.7 LU under the quietest shipped song. Its mix has a
+high crest factor and buying the last two LU cost audible limiting on the brass,
+so the honest number is documented instead of squashed (measured every way:
+two-pass `loudnorm` reached −12.9, +2 dB into `alimiter` came back at −13.6
+because the limiter ate the peaks it was gaining).
+
+Both files are registered in `assets/audio/MANIFEST.json` under a new `music`
+section (`tools/audio/build_manifest.mjs` measures them with ffprobe like every
+other take), and the service worker's media policy already covers
+`/assets/` cache-first, so they need no worker change.
+
+### The stingers
+
+Round and match ends had no musical punctuation at all: a KO ducked the bed to
+0.28 for 2.6 s and the same loop came back, and `resolveMatchResult` never
+touched the music. There are now **twelve new stingers in four banks of three**
+under `assets/audio/music/stingers/`, played on their own Audio elements OVER
+the bed — never by swapping `fightMusic.src`:
+
+| bank | when | length | takes |
+| --- | --- | --- | --- |
+| `roundstart` | the intro → fight edge, every round (and the skipped-intro path) | 3.056 s | brass swell / taiko + chiptune / slap-bass + wah |
+| `ko` | a round won on a knockout, match not over | 3.056 s | orchestral gong stab / guitar dive + 808 / anvil + brass fall |
+| `decision` | the clock ran out on two standing fighters | 3.056 s | buzzer + woodwind sigh / muted-trumpet wah / dying chiptune alarm |
+| `matchwin` | the round that closes the match, whatever the cause | 4.075 s | orchestral fanfare / funk victory lick / 16-bit jingle |
+
+Which bank a round end earns is `musicStingerForRoundEnd()` in
+`engine/music.mjs`, fed the same three facts the announcer plan already gets. A
+**Final Blow returns null on purpose** — `performFinisher` ducks the bed to 0.1
+for the whole cinematic so the gore mix owns the frame, and a fanfare over that
+is exactly the mud the 2.8 wave removed. A match won on the clock returns
+`matchwin`, not `decision`: the announcer still says TIME OVER, and the bigger
+of two simultaneous moments is the one the music marks.
+
+Takes are drawn from a shuffle bag — the same `createCrowdVoiceBag` /
+`crowdVoiceBagDraw` pair the voiced crowd uses, so the no-repeat guarantee is
+written once and proved once. **No take ever follows itself**, including across
+the reshuffle border; the test draws 3000 times per bank and asserts it, and a
+real two-round match ran `roundstart-2 → ko-2 → roundstart-1 → matchwin-2`.
+
+The stinger ducks the bed under itself for its own measured length plus a tail
+(`duckMs > take ms`, asserted), and it ducks with `Math.min(spec.duck,
+state.musicDuck)` so it can never *lift* a deeper duck already in flight. They
+are music, not SFX: `#musicToggle` and the music slider gate them, and they stay
+out of `sfxPools`, whose round-robin cursor can land the same take twice across
+pool borders.
+
+### The danger stem
+
+The "dynamic" low-health layer was one biquad. Neutral (0.45 open) put the
+cutoff at 650 + 16800 × 0.45^1.7 ≈ **4.97 kHz**; low health (0.8) took it to
+≈ **12.1 kHz**, with the presence gain moving 1.02 → 1.17, about **+1.2 dB**.
+Everything that moved lived above 5 kHz — which is roughly where a phone
+speaker stops. On the hardware Jez actually plays on, the difference between
+"fine" and "one hit from death" was very nearly nothing.
+
+It is now a real crossfade. `assets/audio/music/danger-stem.mp3` is a NEW
+unpitched layer — heartbeat kick, rim build, taiko rolls, industrial hits and
+one unmoving low drone, no melody and no chord changes, because it has to sit
+over six songs in six keys. 100 BPM, cut to **six bars = 14.400 s** and closed
+with a one-beat (0.240 s) equal-power crossfade so the element loop is seamless;
+the loop point was found by autocorrelating the onset envelope (beat 0.600 s,
+bar 2.403 s, correlation 0.52 at the 6-bar seam). Measured −13.8 LUFS, so it
+reads as a layer that arrived rather than a second song.
+
+When either fighter is at or under **30 health** — the same edge the filter ride
+has always used, not a second threshold — the stem eases in over ~0.55 s and the
+bed drops to **0.66 of its level (−3.6 dB)**. Out is slower (~1.1 s) so a heal
+or a round end does not snap it off. It is suppressed under a Final Blow and
+outside the live fight, and `syncMusic` stops it wherever it stops the bed
+(music off, tab hidden, paused). The old filter ride is untouched and still
+rides on top: what changed is that the low-health *step* stopped being
+filter-only.
+
+### Verified
+
+A real versus match on Wildwood in AUTO, driven through the actual UI in
+headless Chrome, `__finalBlowQa.music()` read at each beat:
+
+- stage pick → `BOARDWALK NEON`, `assets/audio/music/wildwood-boardwalk-night.mp3`,
+  `stageAuto: 1`, `trackCount: 6`;
+- intro → fight → `lastEvent {cue: "roundstart", take: 2, source: "round1"}`;
+- health 18 → `dangerStem {mix: 0.963, bedGain: 0.673, playing: 1, enters: 1}`,
+  bed volume 0.036 against 0.117 at full health;
+- health restored → mix back to 0.042 over 3.4 s;
+- KO → `ko-2`, `source: "round1:knockout"`; round 2 opened on `roundstart-1`
+  (a different take); the match-closing round played `matchwin-2`,
+  `source: "round2:knockout"`;
+- zero console errors, zero 4xx, and manually selecting tracks 4 and 5 loads
+  both new files.

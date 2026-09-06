@@ -2208,5 +2208,82 @@
       "bytes": 1281507
     }
   },
+  "music": {
+    "tracks": {
+      "files": {
+        "cruise-deck-disco.mp3": {
+          "ms": 80091,
+          "bytes": 1281924
+        },
+        "danger-stem.mp3": {
+          "ms": 14446,
+          "bytes": 231593
+        },
+        "wildwood-boardwalk-night.mp3": {
+          "ms": 80091,
+          "bytes": 1281924
+        }
+      }
+    },
+    "stingers": {
+      "takes": 12,
+      "cues": {
+        "decision": 3,
+        "ko": 3,
+        "matchwin": 3,
+        "roundstart": 3
+      },
+      "files": {
+        "decision-1.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "decision-2.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "decision-3.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "ko-1.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "ko-2.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "ko-3.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "matchwin-1.mp3": {
+          "ms": 4075,
+          "bytes": 65663
+        },
+        "matchwin-2.mp3": {
+          "ms": 4075,
+          "bytes": 65663
+        },
+        "matchwin-3.mp3": {
+          "ms": 4075,
+          "bytes": 65663
+        },
+        "roundstart-1.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "roundstart-2.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        },
+        "roundstart-3.mp3": {
+          "ms": 3056,
+          "bytes": 49363
+        }
+      }
+    }
+  },
   "gaps": []
 }

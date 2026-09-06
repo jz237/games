@@ -58,17 +58,29 @@ export function parseAudioManifest(raw) {
     }
   }
   const shared = fileTable(raw.shared);
-  if (!announcer && !Object.keys(fighters).length && !shared) return null;
+  // v5.3 SPECTACLE: the music section. Beds/stems live flat under
+  // assets/audio/music, stingers one level down; both are optional, so an
+  // older manifest still parses and the music paths simply go unmeasured.
+  const music = raw.music && typeof raw.music === "object"
+    ? Object.freeze({
+      tracks: fileTable(raw.music.tracks?.files ?? raw.music.tracks),
+      stingers: fileTable(raw.music.stingers?.files ?? raw.music.stingers),
+    })
+    : null;
+  if (!announcer && !Object.keys(fighters).length && !shared && !music) return null;
   return Object.freeze({
     generated: typeof raw.generated === "string" ? raw.generated : "",
     announcer,
     fighters: Object.freeze(fighters),
     shared,
+    music,
   });
 }
 
 const FIGHTER_PATH = /^assets\/audio\/fighters\/([^/]+)\/([^/]+\.mp3)$/;
 const ANNOUNCER_PATH = /^assets\/audio\/announcer\/([^/]+\.mp3)$/;
+const MUSIC_STINGER_PATH = /^assets\/audio\/music\/stingers\/([^/]+\.mp3)$/;
+const MUSIC_TRACK_PATH = /^assets\/audio\/music\/([^/]+\.mp3)$/;
 const SHARED_PATH = /^assets\/audio\/([^/]+\.mp3)$/;
 
 /** Manifest entry ({ ms, bytes }) for a canonical asset path, or null. */
@@ -78,6 +90,12 @@ export function audioManifestEntry(manifest, path) {
   if (match) return manifest.fighters[match[1]]?.[match[2]] || null;
   match = path.match(ANNOUNCER_PATH);
   if (match) return manifest.announcer?.[match[1]] || null;
+  // Stingers before tracks: the stinger pattern is the more specific of the
+  // two (SHARED_PATH cannot swallow either — its segment excludes "/").
+  match = path.match(MUSIC_STINGER_PATH);
+  if (match) return manifest.music?.stingers?.[match[1]] || null;
+  match = path.match(MUSIC_TRACK_PATH);
+  if (match) return manifest.music?.tracks?.[match[1]] || null;
   match = path.match(SHARED_PATH);
   if (match) return manifest.shared?.[match[1]] || null;
   return null;

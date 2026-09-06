@@ -18,7 +18,7 @@ Final Blow 1.0E can run a complete CPU-vs-CPU exhibition from the title screen.
 
 - all 28 unordered eight-fighter matchups play before a matchup repeats;
 - fighters are randomly assigned to the left or right side;
-- every stage and all four soundtracks are exhausted before their bags refill;
+- every stage and all six soundtracks are exhausted before their bags refill (four until 5.3; the wildwood and cruise beds joined the rotation with the two new stage tracks);
 - bag boundaries are repaired so the previous matchup, stage, or soundtrack cannot repeat immediately.
 
 The director retains only the current bounded bags, so it does not accumulate match history during long unattended runs.

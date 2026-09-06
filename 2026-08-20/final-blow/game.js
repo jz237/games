@@ -510,6 +510,19 @@ import {
   crowdVoicePath,
 } from "./engine/crowd-voice.mjs";
 import {
+  DANGER_STEM,
+  DANGER_STEM_PATH,
+  MUSIC_STINGERS,
+  dangerStemBedGain,
+  dangerStemGain,
+  dangerStemStep,
+  dangerStemTarget,
+  musicStageTrackEntries,
+  musicStingerFiles,
+  musicStingerForRoundEnd,
+  musicStingerPath,
+} from "./engine/music.mjs";
+import {
   STAGE_WEAPONS,
   canPickUpWeapon,
   canWeaponArrive,
@@ -2006,6 +2019,14 @@ const fatalityAudioAssets = Object.freeze(Object.fromEntries(
 // instead. Listed here so the registration is auditable next to the others.
 const crowdVoiceAssets = Object.freeze(crowdVoiceFiles());
 
+// v5.3 SPECTACLE: the twelve NEW music stingers (assets/audio/music/stingers,
+// manifest in engine/music.mjs). Same reasoning as the crowd voices — they
+// stay OUT of sfxPools because the round-robin cursor can repeat a take
+// across pool borders, and playMusicStinger() draws from a shuffle bag
+// instead. They are music, not SFX: #musicToggle and state.musicVolume gate
+// them. Listed here so the registration is auditable next to the others.
+const musicStingerAssets = Object.freeze(musicStingerFiles());
+
 const sfxVolumes = {
   select: 0.5,
   jump: 0.42,
@@ -2121,15 +2142,19 @@ const musicTracks = [
   { title: "VET PARKING LOT", src: "assets/audio/vet-parking-lot.mp3" },
   { title: "NEON SIGN WAR", src: "assets/audio/neon-sign-war.mp3" },
   { title: "SUBWAY AFTER MIDNIGHT", src: "assets/audio/subway-after-midnight.mp3" },
+  // v5.3 SPECTACLE: the two stage themes release 1.6 planned and the broken
+  // ElevenLabs key blocked. NEW files (engine/music.mjs carries the
+  // measurements); the four above are untouched, byte for byte. They append
+  // rather than insert so every saved manual track index keeps its meaning.
+  ...musicStageTrackEntries(),
 ];
 let currentTrackIndex = 0;
 // Release 1.6 "LOUD": stage-matched AUTO music, chosen by vibe/title fit.
-// Four tracks cover six stages for now; each entry may also name a planned
-// track via todoTrack, and stageMusicTrackIndex() automatically prefers that
-// file the moment it appears in musicTracks.
-// TODO(wildwood-boardwalk-night): compose with ElevenLabs when auth returns,
-// append it to musicTracks, and the wildwood mapping below picks it up.
-// TODO(cruise-deck-disco): same deal for the cruise pool deck.
+// Every entry may name a planned track via todoTrack, and
+// stageMusicTrackIndex() prefers that file the moment it appears in
+// musicTracks — which, as of 5.3, both of them do: wildwood and cruise stop
+// borrowing NEON SIGN WAR and SUBWAY AFTER MIDNIGHT and get their own bed.
+// The todoTrack entries stay because they are what resolves the new files.
 const STAGE_MUSIC = Object.freeze({
   somerset: Object.freeze({ title: "PHILLY AFTER DARK" }),
   vet: Object.freeze({ title: "VET PARKING LOT" }),
@@ -2147,6 +2172,30 @@ fightMusic.preload = "auto";
 fightMusic.loop = false;
 fightMusic.volume = 0.24;
 let musicDuckTimer = 0;
+// v5.3 SPECTACLE — the music layer above the bed (engine/music.mjs).
+//
+// DANGER STEM. The low-health tell was one biquad: 0.45 open -> 4.97 kHz,
+// 0.8 -> 12.1 kHz, presence 1.02 -> 1.17 (about +1.2 dB). Everything that
+// moved lived above 5 kHz, which is where a phone speaker stops. It is now a
+// real layer — a 14.4 s unpitched percussion/drone loop on its OWN looping
+// element — crossfaded in while the bed drops 34%, so the change is a texture
+// swap you feel rather than a shelf you cannot hear.
+const dangerStem = new Audio(DANGER_STEM_PATH);
+dangerStem.preload = "auto";
+dangerStem.loop = true;
+dangerStem.volume = 0;
+let dangerStemLevel = 0;
+let dangerStemPlaying = false;
+// STINGERS. One bank of Audio elements per cue, built on first use, drawn
+// from a per-cue shuffle bag (the crowd-voice contract: every take once per
+// bag, never the same take twice in a row across the reshuffle border). This
+// is the second channel the round bookends ride: the take plays OVER the bed
+// under a duck, never by swapping fightMusic's src.
+const musicStingerBanks = new Map();
+const musicStingerBags = new Map();
+// The last dozen stinger plays as "cue-take", newest last (QA snapshot).
+const musicStingerRecent = [];
+let lastMusicSting = null;
 let soundCaptionTimer = 0;
 let lastSoundEvent = null;
 const soundCaptionLabels = Object.freeze({
@@ -2175,6 +2224,9 @@ const soundCaptionLabels = Object.freeze({
   // w51 clock truth: the :00 buzzer (ticks themselves stay uncaptioned —
   // ten captions in ten seconds would bury the fight captions).
   "time-buzzer": "TIME",
+  // v5.3 SPECTACLE: the round/match music stingers (bank captions come from
+  // MUSIC_STINGERS, this is the fallback label).
+  "music-sting": "MUSIC STINGER",
 });
 
 const keys = new Set();
@@ -12060,6 +12112,8 @@ function trySkipFightFlow(input0 = {}, input1 = {}) {
     cancelFightAnnouncement();
     announce("FIGHT!", "INTRO SKIPPED", 0.55);
     updateFlowSkipHint();
+    // v5.3 SPECTACLE: a skipped intro is still a round start.
+    playMusicStinger("roundstart", { source: `round${state.round}-skip` });
     return true;
   }
   if (state.phase === "roundover") {
@@ -12118,12 +12172,18 @@ function finishRound(winner, type = -1) {
     // incremented above) earns the "<id>-wins" bank.
     const loser = state.fighters[1 - winner];
     const cause = roundEndCause({ finisherType: type, timer: state.timer, loserHealth: loser.health });
-    const speak = roundEndAnnouncerPlan({
-      cause,
-      matchWon: state.rounds[winner] >= roundsToWinValue(),
-      fighterId: winDef.id,
-    });
+    const matchWon = state.rounds[winner] >= roundsToWinValue();
+    const speak = roundEndAnnouncerPlan({ cause, matchWon, fighterId: winDef.id });
     announce(`${winDef.name} WINS`, roundEndBannerSub(cause), 2.4, { speak });
+    // v5.3 SPECTACLE: the musical punctuation the round bookends never had —
+    // a KO stab, a sour TIME OVER figure, or the match-win fanfare, played on
+    // the stinger channel over the bed the duck above just lowered. The
+    // decision is engine/music musicStingerForRoundEnd (a Final Blow returns
+    // null there: performFinisher's 0.1 duck hands the frame to the gore mix,
+    // and that branch never reaches here anyway).
+    playMusicStinger(musicStingerForRoundEnd({ cause, matchWon, finisher: type >= 0 }), {
+      source: `round${state.round}:${cause}`,
+    });
     if (cause !== ROUND_END_CAUSES.decision) sound("ko", loser);
     // v5.3 SPECTACLE (ko-collapse): THE BODY GOES DOWN. checkKnockout stood
     // the victim up for the Final Blow stand-off (down=false, stun=99,
@@ -17640,6 +17700,11 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
       state.phase = "fight";
       for (const fighter of state.fighters) fighter.introWalkTarget = null;
       updateFlowSkipHint();
+      // v5.3 SPECTACLE: the round opens on a stinger over the bed. Every
+      // round reaches this edge (resetRound always returns to "intro"), and
+      // the skip path below fires the same cue, so ROUND 2 with the intro
+      // skipped still gets its downbeat.
+      playMusicStinger("roundstart", { source: `round${state.round}` });
     }
   }
 
@@ -28123,12 +28188,20 @@ function syncMusic() {
   if (!state.audioUnlocked) return;
   const enabled = Boolean($("#musicToggle")?.checked);
   fightMusic.loop = state.musicChoice !== "auto";
-  fightMusic.volume = clamp(musicBaseVolume() * state.musicDuck * state.musicVolume, 0, 1);
+  // v5.3: the bed's half of the danger crossfade. dangerStemBedGain is 1
+  // until the stem starts arriving, so nothing about the ordinary mix moves.
+  fightMusic.volume = clamp(
+    musicBaseVolume() * state.musicDuck * state.musicVolume * dangerStemBedGain(dangerStemLevel),
+    0,
+    1,
+  );
   if (!enabled || document.hidden || state.paused) {
     fightMusic.pause();
+    stopDangerStem();
     return;
   }
   if (fightMusic.paused) fightMusic.play().catch(() => {});
+  syncDangerStem();
 }
 
 function resetMusicDuck() {
@@ -28728,6 +28801,9 @@ const audioFxDebug = {
   rearmClicks: 0,
   // 5.3 CLOSE RANGE: clinch-break snaps actually voiced.
   clinchTechBreaks: 0,
+  // v5.3 SPECTACLE: round/match music stingers actually started (post every
+  // gate) and low-health danger-stem entries (mix crossing 0.5 upward).
+  stingerPlays: 0, dangerStemEnters: 0,
 };
 // Live node bookkeeping for the QA node-graph hook: persistent = currently
 // connected long-lived nodes (master bus, beds, music routing), one-shots =
@@ -29431,6 +29507,112 @@ function updateMusicIntensity(dt) {
   );
 }
 
+// --- v5.3 SPECTACLE: music stingers + the low-health stem -------------------
+// Both ride ABOVE the bed on their own elements. Nothing here reads back into
+// the simulation, everything is rollback-guarded at the call sites, and both
+// are silent when the music toggle is off — this is music, not SFX, so it
+// obeys #musicToggle and state.musicVolume rather than the SFX slider.
+
+function musicStingerBank(cue) {
+  let bank = musicStingerBanks.get(cue);
+  if (bank) return bank;
+  const spec = MUSIC_STINGERS[cue];
+  bank = [];
+  for (let take = 1; take <= (spec?.takes || 0); take += 1) {
+    const sample = new Audio(musicStingerPath(cue, take));
+    sample.preload = "auto";
+    bank.push(sample);
+  }
+  musicStingerBanks.set(cue, bank);
+  return bank;
+}
+
+/**
+ * Play one stinger take over the bed and duck the bed under it for the take's
+ * measured length. Returns the take index played, or -1 when a gate held it.
+ * The bag guarantees no take follows itself, which is the thing Jez listens
+ * for — a KO that sounds identical twice in a row is worse than no stinger.
+ */
+function playMusicStinger(cue, { source = "" } = {}) {
+  if (rollbackResimulating || !cue) return -1;
+  const spec = MUSIC_STINGERS[cue];
+  if (!spec) return -1;
+  if (!$("#musicToggle")?.checked || !(state.musicVolume > 0)) return -1;
+  if (demoSession.attract && !state.audioUnlocked) return -1;
+  const bank = musicStingerBank(cue);
+  if (!bank.length) return -1;
+  let bag = musicStingerBags.get(cue);
+  if (!bag || bag.size !== bank.length) {
+    bag = createCrowdVoiceBag(bank.length);
+    musicStingerBags.set(cue, bag);
+  }
+  const take = crowdVoiceBagDraw(bag, visualRandom);
+  const sample = bank[take];
+  unlockAudio();
+  showSoundCaption("music-sting", null, spec.caption);
+  sample.pause();
+  sample.currentTime = 0;
+  sample.volume = clamp(spec.volume * musicBaseVolume() * state.musicVolume, 0, 1);
+  const playback = sample.play();
+  if (playback?.catch) playback.catch(() => {});
+  // The bed steps aside for the take, then comes back on its own timer. A
+  // deeper duck already in flight (the fatality's 0.1, the KO hold's 0.28)
+  // wins, so a stinger never LIFTS the bed back over a cinematic.
+  duckMusic(Math.min(spec.duck, state.musicDuck), spec.duckMs);
+  audioFxDebug.stingerPlays += 1;
+  lastMusicSting = Object.freeze({
+    cue, take: take + 1, source, level: Number(sample.volume.toFixed(3)),
+  });
+  musicStingerRecent.push(`${cue}-${take + 1}`);
+  while (musicStingerRecent.length > 12) musicStingerRecent.shift();
+  return take;
+}
+
+function stopDangerStem() {
+  if (!dangerStemPlaying) return;
+  dangerStem.pause();
+  dangerStemPlaying = false;
+}
+
+/** Element side of the crossfade: level, and start/stop at the mix edges. */
+function syncDangerStem() {
+  const wanted = dangerStemGain(dangerStemLevel) * state.musicDuck * musicBaseVolume() * state.musicVolume;
+  dangerStem.volume = clamp(wanted, 0, 1);
+  const live = dangerStemLevel > 0.002
+    && Boolean($("#musicToggle")?.checked)
+    && state.musicVolume > 0
+    && !document.hidden
+    && !state.paused;
+  if (!live) {
+    stopDangerStem();
+    return;
+  }
+  if (dangerStem.paused) {
+    const playback = dangerStem.play();
+    if (playback?.catch) playback.catch(() => {});
+  }
+  dangerStemPlaying = true;
+}
+
+/**
+ * Ease the danger mix toward its target and hand both halves of the
+ * crossfade to syncMusic (bed) and syncDangerStem (stem). Render-clock only.
+ */
+function updateMusicLayer(dt) {
+  const previous = dangerStemLevel;
+  const target = dangerStemTarget({
+    fightLive: state.screen === "fight" && state.fighters.length === 2,
+    phase: state.phase,
+    finisher: Boolean(state.finisher),
+    healths: state.fighters.map((fighter) => fighter.health),
+  });
+  dangerStemLevel = dangerStemStep(dangerStemLevel, target, dt);
+  if (previous <= 0.5 && dangerStemLevel > 0.5) audioFxDebug.dangerStemEnters += 1;
+  // Only touch the elements when the mix is actually moving or sounding —
+  // syncMusic is otherwise the sole owner of fightMusic.volume.
+  if (Math.abs(dangerStemLevel - previous) > 0.0005 || dangerStemPlaying) syncMusic();
+}
+
 // --- Feature: per-stage ambience beds --------------------------------------
 
 // One shared ambience engine, per-stage parameter tables. Layers are
@@ -30089,6 +30271,8 @@ function updateAudioPresentation(time, dtMs) {
   const dt = clamp(dtMs / 1000, 0.001, 0.1);
   updateCrowdAudio(dt);
   updateMusicIntensity(dt);
+  // v5.3 SPECTACLE: the low-health stem's crossfade rides the same clock.
+  updateMusicLayer(dt);
   updateAmbienceAudio(time, dt);
   updateVoiceCallouts();
   // Wave 16: pre-fight dialogue card reveal rides the same per-frame observer.
@@ -30416,6 +30600,8 @@ function setPaused(paused, reason = "") {
   $("#touchControls").classList.toggle("paused", state.paused);
   if (state.paused) {
     fightMusic.pause();
+    // v5.3: the danger stem is a second element, so it needs the same stop.
+    stopDangerStem();
     showSoundCaption("pause");
   } else {
     showSoundCaption("resume");
@@ -32043,6 +32229,19 @@ window.__finalBlowEngine = {
         weaponClatters: audioFxDebug.weaponClatters,
         koHorns: audioFxDebug.koHorns,
         musicIntensity: Number(musicIntensityLevel.toFixed(3)),
+        // v5.3 SPECTACLE music: stinger takes actually started, the last
+        // dozen as "cue-take" so the smoke can prove no take repeats back to
+        // back, the last one played, and the low-health crossfade — the mix
+        // itself, the bed multiplier it is imposing, and how many times the
+        // danger layer has come in this session.
+        stingerPlays: audioFxDebug.stingerPlays,
+        stingerRecent: musicStingerRecent.slice(),
+        stingerLast: lastMusicSting,
+        stingerFiles: musicStingerAssets.length,
+        dangerStemMix: Number(dangerStemLevel.toFixed(3)),
+        dangerStemBed: Number(dangerStemBedGain(dangerStemLevel).toFixed(3)),
+        dangerStemEnters: audioFxDebug.dangerStemEnters,
+        dangerStemPlaying: dangerStemPlaying ? 1 : 0,
         ambienceActive: ambienceEngaged ? 1 : 0,
         ambienceStage: ambienceEngaged ? state.stage : "",
         ambienceEvents: audioFxDebug.ambienceEvents,
@@ -32976,6 +33175,35 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         surge: ambientSurge(level, beat),
         stage: state.stage,
         tick: state.simulationTick,
+      };
+    },
+    // v5.3 SPECTACLE: the music snapshot — which bed the stage picked, where
+    // the low-health crossfade sits, and the stinger log. `lastEvent` is the
+    // last stinger fired with its source tag ("round2:knockout"), so a probe
+    // can assert that a KO produced a KO stinger and that two KOs in a row
+    // did not produce the same take. Presentation reads only.
+    music() {
+      return {
+        track: musicTracks[currentTrackIndex]?.title || "",
+        trackSrc: musicTracks[currentTrackIndex]?.src || "",
+        trackCount: musicTracks.length,
+        stage: state.stage,
+        stageAuto: state.musicChoice === "auto" && stageMusicAutoApplied ? 1 : 0,
+        intensity: Number(musicIntensityLevel.toFixed(3)),
+        bedVolume: Number(fightMusic.volume.toFixed(4)),
+        duck: Number(state.musicDuck.toFixed(3)),
+        stingerPlays: audioFxDebug.stingerPlays,
+        stingerRecent: musicStingerRecent.slice(),
+        lastEvent: lastMusicSting,
+        stingerBanks: Object.keys(MUSIC_STINGERS),
+        dangerStem: {
+          mix: Number(dangerStemLevel.toFixed(3)),
+          bedGain: Number(dangerStemBedGain(dangerStemLevel).toFixed(3)),
+          volume: Number(dangerStem.volume.toFixed(4)),
+          playing: dangerStemPlaying ? 1 : 0,
+          enters: audioFxDebug.dangerStemEnters,
+          healthAt: DANGER_STEM.healthAt,
+        },
       };
     },
     // v5.3 CROWD DEPTH: drive a stir straight into the crowd — the same call

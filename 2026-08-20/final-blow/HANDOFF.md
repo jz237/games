@@ -458,8 +458,11 @@ returns `api_key_id_used_as_api_key`. Consequences:
 
 - The eight throwable-object impact sounds are synthesized in WebAudio
   (`OBJECT_SOUNDS` in `game.js`) instead of recorded samples.
-- Wildwood, the buffet and the cruise deck have no dedicated music; they share
-  the existing four original soundtracks, and their ambience is rendered visually.
+- ~~Wildwood, the buffet and the cruise deck have no dedicated music~~ —
+  **cleared in 5.3**: the key was rotated and the two planned beds
+  (`wildwood-boardwalk-night`, `cruise-deck-disco`) were composed, so only the
+  buffet still shares a soundtrack. Their ambience is still rendered visually.
+  See STAGES.md → *5.3 — Music*.
 
 Rotating that key is the only thing needed to finish both. fal (image generation)
 works fine and was used for all the new art.

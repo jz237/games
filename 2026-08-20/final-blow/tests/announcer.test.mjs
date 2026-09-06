@@ -137,7 +137,13 @@ test("the dizzy ring is three climbing chirps whose variant moves the root", () 
 test("game.js wiring: no knockout.mp3 on a decision or a dizzy, tick on the timer edge", () => {
   const finish = slice("function finishRound(winner, type = -1) {", "function performFinisher(");
   assert.match(finish, /roundEndCause\(\{ finisherType: type, timer: state\.timer, loserHealth: loser\.health \}\)/);
-  assert.match(finish, /matchWon: state\.rounds\[winner\] >= roundsToWinValue\(\)/);
+  // 5.3 SPECTACLE (music): the match-won test is now a `const` because the
+  // round-end music stinger reads the same fact as the announcer plan. The
+  // pin follows the value to its new site rather than the old inline literal
+  // — what it protects is that the plan is still told whether this round
+  // closed the match, which the second assertion below now carries.
+  assert.match(finish, /const matchWon = state\.rounds\[winner\] >= roundsToWinValue\(\);/);
+  assert.match(finish, /roundEndAnnouncerPlan\(\{ cause, matchWon, fighterId: winDef\.id \}\)/);
   assert.match(finish, /announce\(`\$\{winDef\.name\} WINS`, roundEndBannerSub\(cause\), 2\.4, \{ speak \}\)/);
   assert.match(finish, /if \(cause !== ROUND_END_CAUSES\.decision\) sound\("ko", loser\);/);
   assert.doesNotMatch(finish, /"KNOCKOUT"/, "the banner sub is derived, never hard-coded KNOCKOUT");

@@ -220,6 +220,31 @@ through `SHARED_SYNTH_VOICES` in `sound()`. QA: `snapshot().audio.variation`
 is the last shared draw (`kind`, `rate`, `db`, `gain`) and
 `snapshot().violence` carries `sharedVariations`, `dashScuffs` and
 `weaponClatters` totals. Unit coverage in `tests/shared-sfx.test.mjs`.
+
+### The round bookends got a music channel (5.3 "Spectacle", sweep #25)
+
+The sound of a round ending was a duck: a KO dropped `fightMusic` to 0.28 for
+2.6 s and the same loop came back, and a match ending touched the music not at
+all. There is now a **second Audio channel above the bed** — twelve new
+stingers in four banks (`roundstart`, `ko`, `decision`, `matchwin`), three takes
+each, drawn from the same shuffle bag the voiced crowd uses so no take ever
+follows itself. `musicStingerForRoundEnd()` in `engine/music.mjs` picks the bank
+from the facts `finishRound` already computes for the announcer
+(`roundEndCause`, whether this round closed the match, whether a Final Blow is
+playing); a Final Blow deliberately gets none, because `performFinisher` ducks
+the bed to 0.1 to hand the frame to the gore mix. Each stinger ducks the bed
+under itself for its own measured length, and only ever *downward* —
+`Math.min(spec.duck, state.musicDuck)` means it can never lift a deeper duck
+already in flight.
+
+The same wave replaced the low-health filter sweep with a real crossfade to a
+percussion/drone stem, and composed the two stage beds release 1.6 planned.
+Measurements, the loop maths and the browser verification live in **STAGES.md →
+*5.3 — Music***. QA: `__finalBlowQa.music()` carries the picked track, the
+stinger log (`lastEvent`, `stingerRecent`) and the crossfade
+(`dangerStem.mix` / `.bedGain` / `.enters`); `snapshot().violence` carries
+`stingerPlays`, `dangerStemMix` and `dangerStemEnters`. Unit coverage in
+`tests/music.test.mjs`.
 ## Block economy (post-5.0 sweep)
 
 The 4.4 Tempo / 4.5 Re-Arm pass made a *whiffed* swing pay; this pass makes the

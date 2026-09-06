@@ -390,3 +390,35 @@ until he decides either way.
 | P5 fighter variant retakes | 30 |
 | P6 clock callout (w51, not generated) | 3 |
 | **Total** | **547** |
+
+## 5.3 "Spectacle" — music (sweep #25), 2026-09-06
+
+Fifteen NEW files, none of them voice, none of them touching the 45 reviewed
+takes or the four approved soundtracks. All ElevenLabs `music_v2`,
+`force_instrumental`, encoded to 44.1 kHz / 128 kbps CBR stereo:
+
+| path | count | length | loudness |
+| --- | --- | --- | --- |
+| `assets/audio/music/wildwood-boardwalk-night.mp3` | 1 | 80.091 s | −11.1 LUFS |
+| `assets/audio/music/cruise-deck-disco.mp3` | 1 | 80.091 s | −12.9 LUFS |
+| `assets/audio/music/danger-stem.mp3` | 1 | 14.446 s | −13.8 LUFS |
+| `assets/audio/music/stingers/{roundstart,ko,decision}-{1,2,3}.mp3` | 9 | 3.056 s | −16 LUFS target |
+| `assets/audio/music/stingers/matchwin-{1,2,3}.mp3` | 3 | 4.075 s | −16 LUFS target |
+
+Beds are loudness-matched to the shipped four with two-pass `loudnorm`;
+stingers are `loudnorm` to −16 LUFS with a −1.0 dBTP ceiling, which keeps the
+transient shape of a stab that has to cut through a bed at 0.28 duck. Measured
+integrated loudness across the twelve runs −18.5 to −13.6 LUFS (target −16;
+`loudnorm`'s single-pass estimate over a 3 s clip is approximate).
+
+Registered in `assets/audio/MANIFEST.json` under the new `music` section by
+`tools/audio/build_manifest.mjs` — the manifest walks
+`assets/audio/music/stingers/` with the announcer's 1-based take convention, so
+a misnamed take shows up in `gaps` rather than going silently unreachable.
+Design, wiring and verification: STAGES.md → *5.3 — Music*.
+
+### Still outstanding here
+
+Nothing in this section replaces the P0 candidate-review cycle
+(`engine/audio-review.mjs`: block 0/8, hit-heavy 0/8, ko 0/8, fatal 0/8) — that
+is a separate sitting with Jez and is untouched by the music work.

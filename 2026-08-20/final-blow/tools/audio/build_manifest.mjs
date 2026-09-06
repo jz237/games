@@ -124,6 +124,16 @@ function build() {
     fighters[fighterId] = { takes: Object.keys(files).length, cues: counts, files };
   }
   const shared = measureDir(audioRoot);
+  // v5.3 SPECTACLE: the music section. `tracks` are the two NEW stage beds
+  // and the low-health stem (flat under assets/audio/music); `stingers` are
+  // the four round/match banks one level down, walked with the announcer's
+  // 1-based take convention so a hole in a bank is reported, not hidden.
+  const musicDir = join(audioRoot, "music");
+  const stingerDir = join(musicDir, "stingers");
+  const musicTracks = existsSync(musicDir) ? measureDir(musicDir) : {};
+  const stingerFiles = existsSync(stingerDir) ? measureDir(stingerDir) : {};
+  const stingerCues = cueCounts(stingerFiles, { announcer: true });
+  gaps.push(...stingerCues.gaps.map((name) => `music/stingers/${name}`));
   return {
     generated: new Date().toISOString().slice(0, 10),
     tool: "tools/audio/build_manifest.mjs",
@@ -131,6 +141,10 @@ function build() {
     announcer: { takes: Object.keys(announcerFiles).length, cues: announcerCues.counts, files: announcerFiles },
     fighters,
     shared,
+    music: {
+      tracks: { files: musicTracks },
+      stingers: { takes: Object.keys(stingerFiles).length, cues: stingerCues.counts, files: stingerFiles },
+    },
     gaps,
   };
 }
@@ -146,11 +160,11 @@ if (process.argv.includes("--check")) {
     console.error(`assets/audio/MANIFEST.json is stale — run node tools/audio/build_manifest.mjs`);
     process.exit(1);
   }
-  console.log(`assets/audio/MANIFEST.json is current (${totalTakes} takes, ${Object.keys(manifest.shared).length} shared files)`);
+  console.log(`assets/audio/MANIFEST.json is current (${totalTakes} takes, ${Object.keys(manifest.shared).length} shared files, ${Object.keys(manifest.music.tracks.files).length} music beds + ${manifest.music.stingers.takes} stingers)`);
   process.exit(0);
 }
 
 if (existsSync(manifestPath)) unlinkSync(manifestPath);
 writeFileSync(manifestPath, json);
-console.log(`wrote ${relative(gameRoot, manifestPath)}: announcer ${manifest.announcer.takes} takes / ${Object.keys(manifest.announcer.cues).length} cues, ${Object.keys(manifest.fighters).length} fighters / ${totalTakes - manifest.announcer.takes} takes, ${Object.keys(manifest.shared).length} shared files`);
+console.log(`wrote ${relative(gameRoot, manifestPath)}: announcer ${manifest.announcer.takes} takes / ${Object.keys(manifest.announcer.cues).length} cues, ${Object.keys(manifest.fighters).length} fighters / ${totalTakes - manifest.announcer.takes} takes, ${Object.keys(manifest.shared).length} shared files, ${Object.keys(manifest.music.tracks.files).length} music beds + ${manifest.music.stingers.takes} stingers`);
 if (manifest.gaps.length) console.warn(`unreachable takes (hole before them in the bank): ${manifest.gaps.join(", ")}`);
