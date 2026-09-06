@@ -15,7 +15,8 @@ LOOK = {
   "benny": "a wiry man in a dark cap, black t-shirt and khaki cargo trousers with dark shoes",
   "donald": "a heavyset older man with blonde hair in a navy suit, white shirt and long red tie, with gold knee shields and black shoes",
   "cyraxx": "a thin dishevelled man with long hair and a beard in a grey t-shirt and worn grey-brown trousers",
-  "ali": "a man in a red beanie, sunglasses, a bright yellow track suit and yellow-and-black sneakers",
+  "ali": "a slim, light-skinned man with a dark goatee, small dark sunglasses, a red beanie, a bright yellow tracksuit with black side stripes, a heavy gold chain, yellow-and-black sneakers and a black-and-gold boombox slung on his back (the boombox stays on his back in EVERY cell)",
+  "jez": "a lean man with swept-back white hair in a blue martial-arts gi with a dark belt, blue trousers and brown boots",
   "commissioner": "a stern older man with white hair in a black suit, black tie and black shoes",
   "devil": "a lean winged creature with scaled skin, clawed hands and feet, horns, a long tail and a moss-green cloth wrapped around its shins",
 }

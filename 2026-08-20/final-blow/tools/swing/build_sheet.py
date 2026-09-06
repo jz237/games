@@ -36,10 +36,26 @@ BANKS = {
         "wall-splat", "crumple", "falling", "floor-bounce",
         "getup-a", "getup-b", "thrown", "ko",
     ], {0, 1, 4}),
+    # v5.2 locomotion / air / bookend sheet.
+    "ext5": ([
+        "dash-launch", "dash-stretch", "dash-brake", "turnaround",
+        "apex-tuck", "descent", "air-recover", "air-hit-upright",
+        "power-charge", "entrance-a", "entrance-b", "victory",
+        "taunt", "crouch-guard-flinch", "throw-grab", "dizzy-sway",
+    ], {0, 2, 3, 8, 9, 10, 11, 12, 14}),
+    # v5.2 ext (8-cell in-between grammar) for the four fighters that never had
+    # one, generated as two takes of the eight poses; the slicer keeps all 16
+    # and the installer picks per cell.
+    "ext8": ([
+        "idle-breathe", "walk-down-a", "walk-down-b", "jump-ascent",
+        "jump-descend", "punch-windup", "kick-windup", "mid-reaction",
+        "idle-breathe-b", "walk-down-a-b", "walk-down-b-b", "jump-ascent-b",
+        "jump-descend-b", "punch-windup-b", "kick-windup-b", "mid-reaction-b",
+    ], {0, 1, 2, 5, 6, 7, 8, 9, 10, 13, 14, 15}),
 }
 IDS = None
 STANDING = None
-PURGE_PURPLE = {"ext4": (8, 11, 6, 7)}
+PURGE_PURPLE = {"ext4": (8, 11, 6, 7), "ext5": (7, 13)}
 
 
 def key_unmultiply(rgb):
@@ -53,6 +69,42 @@ def key_unmultiply(rgb):
     # Hard interior keeps the raw colour exactly.
     fg = np.where(a >= 0.98, rgb, fg)
     return fg, alpha
+
+
+def inpaint_magenta(fg, alpha, iterations=6):
+    """v5.2 DESPILL. The model paints a magenta RIM on dark figures against the
+    magenta key (a real glow it invents, not a blend), and the key solve keeps
+    it: 2-4% of every shipped ext2/ext3/ext4 sheet's opaque pixels were magenta
+    while the main sheets had none — a pink outline on every in-between, strike
+    and reaction cell on a dark stage. No costume on the roster is magenta, so
+    a magenta-hued pixel anywhere on a figure is spill: refill it from the
+    nearest non-magenta neighbours (iterative dilation) and keep its alpha."""
+    r, g, b = fg[..., 0], fg[..., 1], fg[..., 2]
+    spill = (alpha > 0.02) & (r > g + 40) & (b > g + 40) & (np.minimum(r, b) > 80)
+    if not spill.any():
+        return fg, 0
+    out = fg.copy()
+    valid = (alpha > 0.02) & ~spill
+    filled = spill.copy()
+    count = int(spill.sum())
+    for _ in range(iterations):
+        if not filled.any():
+            break
+        acc = np.zeros_like(out); n = np.zeros(out.shape[:2], dtype=np.float32)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dy == 0 and dx == 0:
+                    continue
+                sv = np.roll(np.roll(valid, dy, axis=0), dx, axis=1)
+                so = np.roll(np.roll(out, dy, axis=0), dx, axis=1)
+                acc += so * sv[..., None]; n += sv
+        can = filled & (n > 0)
+        out[can] = acc[can] / n[can][:, None]
+        valid = valid | can
+        filled = filled & ~can
+    # Whatever could not be refilled (an isolated fleck) loses its alpha.
+    alpha = np.where(filled, 0.0, alpha)
+    return out, count
 
 
 def keep_main_components(alpha, min_ratio=0.006, reach=28):
@@ -142,6 +194,8 @@ def main():
         r, g, b = cell[..., 0], cell[..., 1], cell[..., 2]
         purple = (r > g + 45) & (b > g + 45) & (np.minimum(r, b) > 70)
         alpha[cy:cy + CELL_IN, cx:cx + CELL_IN][purple] = 0
+    fg, spilled = inpaint_magenta(fg, alpha)
+    print("despilled magenta px", spilled)
     rgba = np.dstack([fg, alpha * 255]).astype(np.uint8)
     rgba[alpha == 0] = 0
     keyed = Image.fromarray(rgba, "RGBA")

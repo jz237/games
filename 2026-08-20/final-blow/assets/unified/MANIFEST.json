@@ -126,7 +126,8 @@
    "thrown",
    "ko"
   ],
-  "swingStatus": "WIRED AND SHIPPING (v5.0). Consumed by swingSubstitute at pose resolution: a resolved motion/motion2 cell with a same-family equivalent on the fighter's ext3/ext4 sheet draws the equivalent instead, gated per cell. Tracks and hold budgets are untouched."
+  "swingStatus": "WIRED AND SHIPPING (v5.0). Consumed by swingSubstitute at pose resolution: a resolved motion/motion2 cell with a same-family equivalent on the fighter's ext3/ext4 sheet draws the equivalent instead, gated per cell. Tracks and hold budgets are untouched.",
+  "despill": "v5.1: every generated ext bank (ext2/ext3/ext4) rebuilt from its archived raw with tools/swing/build_sheet.py inpaint_magenta \u2014 the model paints a magenta rim on figures against the magenta key and the key solve kept it (2-4% of each sheet's opaque pixels were magenta, zero on the main sheets). Registration is byte-identical (heights, body centres and draw adjusts unchanged); weighted dE to each fighter's unified sheet now 0.75-1.97 (devil 1.8-2.0, previously 3.7-4.2)."
  },
  "fighters": {
   "deathblow": {

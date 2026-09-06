@@ -1,0 +1,21 @@
+The reference image is a sprite sheet of ONE fighter: {LOOK}, painted in a detailed 2D fighting-game sprite style with painterly shading.
+
+Draw a NEW 4-by-4 sprite sheet of EXACTLY THE SAME character: identical face, hair, costume, colours, proportions, art style, line weight, lighting direction and figure scale as the reference cells. 16 equal square cells in a perfect grid on the same flat solid magenta (#FF00FF) background — no scenery, no floor, no cast shadows, no glow, no motion blur, no grid lines, no borders, no text. The character faces to the RIGHT in every cell like the reference. Feet planted on the same floor line near the bottom of each cell for grounded poses; airborne poses float in the upper two-thirds of the cell. Standing figures are the same height as the reference's standing cells (about 95% of the cell); every figure centred in its own cell and never touching the edges. Every airborne and hurt pose keeps the HEAD ABOVE THE HIPS — nobody is ever upside down or lying with feet in the air.
+
+The 16 cells, left to right, top to bottom, are LOCOMOTION, AIR and BOOKEND poses:
+1. DASH LAUNCH — the first instant of a forward dash: body leaning hard forward, rear leg driving off the floor, front foot just lifted, arms pumping.
+2. DASH STRETCH — mid-dash at full stride: body stretched long and low, both feet off the floor, arms swung, hair and clothes trailing.
+3. DASH BRAKE — the dash ending: front foot planted and skidding, knees bent, weight still sliding forward, arms thrown out for balance.
+4. TURNAROUND — mid-pivot: torso square to the camera, feet twisted on the floor, head already turned to the right, arms across the body.
+5. APEX TUCK — the top of a jump: knees tucked up to the chest, arms in, body compact.
+6. DESCENT — falling feet-first from a jump: torso upright, head level and looking forward, legs reaching down for the floor, arms out.
+7. AIR RECOVER — airborne just after a strike: body upright, limbs loose and trailing, NOT chambered, falling gently.
+8. AIR HIT — struck while airborne: body folding forward around the blow, head above the hips, limbs flung, still upright in the air.
+9. POWER CHARGE — a power-gathering stance on the floor: knees bent, fists clenched at the hips, chest out, head tilted back, shoulders tense.
+10. ENTRANCE A — a signature entrance pose before the fight: confident, characterful, feet planted.
+11. ENTRANCE B — a second entrance pose, the instant after the first: settling into the fighting stance, one hand extended.
+12. VICTORY — the win pose: both arms raised high, chest out, head up.
+13. TAUNT — a taunt: one hand beckoning "come on", hip cocked, chin up.
+14. CROUCH GUARD FLINCH — crouching guard taking a hit: both forearms crossed low in front, body jolted back, chin tucked.
+15. THROW GRAB — grabbing an opponent: both hands clamped forward at chest height, elbows bent, feet braced wide.
+16. DIZZY SWAY — dizzy: knees buckled, arms hanging loose, head lolling to one side, eyes closed.

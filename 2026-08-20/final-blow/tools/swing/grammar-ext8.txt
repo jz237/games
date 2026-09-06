@@ -1,0 +1,14 @@
+The reference image is a sprite sheet of ONE fighter: {LOOK}, painted in a detailed 2D fighting-game sprite style with painterly shading.
+
+Draw a NEW 4-by-4 sprite sheet of EXACTLY THE SAME character: identical face, hair, costume, colours, proportions, art style, line weight, lighting direction and figure scale as the reference cells. 16 equal square cells in a perfect grid on the same flat solid magenta (#FF00FF) background — no scenery, no floor, no cast shadows, no glow, no motion blur, no grid lines, no borders, no text. The character faces to the RIGHT in every cell like the reference. Feet planted on the same floor line near the bottom of each cell for grounded poses; airborne poses float in the upper two-thirds of the cell. Standing figures are the same height as the reference's standing cells (about 95% of the cell); every figure centred in its own cell and never touching the edges.
+
+The first row and second row (cells 1 to 8) are the IN-BETWEEN poses; the third and fourth rows (cells 9 to 16) are a SECOND, slightly different take of the same eight poses in the same order:
+1. IDLE BREATHING — the reference's relaxed fighting stance one breath later: chest lifted, hands a touch higher, the same stance and the same height.
+2. WALK WEIGHT-SINK A — walking to the right, a wide stride with the leg nearest the camera reaching FORWARD, both feet on the floor, the front knee bending a little so the body is only slightly lower than standing (the head drops by less than a tenth of his height — this is NOT a crouch).
+3. WALK WEIGHT-SINK B — the same walking instant with the two legs EXCHANGED: the leg nearest the camera trailing behind with its heel lifted, the far leg forward, again only slightly lower than standing.
+4. JUMP ASCENT — airborne and still rising: legs extended down, knees starting to lift, arms up.
+5. JUMP DESCENT — falling feet-first: torso upright, head level and looking forward, legs reaching down for the floor, arms out.
+6. PUNCH WIND-UP — standing, rear fist chambered at the ribs, shoulder rotated back, lead hand up in guard.
+7. KICK WIND-UP — standing on the support leg, the kicking knee snapped up and chambered, foot cocked, arms out for balance.
+8. MID REACTION — the flinch between a light hit and a big hit: torso twisting away to the left, one arm rising, feet planted.
+9 to 16: the same eight poses again in the same order, each a second take with a slightly different arm or head position but the same height, stance and facing.
