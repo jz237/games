@@ -772,6 +772,191 @@ export function fightSchoolObserve(school, event = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// 5.3 (sweep #30 / #31): THE LESSON GRAPH.
+//
+// Twelve lessons in a list is a curriculum, not a route. The graph turns the
+// last fight's digest (engine/progression.mjs — plain data, no sim reads) into
+// ONE recommendation: the thing that actually cost the player the fight they
+// just had. Never blocked -> the guard lesson. Never spent Grit -> the Grit
+// lesson. Ate throws -> the throw lesson. The rest of the rules follow the
+// same shape and the same order every time, so the same digest always yields
+// the same lesson — the title screen, the result screen and the tests all
+// agree by construction.
+//
+// Two passes: an unfinished lesson always outranks a finished one, so the
+// graph pushes you forward before it asks you to revise. A matched rule on a
+// finished lesson comes back with `replay: true` and the UI says REPLAY.
+// ---------------------------------------------------------------------------
+
+const DIGEST_FIELDS = Object.freeze([
+  "hitsTaken", "blocks", "perfectGuards", "throwsTaken", "knockdownsTaken",
+  "techs", "specialsLanded", "supersLanded", "exLanded", "throwablesUsed",
+  "weaponPickups", "heavyLanded", "lightLanded", "hitsLanded", "rounds",
+  "damageTaken", "damageDealt", "meterSpent", "meterPeak",
+]);
+
+/** A digest with every field present as a number, so a rule can never read undefined. */
+export function normalizeSchoolSignals(digest) {
+  const signals = { weaponOffered: Boolean(digest?.weaponOffered), damageBy: {}, hitsBy: {} };
+  for (const field of DIGEST_FIELDS) signals[field] = Math.max(0, Number(digest?.[field]) || 0);
+  for (const [cause, amount] of Object.entries(digest?.damageBy || {})) {
+    const value = Math.max(0, Number(amount) || 0);
+    if (value > 0) signals.damageBy[cause] = value;
+  }
+  for (const [cause, hits] of Object.entries(digest?.hitsBy || {})) {
+    const value = Math.max(0, Math.round(Number(hits) || 0));
+    if (value > 0) signals.hitsBy[cause] = value;
+  }
+  signals.damageBySum = Object.values(signals.damageBy).reduce((sum, value) => sum + value, 0);
+  return signals;
+}
+
+const causeShare = (signals, cause) =>
+  (signals.damageBySum > 0 ? (signals.damageBy[cause] || 0) / signals.damageBySum : 0);
+
+/**
+ * Ordered highest-cost-first. `when` is a pure predicate over normalized
+ * signals; `reason` is the coach's one line, written in the corner-man voice
+ * the school already speaks in.
+ */
+export const FIGHT_SCHOOL_RECOMMENDATIONS = Object.freeze([
+  {
+    id: "never-blocked",
+    lessonId: "guard-heights",
+    when: (s) => s.hitsTaken >= 3 && s.blocks === 0,
+    reason: (s) => `YOU BLOCKED NOTHING ALL FIGHT. ${Math.round(s.damageTaken)} DAMAGE WALKED STRAIGHT IN.`,
+  },
+  {
+    id: "ate-throws",
+    lessonId: "throw-tech",
+    when: (s) => s.throwsTaken >= 2 || (s.throwsTaken >= 1 && causeShare(s, "throw") >= 0.25),
+    reason: (s) => `THEY THREW YOU ${s.throwsTaken} TIME${s.throwsTaken === 1 ? "" : "S"}. LEARN THE CLINCH AND THROW BACK.`,
+  },
+  {
+    id: "never-spent-grit",
+    lessonId: "grit-economy",
+    when: (s) => s.meterSpent <= 0 && s.meterPeak >= 25,
+    reason: (s) => `YOU BANKED ${Math.round(s.meterPeak)} GRIT AND SPENT NONE OF IT.`,
+  },
+  {
+    id: "ate-lows",
+    lessonId: "guard-heights",
+    when: (s) => causeShare(s, "low") >= 0.35 && s.hitsTaken >= 3,
+    reason: (s) => `${Math.round(causeShare(s, "low") * 100)}% OF WHAT HIT YOU CAME LOW. CROUCH-BLOCK IT.`,
+  },
+  {
+    id: "ate-jump-ins",
+    lessonId: "guard-heights",
+    when: (s) => causeShare(s, "jumpIn") >= 0.3 && s.hitsTaken >= 3,
+    reason: () => "THEY JUMPED IN ALL NIGHT AND YOU STOOD THERE. HOLD AWAY.",
+  },
+  {
+    id: "no-special",
+    lessonId: "qcf-special",
+    when: (s) => s.specialsLanded === 0 && s.hitsLanded >= 4,
+    reason: () => "NOT ONE SPECIAL LANDED. THE MOTION IS THE WHOLE GAME.",
+  },
+  {
+    id: "never-teched",
+    lessonId: "off-the-floor",
+    when: (s) => s.knockdownsTaken >= 3 && s.techs === 0,
+    reason: (s) => `YOU HIT THE FLOOR ${s.knockdownsTaken} TIMES AND NEVER TECHED ONCE.`,
+  },
+  {
+    id: "no-perfect-guard",
+    lessonId: "split-second",
+    when: (s) => s.blocks >= 8 && s.perfectGuards === 0,
+    reason: (s) => `${s.blocks} BLOCKS, NO PERFECT GUARDS. YOU'RE PAYING CHIP FOR NOTHING.`,
+  },
+  {
+    id: "no-jawn",
+    lessonId: "throwable",
+    when: (s) => s.throwablesUsed === 0 && s.hitsLanded >= 4,
+    reason: () => "YOU CARRIED YOUR JAWN THE WHOLE FIGHT. TWO A ROUND, FREE.",
+  },
+  {
+    id: "ignored-the-weapon",
+    lessonId: "street-furniture",
+    when: (s) => s.weaponOffered && s.weaponPickups === 0,
+    reason: () => "THE STREET HANDED YOU SOMETHING AND YOU WALKED PAST IT.",
+  },
+  {
+    id: "one-button",
+    lessonId: "four-normals",
+    when: (s) => s.hitsLanded >= 4 && (s.heavyLanded === 0 || s.lightLanded === 0),
+    reason: (s) => (s.heavyLanded === 0
+      ? "ALL LIGHTS, NO HEAVIES. YOU'RE FIGHTING WITH TWO BUTTONS."
+      : "ALL HEAVIES, NO LIGHTS. NOTHING OF YOURS IS FAST."),
+  },
+]);
+
+const lessonIndexById = (lessonId) => FIGHT_SCHOOL_LESSONS.findIndex((lesson) => lesson.id === lessonId);
+
+function recommendationRecord(lessonId, { ruleId = null, reason = "", completed = {} }) {
+  const index = lessonIndexById(lessonId);
+  if (index < 0) return null;
+  const lesson = FIGHT_SCHOOL_LESSONS[index];
+  const replay = Boolean(completed[lesson.id]);
+  return {
+    lessonId: lesson.id,
+    lessonIndex: index,
+    lessonNumber: index + 1,
+    lessonName: lesson.name,
+    ruleId,
+    reason,
+    replay,
+    headline: `${replay ? "REPLAY" : "NEXT"} · LESSON ${index + 1} · ${lesson.name}`,
+  };
+}
+
+/**
+ * The one recommendation. `digest` is the last fight (null before the first
+ * fight); `completed` is the school's own completion map.
+ *
+ * Order of resolution:
+ *   1. no fight logged yet -> the first unfinished lesson, "START HERE"
+ *   2. the first matching rule whose lesson is unfinished
+ *   3. the first matching rule at all (a finished lesson, replay: true)
+ *   4. the first unfinished lesson, "NEXT UP"
+ *   5. nothing left to teach -> null
+ */
+export function recommendLesson(digest, { completed = {} } = {}) {
+  const done = completed && typeof completed === "object" ? completed : {};
+  const nextUnfinished = FIGHT_SCHOOL_LESSONS.find((lesson) => !done[lesson.id]) || null;
+  if (!digest || !(Number(digest.hitsTaken) > 0 || Number(digest.hitsLanded) > 0 || Number(digest.rounds) > 0)) {
+    if (!nextUnfinished) return null;
+    return recommendationRecord(nextUnfinished.id, {
+      ruleId: "first-run",
+      reason: "NO FIGHT ON THE BOOKS YET. START AT THE TOP.",
+      completed: done,
+    });
+  }
+  const signals = normalizeSchoolSignals(digest);
+  const matches = FIGHT_SCHOOL_RECOMMENDATIONS.filter((rule) => {
+    try {
+      return Boolean(rule.when(signals));
+    } catch {
+      return false;
+    }
+  });
+  const fresh = matches.find((rule) => !done[rule.lessonId]);
+  const rule = fresh || matches[0];
+  if (rule) {
+    return recommendationRecord(rule.lessonId, {
+      ruleId: rule.id,
+      reason: rule.reason(signals),
+      completed: done,
+    });
+  }
+  if (!nextUnfinished) return null;
+  return recommendationRecord(nextUnfinished.id, {
+    ruleId: "next-up",
+    reason: "CLEAN FIGHT. TAKE THE NEXT PAGE.",
+    completed: done,
+  });
+}
+
 export function fightSchoolSnapshot(school, { style = "classic" } = {}) {
   if (!school) return null;
   const lesson = fightSchoolLesson(school);

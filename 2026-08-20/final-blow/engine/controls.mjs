@@ -441,6 +441,13 @@ const CLASSIC_COMMANDS = Object.freeze({
   guardReversal: "IN BLOCKSTUN · LP&HP OR TOWARD + ↓ → + PUNCH",
   taunt: "↓ ↓ + LK&HK",
   dash: "DOUBLE-TAP ← OR →",
+  // 5.3 (sweep #31 audit): the three copy lines that still named buttons from
+  // inside game.js and index.html — the first-run card's BLOCK and GRAB rows,
+  // the touch prompt's FINISH HIM line and the dialog's throw/dash/object
+  // paragraphs. They are style-free today, but they belong in the one table
+  // so a future style that DOES move them cannot be missed again.
+  block: "HOLD AWAY · DOWN-AWAY FOR LOWS",
+  finalBlow: "LP = A · LK = B · ANY DISTANCE",
   stageWeapon: "↓ + HP OVER THE OBJECT",
   perfectGuard: "TAP AWAY AS THE HIT LANDS",
   airTech: "ANY BUTTON WHILE JUGGLED",

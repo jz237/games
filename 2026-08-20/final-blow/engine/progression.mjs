@@ -245,6 +245,165 @@ export function recordsSummary(store) {
 }
 
 // ---------------------------------------------------------------------------
+// 5.3 (sweep #30 / #31): THE LAST FIGHT DIGEST.
+//
+// The records store answers "how have I done overall". Nothing answered "what
+// just happened", which is the question a player actually has on the result
+// screen and the one FIGHT SCHOOL needs in order to recommend anything. The
+// digest is the single-match companion to the store: same shape rules (plain
+// data, tolerant load, no clock, no sim reads), written once per match at the
+// same fold point, kept in localStorage so the title screen can still coach
+// after a reload.
+//
+// Damage is attributed at the damage sites themselves, because the health
+// delta at round end cannot know WHAT took the health. One cause per landed
+// hit, resolved in priority order — a blocked hit is chip whatever threw it,
+// a throw is a throw, a stage weapon outranks the jawn that carried it, and
+// only then do the levels and the kinds get a say.
+// ---------------------------------------------------------------------------
+
+export const DAMAGE_CAUSES = Object.freeze([
+  "chip", "throw", "weapon", "jawn", "super", "special",
+  "jumpIn", "low", "overhead", "heavy", "light",
+]);
+
+export const DAMAGE_CAUSE_LABELS = Object.freeze({
+  chip: "CHIP THROUGH YOUR GUARD",
+  throw: "THROWS",
+  weapon: "STAGE WEAPONS",
+  jawn: "THROWN JAWNS",
+  super: "SUPERS",
+  special: "SPECIALS",
+  jumpIn: "JUMP-INS",
+  low: "LOWS AND SWEEPS",
+  overhead: "OVERHEADS",
+  heavy: "HEAVY NORMALS",
+  light: "LIGHT NORMALS",
+});
+
+// The one place that turns an attack instance's flags into a cause name.
+// Order is the priority order: the first true wins.
+export function classifyDamageCause({
+  blocked = false, throwMove = false, weapon = false, throwable = false,
+  superMove = false, kind = "", level = "",
+} = {}) {
+  if (blocked) return "chip";
+  if (throwMove || kind === "throw" || level === "throw") return "throw";
+  if (weapon) return "weapon";
+  if (throwable) return "jawn";
+  if (superMove) return "super";
+  if (kind === "special") return "special";
+  if (level === "air") return "jumpIn";
+  if (level === "low") return "low";
+  if (level === "overhead") return "overhead";
+  if (kind === "heavy") return "heavy";
+  return "light";
+}
+
+export const FIGHT_DIGEST_VERSION = 1;
+
+const DIGEST_COUNTERS = Object.freeze([
+  "hitsTaken", "blocks", "perfectGuards", "throwsTaken", "knockdownsTaken",
+  "techs", "specialsLanded", "supersLanded", "exLanded", "throwablesUsed",
+  "weaponPickups", "heavyLanded", "lightLanded", "hitsLanded", "rounds",
+]);
+
+const DIGEST_AMOUNTS = Object.freeze([
+  "damageTaken", "damageDealt", "meterSpent", "meterPeak",
+]);
+
+export function createFightDigest(overrides = {}) {
+  const digest = {
+    version: FIGHT_DIGEST_VERSION,
+    fighterId: "",
+    opponentId: "",
+    mode: "versus",
+    won: false,
+    weaponOffered: false,
+    damageBy: {},
+    hitsBy: {},
+  };
+  for (const field of DIGEST_COUNTERS) digest[field] = 0;
+  for (const field of DIGEST_AMOUNTS) digest[field] = 0;
+  return Object.assign(digest, normalizeFightDigest({ ...digest, ...overrides }));
+}
+
+// Tolerant load, exactly like normalizeRecordsStore: any malformed or foreign
+// JSON collapses to a zeroed digest rather than throwing on the boot path.
+export function normalizeFightDigest(raw) {
+  const digest = {
+    version: FIGHT_DIGEST_VERSION,
+    fighterId: String(raw?.fighterId || ""),
+    opponentId: String(raw?.opponentId || ""),
+    mode: RECORD_MODES.includes(raw?.mode) ? raw.mode : "versus",
+    won: Boolean(raw?.won),
+    weaponOffered: Boolean(raw?.weaponOffered),
+    damageBy: {},
+    hitsBy: {},
+  };
+  for (const field of DIGEST_COUNTERS) digest[field] = toCount(raw?.[field]);
+  for (const field of DIGEST_AMOUNTS) digest[field] = Math.max(0, Number(raw?.[field]) || 0);
+  for (const cause of DAMAGE_CAUSES) {
+    const amount = Math.max(0, Number(raw?.damageBy?.[cause]) || 0);
+    const hits = toCount(raw?.hitsBy?.[cause]);
+    if (amount > 0) digest.damageBy[cause] = amount;
+    if (hits > 0) digest.hitsBy[cause] = hits;
+  }
+  return digest;
+}
+
+/** Fold one landed hit on the player into the digest. Unknown causes are dropped. */
+export function noteFightDamage(digest, cause, amount = 0) {
+  if (!digest || !DAMAGE_CAUSES.includes(cause)) return digest;
+  const value = Math.max(0, Number(amount) || 0);
+  digest.hitsBy[cause] = (digest.hitsBy[cause] || 0) + 1;
+  digest.hitsTaken += 1;
+  if (value > 0) digest.damageBy[cause] = (digest.damageBy[cause] || 0) + value;
+  return digest;
+}
+
+/**
+ * The biggest single source of damage taken. Ties break on DAMAGE_CAUSES
+ * order (chip first, light last) so two loads of the same digest always agree.
+ * Returns null when nothing landed.
+ */
+export function topDamageCause(digest) {
+  let best = null;
+  const total = DAMAGE_CAUSES.reduce((sum, cause) => sum + (digest?.damageBy?.[cause] || 0), 0);
+  for (const cause of DAMAGE_CAUSES) {
+    const amount = digest?.damageBy?.[cause] || 0;
+    if (amount <= 0) continue;
+    if (!best || amount > best.amount) {
+      best = {
+        cause,
+        label: DAMAGE_CAUSE_LABELS[cause],
+        amount,
+        hits: digest.hitsBy?.[cause] || 0,
+        share: total > 0 ? amount / total : 0,
+      };
+    }
+  }
+  return best;
+}
+
+/**
+ * The result screen's "what just happened" line. One sentence, no jargon, and
+ * it never lies about a fight where nothing landed.
+ */
+export function fightRecapLine(digest) {
+  if (!digest || digest.hitsTaken <= 0 || !(digest.damageTaken > 0)) {
+    return digest && digest.won
+      ? "WHAT JUST HAPPENED · THEY NEVER TOUCHED YOU. FLAWLESS."
+      : "WHAT JUST HAPPENED · NOTHING LANDED ON YOU WORTH COUNTING.";
+  }
+  const top = topDamageCause(digest);
+  if (!top) return "WHAT JUST HAPPENED · NOTHING LANDED ON YOU WORTH COUNTING.";
+  const share = Math.round(top.share * 100);
+  const hits = top.hits === 1 ? "ONE OF THEM" : `${top.hits} OF THEM`;
+  return `WHAT JUST HAPPENED · ${share}% OF THE ${Math.round(digest.damageTaken)} DAMAGE YOU TOOK CAME FROM ${top.label} · ${hits}.`;
+}
+
+// ---------------------------------------------------------------------------
 // The Black Book — the Commissioner's ledger of everything he never wanted
 // you to finish. ~30 entries, each a pure predicate over accumulated
 // observation counters. Locked entries render as redacted lines.
