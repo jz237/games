@@ -529,6 +529,19 @@ import {
   scarDecals,
   stageSurface,
 } from "./engine/stage-scars.mjs";
+// 5.3 SPECTACLE (#47/#48): the effect math BOTH renderers read — the element
+// flipbook's frame pick and fade curve, the charge-glow radius, the per-kind
+// routing of the 2D particle pool into the 3D pools, the dash ghost's opacity
+// ladder and the battle-damage decal cache key.
+import {
+  afterimageGhost,
+  chargeGlowAlpha,
+  chargeGlowRadius,
+  damageDecalKey,
+  elementFrameIndex,
+  elementSpriteAlpha,
+  particleMote,
+} from "./engine/vfx-bridge.mjs";
 import {
   FIGHTER_THROWABLES,
   THROWABLE_COMMAND,
@@ -8626,15 +8639,16 @@ function drawElementalVfx() {
     const kit = fighterElementKit(fighter?.def);
     if (!kit) continue;
     const tier = fighter.attacking ? elementTier(fighter.attacking) : 0;
-    const pulse = 1 + Math.sin(state.simulationTick * 0.55 + side) * 0.08;
-    const radius = (40 + tier * 16) * pulse * (0.6 + obs.chargeLevel * 0.4);
+    // 5.3 SPECTACLE (#47): radius and alpha come from engine/vfx-bridge.mjs
+    // so the 3D charge light is the same swell as this canvas halo.
+    const radius = chargeGlowRadius(obs.chargeLevel, tier, state.simulationTick, side);
     const gradient = ctx.createRadialGradient(obs.limbX, obs.limbY, radius * 0.12, obs.limbX, obs.limbY, radius);
     gradient.addColorStop(0, kit.core);
     gradient.addColorStop(0.45, kit.glow);
     gradient.addColorStop(1, "rgba(0,0,0,0)");
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.26 * obs.chargeLevel * (tier === 2 ? 1.35 : 1);
+    ctx.globalAlpha = chargeGlowAlpha(obs.chargeLevel, tier);
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(obs.limbX, obs.limbY, radius, 0, Math.PI * 2);
@@ -8657,13 +8671,12 @@ function drawElementalVfx() {
       ctx.restore();
       continue;
     }
-    let index;
-    if (meta.mode === "anim") index = Math.min(15, Math.floor((1 - fade) * meta.frames.length));
     // MOTION FIX 4: live electricity re-forks EVERY sim tick (the >>1 gate is
     // gone) — ticks keep advancing through hitstop, so a held impact never
-    // shows the same fork twice.
-    else if (meta.mode === "flicker") index = (particle.seed * 31 + state.simulationTick * 7) % 16;
-    else index = particle.frame;
+    // shows the same fork twice. 5.3 SPECTACLE (#47): the anim/flicker/scatter
+    // pick moved to engine/vfx-bridge.mjs — the 3D element layer resolves the
+    // SAME cell on the same tick from the same function.
+    const index = elementFrameIndex(meta, particle, state.simulationTick);
     const frame = meta.frames[index];
     if (!frame || !frame.w) continue;
     // MOTION FIX 3: smoke grows as it climbs — the puff opens up to ~1.5x
@@ -8708,9 +8721,7 @@ function drawElementalVfx() {
     ctx.save();
     // Front-loaded fades: sprites hold near-full presence through most of
     // their life and drop off at the end, instead of thinning immediately.
-    ctx.globalAlpha = (particle.additive
-      ? Math.min(1, fade * 1.35)
-      : Math.min(1, Math.sqrt(fade) * 1.08)) * particle.alpha;
+    ctx.globalAlpha = elementSpriteAlpha(particle);
     ctx.globalCompositeOperation = particle.additive ? "lighter" : "source-over";
     ctx.translate(particle.x, particle.y);
     if (particle.rotation) ctx.rotate(particle.rotation);
@@ -20643,10 +20654,44 @@ const damageScratchContexts = damageScratches.map((scratch) => {
 });
 const damageScratchKeys = ["", ""];
 
+// 5.3 SPECTACLE (#48): the marks as a DRAWING, on a foreign context — the
+// same pattern the projectile / trap painters use. The 2D path composites it
+// into its source-atop scratch cell; the CINEMA 3D fighter layer paints it
+// into a 320px decal canvas bound as a second sampler on the sprite shader.
+// Cell-space (320px atlas cell) coordinates, authored about (0,0) of the cell,
+// so mirroring and the HD swap both come for free.
+function paintBattleDamageWith(c, side) {
+  const gore = state.graphicFatalities;
+  for (const mark of battleDamageMarks[side]) {
+    // Blood-red cuts honour the GRAPHIC FATALITIES toggle; with it off every
+    // mark renders as a plain bruise.
+    const bloody = mark.cut && gore;
+    c.save();
+    c.translate(mark.x, mark.y);
+    c.rotate(mark.lean);
+    c.scale(1, bloody ? 1.45 : 0.85);
+    const smear = c.createRadialGradient(0, 0, mark.size * 0.15, 0, 0, mark.size);
+    if (bloody) {
+      smear.addColorStop(0, "rgba(122,10,18,0.68)");
+      smear.addColorStop(0.55, "rgba(88,8,16,0.44)");
+      smear.addColorStop(1, "rgba(60,6,12,0)");
+    } else {
+      smear.addColorStop(0, "rgba(56,32,56,0.6)");
+      smear.addColorStop(0.55, "rgba(42,26,46,0.38)");
+      smear.addColorStop(1, "rgba(28,18,34,0)");
+    }
+    c.fillStyle = smear;
+    c.beginPath();
+    c.arc(0, 0, mark.size, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+}
+
 function drawDamagedAtlasFrame(side, atlas, frame, size) {
   const scratchCtx = damageScratchContexts[side];
   const gore = state.graphicFatalities;
-  const key = `${atlas.src}|${frame}|${battleDamageRevision[side]}|${gore ? 1 : 0}`;
+  const key = `${atlas.src}|${frame}|${damageDecalKey(battleDamageRevision[side], gore)}`;
   if (key !== damageScratchKeys[side]) {
     damageScratchKeys[side] = key;
     scratchCtx.globalCompositeOperation = "source-over";
@@ -20658,30 +20703,7 @@ function drawDamagedAtlasFrame(side, atlas, frame, size) {
       0, 0, SILHOUETTE_CELL, SILHOUETTE_CELL,
     );
     scratchCtx.globalCompositeOperation = "source-atop";
-    for (const mark of battleDamageMarks[side]) {
-      // Blood-red cuts honour the GRAPHIC FATALITIES toggle; with it off every
-      // mark renders as a plain bruise.
-      const bloody = mark.cut && gore;
-      scratchCtx.save();
-      scratchCtx.translate(mark.x, mark.y);
-      scratchCtx.rotate(mark.lean);
-      scratchCtx.scale(1, bloody ? 1.45 : 0.85);
-      const smear = scratchCtx.createRadialGradient(0, 0, mark.size * 0.15, 0, 0, mark.size);
-      if (bloody) {
-        smear.addColorStop(0, "rgba(122,10,18,0.68)");
-        smear.addColorStop(0.55, "rgba(88,8,16,0.44)");
-        smear.addColorStop(1, "rgba(60,6,12,0)");
-      } else {
-        smear.addColorStop(0, "rgba(56,32,56,0.6)");
-        smear.addColorStop(0.55, "rgba(42,26,46,0.38)");
-        smear.addColorStop(1, "rgba(28,18,34,0)");
-      }
-      scratchCtx.fillStyle = smear;
-      scratchCtx.beginPath();
-      scratchCtx.arc(0, 0, mark.size, 0, Math.PI * 2);
-      scratchCtx.fill();
-      scratchCtx.restore();
-    }
+    paintBattleDamageWith(scratchCtx, side);
     scratchCtx.globalCompositeOperation = "source-over";
   }
   ctx.drawImage(damageScratches[side], -size * 0.5, -size, size, size);
@@ -25186,18 +25208,19 @@ function drawAfterimages() {
     // 2.7 critic round: alpha CRUSHED below face-readability (25%/22% read
     // as a legible duplicate figure at speed — echoes are a wash, not a
     // second fighter).
+    // 5.3 SPECTACLE (#47): the ghost's opacity ladder is engine/vfx-bridge.mjs
+    // (afterimageGhost) — the 3D dash trail wears the same wash.
     const ghostAge = 1 - clamp(effect.life / effect.max, 0, 1);
-    if (ghostAge < 0.45) {
-      ctx.globalAlpha = 0.15;
-      ctx.scale(1.3, 0.97);
-      drawAtlasFrame(atlas, frame, effect.size);
-    } else {
-      ctx.globalAlpha = 0.13 - ghostAge * 0.07;
+    const ghost = afterimageGhost(ghostAge);
+    ctx.globalAlpha = ghost.opacity;
+    if (ghost.clipTop > 0) {
       ctx.beginPath();
-      ctx.rect(-effect.size * 0.5, -effect.size * 0.74, effect.size, effect.size * 0.74);
+      ctx.rect(-effect.size * 0.5, -effect.size * (1 - ghost.clipTop), effect.size, effect.size * (1 - ghost.clipTop));
       ctx.clip();
-      drawAtlasFrame(atlas, frame, effect.size);
+    } else {
+      ctx.scale(ghost.scaleX, ghost.scaleY);
     }
+    drawAtlasFrame(atlas, frame, effect.size);
     ctx.restore();
   }
   ctx.globalAlpha = 1;
@@ -25390,7 +25413,10 @@ function drawParticles() {
   for (const particle of state.particles) {
     const alpha = clamp(particle.life / particle.max, 0, 1);
     ctx.save();
-    ctx.globalAlpha = particle.kind === "dust" ? alpha * 0.42 : alpha;
+    // 5.3 SPECTACLE (#47): the quiet-kind knock-down lives in
+    // engine/vfx-bridge.mjs, so a mote mirrored into the 3D cloud carries
+    // exactly the weight the canvas gives it.
+    ctx.globalAlpha = particleMote(particle).alpha;
     ctx.fillStyle = particle.color;
     ctx.beginPath();
     if (particle.kind === "sparkLine") {
@@ -33916,6 +33942,89 @@ function drawCinema3dOverlayReads(time) {
   presentationDebug.cinema3dOverlayReads += drawn;
 }
 
+// ---------------------------------------------------------------------------
+// 5.3 SPECTACLE (#16/#43/#47/#48) — the reads CINEMA 3D was missing.
+//
+// Everything below is a READ of state the 2D pass already owns. They exist as
+// named functions (not inline arrows in the host literal) because each one
+// carries a rule the 3D side must not re-derive.
+// ---------------------------------------------------------------------------
+
+// The one "how hard is the stage reacting" number both renderers draw from.
+// CRITICAL: stageSurge() is also where the KO pulse is LATCHED (the phase
+// edge into finish/roundover, via readAmbientPulse -> ambientPhaseChange). In
+// 2D that latch rode inside drawStageAmbient, whose only caller lives in the
+// `!cinema3dWorld` branch — so before 5.3 a KO in CINEMA 3D never even
+// latched a pulse, and MOTION-ATLAS v5.0's "+27 mean brightness at the KO
+// tick" measured 0 in 3D. The 3D stage layer calling this every frame is what
+// fires it. The latch is one-shot per phase edge and the hold latch is
+// idempotent, so being called from both renderers changes nothing.
+function cinema3dAmbientPulse() {
+  const surge = stageSurge(state.simulationTick);
+  return {
+    level: surge.level,
+    age: surge.age,
+    ko: surge.ko,
+    hold: surge.hold,
+    pulseAge: surge.pulseAge,
+    kind: ambientObs.pulseKind,
+    // The latch tick seeds the firework scatter, exactly as the 2D bursts do.
+    latchTick: ambientObs.pulseTick,
+    frame: state.simulationTick,
+    reduced: Boolean(state.accessibility.reducedMotion),
+  };
+}
+
+// The crowd's DRAWN reaction (the sim value, or the held KO reaction during
+// the roundover hold) — the same number drawCrowd and drawPracticalLights use.
+function cinema3dCrowdReaction() {
+  return crowdDrawReaction();
+}
+
+// The live elemental flipbook pool. Handed over raw: the 3D layer reads it
+// once per frame and never mutates it, and the array is already capped at
+// elementBudgetCap() by the spawner.
+function cinema3dElementSprites() {
+  return elementParticles;
+}
+
+// One element sheet, resolved: null until the lazy fetch lands, so the 3D
+// layer simply draws nothing for that sheet in the meantime (the 2D pass
+// falls back to a procedural glow; in 3D the charge light covers the gap).
+function cinema3dElementSheet(name) {
+  const meta = elementSheets.manifest?.[name];
+  const image = elementSheets.images.get(name);
+  if (!meta || !image?.complete || !image.naturalWidth) return null;
+  return { meta, image };
+}
+
+// The charging limb: where it is, how hot, and the kit's colours. Radius and
+// alpha are engine/vfx-bridge.mjs so the 3D point light swells with the 2D
+// halo instead of near it.
+function cinema3dElementCharge(side) {
+  const obs = elementObs[side];
+  if (!obs || obs.chargeLevel <= 0.02) return null;
+  const fighter = state.fighters[side];
+  const kit = fighterElementKit(fighter?.def);
+  if (!kit) return null;
+  const tier = fighter.attacking ? elementTier(fighter.attacking) : 0;
+  return {
+    level: obs.chargeLevel, x: obs.limbX, y: obs.limbY, tier,
+    glow: kit.glow, core: kit.core,
+  };
+}
+
+// The battle-damage list for one side plus its revision, so the 3D decal is
+// rebuilt on exactly the pushes the 2D scratch cache invalidates on.
+function cinema3dBattleDamage(side) {
+  if (side !== 0 && side !== 1) return null;
+  return {
+    marks: battleDamageMarks[side],
+    revision: battleDamageRevision[side],
+    gore: Boolean(state.graphicFatalities),
+  };
+}
+
 function ensureCinema3d() {
   if (!state.cinema3d || !cinema3dAllowed()) {
     cinema3dBridge.renderer?.setVisible(false);
@@ -33972,6 +34081,21 @@ function ensureCinema3d() {
       // 5.3 SPECTACLE (#19): the battle-scar list as decal descriptors, so
       // the 3D arena wears the fight the same way the canvas does.
       stageScars: stageScarDecals,
+      // 5.3 SPECTACLE (#16/#43): the ambient surge (and, critically, its KO
+      // latch) and the crowd's drawn reaction — the two numbers every 3D
+      // stage's practicals now answer.
+      ambientPulse: cinema3dAmbientPulse,
+      crowdReaction: cinema3dCrowdReaction,
+      // 5.3 SPECTACLE (#47): the elemental flipbook pool, its sheets and the
+      // charging limb, so a curse special is curse-green flipbooks in 3D too
+      // and not just a re-tinted spark burst.
+      elementSprites: cinema3dElementSprites,
+      elementSheet: cinema3dElementSheet,
+      elementCharge: cinema3dElementCharge,
+      // 5.3 SPECTACLE (#48): the bruises and cuts, plus the SAME painter the
+      // 2D compositor uses, handed a foreign context.
+      battleDamage: cinema3dBattleDamage,
+      paintBattleDamage: (context, side) => paintBattleDamageWith(context, side),
       crowdBillboards,
       crowdSheetImage: (name) => crowdSheets.images.get(name) || null,
       crowdMediaRequest: ensureCrowdMedia,

@@ -46,6 +46,33 @@ import { AUTHORED_BANKS, SPECIALS_LEGACY_BANK, UNIFIED_BANK } from "../../engine
 // reads, so the whiff fringe and the re-arm wash land on identical ticks in
 // both renderers (no host member: it is pure engine code, not a game.js read).
 import { whiffTellState } from "../../engine/tempo-tells.mjs";
+// 5.3 SPECTACLE (#47/#48): the dash ghost's opacity ladder and the damage
+// decal's cache key — the same functions the 2D pass reads.
+import { afterimageGhost, damageDecalKey } from "../../engine/vfx-bridge.mjs";
+
+// 5.3 SPECTACLE (#48): battle damage. The 2D path composites its bruises and
+// cuts into a 320px scratch cell keyed on (atlas, frame, revision, gore) and
+// draws THAT instead of the atlas frame; 3D cannot, because the rig's colour
+// map is a shared atlas the whole side draws from. Instead the marks go into
+// a per-side 320px decal canvas — the same 320px CELL SPACE the marks are
+// authored in — bound as a second sampler and composited in the fragment
+// shader after the atlas read. Cell space is why mirroring and the HD swap
+// need no special case: the quad's own uv IS the cell.
+const DAMAGE_CELL = 320;
+// Ghosts live 0.07 s and spawn every other tick of a dash, so 4 is already
+// more than a dash ever has in the air at once; the cap is a floor under the
+// draw-call budget, not a trim of the read.
+const GHOSTS_PER_SIDE = 4;
+// Bound whenever a side has no marks yet: a 1x1 fully transparent texel, so
+// the shader has one code path and the uniform is never null.
+let emptyDamageTexture = null;
+function emptyDamage() {
+  if (!emptyDamageTexture) {
+    emptyDamageTexture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
+    emptyDamageTexture.needsUpdate = true;
+  }
+  return emptyDamageTexture;
+}
 
 // HD (2x) atlas variants for 3D mode only (renderer/hd/MANIFEST.json).
 // Loaded lazily per fighter; on any failure the bank silently keeps the
@@ -173,6 +200,10 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     whiffRim: { value: 0 },
     rearmDim: { value: 0 },
     texel: new THREE.Vector2(1 / atlasWidth, 1 / atlasHeight),
+    // 5.3 SPECTACLE (#48): the side's battle-damage decal in cell uv space,
+    // and 0/1 for whether this side has any marks at all.
+    damageMap: { value: emptyDamage() },
+    damageOn: { value: 0 },
   };
   material.userData.fb = fb;
   material.onBeforeCompile = (shader) => {
@@ -201,6 +232,8 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     shader.uniforms.uFbWhiffRim = fb.whiffRim;
     shader.uniforms.uFbRearmDim = fb.rearmDim;
     shader.uniforms.uFbTexel = { value: fb.texel };
+    shader.uniforms.uFbDamage = fb.damageMap;
+    shader.uniforms.uFbDamageOn = fb.damageOn;
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vFbWorld;\nvarying vec2 vFbLocal;")
       .replace("#include <uv_vertex>", "#include <uv_vertex>\nvFbLocal = uv;")
@@ -233,7 +266,9 @@ uniform float uFbReadyRim;
 uniform vec3 uFbReadyColor;
 uniform float uFbWhiffRim;
 uniform float uFbRearmDim;
-uniform vec2 uFbTexel;`)
+uniform vec2 uFbTexel;
+uniform sampler2D uFbDamage;
+uniform float uFbDamageOn;`)
       // 1px-ERODED matte + derivative-smoothed cut at 0.5: the alpha is taken
       // as the MIN of this texel and its 4 neighbours, which shrinks the matte
       // by one texel and executes the halo ring that used to survive the
@@ -254,6 +289,16 @@ float fbDitherN = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) 
 if (fbCut < 0.32 + fbDitherN * 0.36) discard;
 diffuseColor.a = 1.0;`)
       .replace("#include <map_fragment>", `#include <map_fragment>
+// --- 5.3 SPECTACLE (#48) BATTLE DAMAGE, composited FIRST so the bruise is
+// graded, cel-banded and rim-lit with the skin it sits on (the 2D path bakes
+// it into the atlas cell before any of that runs, so this is the same order).
+// vFbLocal is the quad's own uv = the 320px cell, which is exactly the space
+// pushBattleDamageMark authors marks in — the decal mirrors with the sprite
+// and survives the HD swap for free.
+if (uFbDamageOn > 0.5) {
+  vec4 fbDmg = texture2D(uFbDamage, vFbLocal);
+  diffuseColor.rgb = mix(diffuseColor.rgb, fbDmg.rgb, fbDmg.a);
+}
 // --- ONE-MEDIUM softening: quarter-texel tent blur folds the atlas's
 // nearest-neighbour micro-stairs into the same soft-media response as the
 // painterly stage (the unsharp mask downstream restores macro edge snap).
@@ -483,7 +528,8 @@ if (uFbHitTone > 0.001) {
   // Distinct program per patched material (uniforms differ per bank).
   // v12 (5.1): uFbTopTint joined the uniform set; v13 (5.1): uFbWhiffRim /
   // uFbRearmDim (the tempo tells) joined it — both landed in the same wave.
-  material.customProgramCacheKey = () => "fb-sprite-grade-v13";
+  // v14 (5.3, #48): uFbDamage / uFbDamageOn — the battle-damage decal.
+  material.customProgramCacheKey = () => "fb-sprite-grade-v14";
   return fb;
 }
 
@@ -571,6 +617,113 @@ export class FighterLayer {
     // how many sheets were evicted (drives the "no growth across a ladder"
     // probe).
     this.bankStats = { built: 0, ready: 0, evicted: 0, warmed: 0, lateFallbacks: 0 };
+    // 5.3 SPECTACLE (#48): per-side battle-damage decal (canvas + texture +
+    // the cache key it was painted at). Built on the first mark, repainted
+    // only when the revision moves — capped at 10 marks, so a rebuild is ten
+    // radial gradients on a 320px canvas, a few times a round.
+    this.damage = [null, null];
+    this.damageRebuilds = 0;
+    // 5.3 SPECTACLE (#47): the dash afterimage pool. The ghosts draw the
+    // side's LIVE bank texture (which already carries the live frame window),
+    // so a trail costs no extra texture and can never show a pose its owner
+    // has already left.
+    this.ghosts = [[], []];
+    this.ghostsDrawn = 0;
+  }
+
+  // The side's damage decal, or null when nothing has landed yet.
+  damageDecal(side) {
+    const host = this.host;
+    const report = host.battleDamage ? host.battleDamage(side) : null;
+    if (!report || !report.marks?.length || !host.paintBattleDamage) return null;
+    let entry = this.damage[side];
+    if (!entry) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = DAMAGE_CELL;
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      entry = { canvas, ctx: canvas.getContext("2d"), texture, key: null };
+      this.damage[side] = entry;
+    }
+    const key = damageDecalKey(report.revision, report.gore);
+    if (entry.key !== key) {
+      entry.key = key;
+      entry.ctx.clearRect(0, 0, DAMAGE_CELL, DAMAGE_CELL);
+      host.paintBattleDamage(entry.ctx, side);
+      entry.texture.needsUpdate = true;
+      this.damageRebuilds += 1;
+    }
+    return entry;
+  }
+
+  // One ghost quad for a side, lazily grown. Shares the rig's plane and the
+  // side's live bank map; its own material carries the wash.
+  ghostQuad(side, index) {
+    const pool = this.ghosts[side];
+    let mesh = pool[index];
+    if (!mesh) {
+      const geometry = new THREE.PlaneGeometry(1, 1);
+      geometry.translate(0, 0.5, 0); // feet-anchored, like the rig quad
+      mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+        transparent: true,
+        depthWrite: false,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        alphaTest: 0.5,
+        fog: false,
+      }));
+      mesh.frustumCulled = false;
+      // Behind the body, in front of the mirror: an echo is a wash the
+      // fighter runs out of, never a second figure standing over him.
+      mesh.renderOrder = 2;
+      mesh.visible = false;
+      mesh.layers.enable(FIGHTER_MASK_LAYER);
+      pool[index] = mesh;
+      this.group.add(mesh);
+    }
+    return mesh;
+  }
+
+  // 5.3 SPECTACLE (#47): the dash trail. state.effects carries the 2D
+  // afterimage echoes (spawned every other tick of a dash, life 0.07s); each
+  // one becomes a quad at its own sim position wearing the SIDE'S LIVE CELL,
+  // which is what drawAfterimages resolves to as well — an echo can never
+  // show a pose its owner has already left. The wash is engine/vfx-bridge's
+  // afterimageGhost, so 2D and 3D fade identically.
+  updateGhosts(state) {
+    const used = [0, 0];
+    for (const effect of state.effects || []) {
+      if (effect.kind !== "afterimage") continue;
+      const side = effect.side;
+      const rig = this.rigs[side];
+      const fighter = state.fighters?.[side];
+      // Dash echoes END WITH THE DASH (2D drops leftovers the same way).
+      if (!rig || !fighter || fighter.dashFrames <= 0) continue;
+      if (used[side] >= GHOSTS_PER_SIDE) continue;
+      const bank = rig.banks[rig.currentBank] || rig.banks.base;
+      if (!bank?.map) continue;
+      const ghost = afterimageGhost(1 - Math.max(0, Math.min(1, effect.life / effect.max)));
+      if (ghost.opacity <= 0.005) continue;
+      const mesh = this.ghostQuad(side, used[side]);
+      if (mesh.material.map !== bank.map) {
+        mesh.material.map = bank.map;
+        mesh.material.needsUpdate = true;
+      }
+      const size = effect.size * PX;
+      const mirror = Math.sign(rig.mesh.scale.x) || 1;
+      mesh.position.set(worldX(effect.x), worldY(effect.y), -0.02);
+      mesh.scale.set(size * mirror * ghost.scaleX, size * ghost.scaleY, 1);
+      mesh.material.opacity = ghost.opacity;
+      mesh.material.color.set(effect.color || "#ffffff");
+      mesh.visible = true;
+      used[side] += 1;
+    }
+    for (let side = 0; side < 2; side += 1) {
+      for (let index = used[side]; index < this.ghosts[side].length; index += 1) {
+        this.ghosts[side][index].visible = false;
+      }
+    }
+    this.ghostsDrawn = used[0] + used[1];
   }
 
   // The normal-map resolution step for this tier: the balanced tier gets a
@@ -886,6 +1039,18 @@ export class FighterLayer {
   // of canvases resident per fighter met in 3D.
   disposeRig(rig) {
     if (!rig) return;
+    // 5.3 (#47): the ghosts borrow this rig's bank textures; release them
+    // before those textures are disposed under them.
+    const ghostSide = this.rigs.indexOf(rig);
+    if (ghostSide >= 0) {
+      for (const ghost of this.ghosts[ghostSide]) {
+        ghost.visible = false;
+        if (ghost.material.map) {
+          ghost.material.map = null;
+          ghost.material.needsUpdate = true;
+        }
+      }
+    }
     this.queue.cancel(rig.key);
     this.group.remove(rig.root);
     this.group.remove(rig.reflRoot);
@@ -963,6 +1128,9 @@ export class FighterLayer {
       rig.root.visible = rig.reflRoot.visible = rig.shadow.visible = true;
       this.poseRig(rig, fighter, state, timeSec, dtSec);
     }
+    // After the rigs are posed: the ghosts read rig.currentBank's live frame
+    // window and the rig's mirror sign, both of which poseRig has just set.
+    this.updateGhosts(state);
   }
 
   // v2.7 FRAMES: the SD motion sheet becomes a bank the first time a motion
@@ -999,6 +1167,12 @@ export class FighterLayer {
         .map(([name, bank]) => [name, bank.ready ? "ready" : bank.stage])) : null)),
       caches: atlasCacheStats(),
       stageLight: this.spriteLight?.id ?? null,
+      // 5.3: dash ghosts drawn this frame, damage decals live, and how many
+      // times a decal has been repainted (a probe's proof it rebuilds on the
+      // mark push and not per frame).
+      ghosts: this.ghostsDrawn,
+      damage: this.damage.map((entry) => (entry ? entry.key : null)),
+      damageRebuilds: this.damageRebuilds,
     };
   }
 
@@ -1045,6 +1219,12 @@ export class FighterLayer {
     applyAtlasFrame(bank.normalMap, pose.frame);
     applyAtlasFrame(bank.reflMap, pose.frame);
     bank.frame = pose.frame; // a texture landing mid-chain opens on this cell
+    // 5.3 SPECTACLE (#48): bind this side's bruises and cuts. Only the bank
+    // actually drawing this frame needs the binding, and the uniform objects
+    // are per-material, so a bank swap picks the decal up on its own frame.
+    const decal = this.damageDecal(fighter.side);
+    bank.fb.damageMap.value = decal ? decal.texture : emptyDamage();
+    bank.fb.damageOn.value = decal ? 1 : 0;
 
     // --- Same presentation math drawFighter uses (read-only sim fields) ----
     const attack = fighter.attacking;

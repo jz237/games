@@ -507,6 +507,22 @@ export function buildSomersetStage(host, { quality }) {
   group.name = "stage-somerset";
   const updaters = [];
   const flickers = [];
+  // 5.3 SPECTACLE (#43): Somerset had the only real update() in the renderer,
+  // and it ignored `state` entirely — a wall-clock loop of flickers and
+  // walkers. The 2D somerset ambient has surged its nine station lamps, the
+  // SOMERSET sign, the corner signal and the storefront neon on every big hit
+  // since 5.1; these responders are that same read, driven by the same
+  // engine/ambient.mjs surge over the host bridge.
+  //
+  // Ordering rule: responders run AFTER the flickers, so a light the flicker
+  // already writes absolutely each frame is safe to MULTIPLY (`boost`), and a
+  // light nothing else touches is set from its own build-time base (`swell`).
+  // Never the other way round, or a surge would compound frame over frame.
+  const surgeResponders = [];
+  const boost = (fn) => surgeResponders.push(fn);
+  const swell = (light, base, gain, koGain = 0) => surgeResponders.push((level, ko) => {
+    light.intensity = base * (1 + level * (gain + (ko ? koGain : 0)));
+  });
   const shadowSize = quality === "high" ? 2048 : 1024;
 
   // --- Atmosphere -----------------------------------------------------------
@@ -1182,6 +1198,11 @@ export function buildSomersetStage(host, { quality }) {
     // The lightbox's wet-street answer hums with its fluorescents.
     shelterStreak.material.opacity = 0.14 * Math.max(0.5, hum);
   });
+  // The platform lamps: the 2D pass stutters nine of them across the plate.
+  boost((level, ko) => {
+    shelterLight.intensity *= 1 + level * (1.1 + (ko ? 0.7 : 0));
+    shelterPanel.material.color.multiplyScalar(1 + level * 0.55);
+  });
 
   // --- Chain-link fence line: midground structure at the curb --------------
   const fenceMap = fenceTexture();
@@ -1758,6 +1779,8 @@ export function buildSomersetStage(host, { quality }) {
     // The wet-street smear swaps colour with the live lens.
     signalStreak.material.color.set(phase ? 0xff2b1e : 0x2bff7a);
   });
+  // The corner signal stutters under load (2D: ambientStutter on the lens).
+  swell(signalLight, 9, 0.9, 0.6);
 
   // Buzzing corner-store neon (magenta) + its point light.
   const neonTexture = canvasTexture(512, 128, (ctx, w, h) => {
@@ -1861,6 +1884,14 @@ export function buildSomersetStage(host, { quality }) {
     neonStreak.material.opacity = 0.55 * (0.55 + 0.45 * level);
     neonMirror.material.opacity = 0.5 * (0.45 + 0.55 * level);
   });
+  // The corner store's tube overdrives on a big hit and floods on the KO.
+  boost((level, ko) => {
+    const gain = 1 + level * (1.5 + (ko ? 0.9 : 0));
+    neonLight.intensity *= gain;
+    neon.material.color.multiplyScalar(1 + level * 0.85);
+    neonHalo.material.opacity = Math.min(1, neonHalo.material.opacity * (1 + level * 1.4));
+    neonMirror.material.opacity = Math.min(1, neonMirror.material.opacity * (1 + level * 0.9));
+  });
 
   // Cool fluorescent under the el deck (greenish, slight hum wobble).
   const underEl = new THREE.PointLight(0xbfffe2, 6, 7, 2);
@@ -1923,6 +1954,13 @@ export function buildSomersetStage(host, { quality }) {
   const sodiumRim = new THREE.PointLight(SODIUM, 13, 10, 2);
   sodiumRim.position.set(-6.4, 1.7, 1.4);
   group.add(sodiumRim);
+  // 5.3: the street-level swell. The rim is the light actually ON the
+  // fighters, so it carries the biggest share of the surge — this is the
+  // reason a KO in 3D reads on the bodies and not only on the backdrop.
+  swell(sodiumRim, 13, 0.55, 0.35);
+  swell(cyanLight, 13, 0.5, 0.3);
+  swell(windowLight, 7, 0.4, 0.5);
+  boost((level) => cyanSign.material.color.set(NEON_CYAN).multiplyScalar(2.2 * (1 + level * 0.8)));
 
   // --- Foreground frame silhouettes (nearest parallax plane) ---------------
   // Dark utility pole + span wire top-left, hydrant bottom-right: they slide
@@ -2196,6 +2234,14 @@ export function buildSomersetStage(host, { quality }) {
     plateMaterial.emissiveIntensity = 0.34 * Math.max(0.55, hum);
     plateKiss.material.opacity = 0.3 * Math.max(0.5, hum);
   });
+  // The SOMERSET sign and its stairwell lamp flood with the surge (2D:
+  // ambientGlow over the sign at 22 + surge*70 px radius).
+  boost((level, ko) => {
+    stationLight.intensity *= 1 + level * (1.2 + (ko ? 0.8 : 0));
+    stationGlow.material.opacity = Math.min(1, stationGlow.material.opacity * (1 + level * 1.5));
+    plateMaterial.emissiveIntensity *= 1 + level * 1.6;
+    plateKiss.material.opacity = Math.min(1, plateKiss.material.opacity * (1 + level * 1.5));
+  });
 
   // --- Street dressing at staggered depths ----------------------------------
   // Parked car at the far-left curb: dark silhouette, practical edges only.
@@ -2261,6 +2307,8 @@ export function buildSomersetStage(host, { quality }) {
   const bodegaGlow = new THREE.PointLight(0xffb46a, 4, 4.5, 2);
   bodegaGlow.position.set(-6.7, 1.5, -3);
   group.add(bodegaGlow);
+  swell(bodegaGlow, 4, 0.7, 0.5);
+  swell(laundromatLight, 3.2, 0.6, 0.4);
 
   // --- Key + ambient --------------------------------------------------------
   // Cool sky key: modest, so the practicals and grade own the fighters' look
@@ -2323,6 +2371,8 @@ export function buildSomersetStage(host, { quality }) {
     moteGeometry.attributes.position.needsUpdate = true;
   });
 
+  let surgeLevel = 0;
+
   return {
     group,
     fog,
@@ -2350,10 +2400,22 @@ export function buildSomersetStage(host, { quality }) {
       // Train windows settle with the freeze (absolute set — never compounds).
       trainWindows.material.color.setRGB(1.22, 1.14, 0.95).multiplyScalar(1 - dim * 0.7);
     },
-    update(timeSec) {
+    // 5.3 SPECTACLE (#43): `beat` is { surge, reaction } from main.mjs — the
+    // same engine/ambient.mjs read the 2D somerset ambient draws from. The
+    // crowd's own reaction is a floor under the surge so a sustained roar
+    // lights the street between the discrete pulses.
+    update(timeSec, state, beat) {
       for (const flicker of flickers) flicker(timeSec);
       for (const updater of updaters) updater(timeSec);
+      const level = Math.max(
+        beat?.surge?.level > 0 ? beat.surge.level : 0,
+        Math.min(0.55, (beat?.reaction || 0) * 0.4),
+      );
+      const ko = Boolean(beat?.surge?.ko);
+      surgeLevel = level;
+      for (const respond of surgeResponders) respond(level, ko);
     },
+    report: () => ({ stage: "somerset", practicals: surgeResponders.length, peak: Number(surgeLevel.toFixed(3)), lights: surgeResponders.length, fireworks: 0 }),
     dispose() {
       group.traverse((node) => {
         node.geometry?.dispose?.();

@@ -24,6 +24,7 @@ import { ImpactVfxLayer } from "./vfx.mjs";
 import { CrowdLayer } from "./crowd-layer.mjs";
 import { WorldObjectsLayer } from "./world-objects.mjs";
 import { ScarDecalLayer } from "./scar-decals.mjs";
+import { EffectsLayer } from "./effects-layer.mjs";
 import { buildSomersetStage } from "./stage-somerset.mjs";
 import { buildGenericStage } from "./stage-generic.mjs";
 // 5.1 (#45): per-stage sprite lighting — a stage builder may return its own
@@ -200,6 +201,14 @@ export function createRenderer(host) {
       scene.add(scarDecals.group);
       layers.set("scarDecals", scarDecals);
       renderer3d.scarDecals = scarDecals;
+      // 5.3 SPECTACLE (#47): the elemental flipbooks, the charging limb glow
+      // and the 2D particle pool — all of it was simulated every frame and
+      // drawn by nobody while the 3D world was on.
+      const effects = new EffectsLayer(host);
+      scene.add(effects.group);
+      layers.set("effects", effects);
+      renderer3d.effects = effects;
+      effects.setPixelScale(SIM_H * renderer.getPixelRatio() * 0.5);
       // Silhouette guard: fighter sprites darken their edges while an impact
       // flash is live, so bursts never erase the characters.
       fighters.getFlashLevel = () => vfx.flashLevel();
@@ -265,6 +274,9 @@ export function createRenderer(host) {
       lastPixelRatio = wantedRatio;
       renderer.setPixelRatio(wantedRatio);
       renderer.setSize(SIM_W, SIM_H, false);
+      // gl_PointSize is in framebuffer pixels: the mirrored particle cloud
+      // has to be told when the backing store moves.
+      layers.get("effects")?.setPixelScale(SIM_H * wantedRatio * 0.5);
       rebuildPost();
       // Stage shadow-map budgets differ per tier; rebuild lazily.
       stageId = null;
@@ -291,7 +303,15 @@ export function createRenderer(host) {
 
     const state = host.state;
     framing.update(state, host.cinematicCamera, freeze ? 0.0001 : dtSec, t);
-    stage.update?.(t, state);
+    // 5.3 SPECTACLE (#16/#43): the stage's own beat. `ambientPulse` is also
+    // where the KO pulse is LATCHED (it rode inside the 2D-only
+    // drawStageAmbient until 5.3), so this call is what makes a 3D KO flare
+    // at all; the crowd's drawn reaction rides along as the floor under it.
+    const ambientBeat = {
+      surge: host.ambientPulse ? host.ambientPulse() : null,
+      reaction: host.crowdReaction ? host.crowdReaction() : 0,
+    };
+    stage.update?.(t, state, ambientBeat);
     // Super freeze: ease the rim-lit silhouette dim while a grit super is in
     // flight (mirrors the 2D superDimLevel ease) + chromatic pulse on the
     // ignition frame. Read-only on sim state.
@@ -413,6 +433,10 @@ export function createRenderer(host) {
     // 5.3: battle scars drawn as decals this frame, and the tally by kind.
     scars: renderer3d.scarDecals?.visibleCount ?? 0,
     scarKinds: renderer3d.scarDecals?.lastKinds ?? null,
+    // 5.3: element sprites / mirrored motes / rings / charges drawn this
+    // frame, and how hard the stage's practicals are burning.
+    effects: renderer3d.effects?.stats?.() ?? null,
+    practicals: stage?.report?.() ?? null,
     tris: lastStatsFrame.triangles,
     fps: Math.round(fpsEstimate),
     quality,
