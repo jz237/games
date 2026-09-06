@@ -16,10 +16,17 @@ import {
   UNIFIED_EXT3_CELLS,
   swingSubstitute,
 } from "./fighter-kits.mjs";
+import { ATTACK_LEVELS, GUARD_RULES, STUN_RULES } from "./defense.mjs";
+
+// v5.1: ticks of a dizzy / guard crush that wear the ext4 reel before the
+// sway. 12 ticks is one MOTION_HOLD_BUDGET and a half — long enough to read as
+// a beat against a 128-tick dizzy, short enough that the wobble transform
+// (which starts at full amplitude) is already carrying the sway when it lands.
+export const REEL_ONSET_TICKS = 12;
 
 /**
- * The substitution context for a fighter snapshot. The seven fields are what
- * `swingSubstitute` reads; `crouchActive` is the one extra the resolver needs
+ * The substitution context for a fighter snapshot. The seven 5.0 fields plus
+ * the three 5.1 reaction reads are what `swingSubstitute` reads; `crouchActive` is the one extra the resolver needs
  * for the crouching normal's active window (see swingResolve).
  *
  * `crouching` is read from the ATTACK while one is in flight (its cancel
@@ -28,7 +35,7 @@ import {
  * `falling` is the victim's descent with a knockdown pending: the moment the
  * airrec key hands over from the launched arch to the falling cell.
  */
-export function swingContext(fighter) {
+export function swingContext(fighter, { roundDecided = false } = {}) {
   const attack = fighter.attacking;
   const grounded = fighter.grounded;
   const victimAirborne = !grounded && (fighter.hitstunFrames > 0 || fighter.pendingKnockdown || fighter.airHitstunFrames > 0);
@@ -41,6 +48,23 @@ export function swingContext(fighter) {
     airborne: !grounded,
     victimAirborne,
     falling: victimAirborne && fighter.vy > 0 && Boolean(fighter.pendingKnockdown),
+    // v5.1 EXT4 ROUTING — the three reads that pick a reaction drawing. All
+    // are snapshotted sim state, so a rollback resim and both renderers agree.
+    //   bodyBlow  a landed MID/LOW (the level of the last contact) or a
+    //             crouched victim opens on the doubled-over body blow, not
+    //             the head snap. Gated on real hitstun so the clinch flinch
+    //             stays a head snap.
+    //   reeling   the first REEL_ONSET_TICKS of a dizzy or guard crush wear
+    //             the backward reel before the authored sway takes the loop.
+    //   ko        the round is decided against this fighter (`roundDecided`
+    //             is the caller's phase read): the KO lying cell replaces the
+    //             knockdown drawing once he is down. Never a plain
+    //             knockdown's cell, so the wake-up chain is untouched.
+    bodyBlow: fighter.hitstunFrames > 0
+      && (Boolean(fighter.crouch) || fighter.lastHitLevel === ATTACK_LEVELS.MID || fighter.lastHitLevel === ATTACK_LEVELS.LOW),
+    reeling: (fighter.dizzyFrames > 0 && fighter.dizzyFrames > (fighter.dizzyTotalFrames || STUN_RULES.dizzyFrames) - REEL_ONSET_TICKS)
+      || (fighter.guardCrushFrames > 0 && fighter.guardCrushFrames > (fighter.guardCrushTotalFrames || GUARD_RULES.crushFrames) - REEL_ONSET_TICKS),
+    ko: Boolean(roundDecided) && fighter.health <= 0,
     // A kit-less crouching normal inside its active window. That window has
     // no motion cell at all (it draws a base cell), so the table never sees
     // it; the resolver stands the crouch extension / sweep in directly.

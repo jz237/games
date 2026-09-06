@@ -3241,3 +3241,93 @@ Not done here: a boo/laugh bank for the taunt (it borrows the ooh), the
 per-stage KO ambient beats for the four stages without one (item #15), and
 the 3D stages' own reaction to the hold (the billboards carry it; the stage
 furniture in `renderer/three` does not — item #43).
+## v5.1 — EXT4 ROUTING: THE REACTION SHEET REACHES THE SCREEN, AND THE GUARD FLINCH STOPS GROWING
+
+Routing only, no art. Two findings from the post-5.0 sweep, both against the
+ext4 reaction sheet 5.0 shipped.
+
+THE GUARD FLINCH RE-OPENED M4. `blockstunKeys` band 0 resolves motion2:8 and
+the substitution draws ext4:0, but `guardFlinchAdjust` only ever reconciled
+motion2:8 (and floors at 1, so it could not have shrunk a cell). Measured on
+screen (UNIFIED_EXT4_CELL_HEIGHT x its ADJUST against the unified guard, the
+commissioner's 1.033 on both sides): benny +13.1%, cyraxx +11.4%, alan +9.1%,
+ali +3.8%, jez +3.7%, commissioner +1.5%, deathblow -5.7%, donald -4.3% — a
+blocked hit made three of the most-played fighters GROW for the impact ticks,
+in both renderers. The ext4 flinch is an upright figure against the settled
+knees-bent guard: the walk-key gap, with the walk-key cure.
+
+`swingStandInAdjust` (engine/fighter-kits.mjs, third factor of
+`cellDrawAdjust`, so CINEMA 3D reads the same number) lands every routed
+stand-in on the height of the unified rung it replaces, per body PLAN:
+match in both directions when the plans agree — ext4:0 guard flinch onto
+unified:7, ext4:1 head snap onto unified:12 (measured +9.4 jez, +13.7 benny,
++15.9 cyraxx, +15.6 commissioner, +9.0 alan), ext3:12 crouch guard onto
+unified:5 (-8.1 alan .. +12.8 commissioner); CEILING only (never taller
+than the idle, never enlarged) for the body blow, big hit and reel, whose
+depth differs per drawing and which the 3.0 reasoning leaves alone rather
+than flatten. 3% deadband, clamp 0.80..1.22. Resulting factors: guard flinch
+benny 0.884, cyraxx 0.945, alan 0.917, jez 0.964, ali 0.964, deathblow 1.061,
+donald 1.045; head snap jez 0.914, alan 0.918, benny 0.891, cyraxx 0.917,
+commissioner 0.894, ali 0.948, post 1.043, devil 1.061; crouch guard
+deathblow 0.952, jez 1.063, alan 1.088, post 0.932, benny 0.924, cyraxx
+0.958, commissioner 0.916, devil 0.888; ceilings on cyraxx's big hit (+8.7% of
+idle) and reel (+7.7%), the commissioner's big hit (+8.2%), benny's and
+alan's big hit. Contract test: every stand-in within 3% of its rung or at or
+under the idle, on all ten sheets; the get-up rung the wake-up seam is
+measured on, the crumple and the thrown cell take exactly 1.
+
+HALF THE SHEET NEVER DREW. 5.0 keyed the head snap on motion2:9 and the big
+hit on motion:8, but every chain carrying those links leads with a UNIFIED
+rung (`reactionTrackKeys` stacks `urung(ladder[band])` in front of the 2.9
+chain; the airborne victim and the clinch read `uni(...)` first) and all ten
+fighters are whole on the unified bank, so the resolved pose was always
+unified:12/13/14 and the substitution never fired. Traced with every sheet
+whole: light `unified:12 -> unified:14 -> ext:7 -> unified:7 -> idle`, heavy
+`unified:13 -> ext:7 -> unified:14 -> unified:7 -> idle`. `swingSubstitute`
+keys on the resolved UNIFIED reaction cells now (same generation — ext4 is
+generated from that sheet — so RULE 2's connected-region objection does not
+apply; idle, walk, guard and crouch are never substituted):
+
+    unified:12 light hit   -> ext4:2 body blow when the last contact was
+                              MID/LOW or the victim is crouching, else
+                              ext4:1 head snap
+    unified:13 big hit     -> ext4:6 launched while carried, else ext4:3
+    unified:14 stagger     -> ext4:4 (a backward reel)
+    unified:15 knockdown   -> ext4:15 KO, only once the round is decided
+                              against the fighter (finish/roundover/result
+                              and health <= 0); a plain knockdown keeps
+                              unified:15 so the wake-up chain is untouched
+    motion2:10 dizzy       -> ext4:4 reel for the first 12 ticks of a dizzy
+                              or guard crush, then ext4:5 sway
+    motion2:8  block hit   -> ext3:12 crouch guard when crouching
+
+The level read is a new presentation field `fighter.lastHitLevel` (melee,
+projectile and paint-trap contacts set it; snapshotted beside
+`lastHitResult`, out of the checksum) because `lastHitResult` drops the level
+on a counter hit.
+
+CROUCH BLOCKSTUN HAD NO FLINCH. The standing track is gated on `!crouch`
+(motion2:8 is a standing cover) and the crouch stance held unified:5 through
+the window — worse, the contact-flash read below it drew the STANDING light
+hit for the flash ticks, so a crouched block popped the fighter upright.
+`crouchBlockstunKeys` (same band grid as the standing track: the flinch owns
+the impact to BLOCK_EXIT_AT, empty recovery bands hand to the crouch read)
+draws ext3:12 over unified:5, and the R6 flinch-exit bridge rides the crouch
+too. Byte-identical for a fighter without the cell.
+
+Traced chains (jez, every sheet whole, hold ticks): light
+`ext4:1 x7 -> ext4:4 x7 -> ext:7 x7 -> unified:7 x8 -> idle`; light MID/LOW
+`ext4:2 x7 -> ext4:4 x7 -> ext:7 x7 -> unified:7 x8 -> idle`; heavy
+`ext4:3 x7 -> ext:7 x7 -> ext4:4 x7 -> unified:7 x8 -> idle`; heavy airborne
+opener `ext4:6`; standing block `ext4:0 x8 -> unified:7 x9`; crouched block
+`ext3:12 x8 -> unified:5 x9`; dizzy `ext4:4 x12 -> ext4:5 x116`; KO
+`ext4:9 (crumple) -> ext4:15`; wake-up unchanged `ext4:9 x3 -> ext4:12 x7 ->
+ext4:13 x6`. No track or hold budget changed; the drawings did.
+
+STILL UNROUTED, BY DECISION: ext4:7 air hit (inverted, as 5.0 recorded) and
+ext4:11 FLOOR BOUNCE — inspected at 1:1 on all ten sheets, it is a body on
+its shoulders with the legs in the air (the read 4.6 took off the floor and
+the owner's rule), and there is no ground-bounce sim state for it to mean
+anything. Both stay drawn, gated and pinned unreachable. The KO cell lies
+flat with the head on the same side as unified:15 on every sheet, so
+`downTiltFor` measures it at 0 and the down-tilt rule holds.

@@ -91,6 +91,7 @@ import {
   attackMotionBeat,
   bareHandedAttack,
   blockstunKeys,
+  crouchBlockstunKeys,
   throwClinchKeys,
   throwRecoveryKeys,
   baseCellDrawAdjust,
@@ -6585,6 +6586,13 @@ function makeFighter(index, side, overrideDef = null) {
     grabbed: null,
     lastThrowInputFrame: -Infinity,
     lastHitResult: "",
+    // v5.1 EXT4 ROUTING: the attack LEVEL of the last contact, kept apart from
+    // lastHitResult because that string drops the level on a counter hit
+    // ("counter") and the reaction drawing needs it on every hit: a MID/LOW
+    // opens on the body blow, anything else on the head snap. Presentation
+    // data — it chooses a drawing, never a sim outcome — so it is snapshotted
+    // with lastHitResult and stays out of the combat checksum like it.
+    lastHitLevel: "",
     hitFlash: 0,
     specialGlow: 0,
     animTime: visualRandom() * 2,
@@ -7543,7 +7551,11 @@ function fighterMotionTransform(fighter) {
   // stance now ARRIVES carrying the flinch's tuck and unwinds out of it over
   // the next few ticks; the helper returns null before the handoff, so the
   // flinch itself is never double-tucked, and null once settled.
-  if (fighter.blockstunFrames > 0 && !fighter.crouch && fighter.grounded && !reducedMotion) {
+  // v5.1: a CROUCHED block has a flinch now too (the ext3 crouch guard, see
+  // crouchBlockstunKeys) and hands back to the crouch on the same
+  // BLOCK_EXIT_AT tick, so the bridge rides the crouch stance as well — the
+  // same lift/pitch/squash, unwinding out of the crouched cover.
+  if (fighter.blockstunFrames > 0 && fighter.grounded && !reducedMotion) {
     const blockTotal = Math.max(fighter.blockstunFrames, obs.blockstunTotal || 0);
     const blockPhase = clamp(1 - fighter.blockstunFrames / Math.max(1, blockTotal), 0, 0.999);
     const bridge = blockRecoverTransform(blockPhase);
@@ -9820,6 +9832,8 @@ const rollbackPresentationFighterFields = new Set([
   // resolves), so it is snapshotted and restored with everything else but
   // stays out of the combat checksum exactly as walkTime always has.
   "animTime", "walkTime", "strideTime", "hitFlash", "specialGlow", "cinematicFrame", "cinematicRotation", "cinematicScale", "lastHitResult",
+  // v5.1: the last contact's level, same class of field as lastHitResult.
+  "lastHitLevel",
 ]);
 
 function cloneRollbackValue(value) {
@@ -14891,6 +14905,7 @@ function triggerPaintTrap(trap, victim) {
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
   victim.vx = owner.facing * trap.push * (blocked ? 0.26 : 1);
   victim.lastHitResult = blocked ? "blocked-low-trap" : "paint-trap";
+  victim.lastHitLevel = ATTACK_LEVELS.LOW;
   victim.hitFlash = 0.13;
   if (!blocked) {
     victim.attacking = null;
@@ -15170,6 +15185,7 @@ function triggerProjectile(projectile, victim) {
   victim.vx = hitDirection * projectile.push * (blocked ? 0.27 : armored ? 0.12 : 1);
   const resultKind = projectile.style === "feedback" ? "feedback-echo" : "projectile";
   victim.lastHitResult = blocked ? `blocked-${projectile.level}-${resultKind}` : armored ? "armor" : counter ? `counter-${resultKind}` : projectile.style === "feedback" ? "feedback-echo" : `${projectile.level}-projectile`;
+  victim.lastHitLevel = projectile.level;
   victim.hitFlash = 0.13;
   if (!blocked && !armored) {
     // Release 1.8 GRIND: score attack — projectiles/thrown objects score as
@@ -15993,6 +16009,7 @@ function hit(attacker, victim, attack, collision) {
   victim.lastHitResult = victim.guardCrushFrames > 0 ? "guard-crush"
     : blocked ? (perfect ? "perfect-guard" : `blocked-${attack.level}`)
       : armored ? "armor" : counter ? "counter" : attack.level;
+  victim.lastHitLevel = attack.level;
   if (!blocked && !armored) {
     // Release 1.8 GRIND: score attack — clean hits score by move class
     // (guarded meta bookkeeping inside; never touches sim state).
@@ -18234,7 +18251,7 @@ function fighterAnimationPose(fighter) {
     fighter.def.id,
     { bareHanded },
   );
-  const pose = swingResolve(resolvedPose, swingContext(fighter), (cell, bank) => motionBankCellDrawable(fighter.def.id, cell, bank));
+  const pose = swingResolve(resolvedPose, swingContext(fighter, { roundDecided: state.phase === "finish" || state.phase === "roundover" || state.phase === "result" }), (cell, bank) => motionBankCellDrawable(fighter.def.id, cell, bank));
   recordPoseTrace(fighter, pose);
   return pose;
 }
@@ -18651,6 +18668,19 @@ function fighterPoseDescriptor(fighter) {
     // contact flash decayed, which put a 2-tick hit pose in the middle of a
     // block once the flinch stopped owning the whole thing.
     return beatPoseAt(blockstunKeys(), blockPhase, uni(UNIFIED_CELLS.guard, base(roles.guard)));
+  }
+  // v5.1 EXT4 ROUTING — CROUCH BLOCKSTUN. The branch above is gated on
+  // `!crouch` because the authored flinch is a standing cover, and the crouch
+  // stance branch below then held unified:5 through the whole window: a
+  // low-blocked heavy produced no pose change at all. The ext3 crouch guard
+  // (forearms crossed, still crouched) owns the impact band now, paced by the
+  // same observer clock; the recovery bands are empty and resolve to the
+  // crouch read the stance branch draws, so a fighter without the cell is
+  // byte-identical and the flinch hands back to exactly the drawing it left.
+  if (fighter.blockstunFrames > 0 && fighter.crouch && fighter.grounded) {
+    const blockTotal = Math.max(fighter.blockstunFrames, motionObs[fighter.side]?.blockstunTotal || 0);
+    const blockPhase = clamp(1 - fighter.blockstunFrames / Math.max(1, blockTotal), 0, 0.999);
+    return beatPoseAt(crouchBlockstunKeys(), blockPhase, uni(UNIFIED_CELLS.crouch, base(roles.crouch)));
   }
   if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
   // v2.9 FLOW: sequenced wake-up — getup-a (knee up, hand pushing off) into

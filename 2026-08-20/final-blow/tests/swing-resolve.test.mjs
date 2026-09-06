@@ -75,7 +75,16 @@ function testContextFromSnapshot() {
   assert.deepEqual(swingContext(snapshot()), {
     limb: "punch", heavy: false, crouching: false, attacking: false, airborne: false,
     victimAirborne: false, falling: false, crouchActive: false,
+    bodyBlow: false, reeling: false, ko: false,
   });
+  // v5.1 reaction reads.
+  assert.equal(swingContext(snapshot({ hitstunFrames: 6, lastHitLevel: "low" })).bodyBlow, true);
+  assert.equal(swingContext(snapshot({ hitstunFrames: 6, crouch: true })).bodyBlow, true);
+  assert.equal(swingContext(snapshot({ hitstunFrames: 0, crouch: true })).bodyBlow, false, "no hitstun, no body blow");
+  assert.equal(swingContext(snapshot({ dizzyFrames: 120, dizzyTotalFrames: 128 })).reeling, true);
+  assert.equal(swingContext(snapshot({ dizzyFrames: 60, dizzyTotalFrames: 128 })).reeling, false);
+  assert.equal(swingContext(snapshot({ health: 0 }), { roundDecided: true }).ko, true);
+  assert.equal(swingContext(snapshot({ health: 0 })).ko, false, "a KO read needs the caller's phase");
   // The stance answers `crouching` while no attack is in flight...
   assert.equal(swingContext(snapshot({ crouch: true })).crouching, true);
   // ...and the ATTACK's cancel profile answers it while one is: a sweep

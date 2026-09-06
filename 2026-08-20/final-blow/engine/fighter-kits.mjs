@@ -2290,6 +2290,101 @@ const UNIFIED_EXT4_CELL_ADJUST = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
+// v5.1 EXT4 ROUTING — THE STAND-IN HEIGHT RECONCILIATION, and the M4 size pop
+// the 5.0 guard flinch re-opened.
+//
+// 5.0 substituted the authored block flinch (motion2:8) with the ext4 guard
+// flinch at draw time and left guardFlinchAdjust matching motion2:8 against
+// the guard — so the cell that ACTUALLY drew got no reconciliation at all,
+// and the function floors at 1 so it could not have shrunk one anyway.
+// Measured on the sheets in the repo (UNIFIED_EXT4_CELL_HEIGHT x its ADJUST
+// against unifiedDrawnHeight(guard), on screen, the commissioner's 1.033
+// sheet correction on both sides):
+//
+//   benny   310 : 274  +13.1%      cyraxx  330 : 296  +11.4%
+//   alan    289 : 265   +9.1%      ali     303 : 292   +3.8%
+//   jez     281 : 271   +3.7%      commissioner 301 : 296  +1.5%
+//   deathblow 263 : 279 -5.7%      donald  244 : 255   -4.3%
+//
+// The 2.9 critic finding M4 was written for says a 15% one-tick height step
+// "reads as the character changing size"; the 3.0 note warned against
+// exactly this sign flip. The ext4 flinch is an UPRIGHT figure where the
+// unified guard is the settled knees-bent stance — the same content-height
+// gap the walk keys have against the idle, and it takes the same cure: land
+// the stand-in on the drawn height of the cell it replaces. 3% deadband (the
+// honest measurement noise of a hand-painted sheet), clamped to 0.80..1.22,
+// the same cap philosophy as every other correction in this file.
+//
+// The rule generalises to the reaction cells this wave routes for the first
+// time, and it is per PLAN, not per cell:
+//   MATCH    stand-ins whose body plan is the plan of the rung they replace
+//            are matched onto it in both directions — ext4:0 guard flinch
+//            onto unified:7, ext4:1 head snap onto unified:12 (an upright
+//            recoil; measured +9.4 jez, +13.7 benny, +15.9 cyraxx, +15.6
+//            commissioner, +9.0 alan against the light hit), ext3:12 crouch
+//            guard onto unified:5 (a crouch; -8.1 alan .. +12.8 commissioner).
+//   CEILING  stand-ins of a DIFFERENT plan — the body blow (doubled over),
+//            the big hit (arched, at a depth that differs per drawing) and
+//            the stagger (a backward reel where several unified staggers are
+//            a forward fold) — are legitimately different heights, and
+//            forcing them onto the rung would flatten the pose, not the pop
+//            (the 3.0 reasoning for leaving crouch/stagger/big-hit alone).
+//            They are only ever brought DOWN to the fighter's own idle: a
+//            struck fighter does not grow, and growth is the direction every
+//            reported pop had. cyraxx's big hit (+8.7% of his idle) and reel
+//            (+7.7%) and the commissioner's big hit (+8.2%) take it; the body
+//            blow is shorter than the idle on every sheet and takes nothing.
+//
+// Applied through cellDrawAdjust like the flinch reconciliation, so both
+// renderers read one number per cell. The floor-bounce and air-hit cells are
+// not here because they are not routed (see swingSubstitute).
+// ---------------------------------------------------------------------------
+
+/**
+ * game.js applies UNIFIED_SHEET_ADJUST to the unified bank at draw time and
+ * the ext tables above fold the same number into every commissioner cell, so
+ * an on-screen comparison between a unified rung and its ext stand-in has to
+ * put it on the unified side. Mirrors game.js; the contract test pins both.
+ */
+export const UNIFIED_SHEET_FOLD = Object.freeze({ commissioner: 1.033 });
+export const SWING_STAND_IN_DEADBAND = 0.03;
+export const SWING_STAND_IN_CLAMP = Object.freeze({ min: 0.80, max: 1.22 });
+
+// SWING_STAND_IN_TARGET (which rung each stand-in reconciles to, and how) is
+// declared beside SWING_BANKS below: it keys on the bank names, which are
+// declared there, and a module-level literal cannot read them earlier.
+
+/** Drawn (fit-restored) content height of an ext3/ext4 cell, by SHEET FRAME. */
+export function swingDrawnHeight(fighterId, bank, frame) {
+  const table = bank === UNIFIED_EXT4_BANK ? UNIFIED_EXT4_CELL_HEIGHT
+    : bank === UNIFIED_EXT3_BANK ? UNIFIED_EXT3_CELL_HEIGHT : null;
+  const raw = table?.[fighterId]?.[frame];
+  return Number.isFinite(raw) ? raw * baseCellDrawAdjust(fighterId, bank, frame) : 0;
+}
+
+/** On-screen drawn height of a unified main cell, sheet correction included. */
+export function unifiedScreenHeight(fighterId, cell) {
+  return unifiedDrawnHeight(fighterId, cell) * (UNIFIED_SHEET_FOLD[fighterId] || 1);
+}
+
+/**
+ * The reconciliation a routed ext3/ext4 reaction stand-in takes on top of its
+ * fit-restore adjust. 1 for every cell that is not a routed stand-in, inside
+ * the deadband, or (ceiling mode) already no taller than the idle.
+ */
+export function swingStandInAdjust(fighterId, bank, frame) {
+  const target = SWING_STAND_IN_TARGET[bank]?.[frame];
+  if (!target) return 1;
+  const drawn = swingDrawnHeight(fighterId, bank, frame);
+  const goal = unifiedScreenHeight(fighterId, target.cell);
+  if (!(drawn > 0) || !(goal > 0)) return 1;
+  const ratio = goal / drawn;
+  if (target.mode === "ceiling" && ratio >= 1 - SWING_STAND_IN_DEADBAND) return 1;
+  if (target.mode === "match" && Math.abs(ratio - 1) <= SWING_STAND_IN_DEADBAND) return 1;
+  return Math.min(SWING_STAND_IN_CLAMP.max, Math.max(SWING_STAND_IN_CLAMP.min, ratio));
+}
+
+// ---------------------------------------------------------------------------
 // v2.9 final round (T4) — THE BASE WALK SCALE POP.
 //
 // baseCellDrawAdjust corrected exactly one cell per fighter, the oversized
@@ -2425,8 +2520,13 @@ export function guardFlinchAdjust(fighterId, bank, frame, options = {}) {
  * against whichever bank is drawing the guard.
  */
 export function cellDrawAdjust(fighterId, bank, frame, options = {}) {
+  // v5.1: the third factor lands a routed ext3/ext4 reaction stand-in on the
+  // height of the unified rung it draws instead of (guard flinch, head snap,
+  // crouch guard) or under the idle (body blow, big hit, reel). 1 for every
+  // other cell, so nothing measured before this wave moves.
   return baseCellDrawAdjust(fighterId, bank, frame)
-    * guardFlinchAdjust(fighterId, bank, frame, options);
+    * guardFlinchAdjust(fighterId, bank, frame, options)
+    * swingStandInAdjust(fighterId, bank, frame);
 }
 
 // ---------------------------------------------------------------------------
@@ -3551,6 +3651,28 @@ export const SWING_BANKS = Object.freeze({
   [UNIFIED_EXT4_BANK]: Object.freeze({ base: UNIFIED_EXT4_BASE, count: UNIFIED_EXT4_CELL_COUNT, sheetKey: "ext4Sheet", cellsKey: "ext4Cells" }),
 });
 
+/**
+ * v5.1: which unified rung each routed reaction stand-in is height-reconciled
+ * to, and how — see the STAND-IN HEIGHT RECONCILIATION block above
+ * swingStandInAdjust for the measurements and the match/ceiling rule.
+ */
+export const SWING_STAND_IN_TARGET = Object.freeze({
+  [UNIFIED_EXT4_BANK]: Object.freeze({
+    0: Object.freeze({ cell: 7, mode: "match" }),    // guard flinch  -> guard
+    1: Object.freeze({ cell: 12, mode: "match" }),   // head snap     -> light hit
+    2: Object.freeze({ cell: 0, mode: "ceiling" }),  // body blow     <= idle
+    3: Object.freeze({ cell: 0, mode: "ceiling" }),  // big hit       <= idle
+    4: Object.freeze({ cell: 0, mode: "ceiling" }),  // stagger/reel  <= idle
+  }),
+  [UNIFIED_EXT3_BANK]: Object.freeze({
+    12: Object.freeze({ cell: 5, mode: "match" }),   // crouch guard  -> crouch
+  }),
+});
+
+/** Chain-constructor siblings of x2key for the swing sheets. SHEET FRAMES. */
+export const x3key = (cell) => Object.freeze({ bank: UNIFIED_EXT3_BANK, cell });
+export const x4key = (cell) => Object.freeze({ bank: UNIFIED_EXT4_BANK, cell });
+
 export function swingFrame(bank, cell) {
   const spec = SWING_BANKS[bank];
   if (!spec) return -1;
@@ -3588,11 +3710,52 @@ export function swingFighterIds(masks) {
  * fighter is doing, the same-family drawing that should stand in for it, or
  * null. Pure; the caller checks the target cell is drawable.
  *
- * ctx: { limb, heavy, crouching, attacking, airborne, victimAirborne, falling }
+ * ctx: { limb, heavy, crouching, attacking, airborne, victimAirborne, falling,
+ *        bodyBlow, reeling, ko }
+ *
+ * v5.1 EXT4 ROUTING — WHY HALF THE REACTION SHEET NEVER DREW. 5.0 keyed the
+ * head snap on motion2:9 and the big hit on motion:8, but every chain that
+ * carries those links leads with a UNIFIED rung: reactionTrackKeys stacks
+ * urung(ladder[band]) in front of the 2.9 chain, the airborne victim reads
+ * uni(bigHit, motion bighit), the clinch uni(lightHit, motion2 lightHit).
+ * All ten fighters are whole on the unified bank, so the resolved pose was
+ * unified:12/13/14 on every hit and the motion links underneath were never
+ * reached — traced light and heavy with every sheet whole: unified:12/13 ->
+ * unified:14 / ext:7 -> unified:7 -> idle, no ext4 cell. The substitution
+ * therefore has to key on the UNIFIED reaction cells too. It is the same
+ * generation (ext4 is generated image-to-image from that sheet), so RULE 2's
+ * connected-region objection to swapping a unified rung does not apply; the
+ * idle, walk, guard and crouch stay untouched. The motion-family cases are
+ * kept for the read a fighter off the bank would take.
+ *
+ *   unified:12 light hit  -> body blow when the landed hit was MID/LOW or the
+ *                            victim is crouching (ctx.bodyBlow), else head snap
+ *   unified:13 big hit    -> launched while carried, else big hit
+ *   unified:14 stagger    -> the reel
+ *   unified:15 knockdown  -> the KO lying cell, only once the round is decided
+ *                            against this fighter (ctx.ko); the plain
+ *                            knockdown keeps drawing the unified cell
+ *   motion2:10 dizzy      -> the reel for the ONSET of a dizzy / guard crush
+ *                            (ctx.reeling), then the authored sway
+ *
+ * NOT routed, on purpose: the air hit (7) and the FLOOR BOUNCE (11). Both
+ * came out with the feet in the air on every sheet (the bounce is a body on
+ * its shoulders, legs up), which is the read 4.6 took off the floor and the
+ * owner's standing rule; there is also no ground-bounce sim state for the
+ * bounce to mean anything. They stay drawn, gated and unrouted.
  */
 export function swingSubstitute(bank, frame, ctx = {}) {
   const kick = ctx.limb === "kick";
   const E3 = UNIFIED_EXT3_CELLS, E4 = UNIFIED_EXT4_CELLS;
+  if (bank === UNIFIED_BANK) {
+    switch (frame) {
+      case UNIFIED_CELLS.lightHit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.bodyBlow ? E4.bodyBlow : E4.headSnap };
+      case UNIFIED_CELLS.bigHit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.victimAirborne ? E4.launched : E4.bigHit };
+      case UNIFIED_CELLS.stagger: return { bank: UNIFIED_EXT4_BANK, frame: E4.stagger };
+      case UNIFIED_CELLS.knockdown: return ctx.ko ? { bank: UNIFIED_EXT4_BANK, frame: E4.ko } : null;
+      default: return null;
+    }
+  }
   if (bank === "motion") {
     switch (frame) {
       case MOTION_CELLS.punchExt:
@@ -3637,9 +3800,11 @@ export function swingSubstitute(bank, frame, ctx = {}) {
       // the whole swing on the unified family now, the unified crouch
       // transition is the same-generation drawing for it.
       case MOTION2_CELLS.crouchTrans: return ctx.attacking && !ctx.crouching ? { bank: UNIFIED_BANK, frame: UNIFIED_CELLS.crouchTrans } : null;
-      case MOTION2_CELLS.blockHit: return { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch };
-      case MOTION2_CELLS.lightHit: return { bank: UNIFIED_EXT4_BANK, frame: E4.headSnap };
-      case MOTION2_CELLS.dizzy: return { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy };
+      // A crouching fighter's block flinch is the ext3 crouch guard, never the
+      // standing cover (the reason the standing branch was gated on !crouch).
+      case MOTION2_CELLS.blockHit: return ctx.crouching ? { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard } : { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch };
+      case MOTION2_CELLS.lightHit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.bodyBlow ? E4.bodyBlow : E4.headSnap };
+      case MOTION2_CELLS.dizzy: return { bank: UNIFIED_EXT4_BANK, frame: ctx.reeling ? E4.stagger : E4.dizzy };
       case MOTION2_CELLS.getupA: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupA };
       case MOTION2_CELLS.getupB: return { bank: UNIFIED_EXT4_BANK, frame: E4.getupB };
       case MOTION2_CELLS.thrown: return { bank: UNIFIED_EXT4_BANK, frame: E4.thrown };
@@ -3928,13 +4093,18 @@ export function beatPoseAt(keys, progress, fallback) {
  * slots that both degrade to the same authored cell" is one hold, not two.
  */
 export function defaultBeatKeyResolve(key, {
-  motion3 = false, unified = false, ext = false, ext2 = false, fallback = null,
+  motion3 = false, unified = false, ext = false, ext2 = false, swing = false, fallback = null,
 } = {}) {
   for (const link of key?.chain || []) {
     // v4.9: an ext2 link is skipped unless the caller audits a fighter who
     // HAS the in-between sheet, so every earlier budget keeps its meaning.
     if (link.bank === UNIFIED_EXT2_BANK) {
       if (ext2) return `unified-ext2:${link.cell}`;
+      continue;
+    }
+    // v5.1: the same for a swing-sheet link (the crouch blockstun flinch).
+    if (link.bank === UNIFIED_EXT3_BANK || link.bank === UNIFIED_EXT4_BANK) {
+      if (swing) return `${link.bank}:${link.cell}`;
       continue;
     }
     if (link.bank === MOTION3_BANK) {
@@ -4501,6 +4671,26 @@ export function blockstunKeys() {
 
 /** The progress at which the flinch hands the beat back to the stance. */
 export const BLOCK_EXIT_AT = 0.42;
+
+/**
+ * v5.1 — CROUCH BLOCKSTUN, which had no flinch at all. game.js gated the
+ * blockstun track on `!fighter.crouch` because motion2:8 is a STANDING cover,
+ * and the crouch stance branch then held unified:5 through every tick of a
+ * crouched block: a low-blocked heavy produced zero pose change. The ext3
+ * crouch guard (forearms crossed, still crouched) is the drawing for that
+ * beat, and it takes the same shape as the standing track — the flinch owns
+ * the impact to BLOCK_EXIT_AT, the stance recovers behind it. No motion3
+ * settle exists for a crouch, so the recovery bands are empty and hand to the
+ * caller's crouch read, which is exactly what drew before on every tick. A
+ * fighter without the cell is therefore byte-identical.
+ */
+export function crouchBlockstunKeys() {
+  return [
+    { at: 0, chain: [x3key(UNIFIED_EXT3_CELLS.crouchGuard)] },
+    { at: BLOCK_EXIT_AT, chain: [] },
+    { at: 0.62, chain: [] },
+  ];
+}
 
 /**
  * v2.9 final round (R6) — THE GUARD-FLINCH EXIT WAS A HARD CUT.

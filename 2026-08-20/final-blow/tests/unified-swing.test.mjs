@@ -16,14 +16,28 @@ import {
   UNIFIED_EXT4_BEATS,
   UNIFIED_EXT4_CELLS,
   UNIFIED_EXT4_CELL_HEIGHT,
+  BLOCK_EXIT_AT,
+  SWING_STAND_IN_CLAMP,
+  SWING_STAND_IN_DEADBAND,
+  SWING_STAND_IN_TARGET,
+  UNIFIED_BANK,
+  UNIFIED_CELLS,
+  UNIFIED_SHEET_FOLD,
   attackRecoveryKeys,
+  blockstunKeys,
   buildSwingAcceptMasks,
   buildUnifiedAcceptMasks,
+  cellDrawAdjust,
+  crouchBlockstunKeys,
+  defaultBeatKeyResolve,
   heavyWindupKeys,
   isAuthoredBank,
+  swingDrawnHeight,
   swingFighterIds,
   swingFrame,
+  swingStandInAdjust,
   swingSubstitute,
+  unifiedScreenHeight,
 } from "../engine/fighter-kits.mjs";
 
 // v5.0 FULL SWING — the strike and reaction sheets, consumed by substitution
@@ -100,7 +114,29 @@ function testSubstitutionTable() {
   assert.equal(sub("motion", MOTION_CELLS.tuck, { attacking: false, airborne: true }), null, "a plain jump keeps its tuck");
   // Reactions.
   assert.deepEqual(sub("motion2", MOTION2_CELLS.blockHit, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch });
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.blockHit, { crouching: true }), { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard },
+    "a crouched block flinch is the crouch guard, never the standing cover");
   assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.headSnap });
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, { bodyBlow: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.bodyBlow });
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy });
+  assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, { reeling: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.stagger },
+    "the onset of a dizzy / guard crush reels before the sway");
+  // v5.1: THE UNIFIED REACTION CELLS. Every reaction chain leads with a
+  // unified rung and all ten fighters are whole on that bank, so the motion
+  // links the 5.0 table keyed on were never the resolved pose — the head snap
+  // and big hit were dead. The table keys on the resolved unified cell now.
+  const U = UNIFIED_CELLS;
+  assert.deepEqual(sub(UNIFIED_BANK, U.lightHit, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.headSnap });
+  assert.deepEqual(sub(UNIFIED_BANK, U.lightHit, { bodyBlow: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.bodyBlow },
+    "a MID/LOW hit or a crouched victim opens on the body blow");
+  assert.deepEqual(sub(UNIFIED_BANK, U.bigHit, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.bigHit });
+  assert.deepEqual(sub(UNIFIED_BANK, U.bigHit, { victimAirborne: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.launched });
+  assert.deepEqual(sub(UNIFIED_BANK, U.stagger, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.stagger });
+  assert.deepEqual(sub(UNIFIED_BANK, U.knockdown, { ko: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.ko });
+  assert.equal(sub(UNIFIED_BANK, U.knockdown, {}), null, "a plain knockdown keeps the unified cell (the wake-up chain reads it)");
+  for (const cell of [U.idle, U.guard, U.crouch, U.crouchTrans, U.walkContactA, U.jumpRise, U.punchExt]) {
+    assert.equal(sub(UNIFIED_BANK, cell, { bodyBlow: true, ko: true, victimAirborne: true }), null, `unified:${cell} is never substituted`);
+  }
   assert.deepEqual(sub("motion", MOTION_CELLS.bighit, { victimAirborne: false }), { bank: UNIFIED_EXT4_BANK, frame: E4.bigHit });
   assert.deepEqual(sub("motion", MOTION_CELLS.bighit, { victimAirborne: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.launched });
   assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: true, falling: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.falling });
@@ -111,10 +147,12 @@ function testSubstitutionTable() {
     "an attacker's trail after an air strike is the ext descent, or the chambered air cell where the descent was never accepted");
   assert.deepEqual(sub("motion", MOTION_CELLS.airrec, { victimAirborne: false, airborne: false }), { bank: UNIFIED_EXT3_BANK, frame: E3.land },
     "the landing footing holds the land cell");
-  const everyCtx = [{}, { victimAirborne: true }, { victimAirborne: true, falling: true }, { airborne: true, attacking: true }, { attacking: true }];
-  for (const cell of Object.values(MOTION_CELLS)) for (const ctx of everyCtx) {
-    const out = sub("motion", cell, ctx);
+  const everyCtx = [{}, { victimAirborne: true }, { victimAirborne: true, falling: true }, { airborne: true, attacking: true }, { attacking: true },
+    { bodyBlow: true }, { ko: true }, { reeling: true }];
+  for (const bank of ["motion", "motion2", UNIFIED_BANK]) for (let cell = 0; cell < 24; cell += 1) for (const ctx of everyCtx) {
+    const out = sub(bank, cell, ctx);
     assert.ok(!(out && out.bank === UNIFIED_EXT4_BANK && out.frame === E4.airHit), "the inverted air-hit cell is never routed");
+    assert.ok(!(out && out.bank === UNIFIED_EXT4_BANK && out.frame === E4.floorBounce), "the feet-up floor-bounce cell is never routed");
   }
   assert.deepEqual(sub("motion", MOTION_CELLS.wallsplat, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.wallSplat });
   assert.deepEqual(sub("motion", MOTION_CELLS.crumple, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.crumple });
@@ -124,22 +162,23 @@ function testSubstitutionTable() {
   assert.equal(sub("unified", 0, {}), null);
   assert.equal(sub("base", 11, {}), null);
   assert.equal(sub("motion3", 0, {}), null);
-  // Every ext3/ext4 cell except the crouch guard, KO, stagger, body blow and
-  // floor bounce is reachable through the table (those five are reserved for
-  // a later routing pass), and except the air hit, which every sheet drew
-  // inverted and which therefore never routes.
+  // v5.1: every ext3/ext4 cell is reachable through the table except the two
+  // that stay unrouted BY DECISION: the air hit (inverted on every sheet) and
+  // the floor bounce (a body on its shoulders, feet in the air, on every
+  // sheet, with no ground-bounce sim state to key it on). 5.0 reserved the
+  // crouch guard, KO, stagger and body blow "for a later pass"; this is it.
   const reached = new Set();
   const ctxs = [];
   for (const limb of ["punch", "kick"]) for (const heavy of [false, true]) for (const crouching of [false, true])
     for (const attacking of [false, true]) for (const victimAirborne of [false, true]) for (const falling of [false, true])
-      ctxs.push({ limb, heavy, crouching, attacking, airborne: true, victimAirborne, falling });
-  for (const bank of ["motion", "motion2"]) for (let frame = 0; frame < 16; frame += 1) for (const ctx of ctxs) {
+      for (const bodyBlow of [false, true]) for (const reeling of [false, true]) for (const ko of [false, true])
+        ctxs.push({ limb, heavy, crouching, attacking, airborne: true, victimAirborne, falling, bodyBlow, reeling, ko });
+  for (const bank of ["motion", "motion2", UNIFIED_BANK]) for (let frame = 0; frame < 16; frame += 1) for (const ctx of ctxs) {
     const s = sub(bank, frame, ctx);
     if (s && (s.bank === UNIFIED_EXT3_BANK || s.bank === UNIFIED_EXT4_BANK)) reached.add(`${s.bank}:${s.frame}`);
   }
   const expectedUnreached = new Set([
-    `${UNIFIED_EXT3_BANK}:${E3.crouchGuard}`, `${UNIFIED_EXT4_BANK}:${E4.ko}`, `${UNIFIED_EXT4_BANK}:${E4.stagger}`,
-    `${UNIFIED_EXT4_BANK}:${E4.bodyBlow}`, `${UNIFIED_EXT4_BANK}:${E4.floorBounce}`, `${UNIFIED_EXT4_BANK}:${E4.airHit}`,
+    `${UNIFIED_EXT4_BANK}:${E4.floorBounce}`, `${UNIFIED_EXT4_BANK}:${E4.airHit}`,
   ]);
   for (const bank of [UNIFIED_EXT3_BANK, UNIFIED_EXT4_BANK]) for (let frame = 0; frame < 16; frame += 1) {
     const key = `${bank}:${frame}`;
@@ -189,6 +228,74 @@ function testRegistryAndWiring() {
   const adjustBody = gameSource.slice(gameSource.indexOf("function bankSheetAdjust("), gameSource.indexOf("function bankSheetAdjust(") + 1600);
   assert.ok(!adjustBody.includes("UNIFIED_EXT3_BANK") && !adjustBody.includes("UNIFIED_EXT4_BANK"));
   assert.ok(!/hdSheetPath\([^)]*ext[34]/.test(gameSource));
+  // v5.1: the three reaction reads swingResolve hands the table, and the
+  // sim field the body blow keys on — snapshotted as presentation data.
+  const resolveBody = gameSource.slice(gameSource.indexOf("function swingResolve("), gameSource.indexOf("function swingResolve(") + 3000);
+  assert.match(resolveBody, /bodyBlow: fighter\.hitstunFrames > 0/);
+  assert.match(resolveBody, /fighter\.lastHitLevel === ATTACK_LEVELS\.MID \|\| fighter\.lastHitLevel === ATTACK_LEVELS\.LOW/);
+  assert.match(resolveBody, /reeling: \(fighter\.dizzyFrames > 0/);
+  assert.match(resolveBody, /ko: roundDecided && fighter\.health <= 0/);
+  assert.match(gameSource, /"lastHitResult",\s*(\/\/[^\n]*\n\s*)?"lastHitLevel",/, "lastHitLevel is a snapshotted presentation field");
+  assert.match(gameSource, /victim\.lastHitLevel = attack\.level;/);
+  assert.match(gameSource, /victim\.lastHitLevel = projectile\.level;/);
+  // The crouch blockstun branch draws the ext3 crouch guard over the crouch
+  // read, and the flinch-exit bridge rides a crouched block too.
+  assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.crouch && fighter\.grounded\) \{[\s\S]{0,600}beatPoseAt\(crouchBlockstunKeys\(\), blockPhase, uni\(UNIFIED_CELLS\.crouch, base\(roles\.crouch\)\)\)/);
+  assert.match(gameSource, /if \(fighter\.blockstunFrames > 0 && fighter\.grounded && !reducedMotion\) \{\s*\n\s*const blockTotal/);
+  // The engine's sheet fold mirrors the correction game.js applies to the
+  // unified bank, so an on-screen comparison puts it on the right side.
+  assert.match(gameSource, /const UNIFIED_SHEET_ADJUST = Object\.freeze\(\{ commissioner: 1\.033 \}\);/);
+  assert.deepEqual(UNIFIED_SHEET_FOLD, { commissioner: 1.033 });
+}
+
+/**
+ * v5.1 — THE STAND-IN HEIGHT CONTRACT. The ext4 guard flinch drew through a
+ * reconciliation computed for motion2:8 and grew benny 13%, cyraxx 11% and
+ * alan 9% on every blocked hit. Every routed stand-in now lands within the
+ * deadband of the unified rung it replaces (match) or no taller than the idle
+ * (ceiling), on screen, through the one number both renderers read.
+ */
+function testStandInHeights() {
+  const E3 = UNIFIED_EXT3_CELLS, E4 = UNIFIED_EXT4_CELLS;
+  const screen = (id, bank, frame) => swingDrawnHeight(id, bank, frame) * swingStandInAdjust(id, bank, frame);
+  for (const id of SWING) {
+    for (const [bank, frame, cell] of [[UNIFIED_EXT4_BANK, E4.guardFlinch, UNIFIED_CELLS.guard], [UNIFIED_EXT4_BANK, E4.headSnap, UNIFIED_CELLS.lightHit], [UNIFIED_EXT3_BANK, E3.crouchGuard, UNIFIED_CELLS.crouch]]) {
+      const ratio = screen(id, bank, frame) / unifiedScreenHeight(id, cell);
+      assert.ok(Math.abs(ratio - 1) <= SWING_STAND_IN_DEADBAND + 1e-9, `${id} ${bank}:${frame} lands on unified:${cell} (${ratio.toFixed(3)})`);
+    }
+    for (const frame of [E4.bodyBlow, E4.bigHit, E4.stagger]) {
+      const ratio = screen(id, UNIFIED_EXT4_BANK, frame) / unifiedScreenHeight(id, UNIFIED_CELLS.idle);
+      assert.ok(ratio <= 1 + SWING_STAND_IN_DEADBAND + 1e-9, `${id} ext4:${frame} never draws taller than the idle (${ratio.toFixed(3)})`);
+    }
+    for (const [bank, targets] of Object.entries(SWING_STAND_IN_TARGET)) for (const frame of Object.keys(targets)) {
+      const adjust = swingStandInAdjust(id, bank, Number(frame));
+      assert.ok(adjust >= SWING_STAND_IN_CLAMP.min && adjust <= SWING_STAND_IN_CLAMP.max, `${id} ${bank}:${frame} inside the clamp`);
+      assert.equal(cellDrawAdjust(id, bank, Number(frame), { unified: true }) / adjust > 0, true);
+    }
+    // Nothing outside the routed set moves: the get-up rung the wake-up seam
+    // is measured on, the crumple, the thrown cell.
+    for (const frame of [E4.crumple, E4.getupA, E4.getupB, E4.thrown, E4.launched, E4.falling, E4.wallSplat, E4.dizzy, E4.ko]) {
+      assert.equal(swingStandInAdjust(id, UNIFIED_EXT4_BANK, frame), 1, `${id} ext4:${frame} untouched`);
+    }
+    for (let frame = 0; frame < 16; frame += 1) if (frame !== E3.crouchGuard) assert.equal(swingStandInAdjust(id, UNIFIED_EXT3_BANK, frame), 1);
+  }
+  // The measured pop this closes, on the sheets in the repo: without the
+  // reconciliation benny's flinch is 13% over his guard, cyraxx's 11%.
+  assert.ok(swingDrawnHeight("benny", UNIFIED_EXT4_BANK, E4.guardFlinch) / unifiedScreenHeight("benny", UNIFIED_CELLS.guard) > 1.12);
+  assert.ok(swingStandInAdjust("benny", UNIFIED_EXT4_BANK, E4.guardFlinch) < 0.9);
+  assert.equal(swingStandInAdjust("jez", "motion2", MOTION2_CELLS.blockHit), 1, "the motion2 flinch keeps its own M4 path");
+}
+
+/** v5.1 — the crouch blockstun track: flinch to BLOCK_EXIT_AT, then the crouch. */
+function testCrouchBlockstunTrack() {
+  const keys = crouchBlockstunKeys();
+  assert.equal(keys[0].at, 0);
+  assert.deepEqual(keys[0].chain, [{ bank: UNIFIED_EXT3_BANK, cell: UNIFIED_EXT3_CELLS.crouchGuard }]);
+  assert.equal(keys[1].at, BLOCK_EXIT_AT, "hands back on the same tick the standing flinch does");
+  assert.ok(keys.slice(1).every((key) => key.chain.length === 0), "the recovery is the caller's crouch read");
+  assert.deepEqual(keys.map((k) => k.at), blockstunKeys().map((k) => k.at), "same band grid as the standing track");
+  assert.equal(defaultBeatKeyResolve(keys[0], { swing: true }), `${UNIFIED_EXT3_BANK}:${UNIFIED_EXT3_CELLS.crouchGuard}`);
+  assert.equal(defaultBeatKeyResolve(keys[0], { fallback: "crouch" }), "crouch", "a fighter without the sheet reads the crouch on every tick");
 }
 
 testManifestShape();
@@ -197,5 +304,7 @@ testSubstitutionTable();
 testTracksUntouched();
 testMeasuredTables();
 testRegistryAndWiring();
+testStandInHeights();
+testCrouchBlockstunTrack();
 
 console.log("Final Blow swing bank tests passed");
