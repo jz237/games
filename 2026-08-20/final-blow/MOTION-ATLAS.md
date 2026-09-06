@@ -4466,3 +4466,94 @@ from the drawn height they ship at today (benny 8/11, deathblow 7/8/9,
 cyraxx 14, post 5) — all of them cells whose new pose or effect extent is
 genuinely a different height, not a scale error; each is a bank-internal
 difference, not a step inside one move.
+## v5.3 — SPECTACLE: THE KO COLLAPSE, OR WHY THE LOSER WAS STANDING UP FOR HIS OWN KNOCKOUT
+
+Routing and a knockdown flag, no art. The integrator's 5.2 screenshot is the
+whole finding: "JEZ WINS · KNOCKOUT" across the middle of the screen, Jez
+holding the ext5 victory — and Benny STANDING BESIDE HIM, feet planted, head
+snapped back, for the full 4.9 s of the curtain call.
+
+It was never a drawing that was missing. `checkKnockout` opens the FINISH
+THEM window by explicitly UN-DOWNING the victim so he is dazed on his feet
+for the stand-off — `down = false`, `knockdownFrames = 0`, `wakeupFrames = 0`,
+`stun = 99`, `hitstunFrames = 5940` — which is exactly right for the six
+seconds the winner is being offered a Final Blow. When that window EXPIRES
+unspent, `finishRound(finishWinner, -1)` flipped the phase to roundover and
+touched none of it. So the pose read fell all the way through to the
+`hitFlash > 0 || hitstunFrames > 21` branch and drew `unified:12` — which
+`swingSubstitute` turns into **ext4:1 head snap** (or ext4:2 body blow if the
+killing hit was LOW or he was crouched) — for every tick of the hold.
+Measured in the browser against the base commit, jez vs benny on Somerset,
+the loser's chain across the edge:
+
+    5.2   finish window   unified-ext4:1                (correct: he is dazed and upright)
+    5.2   roundover       unified-ext4:1 x295           down=false, hitstun 5579, 0 dust, no thud
+
+The ext4 KO lie was already routed and already unreachable:
+`swingSubstitute` maps the unified `knockdown` rung to **ext4:15** under the
+resolver's `ko` context (`roundDecided && health <= 0`), so the drawing 5.0
+paid for only ever needed a fighter who was actually DOWN. Nobody ever put
+one there on a plain KO.
+
+**The collapse is `enterKnockdown` and nothing else.** At the finish ->
+roundover edge, in the `type < 0` branch of `finishRound` (a FINAL BLOW never
+reaches it — it returns through the finisher branch above), the loser is laid
+down through the ordinary knockdown path, so the crumple -> KO-lie handover,
+the prone down-tilt and the settle on the boards all arrive for free in BOTH
+renderers and the sim gains no new field to snapshot. Three fields are
+cleared first, because they are the STAND-OFF's and the pose read is ordered
+dizzy -> hitstun -> down: a body still holding 5940 hitstun frames or a dizzy
+clock would draw a standing reel over a fighter lying on the street.
+
+The decision is three pure functions in `engine/bookends.mjs`, beside the
+intro and the win pose the same file already owns:
+
+  * `koCollapseOnRoundEnd` — fires once, at the edge. The cause comes from
+    `roundEndCause` (announcer.mjs), the same classifier the banner and the
+    "K.O.!" call already read, so a DECISION never lays anyone down, a FINAL
+    BLOW keeps its own script, and a fighter already prone or still airborne
+    is left exactly where he is.
+  * `koCollapseHolds` — true while a decided round's KO lie must not tick
+    away. This is the one that had to exist: `DEFENSE_RULES.knockdownFrames`
+    is 48 and the roundover hold is 294, so left alone the loser stands back
+    up **0.8 s into the winner's curtain call** and plays a wake-up rung off
+    a KO. The countdown still RUNS (the crumple band reads it); it floors at
+    1 instead of 0, so `wakeupFrames` is never armed at all — which is what
+    makes the result screen and the rematch clean rather than a getup being
+    suppressed somewhere downstream.
+  * `koCollapseThudTick` — the single tick the body reaches the boards: the
+    crumple band's last frame, `48 - 7`. The thud and the dust are spent
+    THERE, ~117 ms after the flag, not at the phase edge with the fighter
+    still upright.
+
+`KO_COLLAPSE_CRUMPLE_TICKS` is the 7 the knockdown read has always used; it
+is a named constant now so the landing beat and the drawing cannot drift.
+
+THE LANDING is `spawnKnockdownImpact` at 320 px/s — the game's own body-hits-
+the-floor beat, at the bottom of its force clamp (0.55): a small dust puff
+(measured: 8 motes at the peak, 0 at the edge), a 102 px floor ring, the
+scuff scar, and a thud that resolves `hit-heavy` -> the shared body-hit take
+through the 5.1 per-play jitter. Browser-measured at the landing tick:
+`assets/audio/body-hit.mp3` at playbackRate **0.9369** — a real draw off the
+±8% span, not the file played flat, and `distinctDraw` guarantees the next
+one cannot share it. The KO groan (`knockout.mp3`) still fires at the edge,
+0.117 s ahead of the thud, so the two read as a groan and then a body
+landing rather than one event.
+
+Traced in the browser (jez vs benny, Somerset, the same probe as the 5.2 row
+above) and at node level in `tests/bookends.test.mjs` with the shipped
+manifests as the gate:
+
+    5.3   edge            down=true, knockdownFrames 48, hitstun 0        (phase flips at tick 360 = 6.00 s, unchanged)
+    5.3   roundover       unified-ext4:9 x7 -> unified-ext4:15 x288       thud + dust at kdf 41, one landing only
+    5.3   hold ends       down=true, knockdownFrames 1, wakeupFrames 0     no getup cell (ext4:12 / ext4:13) ever draws
+    5.3   round 2 opens   intro/unified-ext5:9 -> ext5:10                 fresh fighter, health 100, down=false
+    control (decision)    loser stands on unified:0, down=false            a timer win still ends with two fighters up
+    CINEMA 3D             the same two cells, the same lie                 `proneTransform` reads `fighter.down` over the host bridge
+
+Nothing the player can time moved: `state.phaseTime`, `roundWinHoldSeconds()`
+(4.9), the 6 s FINISH THEM window, `DEFENSE_RULES.knockdownFrames` and the
+crowd's KO hold latch (`updateCrowdKoHoldLatch`, keyed on the phase alone)
+are all untouched, and the winner still reads `ext5:11 -> ext5:12` beside the
+body exactly as 5.2 shipped it. The whole change is a drawing and a knockdown
+flag on a round that is already decided.

@@ -368,8 +368,12 @@ import {
   sampleFinisher,
 } from "./engine/finisher-scripts.mjs";
 import {
+  KO_COLLAPSE_CRUMPLE_TICKS,
   ROUND_WIN_HOLD_SECONDS,
   introEntranceCell,
+  koCollapseHolds,
+  koCollapseOnRoundEnd,
+  koCollapseThudTick,
   roundWinShowcaseCell,
 } from "./engine/bookends.mjs";
 import {
@@ -12024,6 +12028,17 @@ function finishRound(winner, type = -1) {
     });
     announce(`${winDef.name} WINS`, roundEndBannerSub(cause), 2.4, { speak });
     if (cause !== ROUND_END_CAUSES.decision) sound("ko", loser);
+    // v5.3 SPECTACLE (ko-collapse): THE BODY GOES DOWN. checkKnockout stood
+    // the victim up for the Final Blow stand-off (down=false, stun=99,
+    // hitstunFrames=5940); when that window expires unspent the loser was
+    // left on his feet, drawing the head-snap for the whole 4.9 s hold. The
+    // decision is engine/bookends koCollapseOnRoundEnd — knockout only, and
+    // only a fighter still standing on the ground — so a DECISION and a
+    // FINAL BLOW are both untouched (the finisher branch above never reaches
+    // here at all). Everything after this is the ORDINARY knockdown path.
+    if (koCollapseOnRoundEnd({
+      cause, health: loser.health, down: loser.down, grounded: loser.grounded,
+    })) collapseKoLoser(loser);
   }
   // Wave 9: round-story callouts (FLAWLESS / COMEBACK / time-over / fatality)
   // layered after the primary call — guarded + deduped like announce().
@@ -14500,6 +14515,42 @@ function enterKnockdown(fighter) {
   fighter.inputBuffer.clear();
 }
 
+// v5.3 SPECTACLE (ko-collapse): the plain KO's collapse, spent at the
+// finish->roundover edge. It is enterKnockdown and nothing else — the same
+// flags, the same countdown, so the crumple -> KO-lie drawing, the prone
+// down-tilt (2D `downTiltFor`, CINEMA 3D `proneTransform` over the same host
+// bridge member) and the settle on the boards all come for free in both
+// renderers, and the sim gains no new field to snapshot.
+//
+// The three lines before it undo what the STAND-OFF needed: checkKnockout
+// parked the victim on 99 stun and 5940 hitstun frames so he would stay dazed
+// and upright for the 6 s window, and the pose read is ordered
+// dizzy -> hitstun -> down, so a body left holding either of those would draw
+// a standing reel over a fighter who is lying on the street. A KO'd fighter
+// is not reeling and is not in hitstun; he is on the floor.
+function collapseKoLoser(fighter) {
+  fighter.stun = 0;
+  fighter.hitstunFrames = 0;
+  fighter.dizzyFrames = 0;
+  fighter.dizzyTotalFrames = 0;
+  fighter.guardCrushFrames = 0;
+  enterKnockdown(fighter);
+}
+
+// The moment the collapsing body reaches the boards — the crumple band's last
+// tick, ~117 ms after the flag, never the phase edge with the fighter still
+// upright. It is the knockdown landing the game already has: a small dust
+// puff (force floors at 0.55, so 8 motes and a 102 px floor ring), the scuff
+// scar, and the thud, which resolves `hit-heavy` -> the shared body-hit take
+// through the 5.1 per-play jitter (±8% pitch, ±1.5 dB, no two consecutive
+// draws alike — engine/shared-sfx.mjs). No fighter has a signature hit-heavy
+// take, so the shared pool is always what plays here.
+const KO_COLLAPSE_LANDING_VELOCITY = 320;
+
+function spawnKoCollapseLanding(fighter) {
+  spawnKnockdownImpact(fighter, KO_COLLAPSE_LANDING_VELOCITY);
+}
+
 // Release 1.7: guard gauge — the addStun mirror for BLOCKED pressure. Fed
 // from the blocked branch of hit() where blockstunFrames is set; immune and
 // already-crushed defenders take no pressure, and a Perfect Guard absorbs the
@@ -14634,11 +14685,33 @@ function advanceFighterTimers(fighter) {
   }
 
   if (fighter.down && fighter.grounded) {
-    fighter.knockdownFrames = Math.max(0, fighter.knockdownFrames - 1);
-    if (fighter.knockdownFrames === 0) {
-      fighter.down = false;
-      fighter.wakeupFrames = DEFENSE_RULES.wakeupFrames;
-      fighter.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
+    // v5.3 SPECTACLE (ko-collapse): a DECIDED round's KO lie holds. The
+    // knockdown countdown is 48 ticks and the roundover hold is 294, so
+    // without this the loser stands up 0.8 s into the winner's curtain call
+    // and plays a wake-up rung off a KO. The countdown still runs (the
+    // crumple -> KO-lie handover reads it); it floors at 1, so `wakeupFrames`
+    // is never armed and the result screen and the rematch open on a clean
+    // fighter. Purely derived from snapshotted fields — see
+    // engine/bookends koCollapseHolds — so a resim agrees without a new field.
+    const koLie = koCollapseHolds({
+      phase: state.phase,
+      finisher: Boolean(state.finisher),
+      finisherType: state.finisherType,
+      health: fighter.health,
+      down: true,
+    });
+    if (koLie && fighter.knockdownFrames <= 1) {
+      fighter.knockdownFrames = 1;
+    } else {
+      fighter.knockdownFrames = Math.max(0, fighter.knockdownFrames - 1);
+      if (koLie && koCollapseThudTick(fighter.knockdownFrames, DEFENSE_RULES.knockdownFrames)) {
+        spawnKoCollapseLanding(fighter);
+      }
+      if (fighter.knockdownFrames === 0) {
+        fighter.down = false;
+        fighter.wakeupFrames = DEFENSE_RULES.wakeupFrames;
+        fighter.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
+      }
     }
   } else if (fighter.wakeupFrames > 0) {
     fighter.wakeupFrames -= 1;
@@ -19423,10 +19496,18 @@ function fighterPoseDescriptor(fighter) {
     }
   }
   if (fighter.down || fighter.knockdownFrames > 0) {
-    // The first beats of the knockdown keep the mid-collapse key.
-    if (fighter.down && fighter.knockdownFrames > DEFENSE_RULES.knockdownFrames - 7) {
+    // The first beats of the knockdown keep the mid-collapse key (ext4:9
+    // through the substitution). v5.3 SPECTACLE (ko-collapse): the band
+    // length is KO_COLLAPSE_CRUMPLE_TICKS now — the same 7 it has always
+    // been, named so the collapse's landing beat (the thud and the dust,
+    // spent on the tick this band hands over) and this drawing read ONE
+    // number and cannot drift apart.
+    if (fighter.down && fighter.knockdownFrames > DEFENSE_RULES.knockdownFrames - KO_COLLAPSE_CRUMPLE_TICKS) {
       return motionPose(MOTION_CELLS.crumple, "base", roles.down);
     }
+    // The KO lie: on a decided round against a fighter at 0 health the
+    // resolver's `ko` context turns this rung into ext4:15 (swingSubstitute),
+    // which is the drawing 5.0 paid for and nothing had ever reached.
     return uni(UNIFIED_CELLS.knockdown, base(roles.down));
   }
   // v2.6 BODY-FIRST (core 2): EVERY hit sequences the victim through a
