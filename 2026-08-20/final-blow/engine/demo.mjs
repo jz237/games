@@ -3,10 +3,14 @@ import { DeterministicRng, hashSeed } from "./foundation.mjs";
 export const DEMO_IDLE_DELAY_MS = 45_000;
 export const DEMO_RESULT_HOLD_MS = 5_000;
 import { registerAiDifficulty, resolveAiSettings } from "./ai.mjs";
+import { getFighterKit } from "./fighter-kits.mjs";
 
 // 4.3 DEMO SPACING: the attract-mode CPUs fight on a PRO brain with every kit
 // range widened 1.6x and the mid-band pokes thinned, so the two never sit in
 // a permanent clinch and each move can be read from the couch.
+//
+// 5.4 PERSONAS (sweep #2): kept registered as the FALLBACK for a kit without
+// a persona, but no shipped kit uses it any more — see DEMO_PERSONAS.
 export const DEMO_AI_DIFFICULTY = "demo";
 registerAiDifficulty(DEMO_AI_DIFFICULTY, {
   ...resolveAiSettings("pro"),
@@ -105,6 +109,123 @@ export function demoCloserPlan({
   const finisher = reason !== "plain";
   const shown = Number(ledger?.[fighterId]) || 0;
   return Object.freeze({ finisher, variant: finisher ? shown % 2 : -1, reason });
+}
+
+// ---------------------------------------------------------------------------
+// 5.4 PERSONAS — one demo brain per ARCHETYPE instead of one for the roster.
+//
+// The 4.3 tier widened every kit 1.6x and floored the bands at 230/130/340px,
+// which made the attract loop readable and also made it anonymous: sampled
+// with 3000 decideAiIntent rolls per fighter per distance, EVERY fighter's top
+// intent at 90-200px was `retreat` (50-78%) and at 260-520px `advance`
+// (50-62%) — the grappler backed out of the clinch he is built for, the zoner
+// walked in on the band his golf ball was authored for, and the pair traded
+// 21-33 walk reversals a minute. Each persona below is a PRO brain with the
+// kit's own ranges (floors off), its own clinch line (`spaceRange`), and band
+// weights that push the signature move back into the band it belongs in.
+// Every knob is undefined on the built-in tiers, so a played match is
+// byte-identical (tests/demo-personas.test.mjs pins that against a copy of
+// the 5.3 table body).
+//
+// The 1.6x widening survives in exactly one place: the APPROACH band of the
+// three close-range kits (deathblow 82px, alan 96px, benny 92px — the
+// grappler, the counter-puncher and the rushdown). They still open from a
+// readable distance and walk in — the walk-in is the point of all three —
+// but their preferred bands are the authored ones, so the fight ends up
+// where the kit was designed to be fought.
+//
+// The Grit policy (sweep #6) is shared by every persona: a full bar on a
+// confirmed hit is the super (`superConfirmChance`, ahead of the combo roll),
+// the standalone super's share rises from 0.38 to 0.6 of meterChance inside
+// `superRange`, and a half bar converts the band's own action to EX at 0.8
+// instead of 0.5.
+const DEMO_GRIT_POLICY = Object.freeze({
+  superConfirmChance: 0.92,
+  meterSuperShare: 0.6,
+  exShare: 0.8,
+  superRange: 270,
+});
+
+export const DEMO_PERSONAS = Object.freeze({
+  // Keep-away: hold the far band, fire the projectile/trap on it, throw
+  // almost never, and back out of anything under ~190px.
+  zoner: Object.freeze({
+    label: "DEMO · ZONER",
+    spacing: 1.3, patience: 0.7, spaceRange: 190, spacingFloors: null,
+    rangedWeight: 3, pokeWeight: 1.2, throwWeight: 0.3, holdSlack: 50,
+    throwChance: 0.05, grabPressureChance: 0.1,
+    reactionFrames: 10, decisionFrames: 12, comboChance: 0.45, tauntChance: 0.08,
+    superRange: 300,
+  }),
+  // Grab pressure: authored ranges, no clinch line at all, the throw and
+  // the meaty grab at real shares, and the wide walk-in.
+  grappler: Object.freeze({
+    label: "DEMO · GRAPPLER",
+    spacing: 1, approachSpacing: 1.6, patience: 0, spaceRange: 0, spacingFloors: null,
+    throwWeight: 1.8, closeWeight: 1.2,
+    throwChance: 0.3, grabPressureChance: 0.4, meatyChance: 0.7, clinchTechChance: 0.55,
+    reactionFrames: 9, decisionFrames: 10, comboChance: 0.55,
+  }),
+  // Hunt: impatient, dashes in from the approach band, converts confirms.
+  rushdown: Object.freeze({
+    label: "DEMO · RUSHDOWN",
+    spacing: 1, approachSpacing: 1.6, patience: 0.2, spaceRange: 0, spacingFloors: null,
+    dashInChance: 0.45, pokeWeight: 1.3,
+    throwChance: 0.15, comboChance: 0.7, meatyChance: 0.6,
+    reactionFrames: 8, decisionFrames: 9,
+  }),
+  // Retreat and punish: sits just outside, blocks and perfect-guards more,
+  // takes the counter on nearly every swing it sees, punishes every whiff.
+  counter: Object.freeze({
+    label: "DEMO · COUNTER",
+    spacing: 1.15, approachSpacing: 1.6, patience: 0.5, spaceRange: 130, spacingFloors: null,
+    counterChance: 0.9, counterFirstChance: 0.55, pokeWeight: 0.8, holdSlack: 30,
+    defenseChance: 0.84, perfectGuardChance: 0.42, throwWhiffPunishChance: 0.9,
+    throwChance: 0.12, errorChance: 0.05,
+    reactionFrames: 8, decisionFrames: 11,
+  }),
+  // Mid-range pokes at the edge of reach.
+  footsies: Object.freeze({
+    label: "DEMO · FOOTSIES",
+    spacing: 1.2, patience: 0.45, spaceRange: 120, spacingFloors: null,
+    pokeWeight: 1.6, holdSlack: 40, throwChance: 0.16, comboChance: 0.5,
+    reactionFrames: 9, decisionFrames: 11,
+  }),
+  // The echo: a zoner's ranged share with a rushdown's occasional dash.
+  trickster: Object.freeze({
+    label: "DEMO · TRICKSTER",
+    spacing: 1.2, patience: 0.5, spaceRange: 150, spacingFloors: null,
+    rangedWeight: 2.2, pokeWeight: 1.2, dashInChance: 0.15, holdSlack: 40,
+    throwChance: 0.12, tauntChance: 0.1,
+    reactionFrames: 10, decisionFrames: 12,
+  }),
+  // Hit and run: quick decisions, dashes in, leaves after the exchange.
+  skirmisher: Object.freeze({
+    label: "DEMO · SKIRMISHER",
+    spacing: 1.15, patience: 0.45, spaceRange: 130, spacingFloors: null,
+    pokeWeight: 1.3, dashInChance: 0.3, holdSlack: 30,
+    throwChance: 0.14, airRecoveryChance: 0.6,
+    reactionFrames: 8, decisionFrames: 10,
+  }),
+});
+
+export const DEMO_PERSONA_PREFIX = "demo-";
+
+for (const [name, persona] of Object.entries(DEMO_PERSONAS)) {
+  registerAiDifficulty(`${DEMO_PERSONA_PREFIX}${name}`, {
+    ...resolveAiSettings("pro"),
+    ...DEMO_GRIT_POLICY,
+    ...persona,
+    persona: name,
+  });
+}
+
+// The registered AI tier a fighter plays in the demo: its kit's authored
+// `ai.persona`, or the 4.3 fallback tier for a kit that names none. Pure
+// lookup — game.js makeFighter calls it under `state.mode === "demo"` only.
+export function demoPersonaFor(fighterId) {
+  const persona = getFighterKit(fighterId)?.ai?.persona;
+  return persona && DEMO_PERSONAS[persona] ? `${DEMO_PERSONA_PREFIX}${persona}` : DEMO_AI_DIFFICULTY;
 }
 
 function uniqueStrings(values = []) {

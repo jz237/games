@@ -242,9 +242,22 @@ export function whiffedThrowPunish(observation, frame) {
   return (observation.attackFrame + age) >= observation.attackActiveEndFrame;
 }
 
-function inputFromIntent(intent, self, observation, pulseAction = false, frame = observation.frame) {
+// 5.4 PERSONAS: a dash intent is pressed the way a human presses it — two
+// toward-edges inside MOVEMENT_RULES.dashTapWindowFrames. The brain's input
+// is a held state, so the release has to be explicit: neutral, toward,
+// neutral, toward-and-hold over the four ticks after the decision. Only a
+// `dash: true` intent takes this path.
+function applyDashMovement(input, self, observation, age) {
+  const towardRight = observation.x > self.x;
+  if (age === 0 || age === 2) return;
+  input.right = towardRight;
+  input.left = !towardRight;
+}
+
+function inputFromIntent(intent, self, observation, pulseAction = false, frame = observation.frame, decidedAt = -Infinity) {
   const input = emptyInput();
-  applyMovement(input, intent.movement, self, observation);
+  if (intent.dash) applyDashMovement(input, self, observation, frame - decidedAt);
+  else applyMovement(input, intent.movement, self, observation);
   input.guard = Boolean(intent.guard) && (!intent.justDefend || justDefendHold(observation, frame));
   input.down = Boolean(intent.down);
   input.jump = Boolean(intent.jump && pulseAction);
@@ -279,7 +292,21 @@ function enhancedVersion(action) {
 function comboFollowup(self, settings, roll) {
   if (!self.attacking || self.attackConnected !== "hit") return null;
   const comboKey = `${self.attackSerial || 0}:${self.attackHits || 0}`;
-  if (self.aiBrain?.lastComboKey === comboKey || mixRoll(roll, 2) >= settings.comboChance) return null;
+  if (self.aiBrain?.lastComboKey === comboKey) return null;
+  // 5.4 GRIT POLICY (sweep #6, demo personas only — `superConfirmChance` is
+  // unset on every player-facing tier). A full bar on a CONFIRMED hit is the
+  // super, ahead of the combo roll: the same confirm window the sim opens for
+  // a human (fighter.confirmWindowFrames, set at every contact site) is the
+  // gate, and attackConnected is the fallback for a view without the field.
+  // Measured before this: a demo fighter sat on 100 Grit for 30-39% of the
+  // fight and 20 of 32 rounds ended with the bar still full.
+  if ((settings.superConfirmChance || 0) > 0
+    && self.meter >= GRIT_RULES.superCost
+    && (self.confirmWindowFrames === undefined || self.confirmWindowFrames > 0)
+    && mixRoll(roll, 40) < settings.superConfirmChance) {
+    return { action: "super", comboKey, confirmed: true };
+  }
+  if (mixRoll(roll, 2) >= settings.comboChance) return null;
   if (self.meter >= GRIT_RULES.superCost && mixRoll(roll, 3) < settings.meterChance) return { action: "super", comboKey };
   const current = self.attacking.kitAction;
   let action = ["light", "heavy", "driveHeavy"].includes(current) ? "special"
@@ -320,7 +347,10 @@ export function decideAiIntent(brain, {
   const distance = Math.abs(observation.x - self.x);
   const combo = comboFollowup({ ...self, aiBrain: brain }, settings, roll);
   if (combo) {
-    return { movement: "hold", action: combo.action, reason: "hit-confirm", comboKey: combo.comboKey };
+    return {
+      movement: "hold", action: combo.action,
+      reason: combo.confirmed ? "grit-confirm" : "hit-confirm", comboKey: combo.comboKey,
+    };
   }
 
   // Release 1.7: downed — pick a wake-up option through the same inputs a
@@ -421,6 +451,18 @@ export function decideAiIntent(brain, {
     return { movement: "hold", action: "taunt", reason: "taunt" };
   }
 
+  // 5.4 PERSONAS: the counter-puncher answers a swing with the kit's AUTHORED
+  // counter (alan's backSpecial, counterRange 172) at `counterFirstChance`
+  // before the block roll gets to it. On every player-facing tier that knob
+  // is unset and the defense branch below runs first exactly as in 5.3 —
+  // which is why, sampled, alan's authored counter fired on 0% of swings on
+  // the flat demo tier and the "counter-puncher" read as a wall.
+  if ((settings.counterFirstChance || 0) > 0 && observation.attacking && kit?.ai?.counterAction
+    && distance < (kit.ai.counterRange || 160) && self.grounded
+    && mixRoll(roll, 42) < settings.counterFirstChance) {
+    return { movement: "hold", action: kit.ai.counterAction, reason: "counter-read" };
+  }
+
   const incomingRange = Math.min(300, (observation.attackRange || 105) + 42);
   if (observation.attacking && distance <= incomingRange) {
     const defend = mixRoll(roll, 5) < settings.defenseChance;
@@ -477,8 +519,12 @@ export function decideAiIntent(brain, {
   // inside the clinch with nothing incoming, it opens the gap first — a
   // back-jump a third of the time, a back-walk otherwise — so the next
   // exchange is readable from a distance.
+  // 5.4 PERSONAS: `spaceRange` is the persona's own clinch line (150 as
+  // before when unset). A grappler or a rushdown persona sets it to 0 — the
+  // clinch IS their game — which is what removed the walk reversals measured
+  // at 21-33 per minute per fighter.
   if ((settings.patience || 0) > 0 && !observation.attacking && self.grounded
-    && distance < 150 && mixRoll(roll, 30) < settings.patience) {
+    && distance < (settings.spaceRange ?? 150) && mixRoll(roll, 30) < settings.patience) {
     // (5.4: the demo CLOCK tier sets spaceJumpShare 0 — a back-jump into
     // the other brain's anti-air launcher was the juggle that floored a bar
     // in 15 s on a round meant to reach the buzzer.)
@@ -487,6 +533,9 @@ export function decideAiIntent(brain, {
       : { movement: "retreat", action: null, reason: "demo-space" };
   }
 
+  // 5.4 PERSONAS: the persona's band weights ride into the kit table. Every
+  // one is undefined on the built-in tiers, which selectKitAiIntent resolves
+  // to its identity default, so a played match reads the 5.3 tables exactly.
   let intent = selectKitAiIntent(fighterId, {
     distance,
     opponentAirborne: !observation.grounded,
@@ -497,15 +546,35 @@ export function decideAiIntent(brain, {
     patience: settings.patience || 0,
     // 5.4: only the demo CLOCK tier sets `swing`; every other tier is 1.
     swing: settings.swing ?? 1,
+    floors: settings.spacingFloors,
+    approachSpacing: settings.approachSpacing,
+    pokeWeight: settings.pokeWeight,
+    rangedWeight: settings.rangedWeight,
+    throwWeight: settings.throwWeight,
+    closeWeight: settings.closeWeight,
+    counterChance: settings.counterChance,
+    holdSlack: settings.holdSlack,
   }) || { movement: "hold", action: null };
 
+  // 5.4 PERSONAS: the rushdown dash-in. An empty-handed walk-in from the
+  // approach band sometimes becomes a double-tap dash (see inputFromIntent) —
+  // the same →→ a human presses — at the persona's share. Zero on every
+  // player-facing tier.
+  if ((settings.dashInChance || 0) > 0 && intent.movement === "advance" && !intent.action
+    && self.grounded && distance > 200 && mixRoll(roll, 41) < settings.dashInChance) {
+    intent = { movement: "advance", action: null, dash: true, reason: "dash-in" };
+  }
+
+  // 5.4 GRIT POLICY knobs (unset on the built-in tiers = the 5.3 numbers):
+  // `meterSuperShare` is the standalone super's share of meterChance inside
+  // `superRange`; `exShare` the EX conversion's share on a half bar.
   if (self.meter >= GRIT_RULES.superCost
-    && distance < 270
-    && mixRoll(roll, 12) < settings.meterChance * 0.38) {
+    && distance < (settings.superRange ?? 270)
+    && mixRoll(roll, 12) < settings.meterChance * (settings.meterSuperShare ?? 0.38)) {
     intent = { movement: "hold", action: "super", reason: "meter-super" };
   } else if (intent.action
     && self.meter >= GRIT_RULES.enhancedSpecialCost
-    && mixRoll(roll, 13) < settings.meterChance * 0.5) {
+    && mixRoll(roll, 13) < settings.meterChance * (settings.exShare ?? 0.5)) {
     intent = { ...intent, action: enhancedVersion(intent.action), reason: "enhanced-special" };
   }
 
@@ -551,7 +620,9 @@ export function stepAiBrain(brain, {
   const observation = getReactionObservation(brain, frame);
   if (!observation) return emptyInput();
   brain.lastObservedFrame = observation.frame;
-  if (frame < brain.nextDecisionFrame) return inputFromIntent(brain.intent, self, observation, false, frame);
+  if (frame < brain.nextDecisionFrame) {
+    return inputFromIntent(brain.intent, self, observation, false, frame, brain.lastDecisionFrame);
+  }
 
   brain.intent = applyRepetitionGuard(
     brain,
@@ -573,7 +644,7 @@ export function stepAiBrain(brain, {
   brain.nextDecisionFrame = timedRead ? frame + 1 : frame
     + resolveAiSettings(brain.difficulty).decisionFrames
     + Math.floor(mixRoll(roll, 16) * 4);
-  return inputFromIntent(brain.intent, self, observation, true, frame);
+  return inputFromIntent(brain.intent, self, observation, true, frame, brain.lastDecisionFrame);
 }
 
 export function aiBrainSnapshot(brain) {

@@ -158,14 +158,21 @@ import {
 } from "./defense.mjs";
 import { createFighterMove, getKitMoveProfile, selectKitMoveKey } from "./fighter-kits.mjs";
 import { getThrowable } from "./throwables.mjs";
-import { COMBO_RULES, GRIT_RULES } from "./combos.mjs";
+import { CANCEL_ROUTES, COMBO_RULES, GRIT_RULES } from "./combos.mjs";
 
 // Coverage share of the pick policy: the rest of the time the choreographer
 // deliberately stands down and lets the archetype AI play a natural window.
 // Higher than the first pass because a lane that is NOT showcasing now runs
 // the brain anyway — the pair is never both scripted unless a beat needs it,
 // so the exhibition keeps its natural texture at a smaller explicit share.
-export const DEMO_COVERAGE_BLEND = 0.8;
+//
+// 5.4 PERSONAS (sweep #2): 0.8 → 0.55. Measured at 0.8, 87.5% of the moves a
+// viewer saw were checklist picks fired once each and the archetype brain
+// executed 39 of 311 — the exhibition was a moves reel. The cumulative attract
+// ledger (priorShown / carryover) already finishes the checklist ACROSS
+// cycles, so one exhibition no longer has to; it hands nearly half its
+// windows to the persona brain and reads as the two archetypes fighting.
+export const DEMO_COVERAGE_BLEND = 0.55;
 
 // How often a coverage pick chases an unstaged spectacle instead of the next
 // checklist move. Beats are cheap to interleave and expensive to chase, so
@@ -244,6 +251,9 @@ const BEAT_REPEAT_DEFAULT = 0.25;
 // a normal the opponent keeps interrupting).
 const ITEM_FAIL_BUDGET = 3;
 const ITEM_BACKOFF_FRAMES = 170;
+// 5.4 GRIT POLICY: how long a full bar waits between attempts to steer the
+// picker onto a confirm opener (see gritSteerReady).
+const GRIT_STEER_FRAMES = 240;
 
 // The full kit-move grid, in the same action/context vocabulary beginAttack
 // resolves through selectKitMoveKey — so the checklist ids and the recorded
@@ -400,6 +410,30 @@ export function demoStunStringIds(fighterId) {
     topUp: topUp.length ? topUp : build,
     link: link.length ? link : build.length ? build : topUp,
   };
+}
+
+/**
+ * 5.4 GRIT POLICY (sweep #6) — the grounded checklist ids whose move can be
+ * CANCELLED INTO THE SUPER off a confirmed hit (combos.mjs CANCEL_ROUTES,
+ * read off the kit's own attack instances). These are the confirm openers: a
+ * full bar is spent by showcasing one of them and chaining `super` into the
+ * cancel window the sim opens on contact — the same hit-confirm route a human
+ * plays, never a raw super pressed at nothing. Air normals and the forward
+ * command normals are excluded for the same reasons the stun string excludes
+ * them (no ground cancel; the settle hold).
+ */
+export function demoSuperConfirmIds(fighterId) {
+  const ids = [];
+  for (const id of demoCoverageChecklist(fighterId)) {
+    if (id.startsWith("air") || id === "super" || EX_ACTIONS.has(id)) continue;
+    if (id === "throw" || id === "throwObject" || id === "enhancedThrowObject") continue;
+    if (ROW_FOR_ID.get(id)?.context?.forwardHeld) continue;
+    const move = moveInstanceFor(fighterId, id);
+    if (!move) continue;
+    const routes = move.cancelRoutes || CANCEL_ROUTES[move.cancelProfileId || move.profileId];
+    if (routes?.includes("super")) ids.push(id);
+  }
+  return ids;
 }
 
 // --- staging geometry ------------------------------------------------------
@@ -790,6 +824,8 @@ export function createDemoChoreographer({
     return { build: new Set(build), topUp: new Set(topUp), link: new Set(link) };
   });
   const airIds = pair.map((fighterId, side) => checklists[side].filter((id) => AIR_ROW_IDS.has(id)));
+  // 5.4 GRIT POLICY: the confirm openers per side (see demoSuperConfirmIds).
+  const confirmIds = pair.map((fighterId) => new Set(demoSuperConfirmIds(fighterId)));
   const coverage = pair.map((fighterId, side) => ({
     fighterId,
     side,
@@ -817,6 +853,12 @@ export function createDemoChoreographer({
     airRowPicks: 0, slamPresses: 0, yieldTicks: 0, trailerBoosts: 0,
     topUpCloserPicks: 0,
     turnaroundSeen: 0, turnaroundBlind: {},
+    // 5.4 GRIT POLICY diagnostics.
+    //   gritOpeners  — picks steered onto a confirm opener because the bar
+    //                  was full
+    //   gritLinks    — `super` chained into a confirmed opener on a full bar
+    //   gritPreempts — plain unstarted showcases restarted for the opener
+    gritOpeners: 0, gritLinks: 0, gritPreempts: 0,
   };
   const previous = [null, null];
 
@@ -832,6 +874,9 @@ export function createDemoChoreographer({
   // again. Both are plain tick counters off the sim clock, so they replay.
   const yieldUntil = [0, 0];
   const yieldReleaseUntil = [0, 0];
+  // 5.4 GRIT POLICY: per side, the tick the picker may next be steered onto
+  // a confirm opener (see gritSteerReady).
+  const gritSteerBlockedUntil = [0, 0];
   const idleScript = [
     { mode: "stand", until: 0 },
     { mode: "stand", until: 0 },
@@ -994,6 +1039,24 @@ export function createDemoChoreographer({
     const rival = view.fighters[1 - side];
     if (!Number.isFinite(self?.health) || !Number.isFinite(rival?.health)) return false;
     return self.health - rival.health >= HEALTH_GAP_TOLERANCE && coverageGap(side) > 0;
+  }
+
+  // 5.4 GRIT POLICY: the bar is full and there is a super to spend it on.
+  function gritReady(side, view) {
+    const self = view.fighters[side];
+    return self.meter >= GRIT_RULES.superCost
+      && view.tick >= itemBlockedUntil[side].super;
+  }
+
+  // ...and the checklist may be STEERED onto a confirm opener for it. One
+  // steer per bar: a full bar whose opener whiffed (or whose link the sim
+  // refused) waits GRIT_STEER_FRAMES before the picker is bent again, so a
+  // bar that stays full — the sim-lite harness starts every fighter on 100 —
+  // can never starve the free lane and the air row the way the old
+  // least-shown `super` item starved nothing. The LINK (chainItem) has no
+  // such cooldown: that is the spend itself.
+  function gritSteerReady(side, view) {
+    return gritReady(side, view) && view.tick >= gritSteerBlockedUntil[side];
   }
 
   function trailing(side, view) {
@@ -1256,6 +1319,24 @@ export function createDemoChoreographer({
         }
       }
     }
+    // 5.4 GRIT POLICY (sweep #6) — A FULL BAR OUTRANKS THE CHECKLIST ORDER.
+    // Measured before this, `super` waited its turn behind 29 other ids as an
+    // ordinary least-shown item, so a fighter sat on 100 Grit for 30-39% of
+    // the fight and 20 of 32 rounds ended with the bar still full. With the
+    // bar full the next showcase is a CONFIRM OPENER — the least-shown normal
+    // that cancels into the super — and recoverStep chains the super into the
+    // sim's own confirm window (see chainItem). Like the stun closer this only
+    // reorders the checklist: the opener is a move the exhibition owed anyway.
+    if (gritSteerReady(side, view) && !opponent.down && distance < 320) {
+      gritSteerBlockedUntil[side] = view.tick + GRIT_STEER_FRAMES;
+      const openers = ids.filter((id) => confirmIds[side].has(id));
+      if (openers.length) {
+        const low = Math.min(...openers.map((id) => moves[id]));
+        const chosen = pick(openers.filter((id) => moves[id] === low));
+        stats.gritOpeners += 1;
+        return { id: chosen, count: moves[chosen] };
+      }
+    }
     // THE AIR ROW (v2.9 round 4). Reserved ahead of the FREE LANE below (but
     // deliberately behind the closer, whose windows are measured in tens of
     // ticks), because the free lane is a filter no air normal can ever win:
@@ -1426,6 +1507,7 @@ export function createDemoChoreographer({
   function chainCandidate(side, view) {
     const self = view.fighters[side];
     const moves = coverage[side].moves;
+    if (gritReady(side, view)) return true;
     return checklists[side].some((id) => {
       if (!CHAIN_ITEMS.has(id)) return false;
       if (moves[id] !== 0) return false;
@@ -1445,6 +1527,15 @@ export function createDemoChoreographer({
     // on the four chainable ids. The sim's own confirm flag is the gate.
     if (!self.attackConnected) return null;
     const moves = coverage[side].moves;
+    // 5.4 GRIT POLICY: a full bar on a confirmed hit is the super, shown or
+    // not — the point of the link here is spending the bar the way a human
+    // spends it, and the bar refills. The ordinary "new coverage only" rule
+    // below keeps governing every other link.
+    if (gritReady(side, view) && self.attackConnected !== "block"
+      && (moves.super !== undefined)) {
+      stats.gritLinks += 1;
+      return "super";
+    }
     const ids = checklists[side].filter((id) => {
       if (!CHAIN_ITEMS.has(id)) return false;
       if (EX_ACTIONS.has(id) && self.meter < GRIT_RULES.enhancedSpecialCost) return false;
@@ -1521,14 +1612,14 @@ export function createDemoChoreographer({
     lanes[partner] = { role: "feed", mode, lead, sticky, until: view.tick + lease };
   }
 
-  function maybeStart(side, view, momentOnly = false) {
+  function maybeStart(side, view, momentOnly = false, gritOnly = false) {
     const self = view.fighters[side];
     if (!stageable(self)) return null;
     const beats = beatsFor(side);
     let spec = null;
     let item = null;
     let beat = null;
-    const moment = momentBeatDirective(side, view);
+    const moment = gritOnly ? null : momentBeatDirective(side, view);
     if (momentOnly && !moment) return null;
     // v2.9 round 4 — THE TRAILING SIDE DOES NOT STAND DOWN. A fighter that is
     // losing the exhibition is exactly the fighter that needs every window it
@@ -1539,7 +1630,7 @@ export function createDemoChoreographer({
     if (behind) stats.trailerBoosts += 1;
     if (moment) {
       ({ spec, beat } = moment);
-    } else if (!behind && rng.nextFloat() >= blend) {
+    } else if (!gritOnly && !behind && rng.nextFloat() >= blend) {
       // The natural side of the blend: a genuine archetype-AI window, so the
       // exhibition still reads as a fight rather than a moves checklist.
       // Short, because the OTHER lane is usually mid-showcase anyway.
@@ -1547,7 +1638,7 @@ export function createDemoChoreographer({
       nextDecision[side] = view.tick + 14 + Math.floor(rng.nextFloat() * 18);
       return null;
     }
-    if (!spec && rng.nextFloat() < BEAT_SHARE) {
+    if (!spec && !gritOnly && rng.nextFloat() < BEAT_SHARE) {
       const candidate = eligibleBeatDirective(side, view);
       if (candidate) ({ spec, beat } = candidate);
     }
@@ -2504,6 +2595,25 @@ export function createDemoChoreographer({
         }
         lanes[side] = saved;
       }
+      // 5.4 GRIT POLICY — A FULL BAR PRE-EMPTS THE CHECKLIST the same narrow
+      // way the stun bar does: only a plain, unstarted move showcase under
+      // twenty ticks old, and only when the item it holds is not already a
+      // confirm opener (or the super itself). The restart goes straight to
+      // the opener pick — no natural-window roll — so the super lands within
+      // a few seconds of the bar filling instead of after the checklist.
+      if (!lane.beat && !lane.executed && lane.totalFrames < 20
+        && lane.item && lane.item !== "super" && !confirmIds[side].has(lane.item)
+        && gritSteerReady(side, view) && !rival.down
+        && stageable(view.fighters[side])) {
+        const saved = lanes[side];
+        lanes[side] = null;
+        const opener = maybeStart(side, view, false, true);
+        if (opener) {
+          stats.gritPreempts += 1;
+          return liveliness(side, view, opener);
+        }
+        lanes[side] = saved;
+      }
       stats.leadTicks += 1;
       return liveliness(side, view, runDirective(side, view));
     }
@@ -2580,6 +2690,9 @@ export function createDemoChoreographer({
         airRow: airIds[entry.side].filter((id) => entry.moves[id] === 0),
         slamIds: [...slamIds[entry.side]],
         stunBuildIds: [...stunIds[entry.side].build],
+        // 5.4 GRIT POLICY: the confirm openers this fighter spends a full bar
+        // through (see demoSuperConfirmIds).
+        superConfirmIds: [...confirmIds[entry.side]],
       };
     }
     return perFighter;

@@ -3732,8 +3732,15 @@ probe('demo-mode', async () => {
     assert.equal(demoOpening.demo.active, true);
     assert.equal(demoOpening.demo.difficulty, 'demo');
     assert.notEqual(demoOpening.fighters[0].id, demoOpening.fighters[1].id);
-    assert.equal(demoOpening.fighters[0].ai.difficulty, 'demo');
-    assert.equal(demoOpening.fighters[1].ai.difficulty, 'demo');
+    // 5.4 PERSONAS: each attract seat plays its kit's archetype persona
+    // (engine/demo.mjs DEMO_PERSONAS), reported per side by the snapshot.
+    for (const side of [0, 1]) {
+      assert.match(demoOpening.fighters[side].ai.difficulty, /^demo-[a-z]+$/,
+        `CPU ${side + 1} should play a demo persona, got ${demoOpening.fighters[side].ai.difficulty}`);
+      assert.equal(demoOpening.demo.personas[side], demoOpening.fighters[side].ai.difficulty);
+    }
+    const personaFor = await evaluate(client, `(async () => { const demo = await import('./engine/demo.mjs'); return [${JSON.stringify(demoOpening.fighters[0].id)}, ${JSON.stringify(demoOpening.fighters[1].id)}].map((id) => demo.demoPersonaFor(id)); })()`);
+    assert.deepEqual(demoOpening.demo.personas, personaFor, 'the seats must play the persona their kit names');
     demoThinking = await evaluate(client, `window.__finalBlowQa.step(4.5); window.__finalBlowEngine.snapshot()`);
     assert.ok(demoThinking.fighters[0].ai.decisions > 0, 'CPU 1 should make delayed visual decisions');
     assert.ok(demoThinking.fighters[1].ai.decisions > 0, 'CPU 2 should make delayed visual decisions');

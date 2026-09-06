@@ -490,6 +490,7 @@ import {
   createDemoDirector,
   demoCloserPlan,
   demoMatchupKey,
+  demoPersonaFor,
 } from "./engine/demo.mjs";
 import { DEMO_COVERAGE_BLEND, createDemoChoreographer } from "./engine/demo-choreo.mjs";
 import {
@@ -4329,6 +4330,8 @@ function demoSnapshot() {
     },
     closer: demoSession.closer ? { ...demoSession.closer } : null,
     difficulty: demoSession.fightersTier || DEMO_AI_DIFFICULTY,
+    // 5.4 PERSONAS: the registered tier each seat is actually playing.
+    personas: (state.fighters || []).map((fighter) => fighter.aiBrain?.difficulty || null),
     resultScheduled: Boolean(demoSession.resultTimer),
     idleScheduled: Boolean(demoSession.idleTimer),
     director: demoSession.director?.snapshot() || null,
@@ -7249,7 +7252,9 @@ function makeFighter(index, side, overrideDef = null) {
     cinematicScale: 1,
     down: false,
     aiClock: 0,
-    aiBrain: createAiBrain(state.mode === "demo" ? demoAiTier() : state.aiDifficulty),
+    // 5.4 PERSONAS: attract-mode CPUs play their kit's archetype persona
+    // (engine/demo.mjs) — or the CLOCK brain on a clock card (round-ends).
+    aiBrain: createAiBrain(state.mode === "demo" ? demoAiTier(kitId) : state.aiDifficulty),
     combatState: FIGHTER_STATES.IDLE,
     previousCombatState: FIGHTER_STATES.IDLE,
     stateFrame: 0,
@@ -14327,10 +14332,14 @@ function demoChoreoBeat(side, beat) {
 // Which brain a demo fighter is built with. A CLOCK card runs the patient
 // clock tier until it has put a decision on the board (two rounds at most, so
 // a card whose clock round still ended in a knockout never drags three).
-function demoAiTier() {
+// On a standard card each seat plays its kit's archetype persona (5.4
+// PERSONAS, engine/demo.mjs demoPersonaFor); `fightersTier` records the
+// card's format tier (clock or the demo baseline) for the clock and the
+// snapshot, the per-seat tier is on each fighter's brain.
+function demoAiTier(kitId) {
   const clock = demoSession.show?.format === "clock" && !demoSession.decisionShown && state.round <= 2;
   demoSession.fightersTier = clock ? DEMO_CLOCK_AI_DIFFICULTY : DEMO_AI_DIFFICULTY;
-  return demoSession.fightersTier;
+  return clock ? DEMO_CLOCK_AI_DIFFICULTY : demoPersonaFor(kitId);
 }
 
 // The round clock at the bell: 99 everywhere, and the CLOCK card's own

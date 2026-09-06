@@ -1339,7 +1339,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 6, dashCooldownFrames: 11,
       standingPushboxHalfWidth: 44, crouchingPushboxHalfWidth: 40,
     },
-    ai: { preferredRange: 82, retreatRange: 52, approachRange: 176, antiAirAction: "launcher", pokeAction: "driveHeavy", closeAction: "backSpecial", rangedAction: "commandSpecial" },
+    ai: { persona: "grappler", preferredRange: 82, retreatRange: 52, approachRange: 176, antiAirAction: "launcher", pokeAction: "driveHeavy", closeAction: "backSpecial", rangedAction: "commandSpecial" },
     victory: { bank: "specials", frame: 15, quote: "THE STREET MOVED FIRST." },
     moveList: [
       ["Hammer Jab / Body Check", "LP / → + LP"],
@@ -1365,7 +1365,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 7, dashCooldownFrames: 7,
       standingPushboxHalfWidth: 36, crouchingPushboxHalfWidth: 33,
     },
-    ai: { preferredRange: 188, retreatRange: 96, approachRange: 286, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial" },
+    ai: { persona: "footsies", preferredRange: 188, retreatRange: 96, approachRange: 286, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial" },
     victory: { bank: "specials", frame: 15, quote: "READ THE SIGN." },
     moveList: [
       ["Neon Jab / Letter Opener", "LP / → + LP"],
@@ -1391,7 +1391,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 5, dashCooldownFrames: 12,
       standingPushboxHalfWidth: 46, crouchingPushboxHalfWidth: 42,
     },
-    ai: { preferredRange: 96, retreatRange: 58, approachRange: 188, antiAirAction: "launcher", pokeAction: "special", closeAction: "heavy", rangedAction: "commandSpecial", counterAction: "backSpecial", counterRange: 172, counterChance: 0.76 },
+    ai: { persona: "counter", preferredRange: 96, retreatRange: 58, approachRange: 188, antiAirAction: "launcher", pokeAction: "special", closeAction: "heavy", rangedAction: "commandSpecial", counterAction: "backSpecial", counterRange: 172, counterChance: 0.76 },
     victory: { bank: "specials", frame: 15, quote: "SIX SHOTS. ONE ANSWER." },
     moveList: [
       ["Union Jab / Shoulder Check", "LP / → + LP"],
@@ -1417,7 +1417,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 8, dashCooldownFrames: 8,
       standingPushboxHalfWidth: 37, crouchingPushboxHalfWidth: 34,
     },
-    ai: { preferredRange: 238, retreatRange: 126, approachRange: 348, antiAirAction: "launcher", pokeAction: "special", closeAction: "launcher", rangedAction: "backSpecial", retreatWhenClose: true },
+    ai: { persona: "zoner", preferredRange: 238, retreatRange: 126, approachRange: 348, antiAirAction: "launcher", pokeAction: "special", closeAction: "launcher", rangedAction: "backSpecial", retreatWhenClose: true },
     victory: { bank: "specials", frame: 15, quote: "THE WHOLE CITY IS MY WALL." },
     moveList: [
       ["Can Tap / Tagger's Poke", "LP / → + LP"],
@@ -1443,7 +1443,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 7, dashCooldownFrames: 6,
       standingPushboxHalfWidth: 35, crouchingPushboxHalfWidth: 32,
     },
-    ai: { preferredRange: 92, retreatRange: 48, approachRange: 258, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "special", rangedAction: "backSpecial" },
+    ai: { persona: "rushdown", preferredRange: 92, retreatRange: 48, approachRange: 258, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "special", rangedAction: "backSpecial" },
     victory: { bank: "specials", frame: 15, quote: "CURRENT STAYS WITH ME." },
     moveList: [
       ["Static Jab / Hot Lead", "LP / → + LP"],
@@ -1469,7 +1469,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 8, dashCooldownFrames: 9,
       standingPushboxHalfWidth: 41, crouchingPushboxHalfWidth: 38,
     },
-    ai: { preferredRange: 276, retreatRange: 142, approachRange: 388, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "backSpecial", rangedAction: "commandSpecial", retreatWhenClose: true },
+    ai: { persona: "zoner", preferredRange: 276, retreatRange: 142, approachRange: 388, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "backSpecial", rangedAction: "commandSpecial", retreatWhenClose: true },
     victory: { bank: "specials", frame: 15, quote: "NINE HOLES. NO MERCY." },
     moveList: [
       ["Caddy Tap / Long Iron", "LP / → + LP"],
@@ -1495,7 +1495,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 8, dashCooldownFrames: 7,
       standingPushboxHalfWidth: 37, crouchingPushboxHalfWidth: 34,
     },
-    ai: { preferredRange: 206, retreatRange: 104, approachRange: 326, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial", retreatWhenClose: true },
+    ai: { persona: "trickster", preferredRange: 206, retreatRange: 104, approachRange: 326, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial", retreatWhenClose: true },
     victory: { bank: "specials", frame: 15, quote: "THE ECHO GETS THE LAST WORD." },
     moveList: [
       ["Static Check / Cable Poke", "LP / → + LP"],
@@ -1521,7 +1521,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 7, dashCooldownFrames: 6,
       standingPushboxHalfWidth: 36, crouchingPushboxHalfWidth: 33,
     },
-    ai: { preferredRange: 112, retreatRange: 57, approachRange: 272, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "special", rangedAction: "backSpecial" },
+    ai: { persona: "rushdown", preferredRange: 112, retreatRange: 57, approachRange: 272, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "special", rangedAction: "backSpecial" },
     victory: { bank: "specials", frame: 15, quote: "KEEP IT MASSIVE." },
     moveList: [
       ["Mic One / Mic Two", "LP / → + LP"],
@@ -1553,7 +1553,7 @@ const fighterKits = {
       // gravity like everyone else.
       glideFallCap: 350,
     },
-    ai: { preferredRange: 150, retreatRange: 74, approachRange: 300, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial" },
+    ai: { persona: "skirmisher", preferredRange: 150, retreatRange: 74, approachRange: 300, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial" },
     victory: { bank: "specials", frame: 15, quote: "THE PINES KEEP WHAT THEY CATCH." },
     moveList: [
       ["Talon Jab / Wing Hook", "LP / → + LP"],
@@ -1579,7 +1579,7 @@ const fighterKits = {
       backDashInvulnerableFrames: 6, dashCooldownFrames: 10,
       standingPushboxHalfWidth: 43, crouchingPushboxHalfWidth: 39,
     },
-    ai: { preferredRange: 212, retreatRange: 94, approachRange: 322, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "backSpecial", rangedAction: "commandSpecial" },
+    ai: { persona: "footsies", preferredRange: 212, retreatRange: 94, approachRange: 322, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "backSpecial", rangedAction: "commandSpecial" },
     victory: { bank: "specials", frame: 15, quote: "THE BOOK CLOSES WHEN I SAY IT CLOSES." },
     moveList: [
       ["Cane Jab / Writ Server", "LP / → + LP"],
@@ -5964,6 +5964,14 @@ export function attackAnimationPose(attack, attackFrame, options = undefined) {
   return { bank: animation.bank, frame };
 }
 
+// 4.3 DEMO SPACING floors: a grappler kit authored to fight at 82px would
+// still clinch at 1.6x, so the widened band never sits closer than a readable
+// ~230px. 5.4 PERSONAS: the floors are now a parameter, because they are the
+// exact thing that erased the archetypes in attract mode — with every kit
+// floored to 230/130/340 the grappler, the zoner and the counter-puncher all
+// played the same 130-340px retreat/advance yo-yo.
+export const KIT_SPACING_FLOORS = Object.freeze({ preferred: 230, retreat: 130, approach: 340 });
+
 export function selectKitAiIntent(fighterId, {
   distance = Infinity,
   opponentAirborne = false,
@@ -5982,39 +5990,91 @@ export function selectKitAiIntent(fighterId, {
   // health bar in 10-30 s. At 1 (every tier but the demo CLOCK brain) each
   // comparison below is the authored one, bit for bit.
   swing = 1,
+  // 5.4 PERSONAS (sweep #2). Every knob defaults to the identity so a
+  // non-demo caller gets the 5.3 tables byte-for-byte (pinned in
+  // tests/demo-personas.test.mjs against an inlined copy of the old body):
+  //   floors        — the 4.3 range floors, or null for the kit as authored
+  //   approachSpacing — a separate multiplier for the approach band alone,
+  //                   so a close-range kit can keep opening from a readable
+  //                   distance while its preferred band stays authored
+  //   pokeWeight    — scales the mid/preferred-band poke share
+  //   rangedWeight  — scales the far-band ranged share AND opens a ranged
+  //                   share inside the mid and preferred bands, which is the
+  //                   band the signature projectile/trap was authored for
+  //   throwWeight   — scales the clinch-band throw share
+  //   closeWeight   — scales the clinch/inner-band close-action share
+  //   counterChance — overrides the kit's counter roll when set
+  //   holdSlack     — widens the preferred band's hysteresis (the +28/-24
+  //                   hold window) so a persona holds its range instead of
+  //                   stepping in and out of it every decision
+  floors = KIT_SPACING_FLOORS,
+  approachSpacing = null,
+  pokeWeight = 1,
+  rangedWeight = 1,
+  throwWeight = 1,
+  closeWeight = 1,
+  counterChance = null,
+  holdSlack = 0,
 } = {}) {
   const kitAi = getFighterKit(fighterId)?.ai;
   if (!kitAi) return null;
-  // Floors: a grappler kit authored to fight at 82px would still clinch at
-  // 1.6x, so the demo band never sits closer than a readable ~230px.
-  const ai = spacing === 1 ? kitAi : {
+  const approachScale = approachSpacing ?? spacing;
+  const floored = (value, floor) => (floors ? Math.max(value, floor) : value);
+  const ai = spacing === 1 && approachScale === 1 ? kitAi : {
     ...kitAi,
-    preferredRange: Math.max(kitAi.preferredRange * spacing, 230),
-    retreatRange: Math.max(kitAi.retreatRange * spacing, 130),
-    approachRange: Math.max(kitAi.approachRange * spacing, 340),
+    preferredRange: floored(kitAi.preferredRange * spacing, floors?.preferred),
+    retreatRange: floored(kitAi.retreatRange * spacing, floors?.retreat),
+    approachRange: floored(kitAi.approachRange * approachScale, floors?.approach),
   };
   const calm = 1 - Math.max(0, Math.min(1, patience));
+  // The ranged share the persona opens INSIDE the kit's working bands: zero
+  // at the default weight, so every non-demo band table is untouched.
+  const rangedShare = Math.min(0.6, Math.max(0, 0.2 * (rangedWeight - 1)));
   if (opponentAttacking
     && ai.counterAction
     && distance < (ai.counterRange || 160)
-    && roll < (ai.counterChance || 0.7) * swing) {
+    && roll < (counterChance ?? ai.counterChance ?? 0.7) * swing) {
     return { movement: "hold", action: ai.counterAction, response: "counter" };
   }
   if (opponentAirborne && distance < 180) return { movement: "hold", action: ai.antiAirAction };
   if (meter >= GRIT_RULES.superCost && roll < 0.22 * swing && distance < 245) return { movement: "hold", action: "super" };
   if (distance < ai.retreatRange) {
-    const action = roll < 0.42 * swing ? ai.closeAction : roll < 0.72 * swing ? "light" : roll < swing ? "throw" : null;
+    const closeCut = 0.42 * closeWeight * swing;
+    const throwCut = (1 - 0.28 * throwWeight) * swing;
+    const action = roll < closeCut ? ai.closeAction : roll < Math.max(closeCut, throwCut) ? "light" : roll < swing ? "throw" : null;
     // A patient brain backs out of the clinch, but still swings on the way
     // out: the hit/block pushback is what actually restores the gap.
     return { movement: ai.retreatWhenClose || fighterId === "jez" || patience > 0 ? "retreat" : "hold", action };
   }
   if (distance > ai.approachRange) {
-    return { movement: "advance", action: roll < 0.34 * swing ? ai.rangedAction : null };
+    return { movement: "advance", action: roll < Math.min(0.85, 0.34 * rangedWeight) * swing ? ai.rangedAction : null };
   }
+  // `share` is calm scaled by the CLOCK brain's swing; `ranged` is the
+  // persona's in-band ranged share scaled the same way (both 1 outside the demo).
   const share = calm * swing;
-  if (distance > ai.preferredRange + 28) return { movement: "advance", action: roll < 0.48 * share ? ai.pokeAction : null };
-  if (distance < ai.preferredRange - 24) return { movement: ai.retreatWhenClose || fighterId === "jez" || patience > 0 ? "retreat" : "hold", action: roll < 0.52 * share ? ai.closeAction : roll >= 1 - 0.48 * share ? "heavy" : null };
-  return { movement: "hold", action: roll < 0.36 * share ? ai.pokeAction : roll < 0.62 * share ? "light" : roll < 0.8 * share ? "heavy" : null };
+  const ranged = rangedShare * swing;
+  if (distance > ai.preferredRange + 28 + holdSlack) {
+    const pokeCut = 0.48 * share * pokeWeight;
+    return {
+      movement: "advance",
+      action: roll < pokeCut ? ai.pokeAction : roll >= Math.max(pokeCut, 1 - ranged) ? ai.rangedAction : null,
+    };
+  }
+  if (distance < ai.preferredRange - 24 - holdSlack) {
+    const closeCut = 0.52 * share * closeWeight;
+    return {
+      movement: ai.retreatWhenClose || fighterId === "jez" || patience > 0 ? "retreat" : "hold",
+      action: roll < closeCut ? ai.closeAction : roll >= Math.max(closeCut, 1 - 0.48 * share) ? "heavy" : null,
+    };
+  }
+  const pokeCut = 0.36 * share * pokeWeight;
+  const lightCut = Math.max(pokeCut, 0.62 * share);
+  const heavyCut = Math.max(lightCut, 0.8 * share);
+  return {
+    movement: "hold",
+    action: roll < pokeCut ? ai.pokeAction : roll < lightCut ? "light" : roll < heavyCut ? "heavy"
+      : roll >= Math.max(heavyCut, 1 - ranged) ? ai.rangedAction : null,
+  };
 }
 
 export function listFighterMoves(fighterId) {
