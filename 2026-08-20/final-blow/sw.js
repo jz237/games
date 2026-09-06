@@ -25,6 +25,7 @@ const SHELL = [
   "./engine/fatalities.mjs",
   "./engine/fighter-audio.mjs",
   "./engine/atlas-facing.mjs",
+  "./engine/audio-manifest.mjs",
 ];
 
 self.addEventListener("install", (event) => {

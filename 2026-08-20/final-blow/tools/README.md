@@ -117,3 +117,19 @@ a run at another clone. A root without a `game.js` is refused.
 
 5. `node --test tests/*.test.mjs` — the manifest shape, the per-cell gate and
    the measured tables are pinned.
+## Audio manifest
+
+```sh
+node tools/audio/build_manifest.mjs           # write assets/audio/MANIFEST.json
+node tools/audio/build_manifest.mjs --check   # exit 1 if it no longer matches the files
+```
+
+Needs `ffprobe` on PATH (node only otherwise). Measures every mp3 under
+`assets/audio/` — announcer takes, fighter voice takes, shared samples, music —
+and records `{ ms, bytes }` per file plus contiguous take counts per cue. The
+runtime reads it instead of HEAD-probing variant slots and instead of guessing
+announcer speech length, so **re-run it whenever a take is added, removed or
+renamed**; `tests/audio-manifest.test.mjs` fails on a stale manifest (byte sizes
+are compared against disk). It never reads or rewrites audio samples — the
+reviewed takes are measured, not touched. Writes remove-then-write because the
+asset tree may be hardlinked.

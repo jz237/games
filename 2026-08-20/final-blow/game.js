@@ -483,6 +483,14 @@ import {
   pickSharedVariation,
   weaponClatterParams,
 } from "./engine/shared-sfx.mjs";
+import {
+  AUDIO_MANIFEST_PATH,
+  announcerBankFromManifest,
+  announcerEstimateMs,
+  announcerWindow,
+  fighterBankFromManifest,
+  parseAudioManifest,
+} from "./engine/audio-manifest.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -26340,10 +26348,12 @@ function fighterSoundId(fighter) {
 // ---------------------------------------------------------------------------
 // Wave 9 "voice plumbing" — fighter voice variant banks. Module-level render
 // state only (never snapshotted, never read by the simulation): which
-// canonical variant files exist on disk, probed exactly once per bank per
-// session via HEAD requests so missing takes can never spam the network.
-// Everything ships working with zero new mp3 files present and picks up real
-// takes automatically the moment they appear at their canonical paths.
+// canonical variant files exist on disk. Since 5.1 that answer comes from
+// assets/audio/MANIFEST.json (baked from the files by
+// tools/audio/build_manifest.mjs, which also measures every take's length);
+// the HEAD probe below survives only as the fallback for a missing or
+// unreadable manifest, where it still runs exactly once per bank per session
+// so missing takes can never spam the network.
 // ---------------------------------------------------------------------------
 
 // Monotonic wave-9 voice totals, exposed via snapshot().violence.
@@ -26353,9 +26363,14 @@ const voiceFxDebug = {
   // w51: "TEN SECONDS" clock calls (once per round) and decision round-ends
   // that opened on the timeover bank instead of "ko".
   clockCallouts: 0, decisionCalls: 0,
+  // 5.1 manifest counters: banks resolved without a request, and media
+  // elements actually created for fighter voice (was 3-5 per take, up to
+  // 183 per fighter at fight start; now one per take, grown only on overlap).
+  manifestBanks: 0, voiceElements: 0,
 };
 // Every probe HEAD request ever issued — QA asserts this stays flat when the
-// same missing bank is requested repeatedly (probe once, cached forever).
+// same missing bank is requested repeatedly (probe once, cached forever), and
+// stays at ZERO for the whole session while the manifest is present.
 let voiceProbeRequests = 0;
 
 function probeAudioFile(url) {
@@ -26365,55 +26380,144 @@ function probeAudioFile(url) {
     .catch(() => false);
 }
 
-// `${fighterId}:${cue}` -> { srcs: confirmed variant files, probed }. How a
-// bank fills depends on what the review left behind:
+// The build-time audio manifest, fetched once at boot (before any fighter is
+// made, so by the time makeFighter warms a palette the answer is usually
+// already here and the bank fills synchronously). `data` is the parsed
+// manifest or null once settled; `settled` distinguishes "not yet loaded"
+// (banks wait for it) from "missing" (banks probe, the pre-5.1 path).
+const audioManifestState = { promise: null, data: null, settled: false };
+
+function loadAudioManifest() {
+  if (!audioManifestState.promise) {
+    audioManifestState.promise = fetch(AUDIO_MANIFEST_PATH)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((raw) => parseAudioManifest(raw))
+      .catch(() => null)
+      .then((manifest) => {
+        audioManifestState.data = manifest;
+        audioManifestState.settled = true;
+        return manifest;
+      });
+  }
+  return audioManifestState.promise;
+}
+// Fetched at boot like the motion/walk/unified manifests: one small JSON
+// request, long before the first makeFighter.
+loadAudioManifest();
+
+// `${fighterId}:${cue}` -> { srcs: confirmed variant files, durationsMs,
+// probed, source }. How a bank fills depends on what the review left behind:
 //   recorded    — the reviewed kick pools. Every path is an accepted take that
 //                 ships, so the bank is complete on creation and never probes.
 //   probed      — a surviving 1.5 core take. Variant 1 is known to exist;
-//                 slots 2 and 3 are speculative and cost one HEAD each.
-//   placeholder — a reactive cue with nothing recorded yet; starts empty and
-//                 borrows a detuned take until real files appear.
-// A cue whose recording was rejected has no palette entry at all, so it never
+//                 slots 2 and 3 are speculative (one HEAD each, manifest-less).
+//   placeholder — a reactive cue; starts empty and borrows a detuned take
+//                 until real files are confirmed.
+// With the manifest loaded the probed/placeholder distinction only decides
+// what the bank holds while the fetch is in flight: the manifest then names
+// every existing take at once (source "manifest", zero requests). A cue
+// whose recording was rejected has no palette entry at all, so it never
 // reaches this function and can never be requested from the network.
 const fighterVoiceBanks = new Map();
+
+function probeFighterVoiceBank(bank, variants, seeded) {
+  // One probe pass per bank per session, sequential and stopping at the
+  // first gap (banks are contiguous), so a fully-missing bank costs a
+  // single request and a present bank grows the rotation in place.
+  (async () => {
+    const found = variants.slice(0, seeded);
+    for (let index = seeded; index < variants.length; index += 1) {
+      if (!(await probeAudioFile(variants[index]))) break;
+      found.push(variants[index]);
+    }
+    bank.srcs = found;
+    bank.probed = true;
+    bank.source = "probe";
+  })();
+}
 
 function fighterVoiceBank(fighterId, cue) {
   const variants = fighterAudioVariants(fighterId, cue);
   if (!variants) return null;
   const key = `${fighterId}:${cue}`;
   let bank = fighterVoiceBanks.get(key);
-  if (!bank) {
-    // Wave 16: the bank kind is fighter-aware — the Commissioner's core cues
-    // probe all slots because no recorded variant 1 exists yet.
-    const kind = fighterAudioBankKind(cue, fighterId);
-    if (kind === FIGHTER_AUDIO_BANK_KINDS.recorded) {
-      bank = { key, srcs: [...variants], probed: true };
-      fighterVoiceBanks.set(key, bank);
-      return bank;
-    }
-    const seeded = kind === FIGHTER_AUDIO_BANK_KINDS.probed ? 1 : 0;
-    bank = { key, srcs: variants.slice(0, seeded), probed: false };
+  if (bank) return bank;
+  // Wave 16: the bank kind is fighter-aware — the Commissioner's core cues
+  // probe all slots because no recorded variant 1 exists yet.
+  const kind = fighterAudioBankKind(cue, fighterId);
+  const manifestDurations = (srcs) => srcs.map((src) => fighterBankFromManifest(audioManifestState.data, fighterId, [src])?.durationsMs[0] || 0);
+  if (kind === FIGHTER_AUDIO_BANK_KINDS.recorded) {
+    // The review pool is the truth for recorded banks; the manifest only
+    // contributes lengths (and cannot trim what the review accepted).
+    bank = { key, srcs: [...variants], durationsMs: manifestDurations(variants), probed: true, source: "recorded" };
     fighterVoiceBanks.set(key, bank);
-    // One probe pass per bank per session, sequential and stopping at the
-    // first gap (banks are contiguous), so a fully-missing bank costs a
-    // single request and a present bank grows the rotation in place.
-    (async () => {
-      const found = variants.slice(0, seeded);
-      for (let index = seeded; index < variants.length; index += 1) {
-        if (!(await probeAudioFile(variants[index]))) break;
-        found.push(variants[index]);
-      }
-      bank.srcs = found;
-      bank.probed = true;
-    })();
+    return bank;
   }
+  const seeded = kind === FIGHTER_AUDIO_BANK_KINDS.probed ? 1 : 0;
+  bank = { key, srcs: variants.slice(0, seeded), durationsMs: [], probed: false, source: "pending" };
+  fighterVoiceBanks.set(key, bank);
+  const settleFromManifest = (manifest) => {
+    const resolved = fighterBankFromManifest(manifest, fighterId, variants);
+    if (!resolved) return false;
+    bank.srcs = [...resolved.srcs];
+    bank.durationsMs = [...resolved.durationsMs];
+    bank.probed = true;
+    bank.source = "manifest";
+    voiceFxDebug.manifestBanks += 1;
+    return true;
+  };
+  if (audioManifestState.settled) {
+    if (!settleFromManifest(audioManifestState.data)) probeFighterVoiceBank(bank, variants, seeded);
+    return bank;
+  }
+  loadAudioManifest().then((manifest) => {
+    if (!settleFromManifest(manifest)) probeFighterVoiceBank(bank, variants, seeded);
+  });
   return bank;
 }
 
-function fighterVoicePool(kind, bankKey, variantIndex, src) {
+// Pool caps per cue, unchanged from the eager createSfxPool sizes: a hit cue
+// may stack five overlapping plays, anything else three. The difference is
+// that a pool now STARTS at one element per confirmed take and only grows
+// when a play finds every element busy — measured at 5.0 a devil vs
+// commissioner fight created ~366 fighter voice elements at makeFighter
+// against Chrome's live-player cap (~75 desktop / ~40 Android), so early
+// takes could be torn down and need a reload on first play.
+function fighterVoicePoolCap(cue) {
+  return cue.startsWith("hit-") || cue === "hit" ? 5 : 3;
+}
+
+function fighterVoiceElement(src, preload) {
+  const sample = new Audio(src);
+  sample.preload = preload;
+  voiceFxDebug.voiceElements += 1;
+  return sample;
+}
+
+function fighterVoicePool(cue, bankKey, variantIndex, src, preload = "auto") {
   const poolKey = `${bankKey}:${variantIndex}`;
-  if (!fighterSfxPools.has(poolKey)) fighterSfxPools.set(poolKey, createSfxPool(kind, src));
-  return fighterSfxPools.get(poolKey);
+  let pool = fighterSfxPools.get(poolKey);
+  if (!pool) {
+    pool = [fighterVoiceElement(src, preload)];
+    pool.cue = cue;
+    fighterSfxPools.set(poolKey, pool);
+  }
+  return pool;
+}
+
+// The element a play should use: the first idle one, else a fresh copy while
+// the pool is under its cap (the take is genuinely overlapping itself), else
+// the oldest — which the caller restarts, exactly as the fixed pools did once
+// they wrapped.
+function fighterVoiceSample(pool) {
+  const idle = pool.find((sample) => sample.paused || sample.ended);
+  if (idle) return idle;
+  if (pool.length < fighterVoicePoolCap(pool.cue)) {
+    const sample = fighterVoiceElement(pool[0].src, "auto");
+    pool.push(sample);
+    return sample;
+  }
+  return pool[0];
 }
 
 /**
@@ -26445,15 +26549,50 @@ function fighterVoiceTake(kind, fighterId) {
   const pool = fighterVoicePool(cue, bank.key, variantIndex, bank.srcs[variantIndex]);
   if (!pool?.length) return null;
   if (bank.srcs.length === 1) rate *= 0.94 + visualRandom() * 0.12;
-  return { sample: pool[Math.floor(cursor / bank.srcs.length) % pool.length], rate };
+  return { sample: fighterVoiceSample(pool), rate, durationMs: bank.durationsMs?.[variantIndex] || 0 };
 }
+
+// Voice warm-up runs from makeFighter, i.e. at the same instant the unified
+// sheets (8-14 MB) start downloading against the 2.1 s intro. One element per
+// confirmed take is created with preload="metadata" so the browser opens the
+// file but does not pull the whole 1-3 MB palette during the intro; the FIGHT!
+// banner (or this timer, for paths without one — training, demo) then flips
+// the same elements to preload="auto" so every take is resident before the
+// first exchange. Banks still waiting on the manifest fetch get their pools
+// at top-up time instead.
+const FIGHTER_VOICE_TOPUP_MS = 2400;
+let fighterVoiceTopupTimer = 0;
 
 function warmFighterAudio(fighters = state.fighters) {
   for (const fighter of fighters) {
     const fighterId = fighterSoundId(fighter);
     for (const cue of FIGHTER_AUDIO_CUES) {
       const bank = fighterVoiceBank(fighterId, cue);
-      bank?.srcs.forEach((src, index) => fighterVoicePool(cue, bank.key, index, src));
+      bank?.srcs.forEach((src, index) => fighterVoicePool(cue, bank.key, index, src, "metadata"));
+    }
+  }
+  // The two announcer calls the intro itself makes (the round card and
+  // FIGHT!) used to open their banks at the moment they fired, so the first
+  // line of every fight was a cold fetch; with the manifest settled these
+  // fill synchronously here, a couple of seconds ahead of the call.
+  announcerBank(state.round >= 3 ? "finalround" : state.round === 2 ? "round2" : "round1");
+  announcerBank("fight");
+  window.clearTimeout(fighterVoiceTopupTimer);
+  fighterVoiceTopupTimer = window.setTimeout(() => topUpFighterAudio(fighters), FIGHTER_VOICE_TOPUP_MS);
+}
+
+function topUpFighterAudio(fighters = state.fighters) {
+  window.clearTimeout(fighterVoiceTopupTimer);
+  for (const fighter of fighters) {
+    const fighterId = fighterSoundId(fighter);
+    if (!fighterId) continue;
+    for (const cue of FIGHTER_AUDIO_CUES) {
+      const bank = fighterVoiceBanks.get(`${fighterId}:${cue}`);
+      bank?.srcs.forEach((src, index) => {
+        for (const sample of fighterVoicePool(cue, bank.key, index, src)) {
+          if (sample.preload !== "auto") sample.preload = "auto";
+        }
+      });
     }
   }
 }
@@ -27664,6 +27803,17 @@ function muteRenderAudioBeds() {
 
 const ANNOUNCER_MAX_TAKES = 5;
 
+// cue -> index of the authored line its 2.8 retake re-reads (applied at the
+// end of ANNOUNCER_LINES below).
+const ANNOUNCER_RETAKES = Object.freeze({
+  ko: 0,
+  perfect: 0,
+  finishthem: 0,
+  wallbounce: 0,
+  "cyraxx-wins": 0,
+  flawless: 0,
+});
+
 // One line per planned take, mirrored exactly by MISSING-AUDIO.md — the
 // caption index and the mp3 take index stay aligned as files appear.
 const ANNOUNCER_LINES = (() => {
@@ -27700,6 +27850,16 @@ const ANNOUNCER_LINES = (() => {
     banks[`${id}-name`] = [name, name, name];
     banks[`${id}-wins`] = [`${name} WINS!`, `THE WINNER — ${name}!`, `${name} TAKES IT!`];
   }
+  // 2.8 filled six banks with an extra take each (ko-5, perfect-4,
+  // finishthem-4, wallbounce-4, cyraxx-wins-4, flawless-3), every one a
+  // re-read of that bank's FIRST line (whisper-transcribed 2026-09-05: "K.O.",
+  // "Perfect!", "Finish them!", "Off the wall", "Cyraxx wins!", "Flawless
+  // victory"). Until 5.1 the caption list stopped short of them, so `pick %
+  // lines.length` captioned the extra take with the wrong words — the retake
+  // table appends the line each one actually speaks so caption == take.
+  for (const [cue, lineIndex] of Object.entries(ANNOUNCER_RETAKES)) {
+    banks[cue] = [...banks[cue], banks[cue][lineIndex]];
+  }
   return Object.freeze(banks);
 })();
 
@@ -27713,13 +27873,16 @@ function announcerBagDraw(cue, size) {
   return drawFromBag(announcerBags, cue, size, visualRandom);
 }
 
-// cue -> { takes: [Audio...], probed }. 2.7 critic round: take counts come
-// from assets/audio/announcer/MANIFEST.json (generated from the files on
-// disk — regenerate it when takes land) so the picker is CLAMPED to takes
-// that exist. The old sequential HEAD probe discovered each bank's end by
+// cue -> { takes: [Audio...], durationsMs, probed }. 5.1: takes AND their
+// measured lengths come from assets/audio/MANIFEST.json (the shared
+// build-time manifest — see loadAudioManifest), so the picker is CLAMPED to
+// takes that exist and the speech clock knows how long each one runs. Two
+// fallbacks keep the pre-5.1 behaviour when that file is missing: the 2.7
+// announcer-only assets/audio/announcer/MANIFEST.json (take counts, no
+// lengths), then the sequential HEAD probe that discovered each bank's end by
 // 404ing one request past it (flawless-3, ko-5, wallbounce-4, ...) on every
-// cue a session touched; it survives only as the fallback for a missing/
-// unreadable manifest, where it still stops at the first gap.
+// cue a session touched; both still stop at the first gap. Lengths unknown to
+// the manifest are picked up from each element's loadedmetadata.
 const announcerBankCache = new Map();
 let announcerManifestPromise = null;
 
@@ -27733,12 +27896,41 @@ function announcerTakeCounts() {
   return announcerManifestPromise;
 }
 
+function fillAnnouncerBank(bank, srcs, durationsMs = []) {
+  bank.takes = srcs.map((src, index) => {
+    const sample = new Audio(src);
+    sample.preload = "auto";
+    if (!(durationsMs[index] > 0)) {
+      sample.addEventListener("loadedmetadata", () => {
+        if (!(bank.durationsMs[index] > 0) && Number.isFinite(sample.duration) && sample.duration > 0) {
+          bank.durationsMs[index] = Math.round(sample.duration * 1000);
+        }
+      }, { once: true });
+    }
+    return sample;
+  });
+  bank.durationsMs = srcs.map((_, index) => durationsMs[index] || 0);
+  bank.probed = true;
+  if (srcs.length) voiceFxDebug.announcerBanksLoaded += 1;
+}
+
 function announcerBank(cue) {
   let bank = announcerBankCache.get(cue);
   if (bank) return bank;
-  bank = { cue, takes: [], probed: false };
+  bank = { cue, takes: [], durationsMs: [], probed: false };
   announcerBankCache.set(cue, bank);
+  const settleFromManifest = (manifest) => {
+    const resolved = announcerBankFromManifest(manifest, cue, ANNOUNCER_MAX_TAKES);
+    if (!resolved) return false;
+    fillAnnouncerBank(bank, resolved.srcs, resolved.durationsMs);
+    voiceFxDebug.manifestBanks += 1;
+    return true;
+  };
+  // The manifest usually settled at boot, so a bank fills synchronously and
+  // the very first call on a cue already knows its takes and their lengths.
+  if (audioManifestState.settled && settleFromManifest(audioManifestState.data)) return bank;
   (async () => {
+    if (!audioManifestState.settled && settleFromManifest(await loadAudioManifest())) return;
     const counts = await announcerTakeCounts();
     const found = [];
     if (counts) {
@@ -27754,23 +27946,28 @@ function announcerBank(cue) {
         found.push(src);
       }
     }
-    bank.takes = found.map((src) => {
-      const sample = new Audio(src);
-      sample.preload = "auto";
-      return sample;
-    });
-    bank.probed = true;
-    if (found.length) voiceFxDebug.announcerBanksLoaded += 1;
+    fillAnnouncerBank(bank, found);
   })();
   return bank;
 }
 
 // Serialised speech clock: each accepted call reserves a busy window so
 // layered calls (KO -> fighter-wins -> story) never talk over each other.
+// Before 5.1 the window was announcerEstimateMs (word count, capped at
+// 1.7 s) while real takes run to 4676 ms (benny-wins-2): a Benny comeback KO
+// drawing ko-2 (2429 ms) started the wins call at 950 ms and "comeback" at
+// 2500 ms with benny-wins-2 still going — three takes stacked and the duck
+// released mid-line. The window now comes from the take's measured length
+// (announcerTakeMs), and the same number drives the music duck.
 let announcerBusyUntil = 0;
 
-function announcerEstimateMs(line) {
-  return Math.min(1700, 420 + line.split(/\s+/).length * 260);
+function announcerTakeMs(bank, takeIndex, line) {
+  if (takeIndex >= 0) {
+    if (bank.durationsMs[takeIndex] > 0) return bank.durationsMs[takeIndex];
+    const take = bank.takes[takeIndex];
+    if (take && Number.isFinite(take.duration) && take.duration > 0) return Math.round(take.duration * 1000);
+  }
+  return announcerEstimateMs(line);
 }
 
 /**
@@ -27788,16 +27985,19 @@ function announcerSay(cue, { delay = 0 } = {}) {
   const now = performance.now();
   const pick = announcerBagDraw(cue, Math.max(lines.length, bank.takes.length));
   const line = lines[pick % lines.length];
-  const startAt = Math.max(now + delay, announcerBusyUntil + 90);
-  announcerBusyUntil = startAt + announcerEstimateMs(line);
+  const takeIndex = bank.takes.length ? pick % bank.takes.length : -1;
+  const speechMs = announcerTakeMs(bank, takeIndex, line);
+  const slot = announcerWindow({ now, delay, busyUntil: announcerBusyUntil, speechMs, line });
+  const { startAt } = slot;
+  announcerBusyUntil = slot.busyUntil;
   window.setTimeout(() => {
     showSoundCaption("announcer", null, line);
     if (!$("#soundToggle").checked) return;
     if (demoSession.attract && !state.audioUnlocked) return;
-    const take = bank.takes.length ? bank.takes[pick % bank.takes.length] : null;
+    const take = takeIndex >= 0 ? bank.takes[takeIndex] : null;
     if (!take) return;
     unlockAudio();
-    duckMusic(0.45, Math.max(750, announcerEstimateMs(line)));
+    duckMusic(0.45, Math.max(750, speechMs));
     take.pause();
     take.currentTime = 0;
     take.volume = 0.9 * state.sfxVolume;
@@ -27820,6 +28020,9 @@ function announcerSpeakBanner(text, plan = null) {
   }
   if (text === "FIGHT!") {
     announcerSay("fight");
+    // The sheets had the intro to themselves; from here the fighters' voice
+    // takes may pull their remaining bytes (see warmFighterAudio).
+    topUpFighterAudio();
     return;
   }
   const roundMatch = text.match(/^(?:ONLINE )?ROUND (\d+)$/);
@@ -29914,6 +30117,16 @@ window.__finalBlowEngine = {
         dizzyRings: audioFxDebug.dizzyRings,
         clockCallouts: voiceFxDebug.clockCallouts,
         decisionCalls: voiceFxDebug.decisionCalls,
+        // 5.1 audio manifest: -1 while the fetch is in flight, 1 loaded, 0
+        // missing (probe fallback); banks resolved from it without a request;
+        // fighter voice media elements created so far (one per take plus
+        // overlap growth — was 3-5 per take at warm-up).
+        audioManifest: audioManifestState.settled ? (audioManifestState.data ? 1 : 0) : -1,
+        voiceManifestBanks: voiceFxDebug.manifestBanks,
+        voiceElements: voiceFxDebug.voiceElements,
+        // Remaining serialised-speech reservation: after a KO call it should
+        // read the take's real length (ko-2 = 2429 ms), not the old <=1700.
+        announcerBusyMs: Math.max(0, Math.round(announcerBusyUntil - performance.now())),
         // Release 1.7 DEPTH: sim-mechanic one-shot totals (mechFxDebug —
         // monotonic, resim-guarded at every increment site).
         guardCrushes: mechFxDebug.guardCrushes,

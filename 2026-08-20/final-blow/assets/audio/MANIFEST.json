@@ -1,0 +1,2212 @@
+{
+  "generated": "2026-09-06",
+  "tool": "tools/audio/build_manifest.mjs",
+  "purpose": "Per-take duration (ms) and size (bytes) of every voice take and shared sample, plus contiguous take counts per cue, measured from the files on disk with ffprobe. game.js reads this instead of HEAD-probing variant slots and instead of guessing announcer speech length from word counts; it falls back to those only when this file is missing. Regenerate whenever a take is added, removed or renamed.",
+  "announcer": {
+    "takes": 121,
+    "cues": {
+      "alan-name": 3,
+      "alan-wins": 3,
+      "ali-name": 3,
+      "ali-wins": 3,
+      "benny-name": 3,
+      "benny-wins": 3,
+      "boss-intro": 3,
+      "comeback": 3,
+      "commissioner-name": 3,
+      "commissioner-wins": 3,
+      "connected": 3,
+      "cyraxx-name": 3,
+      "cyraxx-wins": 4,
+      "deathblow-name": 3,
+      "deathblow-wins": 3,
+      "devil-name": 3,
+      "devil-wins": 3,
+      "donald-name": 3,
+      "donald-wins": 3,
+      "fatality-performed": 3,
+      "fight": 4,
+      "finalround": 3,
+      "finishthem": 4,
+      "flawless": 3,
+      "guardcrush": 3,
+      "jez-name": 3,
+      "jez-wins": 3,
+      "ko": 5,
+      "perfect": 4,
+      "post-name": 3,
+      "post-wins": 3,
+      "recovered": 3,
+      "rematch": 3,
+      "round1": 3,
+      "round2": 3,
+      "setpoint": 3,
+      "timeover": 3,
+      "wallbounce": 4
+    },
+    "files": {
+      "alan-name-1.mp3": {
+        "ms": 679,
+        "bytes": 11328
+      },
+      "alan-name-2.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "alan-name-3.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "alan-wins-1.mp3": {
+        "ms": 2038,
+        "bytes": 33062
+      },
+      "alan-wins-2.mp3": {
+        "ms": 2769,
+        "bytes": 44765
+      },
+      "alan-wins-3.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "ali-name-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "ali-name-2.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "ali-name-3.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "ali-wins-1.mp3": {
+        "ms": 2038,
+        "bytes": 33062
+      },
+      "ali-wins-2.mp3": {
+        "ms": 3318,
+        "bytes": 53542
+      },
+      "ali-wins-3.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "benny-name-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "benny-name-2.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "benny-name-3.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "benny-wins-1.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "benny-wins-2.mp3": {
+        "ms": 4676,
+        "bytes": 75276
+      },
+      "benny-wins-3.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "boss-intro-1.mp3": {
+        "ms": 3004,
+        "bytes": 48527
+      },
+      "boss-intro-2.mp3": {
+        "ms": 4127,
+        "bytes": 66499
+      },
+      "boss-intro-3.mp3": {
+        "ms": 2038,
+        "bytes": 33062
+      },
+      "comeback-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "comeback-2.mp3": {
+        "ms": 2194,
+        "bytes": 35570
+      },
+      "comeback-3.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "commissioner-name-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "commissioner-name-2.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "commissioner-name-3.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "commissioner-wins-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "commissioner-wins-2.mp3": {
+        "ms": 3004,
+        "bytes": 48527
+      },
+      "commissioner-wins-3.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "connected-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "connected-2.mp3": {
+        "ms": 2926,
+        "bytes": 47273
+      },
+      "connected-3.mp3": {
+        "ms": 2194,
+        "bytes": 35570
+      },
+      "cyraxx-name-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "cyraxx-name-2.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "cyraxx-name-3.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "cyraxx-wins-1.mp3": {
+        "ms": 2926,
+        "bytes": 47273
+      },
+      "cyraxx-wins-2.mp3": {
+        "ms": 2847,
+        "bytes": 46019
+      },
+      "cyraxx-wins-3.mp3": {
+        "ms": 2273,
+        "bytes": 36824
+      },
+      "cyraxx-wins-4.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "deathblow-name-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "deathblow-name-2.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "deathblow-name-3.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "deathblow-wins-1.mp3": {
+        "ms": 2038,
+        "bytes": 33062
+      },
+      "deathblow-wins-2.mp3": {
+        "ms": 2769,
+        "bytes": 44765
+      },
+      "deathblow-wins-3.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "devil-name-1.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "devil-name-2.mp3": {
+        "ms": 2273,
+        "bytes": 36824
+      },
+      "devil-name-3.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "devil-wins-1.mp3": {
+        "ms": 2508,
+        "bytes": 40586
+      },
+      "devil-wins-2.mp3": {
+        "ms": 3004,
+        "bytes": 48527
+      },
+      "devil-wins-3.mp3": {
+        "ms": 2508,
+        "bytes": 40586
+      },
+      "donald-name-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "donald-name-2.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "donald-name-3.mp3": {
+        "ms": 2847,
+        "bytes": 46019
+      },
+      "donald-wins-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "donald-wins-2.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "donald-wins-3.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "fatality-performed-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "fatality-performed-2.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "fatality-performed-3.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "fight-1.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "fight-2.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "fight-3.mp3": {
+        "ms": 3318,
+        "bytes": 53542
+      },
+      "fight-4.mp3": {
+        "ms": 914,
+        "bytes": 15090
+      },
+      "finalround-1.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "finalround-2.mp3": {
+        "ms": 3161,
+        "bytes": 51035
+      },
+      "finalround-3.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "finishthem-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "finishthem-2.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "finishthem-3.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "finishthem-4.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "flawless-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "flawless-2.mp3": {
+        "ms": 2586,
+        "bytes": 41839
+      },
+      "flawless-3.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "guardcrush-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "guardcrush-2.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "guardcrush-3.mp3": {
+        "ms": 2273,
+        "bytes": 36824
+      },
+      "jez-name-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "jez-name-2.mp3": {
+        "ms": 2038,
+        "bytes": 33062
+      },
+      "jez-name-3.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "jez-wins-1.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "jez-wins-2.mp3": {
+        "ms": 2691,
+        "bytes": 43511
+      },
+      "jez-wins-3.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "ko-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "ko-2.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "ko-3.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "ko-4.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "ko-5.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "perfect-1.mp3": {
+        "ms": 1071,
+        "bytes": 17598
+      },
+      "perfect-2.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "perfect-3.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "perfect-4.mp3": {
+        "ms": 758,
+        "bytes": 12582
+      },
+      "post-name-1.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "post-name-2.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "post-name-3.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "post-wins-1.mp3": {
+        "ms": 2038,
+        "bytes": 33062
+      },
+      "post-wins-2.mp3": {
+        "ms": 2586,
+        "bytes": 41839
+      },
+      "post-wins-3.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "recovered-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "recovered-2.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "recovered-3.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "rematch-1.mp3": {
+        "ms": 2194,
+        "bytes": 35570
+      },
+      "rematch-2.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "rematch-3.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "round1-1.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "round1-2.mp3": {
+        "ms": 2351,
+        "bytes": 38078
+      },
+      "round1-3.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "round2-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "round2-2.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "round2-3.mp3": {
+        "ms": 3161,
+        "bytes": 51035
+      },
+      "setpoint-1.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "setpoint-2.mp3": {
+        "ms": 2691,
+        "bytes": 43511
+      },
+      "setpoint-3.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "timeover-1.mp3": {
+        "ms": 2273,
+        "bytes": 36824
+      },
+      "timeover-2.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "timeover-3.mp3": {
+        "ms": 2847,
+        "bytes": 46019
+      },
+      "wallbounce-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "wallbounce-2.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "wallbounce-3.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "wallbounce-4.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      }
+    }
+  },
+  "fighters": {
+    "alan": {
+      "takes": 38,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "heavy": 3,
+        "hit-light": 3,
+        "jump": 3,
+        "light": 3,
+        "light-kick-impact": 1,
+        "light-kick-swing": 2,
+        "roundhouse-impact": 1,
+        "roundhouse-swing": 1,
+        "scream": 3,
+        "taunt": 3,
+        "tech": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 1959,
+          "bytes": 31808
+        },
+        "counter-3.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "counter.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "crush-2.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "crush-3.mp3": {
+          "ms": 3318,
+          "bytes": 53542
+        },
+        "crush.mp3": {
+          "ms": 3553,
+          "bytes": 57304
+        },
+        "desperation-2.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "desperation-3.mp3": {
+          "ms": 3971,
+          "bytes": 63991
+        },
+        "desperation.mp3": {
+          "ms": 4441,
+          "bytes": 71515
+        },
+        "dizzy-2.mp3": {
+          "ms": 3709,
+          "bytes": 59812
+        },
+        "dizzy-3.mp3": {
+          "ms": 3553,
+          "bytes": 57304
+        },
+        "dizzy.mp3": {
+          "ms": 3709,
+          "bytes": 59812
+        },
+        "heavy-2.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "heavy-3.mp3": {
+          "ms": 2508,
+          "bytes": 40586
+        },
+        "heavy.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "hit-light-2.mp3": {
+          "ms": 1149,
+          "bytes": 18852
+        },
+        "hit-light-3.mp3": {
+          "ms": 1567,
+          "bytes": 25539
+        },
+        "hit-light.mp3": {
+          "ms": 522,
+          "bytes": 8821
+        },
+        "jump-2.mp3": {
+          "ms": 1411,
+          "bytes": 23031
+        },
+        "jump-3.mp3": {
+          "ms": 1306,
+          "bytes": 21359
+        },
+        "jump.mp3": {
+          "ms": 549,
+          "bytes": 9239
+        },
+        "light-2.mp3": {
+          "ms": 1228,
+          "bytes": 20106
+        },
+        "light-3.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "light-kick-impact-b.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light-kick-swing-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light-kick-swing-b.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light.mp3": {
+          "ms": 522,
+          "bytes": 8821
+        },
+        "roundhouse-impact-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "scream-3.mp3": {
+          "ms": 4519,
+          "bytes": 72768
+        },
+        "scream.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "taunt-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "taunt-3.mp3": {
+          "ms": 1411,
+          "bytes": 23031
+        },
+        "taunt.mp3": {
+          "ms": 1489,
+          "bytes": 24285
+        },
+        "tech-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "tech-3.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "tech.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        }
+      }
+    },
+    "ali": {
+      "takes": 29,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "dash": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "light-kick-swing": 1,
+        "roundhouse-swing": 1,
+        "scream": 3,
+        "super": 3,
+        "taunt": 3,
+        "tech": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "counter-3.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "counter.mp3": {
+          "ms": 1959,
+          "bytes": 31808
+        },
+        "crush-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "crush-3.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "crush.mp3": {
+          "ms": 2926,
+          "bytes": 47273
+        },
+        "dash-2.mp3": {
+          "ms": 1489,
+          "bytes": 24285
+        },
+        "dash-3.mp3": {
+          "ms": 1489,
+          "bytes": 24285
+        },
+        "dash.mp3": {
+          "ms": 549,
+          "bytes": 9239
+        },
+        "desperation-2.mp3": {
+          "ms": 4989,
+          "bytes": 80292
+        },
+        "desperation-3.mp3": {
+          "ms": 5146,
+          "bytes": 82799
+        },
+        "desperation.mp3": {
+          "ms": 5329,
+          "bytes": 85725
+        },
+        "dizzy-2.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "dizzy-3.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "dizzy.mp3": {
+          "ms": 4441,
+          "bytes": 71515
+        },
+        "light-kick-swing-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "roundhouse-swing-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 4206,
+          "bytes": 67753
+        },
+        "scream-3.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "scream.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "super-2.mp3": {
+          "ms": 1881,
+          "bytes": 30555
+        },
+        "super-3.mp3": {
+          "ms": 3709,
+          "bytes": 59812
+        },
+        "super.mp3": {
+          "ms": 1228,
+          "bytes": 20106
+        },
+        "taunt-2.mp3": {
+          "ms": 1881,
+          "bytes": 30555
+        },
+        "taunt-3.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "taunt.mp3": {
+          "ms": 1646,
+          "bytes": 26793
+        },
+        "tech-2.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "tech-3.mp3": {
+          "ms": 4676,
+          "bytes": 75276
+        },
+        "tech.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        }
+      }
+    },
+    "benny": {
+      "takes": 28,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "light-kick-swing": 1,
+        "roundhouse-impact": 1,
+        "roundhouse-swing": 2,
+        "scream": 3,
+        "special": 3,
+        "taunt": 3,
+        "tech": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "counter-3.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "counter.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "crush-2.mp3": {
+          "ms": 2508,
+          "bytes": 40586
+        },
+        "crush-3.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "crush.mp3": {
+          "ms": 1959,
+          "bytes": 31808
+        },
+        "desperation-2.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "desperation-3.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "desperation.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "dizzy-2.mp3": {
+          "ms": 4519,
+          "bytes": 72768
+        },
+        "dizzy-3.mp3": {
+          "ms": 3239,
+          "bytes": 52288
+        },
+        "dizzy.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "light-kick-swing-b.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "roundhouse-impact-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 3788,
+          "bytes": 61066
+        },
+        "scream-3.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "scream.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "special-2.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "special-3.mp3": {
+          "ms": 1411,
+          "bytes": 23031
+        },
+        "special.mp3": {
+          "ms": 967,
+          "bytes": 15926
+        },
+        "taunt-2.mp3": {
+          "ms": 1306,
+          "bytes": 21359
+        },
+        "taunt-3.mp3": {
+          "ms": 1411,
+          "bytes": 23031
+        },
+        "taunt.mp3": {
+          "ms": 3082,
+          "bytes": 49781
+        },
+        "tech-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "tech-3.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "tech.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        }
+      }
+    },
+    "commissioner": {
+      "takes": 57,
+      "cues": {
+        "block": 3,
+        "counter": 3,
+        "crush": 3,
+        "dash": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "fatal": 3,
+        "heavy": 3,
+        "hit-heavy": 3,
+        "hit-light": 3,
+        "jump": 3,
+        "ko": 3,
+        "light": 3,
+        "scream": 3,
+        "special": 3,
+        "super": 3,
+        "taunt": 3,
+        "tech": 3,
+        "throw": 3
+      },
+      "files": {
+        "block-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "block-3.mp3": {
+          "ms": 1411,
+          "bytes": 23031
+        },
+        "block.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "counter-2.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "counter-3.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "counter.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "crush-2.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "crush-3.mp3": {
+          "ms": 4441,
+          "bytes": 71515
+        },
+        "crush.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "dash-2.mp3": {
+          "ms": 1567,
+          "bytes": 25539
+        },
+        "dash-3.mp3": {
+          "ms": 1228,
+          "bytes": 20106
+        },
+        "dash.mp3": {
+          "ms": 1567,
+          "bytes": 25539
+        },
+        "desperation-2.mp3": {
+          "ms": 4911,
+          "bytes": 79038
+        },
+        "desperation-3.mp3": {
+          "ms": 4519,
+          "bytes": 72768
+        },
+        "desperation.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "dizzy-2.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "dizzy-3.mp3": {
+          "ms": 4676,
+          "bytes": 75276
+        },
+        "dizzy.mp3": {
+          "ms": 4833,
+          "bytes": 77784
+        },
+        "fatal-2.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "fatal-3.mp3": {
+          "ms": 5329,
+          "bytes": 85725
+        },
+        "fatal.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "heavy-2.mp3": {
+          "ms": 2926,
+          "bytes": 47273
+        },
+        "heavy-3.mp3": {
+          "ms": 2273,
+          "bytes": 36824
+        },
+        "heavy.mp3": {
+          "ms": 1306,
+          "bytes": 21359
+        },
+        "hit-heavy-2.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "hit-heavy-3.mp3": {
+          "ms": 4598,
+          "bytes": 74022
+        },
+        "hit-heavy.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "hit-light-2.mp3": {
+          "ms": 1567,
+          "bytes": 25539
+        },
+        "hit-light-3.mp3": {
+          "ms": 1411,
+          "bytes": 23031
+        },
+        "hit-light.mp3": {
+          "ms": 1959,
+          "bytes": 31808
+        },
+        "jump-2.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "jump-3.mp3": {
+          "ms": 1646,
+          "bytes": 26793
+        },
+        "jump.mp3": {
+          "ms": 1881,
+          "bytes": 30555
+        },
+        "ko-2.mp3": {
+          "ms": 4598,
+          "bytes": 74022
+        },
+        "ko-3.mp3": {
+          "ms": 4598,
+          "bytes": 74022
+        },
+        "ko.mp3": {
+          "ms": 5956,
+          "bytes": 95756
+        },
+        "light-2.mp3": {
+          "ms": 2586,
+          "bytes": 41839
+        },
+        "light-3.mp3": {
+          "ms": 1306,
+          "bytes": 21359
+        },
+        "light.mp3": {
+          "ms": 2273,
+          "bytes": 36824
+        },
+        "scream-2.mp3": {
+          "ms": 3396,
+          "bytes": 54796
+        },
+        "scream-3.mp3": {
+          "ms": 3553,
+          "bytes": 57304
+        },
+        "scream.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "special-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "special-3.mp3": {
+          "ms": 2273,
+          "bytes": 36824
+        },
+        "special.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "super-2.mp3": {
+          "ms": 1881,
+          "bytes": 30555
+        },
+        "super-3.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "super.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "taunt-2.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "taunt-3.mp3": {
+          "ms": 2586,
+          "bytes": 41839
+        },
+        "taunt.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "tech-2.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "tech-3.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "tech.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "throw-2.mp3": {
+          "ms": 2586,
+          "bytes": 41839
+        },
+        "throw-3.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "throw.mp3": {
+          "ms": 1646,
+          "bytes": 26793
+        }
+      }
+    },
+    "cyraxx": {
+      "takes": 27,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "light-kick-impact": 1,
+        "light-kick-swing": 1,
+        "roundhouse-impact": 2,
+        "roundhouse-swing": 2,
+        "scream": 3,
+        "taunt": 3,
+        "tech": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 2926,
+          "bytes": 47273
+        },
+        "counter-3.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "counter.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "crush-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "crush-3.mp3": {
+          "ms": 1959,
+          "bytes": 31808
+        },
+        "crush.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "desperation-2.mp3": {
+          "ms": 4989,
+          "bytes": 80292
+        },
+        "desperation-3.mp3": {
+          "ms": 4362,
+          "bytes": 70261
+        },
+        "desperation.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "dizzy-2.mp3": {
+          "ms": 5407,
+          "bytes": 86979
+        },
+        "dizzy-3.mp3": {
+          "ms": 3866,
+          "bytes": 62319
+        },
+        "dizzy.mp3": {
+          "ms": 4598,
+          "bytes": 74022
+        },
+        "light-kick-impact-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light-kick-swing-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "roundhouse-impact-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-impact-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 3318,
+          "bytes": 53542
+        },
+        "scream-3.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "scream.mp3": {
+          "ms": 2273,
+          "bytes": 36824
+        },
+        "taunt-2.mp3": {
+          "ms": 4127,
+          "bytes": 66499
+        },
+        "taunt-3.mp3": {
+          "ms": 2508,
+          "bytes": 40586
+        },
+        "taunt.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "tech-2.mp3": {
+          "ms": 3396,
+          "bytes": 54796
+        },
+        "tech-3.mp3": {
+          "ms": 3553,
+          "bytes": 57304
+        },
+        "tech.mp3": {
+          "ms": 4441,
+          "bytes": 71515
+        }
+      }
+    },
+    "deathblow": {
+      "takes": 43,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "heavy": 3,
+        "jump": 3,
+        "light": 3,
+        "light-kick-swing": 1,
+        "roundhouse-impact": 1,
+        "roundhouse-swing": 2,
+        "scream": 3,
+        "special": 3,
+        "super": 3,
+        "taunt": 3,
+        "tech": 3,
+        "throw": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "counter-3.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "counter.mp3": {
+          "ms": 2273,
+          "bytes": 36824
+        },
+        "crush-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "crush-3.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "crush.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "desperation-2.mp3": {
+          "ms": 5564,
+          "bytes": 89487
+        },
+        "desperation-3.mp3": {
+          "ms": 4676,
+          "bytes": 75276
+        },
+        "desperation.mp3": {
+          "ms": 5799,
+          "bytes": 93248
+        },
+        "dizzy-2.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "dizzy-3.mp3": {
+          "ms": 4441,
+          "bytes": 71515
+        },
+        "dizzy.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "heavy-2.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "heavy-3.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "heavy.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "jump-2.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "jump-3.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "jump.mp3": {
+          "ms": 549,
+          "bytes": 9239
+        },
+        "light-2.mp3": {
+          "ms": 1567,
+          "bytes": 25539
+        },
+        "light-3.mp3": {
+          "ms": 1149,
+          "bytes": 18852
+        },
+        "light-kick-swing-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light.mp3": {
+          "ms": 522,
+          "bytes": 8821
+        },
+        "roundhouse-impact-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 3082,
+          "bytes": 49781
+        },
+        "scream-3.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "scream.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "special-2.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "special-3.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "special.mp3": {
+          "ms": 967,
+          "bytes": 15926
+        },
+        "super-2.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "super-3.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "super.mp3": {
+          "ms": 1228,
+          "bytes": 20106
+        },
+        "taunt-2.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "taunt-3.mp3": {
+          "ms": 3239,
+          "bytes": 52288
+        },
+        "taunt.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "tech-2.mp3": {
+          "ms": 3082,
+          "bytes": 49781
+        },
+        "tech-3.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "tech.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "throw-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "throw-3.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "throw.mp3": {
+          "ms": 810,
+          "bytes": 13418
+        }
+      }
+    },
+    "devil": {
+      "takes": 57,
+      "cues": {
+        "block": 3,
+        "counter": 3,
+        "crush": 3,
+        "dash": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "fatal": 3,
+        "heavy": 3,
+        "hit-heavy": 3,
+        "hit-light": 3,
+        "jump": 3,
+        "ko": 3,
+        "light": 3,
+        "scream": 3,
+        "special": 3,
+        "super": 3,
+        "taunt": 3,
+        "tech": 3,
+        "throw": 3
+      },
+      "files": {
+        "block-2.mp3": {
+          "ms": 3239,
+          "bytes": 52288
+        },
+        "block-3.mp3": {
+          "ms": 2586,
+          "bytes": 41839
+        },
+        "block.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "counter-2.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "counter-3.mp3": {
+          "ms": 4911,
+          "bytes": 79038
+        },
+        "counter.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "crush-2.mp3": {
+          "ms": 4127,
+          "bytes": 66499
+        },
+        "crush-3.mp3": {
+          "ms": 4206,
+          "bytes": 67753
+        },
+        "crush.mp3": {
+          "ms": 3709,
+          "bytes": 59812
+        },
+        "dash-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "dash-3.mp3": {
+          "ms": 3318,
+          "bytes": 53542
+        },
+        "dash.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "desperation-2.mp3": {
+          "ms": 5642,
+          "bytes": 90741
+        },
+        "desperation-3.mp3": {
+          "ms": 4362,
+          "bytes": 70261
+        },
+        "desperation.mp3": {
+          "ms": 4911,
+          "bytes": 79038
+        },
+        "dizzy-2.mp3": {
+          "ms": 3396,
+          "bytes": 54796
+        },
+        "dizzy-3.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "dizzy.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "fatal-2.mp3": {
+          "ms": 3971,
+          "bytes": 63991
+        },
+        "fatal-3.mp3": {
+          "ms": 3082,
+          "bytes": 49781
+        },
+        "fatal.mp3": {
+          "ms": 5146,
+          "bytes": 82799
+        },
+        "heavy-2.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "heavy-3.mp3": {
+          "ms": 3239,
+          "bytes": 52288
+        },
+        "heavy.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "hit-heavy-2.mp3": {
+          "ms": 4833,
+          "bytes": 77784
+        },
+        "hit-heavy-3.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "hit-heavy.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "hit-light-2.mp3": {
+          "ms": 2586,
+          "bytes": 41839
+        },
+        "hit-light-3.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "hit-light.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "jump-2.mp3": {
+          "ms": 4284,
+          "bytes": 69007
+        },
+        "jump-3.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "jump.mp3": {
+          "ms": 3396,
+          "bytes": 54796
+        },
+        "ko-2.mp3": {
+          "ms": 3788,
+          "bytes": 61066
+        },
+        "ko-3.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "ko.mp3": {
+          "ms": 3709,
+          "bytes": 59812
+        },
+        "light-2.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "light-3.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "light.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "scream-2.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "scream-3.mp3": {
+          "ms": 5068,
+          "bytes": 81546
+        },
+        "scream.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "special-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "special-3.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "special.mp3": {
+          "ms": 1959,
+          "bytes": 31808
+        },
+        "super-2.mp3": {
+          "ms": 4598,
+          "bytes": 74022
+        },
+        "super-3.mp3": {
+          "ms": 4833,
+          "bytes": 77784
+        },
+        "super.mp3": {
+          "ms": 5956,
+          "bytes": 95756
+        },
+        "taunt-2.mp3": {
+          "ms": 3866,
+          "bytes": 62319
+        },
+        "taunt-3.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "taunt.mp3": {
+          "ms": 2508,
+          "bytes": 40586
+        },
+        "tech-2.mp3": {
+          "ms": 3082,
+          "bytes": 49781
+        },
+        "tech-3.mp3": {
+          "ms": 3709,
+          "bytes": 59812
+        },
+        "tech.mp3": {
+          "ms": 4206,
+          "bytes": 67753
+        },
+        "throw-2.mp3": {
+          "ms": 4598,
+          "bytes": 74022
+        },
+        "throw-3.mp3": {
+          "ms": 2691,
+          "bytes": 43511
+        },
+        "throw.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        }
+      }
+    },
+    "donald": {
+      "takes": 29,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "heavy": 3,
+        "jump": 3,
+        "roundhouse-swing": 2,
+        "scream": 3,
+        "taunt": 3,
+        "tech": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 2038,
+          "bytes": 33062
+        },
+        "counter-3.mp3": {
+          "ms": 3318,
+          "bytes": 53542
+        },
+        "counter.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "crush-2.mp3": {
+          "ms": 2273,
+          "bytes": 36824
+        },
+        "crush-3.mp3": {
+          "ms": 2586,
+          "bytes": 41839
+        },
+        "crush.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "desperation-2.mp3": {
+          "ms": 4441,
+          "bytes": 71515
+        },
+        "desperation-3.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "desperation.mp3": {
+          "ms": 4833,
+          "bytes": 77784
+        },
+        "dizzy-2.mp3": {
+          "ms": 3631,
+          "bytes": 58558
+        },
+        "dizzy-3.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "dizzy.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "heavy-2.mp3": {
+          "ms": 993,
+          "bytes": 16344
+        },
+        "heavy-3.mp3": {
+          "ms": 3396,
+          "bytes": 54796
+        },
+        "heavy.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "jump-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "jump-3.mp3": {
+          "ms": 1567,
+          "bytes": 25539
+        },
+        "jump.mp3": {
+          "ms": 549,
+          "bytes": 9239
+        },
+        "roundhouse-swing-a.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "roundhouse-swing-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "scream-3.mp3": {
+          "ms": 3971,
+          "bytes": 63991
+        },
+        "scream.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        },
+        "taunt-2.mp3": {
+          "ms": 2351,
+          "bytes": 38078
+        },
+        "taunt-3.mp3": {
+          "ms": 1489,
+          "bytes": 24285
+        },
+        "taunt.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "tech-2.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        },
+        "tech-3.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "tech.mp3": {
+          "ms": 2429,
+          "bytes": 39332
+        }
+      }
+    },
+    "jez": {
+      "takes": 24,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "light-kick-swing": 2,
+        "roundhouse-impact": 1,
+        "scream": 3,
+        "taunt": 3,
+        "tech": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "counter-3.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "counter.mp3": {
+          "ms": 1489,
+          "bytes": 24285
+        },
+        "crush-2.mp3": {
+          "ms": 1881,
+          "bytes": 30555
+        },
+        "crush-3.mp3": {
+          "ms": 1646,
+          "bytes": 26793
+        },
+        "crush.mp3": {
+          "ms": 2769,
+          "bytes": 44765
+        },
+        "desperation-2.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "desperation-3.mp3": {
+          "ms": 4049,
+          "bytes": 65245
+        },
+        "desperation.mp3": {
+          "ms": 5068,
+          "bytes": 81546
+        },
+        "dizzy-2.mp3": {
+          "ms": 5721,
+          "bytes": 91995
+        },
+        "dizzy-3.mp3": {
+          "ms": 4362,
+          "bytes": 70261
+        },
+        "dizzy.mp3": {
+          "ms": 3971,
+          "bytes": 63991
+        },
+        "light-kick-swing-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light-kick-swing-b.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "roundhouse-impact-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "scream-3.mp3": {
+          "ms": 4127,
+          "bytes": 66499
+        },
+        "scream.mp3": {
+          "ms": 1411,
+          "bytes": 23031
+        },
+        "taunt-2.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "taunt-3.mp3": {
+          "ms": 1306,
+          "bytes": 21359
+        },
+        "taunt.mp3": {
+          "ms": 1228,
+          "bytes": 20106
+        },
+        "tech-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "tech-3.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "tech.mp3": {
+          "ms": 1881,
+          "bytes": 30555
+        }
+      }
+    },
+    "post": {
+      "takes": 25,
+      "cues": {
+        "counter": 3,
+        "crush": 3,
+        "desperation": 3,
+        "dizzy": 3,
+        "light-kick-impact": 1,
+        "light-kick-swing": 2,
+        "roundhouse-impact": 1,
+        "scream": 3,
+        "taunt": 3,
+        "tech": 3
+      },
+      "files": {
+        "counter-2.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "counter-3.mp3": {
+          "ms": 5642,
+          "bytes": 90741
+        },
+        "counter.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "crush-2.mp3": {
+          "ms": 1724,
+          "bytes": 28047
+        },
+        "crush-3.mp3": {
+          "ms": 2586,
+          "bytes": 41839
+        },
+        "crush.mp3": {
+          "ms": 2273,
+          "bytes": 36824
+        },
+        "desperation-2.mp3": {
+          "ms": 4127,
+          "bytes": 66499
+        },
+        "desperation-3.mp3": {
+          "ms": 3161,
+          "bytes": 51035
+        },
+        "desperation.mp3": {
+          "ms": 5956,
+          "bytes": 95756
+        },
+        "dizzy-2.mp3": {
+          "ms": 3971,
+          "bytes": 63991
+        },
+        "dizzy-3.mp3": {
+          "ms": 3709,
+          "bytes": 59812
+        },
+        "dizzy.mp3": {
+          "ms": 5721,
+          "bytes": 91995
+        },
+        "light-kick-impact-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light-kick-swing-a.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "light-kick-swing-b.mp3": {
+          "ms": 731,
+          "bytes": 12164
+        },
+        "roundhouse-impact-b.mp3": {
+          "ms": 914,
+          "bytes": 15090
+        },
+        "scream-2.mp3": {
+          "ms": 2508,
+          "bytes": 40586
+        },
+        "scream-3.mp3": {
+          "ms": 3474,
+          "bytes": 56050
+        },
+        "scream.mp3": {
+          "ms": 1646,
+          "bytes": 26793
+        },
+        "taunt-2.mp3": {
+          "ms": 2194,
+          "bytes": 35570
+        },
+        "taunt-3.mp3": {
+          "ms": 2116,
+          "bytes": 34316
+        },
+        "taunt.mp3": {
+          "ms": 1802,
+          "bytes": 29301
+        },
+        "tech-2.mp3": {
+          "ms": 1959,
+          "bytes": 31808
+        },
+        "tech-3.mp3": {
+          "ms": 3239,
+          "bytes": 52288
+        },
+        "tech.mp3": {
+          "ms": 3004,
+          "bytes": 48527
+        }
+      }
+    }
+  },
+  "shared": {
+    "body-hit.mp3": {
+      "ms": 549,
+      "bytes": 9239
+    },
+    "finish-ready.mp3": {
+      "ms": 1672,
+      "bytes": 27211
+    },
+    "heavy-swing.mp3": {
+      "ms": 679,
+      "bytes": 11328
+    },
+    "jump.mp3": {
+      "ms": 549,
+      "bytes": 9239
+    },
+    "knockout.mp3": {
+      "ms": 1567,
+      "bytes": 25539
+    },
+    "light-swing.mp3": {
+      "ms": 522,
+      "bytes": 8821
+    },
+    "neon-sign-war.mp3": {
+      "ms": 80065,
+      "bytes": 1281089
+    },
+    "philly-after-dark.mp3": {
+      "ms": 80091,
+      "bytes": 1281507
+    },
+    "subway-after-midnight.mp3": {
+      "ms": 80091,
+      "bytes": 1281507
+    },
+    "ui-select.mp3": {
+      "ms": 522,
+      "bytes": 8821
+    },
+    "vet-parking-lot.mp3": {
+      "ms": 80091,
+      "bytes": 1281507
+    }
+  },
+  "gaps": []
+}

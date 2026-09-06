@@ -489,7 +489,7 @@ every autonomous decision made during 1.1:
 | File | Covers |
 | --- | --- |
 | `CONTROLS.md` | Four-button layout, motions, chords, grabs, 10 design decisions |
-| `MISSING-AUDIO.md` | The outstanding voice work order, and which takes the SFX review rejected |
+| `MISSING-AUDIO.md` | The outstanding voice work order, which takes the SFX review rejected, and the 5.1 build-time audio manifest (`tools/audio/build_manifest.mjs`) |
 | `COMBAT.md` | SF2HF/MK3 tuning tables, dizzy, fighter scale, the movement-ratio bug |
 | `THROWABLES.md` | Personal objects and stage weapons |
 | `CYRAXX.md` | The rebuild, identity cues, pipeline, the fal edit-mode limitation |

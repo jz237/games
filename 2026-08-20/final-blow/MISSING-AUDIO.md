@@ -30,12 +30,32 @@ from that review. Run P0 as a candidate-review cycle with him, not as a
 drop-in batch.
 
 Every system below shipped caption-first before the files existed: captions
-show the exact lines, missing banks are HEAD-probed once per session and
-skipped silently, and single-take fighter cues get deterministic
-playbackRate/detune jitter. **Drop a file at its canonical path and it joins
-the rotation on the next page load — no code changes needed.** Banks are
-contiguous: the probe stops at the first missing number, so generate `-1`
-before `-2` before `-3`.
+show the exact lines, missing banks are skipped silently, and single-take
+fighter cues get deterministic playbackRate/detune jitter. Banks are
+contiguous: a bank ends at the first missing number, so generate `-1` before
+`-2` before `-3`.
+
+### Build-time manifest (5.1)
+
+Which takes exist, and how long each runs, is baked into
+`assets/audio/MANIFEST.json` by `node tools/audio/build_manifest.mjs`
+(ffprobe; nothing is re-encoded). game.js reads that one file at boot:
+fighter banks fill from it with **zero HEAD probes** (5.0 fired 21–57 per
+fighter, 114 for devil vs commissioner) and one media element per take
+(was 3–5, up to 183 per fighter), and the announcer's serialised speech clock
+and music duck use the take's **measured length** instead of the old
+word-count guess (capped at 1.7 s while `benny-wins-2` runs 4.68 s — the
+KO → wins → comeback stack used to talk over itself). **Drop a file at its
+canonical path, then re-run the builder** (`--check` says whether it is
+stale; `tests/audio-manifest.test.mjs` fails on a stale or incomplete
+manifest). Without the manifest the runtime behaves exactly as before:
+announcer counts from `assets/audio/announcer/MANIFEST.json`, then the
+once-per-bank HEAD probe, then the word-count estimate.
+
+The six 2.8 retakes (`ko-5`, `perfect-4`, `finishthem-4`, `wallbounce-4`,
+`cyraxx-wins-4`, `flawless-3`) each re-read line 1 of their bank
+(whisper-transcribed 2026-09-05); `ANNOUNCER_RETAKES` in game.js appends that
+line so caption and take agree.
 
 Announcer voice (all `assets/audio/announcer/` files): one voice — a deep,
 gritty arena MC. Short, punchy takes with hard consonants and a little tail
