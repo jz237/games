@@ -3378,3 +3378,19 @@ sprite-pose pinned verbatim against game.js) and the 0.085 rad exhaustion
 lean under 25% health now run in 3D with the 2D gates (reduced motion off,
 cinematic frames off, super storms on). The tremble moves the body and the
 mirror but not the contact shadows, as in 2D.
+## v5.1 — STAGE KO BEATS: THE OTHER FOUR STAGES ANSWER THE KO
+
+Stage art, not fighter art, so the detail lives in STAGES.md ("5.1 — stage
+KO beats"). The short version: the 5.0 AMBIENT REACTIONS paragraph above
+claimed "sign chases, gull scatter and pool-deck flash" for the stages
+below the Vet; only the Vet actually reached the owner's visible bar (the
+pool-deck flash did not exist). The buffet, the cruise deck, Somerset and
+Wildwood now draw big hits and the KO from one shared surge read (the 5.0
+pulse plus the 5.1 crowd KO hold, `engine/ambient.mjs`), each with its own
+furniture — wok fireball, pass-through flood and steam eruption; pool and
+deck flash, horn, funnel jet, cannonball and gulls; station-lamp surge, sign
+flare, the KO train and a street flash; rim chase, sign flood, held chase
+bulbs and pier fireworks — measured on the canvas at the KO tick at +32 to
++130 mean brightness on the landmark rectangles (numbers in STAGES.md),
+decayed by KO+170, sky flat. Reduced motion zeroes all of it; the horn
+still sounds.

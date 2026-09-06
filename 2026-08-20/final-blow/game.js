@@ -366,9 +366,15 @@ import {
 // unit-tested under Node. game.js keeps the DOM gates and the state reads.
 import { swingContext, swingResolve } from "./engine/swing-resolve.mjs";
 import {
+  AMBIENT_KO_HORNS,
+  ambientKoBeat,
   ambientPhaseChange,
   ambientPulseLevel,
+  ambientStutter,
+  ambientSurge,
+  ambientSyncedCycle,
   createAmbientObs,
+  pickKoHorn,
   pulseAmbientLatch,
   stirPulseKind,
 } from "./engine/ambient.mjs";
@@ -9271,6 +9277,10 @@ function drawPracticalLights(time, frame, centre, reaction) {
   const flicker = (speed, phase, amount) =>
     reduced ? 0 : Math.sin(frame * speed + phase * Math.PI * 2) * amount;
   const backdropShift = (centre - W * 0.5) * -0.035;
+  // v5.1 STAGE KO BEATS: the painted lights answer the same surge the
+  // ambient layer reads (a big hit or the KO beat), so the El band, the
+  // boardwalk neon pools and the heat-lamp cones flare with their stages.
+  const surge = stageSurge(frame, reduced);
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   if (state.stage === "somerset") {
@@ -9279,7 +9289,7 @@ function drawPracticalLights(time, frame, centre, reaction) {
     const bandX = trainX + 215;
     if (bandX > -280 && bandX < W + 280) {
       const band = glowSprite(255, 208, 116);
-      ctx.globalAlpha = 0.34 + flicker(0.31, 0.2, 0.05);
+      ctx.globalAlpha = 0.34 + flicker(0.31, 0.2, 0.05) + surge.level * 0.4;
       ctx.drawImage(band, bandX - 260, FLOOR - 66, 520, 132);
       ctx.globalAlpha = 0.2;
       ctx.drawImage(band, bandX - 150, 158, 300, 110); // spill around the cars
@@ -9298,7 +9308,7 @@ function drawPracticalLights(time, frame, centre, reaction) {
     for (const pool of pools) {
       const x = pool.x + backdropShift;
       if (x < -220 || x > W + 220) continue;
-      ctx.globalAlpha = 0.24 + flicker(0.06, pool.phase, 0.09);
+      ctx.globalAlpha = 0.24 + flicker(0.06, pool.phase, 0.09) + surge.level * 0.36;
       ctx.drawImage(glowSprite(pool.red, pool.green, pool.blue), x - pool.radiusX, FLOOR - 34, pool.radiusX * 2, 120);
       presentationDebug.practicalLights += 1;
     }
@@ -9311,13 +9321,14 @@ function drawPracticalLights(time, frame, centre, reaction) {
   } else if (state.stage === "buffet") {
     // Heat-lamp cones flicker over the steam table, hanging from the same
     // swaying pendants the atmosphere pass draws (same x, same phase).
-    const sway = (0.02 + reaction * 0.05) * Math.sin(frame * 0.03);
+    const sway = (0.02 + reaction * 0.05 + surge.level * 0.12) * Math.sin(frame * 0.03);
     const cone = coneSprite(255, 186, 104);
     for (let index = 0; index < 6; index += 1) {
       const x = 150 + index * 200 + (centre - W * 0.5) * -0.1 + Math.sin(sway + index) * 12;
       if (x < -120 || x > W + 120) continue;
-      ctx.globalAlpha = 0.3 + flicker(0.052, index * 0.37, 0.08);
-      ctx.drawImage(cone, x - 82, 132, 164, 310);
+      // The cones flare and widen with the surge (a heat lamp kicked to full).
+      ctx.globalAlpha = 0.3 + flicker(0.052, index * 0.37, 0.08) + surge.level * 0.5;
+      ctx.drawImage(cone, x - 82 - surge.level * 20, 132, 164 + surge.level * 40, 310);
       presentationDebug.practicalLights += 1;
     }
   } else if (state.stage === "janney") {
@@ -17123,6 +17134,47 @@ function pulseAmbient(kind, amount) {
   pulseAmbientLatch(ambientObs, kind, amount, state.simulationTick);
 }
 
+// v5.1 STAGE KO BEATS: the one read every stage layer shares. The KO latch
+// (phase edge into finish/roundover) and the level at `frame`, then the
+// crowd's KO hold folded in as the KO beat — whichever of the two is
+// stronger drives the furniture (engine/ambient.mjs ambientSurge). The
+// atmosphere passes run inside drawCrowd, before drawStageAmbient, so this is
+// called more than once per frame; the phase latch is one-shot per edge and
+// the hold latch idempotent, so the extra reads change nothing.
+function readAmbientPulse(frame, reduced) {
+  const koPulse = ambientPhaseChange(ambientObs, state.phase, state.screen);
+  if (koPulse) pulseAmbient(koPulse.kind, koPulse.amount);
+  const { pulseAge, pulse, ko } = ambientPulseLevel(ambientObs, frame, reduced);
+  return { pulseAge, pulse, ko };
+}
+
+function stageKoBeat(reduced = state.accessibility.reducedMotion) {
+  updateCrowdKoHoldLatch();
+  return ambientKoBeat(crowdKoHoldAge(), reduced);
+}
+
+function stageSurge(frame, reduced = state.accessibility.reducedMotion) {
+  const level = readAmbientPulse(frame, reduced);
+  // pulseAge rides along raw: the synced cycles (splashes, steam, pigeons)
+  // run 60 ticks, longer than the 48-tick level, so they key off the latch
+  // age rather than the surge's age (which reads -1 once the level is gone).
+  return { ...ambientSurge(level, stageKoBeat(reduced)), pulseAge: level.pulseAge };
+}
+
+// A soft-edged horizontal band of light (the pass-through window, the pool
+// surface, a street-level flash): fades in and out vertically so it reads as
+// a lit plane in the plate, not a painted rectangle.
+function ambientBand(x, y, width, height, rgb, alpha) {
+  if (alpha <= 0.002) return;
+  const gradient = ctx.createLinearGradient(0, y, 0, y + height);
+  gradient.addColorStop(0, `rgba(${rgb},0)`);
+  gradient.addColorStop(0.35, `rgba(${rgb},${alpha})`);
+  gradient.addColorStop(0.65, `rgba(${rgb},${alpha})`);
+  gradient.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x, y, width, height);
+}
+
 function stirCrowd(amount = 1, kind = "") {
   state.crowdReaction = Math.min(1.4, state.crowdReaction + amount);
   const pulseKind = stirPulseKind(amount);
@@ -17777,10 +17829,16 @@ function drawStageAmbient(frame, centre, reaction) {
   const skyX = (centre - W * 0.5) * -0.06;
   const stage = state.stage;
   // v5.0 AMBIENT REACTIONS: a KO is a pulse too, latched on the phase change.
-  const koPulse = ambientPhaseChange(ambientObs, state.phase, state.screen);
-  if (koPulse) pulseAmbient(koPulse.kind, koPulse.amount);
   // 0..1 over the first ~40 ticks after a big moment, then gone.
-  const { pulseAge, pulse, ko } = ambientPulseLevel(ambientObs, frame, reduced);
+  const { pulseAge, pulse, ko } = readAmbientPulse(frame, reduced);
+  // v5.1 STAGE KO BEATS: the crowd's KO hold is the stage's KO beat (flash
+  // decays over the same 48 ticks, hold rides the whole roundover), and the
+  // four stages below the Vet draw from the stronger of pulse and flash.
+  // Furniture pinned to painted landmarks rides the plate's own parallax
+  // (drawCover's -0.035), sky pieces the wider skyX like the gulls.
+  const beat = stageKoBeat(reduced);
+  const surge = ambientSurge({ pulseAge, pulse }, beat);
+  const plateX = (centre - W * 0.5) * -0.035;
   ctx.save();
   if (stage === "vet") {
     // Floodlights breathe, a blimp crawls the sky, fireworks pop over the bowl.
@@ -17812,20 +17870,49 @@ function drawStageAmbient(frame, centre, reaction) {
     }
   } else if (stage === "wildwood") {
     // The wheel's rim lights turn, the sign chases, a plane crosses, a ship
-    // sits on the horizon.
+    // sits on the horizon. v5.1 STAGE KO BEATS: a big hit sends a bright
+    // sector chasing round the rim (a lap every 18 ticks) and floods the
+    // WILDWOOD letters pink-gold with the chase bulbs stuttering under it;
+    // the KO strobes the rim in 6-tick alternation, holds every chase bulb
+    // lit for the whole roundover and puts two fireworks up over the pier.
     const cx = 222 + skyX, cy = 240, radius = 83;
+    const chaseAngle = surge.age >= 0 ? surge.age * 0.35 : 0;
+    const rimStrobe = surge.ko && surge.level > 0 ? Math.floor(surge.age / 6) % 2 : -1;
     for (let bulb = 0; bulb < 18; bulb += 1) {
       const angle = (bulb / 18) * Math.PI * 2 + f * 0.007;
       const hue = (bulb * 40 + f * 0.6) % 360;
+      const bx = cx + Math.cos(angle) * radius, by = cy + Math.sin(angle) * radius;
+      // Angular distance to the chasing sector, folded to 0..PI.
+      const gap = Math.abs((((angle - chaseAngle) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      const inSector = surge.level > 0 && gap < 0.9;
+      const strobed = rimStrobe >= 0 && bulb % 2 === rimStrobe;
       ctx.fillStyle = `hsla(${hue}, 95%, 72%, .75)`;
       ctx.beginPath();
-      ctx.arc(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius, 2.4, 0, Math.PI * 2);
+      ctx.arc(bx, by, 2.4 + (inSector || strobed ? surge.level * 2.2 : 0), 0, Math.PI * 2);
       ctx.fill();
+      if (inSector) ambientGlow(bx, by, 14 + surge.level * 12, "255,240,220", surge.level * (1 - gap / 0.9) * 0.9);
+      if (strobed) ambientGlow(bx, by, 12, "255,250,240", surge.level * 0.85);
     }
+    if (surge.level > 0) ambientGlow(cx, cy, radius + 40 + surge.level * 40, "255,190,230", surge.level * 0.28);
+    // The sign: pink-gold flood over the letters while a surge is live.
+    if (surge.level > 0) {
+      ambientGlow(520 + plateX, 165, 250, "255,170,200", surge.level * 0.42);
+      ambientGlow(850 + plateX, 165, 250, "255,196,150", surge.level * 0.42);
+    }
+    // Chase bulbs under the letters: the idle 1-in-7 chase, 4x faster on a
+    // pulse; the KO hold burns every bulb (stuttering through the flash,
+    // then a solid double-speed chase for the rest of the roundover).
     for (let bulb = 0; bulb < 28; bulb += 1) {
-      const lit = ((bulb - Math.floor(f * (0.18 + pulse * 0.6))) % 7 + 7) % 7 === 0;
-      if (!lit) continue;
-      ambientGlow(368 + bulb * 24 + skyX * 0.3, 234, 7, "255,228,200", 0.55);
+      const chase = ((bulb - Math.floor(f * (0.18 + pulse * 0.6 + (beat.hold ? 0.18 : 0)))) % 7 + 7) % 7 === 0;
+      const held = beat.hold && ambientStutter(presentationHash01(Math.floor(f / 3), 23, bulb), beat.flash) > 0.5;
+      if (!chase && !held) continue;
+      const alpha = held ? 0.55 + beat.flash * 0.4 : 0.55 + surge.level * 0.35;
+      ambientGlow(368 + bulb * 24 + skyX * 0.3, 234, 7 + surge.level * 5, "255,228,200", alpha);
+    }
+    // The KO's fireworks over the pier (the pulse burst below stays).
+    if (beat.hold) {
+      ambientFirework(beat.age, 100000, 53 + crowdKoHold.startTick, 120, 560, 60, 200);
+      if (beat.age >= 22) ambientFirework(beat.age - 22, 100000, 59 + crowdKoHold.startTick, 200, 640, 50, 180);
     }
     if (!reduced) {
       const planeX = W + 200 - ((f * 0.85) % (W + 460)) + skyX;
@@ -17842,6 +17929,12 @@ function drawStageAmbient(frame, centre, reaction) {
     }
   } else if (stage === "buffet") {
     // Kitchen staff cross the pass-through, a wok flares, pendants breathe.
+    // v5.1 STAGE KO BEATS: a big hit throws the wok — a fireball climbing out
+    // of the pass with a white-hot core — stutters the five pendants and
+    // rattles the tray line (specular glints hopping along the sneeze guard);
+    // the steam-table plumes erupt in drawBuffetAtmosphere and the heat lamps
+    // flare in drawPracticalLights off the same surge. The KO floods the
+    // whole pass-through window with kitchen light.
     const crossing = (period, salt, direction, speed, y, height) => {
       const age = (f + salt) % period;
       const duration = 840 / speed;
@@ -17863,12 +17956,31 @@ function drawStageAmbient(frame, centre, reaction) {
     }
     const flare = (f + 170) % 330;
     if (flare < 14) ambientGlow(1040, 158, 60, "255,170,70", (14 - flare) / 14 * 0.6);
-    if (pulse > 0) ambientGlow(1040, 150, 60 + pulse * 90, "255,190,90", pulse * 0.8);
-    for (const px of [40, 330, 640, 940, 1240]) {
-      ambientGlow(px, 74, 46, "255,196,120", 0.08 + Math.sin(f * 0.05 + px) * 0.03);
+    if (surge.level > 0) {
+      // The fireball climbs ~30 px out of the pass as it fades.
+      const climb = (1 - surge.level) * 30;
+      ambientGlow(1040 + plateX, 150 - climb, 60 + surge.level * 110, "255,190,90", surge.level * 0.9);
+      ambientGlow(1040 + plateX, 128 - climb, 30 + surge.level * 40, "255,240,200", surge.level * 0.7);
+    }
+    if (beat.flash > 0) ambientBand(230 + plateX, 122, 900, 100, "255,228,180", beat.flash * 0.55);
+    for (const [index, px] of [40, 330, 640, 940, 1240].entries()) {
+      const stutter = ambientStutter(presentationHash01(Math.floor(f / 3), 7, index), surge.level);
+      ambientGlow(px + plateX, 74, 46 + surge.level * 30, "255,196,120", (0.08 + Math.sin(f * 0.05 + px) * 0.03 + surge.level * 0.22) * stutter);
+    }
+    if (surge.level > 0) {
+      // Tray rattle: ten glints hop along the tray line, each on its own beat.
+      for (let glint = 0; glint < 10; glint += 1) {
+        const hop = Math.max(0, Math.sin(surge.age * 0.55 + glint * 1.1)) * surge.level * 9;
+        ambientGlow(150 + glint * 110 + plateX, 322 - hop, 14, "255,240,220", surge.level * 0.8);
+      }
     }
   } else if (stage === "cruise") {
-    // Funnel smoke, gulls over the water, a ship on the horizon.
+    // Funnel smoke, gulls over the water, a ship on the horizon. v5.1 STAGE
+    // KO BEATS: a big hit flashes the pool and the wet deck and stutters the
+    // party string under the bar awning; the five splash plumes fire together
+    // in drawPoolDeckAtmosphere. The KO sounds the horn (updateCrowdAudio) —
+    // a steam jet off the funnel with the horn light on it — and puts six
+    // gulls up off the port rail.
     if (!reduced) {
       for (let puff = 0; puff < 7; puff += 1) {
         const age = (f + puff * 41) % 290;
@@ -17892,6 +18004,43 @@ function drawStageAmbient(frame, centre, reaction) {
     ctx.fillStyle = "rgba(226,232,240,.6)";
     ctx.fillRect(shipX, 296, 26, 5);
     ctx.fillRect(shipX + 6, 291, 12, 5);
+    // The party string under the awning: 26 warm bulbs, a soft idle glow,
+    // stuttering hard while a surge is live.
+    for (let bulb = 0; bulb < 26; bulb += 1) {
+      const stutter = ambientStutter(presentationHash01(Math.floor(f / 3), 11, bulb), surge.level);
+      ambientGlow(350 + bulb * 26 + plateX, 308, 6 + surge.level * 5, "255,214,150", (0.35 + surge.level * 0.3) * stutter);
+    }
+    if (surge.level > 0) {
+      // Pool surface and wet deck flash — the 'pool-deck flash' of the 5.0 note.
+      ambientBand(200 + plateX, 402, 880, 96, "150,235,255", surge.level * 0.55);
+      ambientGlow(640 + plateX, 450, 300, "170,240,255", surge.level * 0.35);
+      ambientBand(0, 500, W, 110, "255,244,214", surge.level * 0.28);
+    }
+    if (beat.hold) {
+      // Horn: a steam jet climbs off the funnel for ~40 ticks under the light.
+      const jet = Math.min(1, beat.age / 40);
+      const funnelX = 745 + skyX;
+      for (let puff = 0; puff < 4; puff += 1) {
+        const t = Math.max(0, jet - puff * 0.12);
+        if (t <= 0) continue;
+        ctx.globalAlpha = (1 - t) * 0.75;
+        ctx.fillStyle = "#f4f7fa";
+        ctx.beginPath();
+        ctx.arc(funnelX + t * 30 + puff * 6, 14 - t * 70 - puff * 10, 8 + t * 22, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ambientGlow(funnelX, 22, 40 + beat.flash * 50, "255,240,200", beat.flash * 0.9);
+      // Six gulls up off the port rail, fanning out over 90 ticks.
+      if (beat.age < 90) {
+        const t = beat.age / 90;
+        for (let gull = 0; gull < 6; gull += 1) {
+          const gx = 110 + gull * 34 + plateX + t * (180 + gull * 55);
+          const gy = 330 - t * (210 + gull * 28) + Math.sin(beat.age * 0.3 + gull) * 6;
+          ambientGull(gx, gy, Math.sin(beat.age * 0.45 + gull * 1.3) * 4, 7 + (gull % 3) * 2, 0.8 * (1 - t * 0.5));
+        }
+      }
+    }
   } else if (stage === "janney") {
     // Moths orbit the sodium lamp, TVs flicker in the rowhouses, a car's
     // lights sweep the far street, a plane blinks over the roofs.
@@ -17924,10 +18073,42 @@ function drawStageAmbient(frame, centre, reaction) {
     }
   } else if (stage === "somerset") {
     // The corner signal cycles, headlights come up the side street, pigeons
-    // peck the wet sidewalk and scatter now and then.
+    // peck the wet sidewalk and scatter now and then. v5.1 STAGE KO BEATS: a
+    // big hit surges the nine station lamps under the El and the SOMERSET
+    // sign, stutters the corner signal and the storefront neon (the El's
+    // window band on the pavement flares in drawPracticalLights); the KO
+    // sends a second train through at speed — 60 ticks end to end, lit
+    // windows smeared into a streak, its band sweeping the wet street — and
+    // lights the whole street level for the flash.
     const cycle = f % 720;
     const signal = cycle < 380 ? "255,64,50" : cycle < 440 ? "255,190,60" : "80,230,120";
-    ambientGlow(1193 + skyX * 0.3, 67, 9, signal, 0.85);
+    ambientGlow(1193 + skyX * 0.3, 67, 9 + surge.level * 8, signal, 0.85 * ambientStutter(presentationHash01(Math.floor(f / 4), 17, 0), surge.level));
+    if (surge.level > 0) {
+      const lamps = [[150, 100], [670, 100], [615, 205], [45, 240], [190, 268], [410, 280], [460, 300], [760, 285], [1240, 95]];
+      for (const [index, [lx, ly]] of lamps.entries()) {
+        const stutter = ambientStutter(presentationHash01(Math.floor(f / 4), 13, index), surge.level * 0.6);
+        ambientGlow(lx + plateX, ly, 22 + surge.level * 70, "255,214,140", surge.level * 0.75 * stutter);
+      }
+      ambientGlow(600 + plateX, 292, 90 + surge.level * 60, "120,255,170", surge.level * 0.55);
+      ambientGlow(60 + plateX, 300, 30 + surge.level * 30, "255,90,70", surge.level * 0.6 * ambientStutter(presentationHash01(Math.floor(f / 3), 19, 0), surge.level));
+    }
+    if (beat.hold && beat.age < 60) {
+      const t = beat.age / 60;
+      const tx = -460 + t * (W + 920) + plateX;
+      ctx.fillStyle = "rgba(200,210,220,.5)";
+      ctx.fillRect(tx, 154, 430, 58);
+      ambientBand(tx - 120, 160, 670, 36, "255,225,150", 0.35);
+      for (let x = tx + 24; x < tx + 410; x += 53) {
+        ctx.fillStyle = "rgba(255,232,160,.95)";
+        ctx.fillRect(x, 166, 34, 22);
+        ambientGlow(x + 17, 177, 40, "255,225,150", 0.5);
+      }
+      ambientGlow(tx + 215, 560, 300, "255,208,116", 0.35 * (1 - t * 0.3));
+    }
+    if (beat.flash > 0) {
+      ambientBand(0, 380, W, 240, "255,225,180", beat.flash * 0.35);
+      ambientGlow(640 + plateX, 300, 520, "255,225,180", beat.flash * 0.3);
+    }
     if (!reduced) {
       const pass = f % 820;
       if (pass < 170) {
@@ -17939,7 +18120,7 @@ function drawStageAmbient(frame, centre, reaction) {
         ambientGlow(x + size, 288, size, "255,250,235", 0.9);
       }
       for (let bird = 0; bird < 3; bird += 1) {
-        const scatter = pulseAge >= 0 && pulseAge < 60 ? pulseAge + bird * 4 : (f + bird * 90) % 900;
+        const scatter = ambientSyncedCycle(pulseAge, bird * 4, 60, (f + bird * 90) % 900);
         const fly = scatter < 60 ? scatter / 60 : 0;
         const bx = 150 + bird * 26 + skyX * 0.2 + fly * (60 + bird * 20) + (scatter >= 60 ? 0 : 0);
         const by = 332 + (bird % 2) * 4 - fly * (90 + bird * 15) + (fly ? 0 : Math.abs(Math.sin(f * 0.11 + bird)) * -2);
@@ -17993,23 +18174,29 @@ function drawBoardwalkAtmosphere(frame, centre) {
 // Steam bursts, swaying pendant lights and rattling trays over the crab legs.
 function drawBuffetAtmosphere(frame, centre, reaction) {
   ctx.save();
+  // v5.1 STAGE KO BEATS: all seven plumes erupt together on a surge — the
+  // rise shoots to full in 10 ticks, the plume grows and brightens with the
+  // level and settles back over its 48 ticks (measured idle: 0.16 peak alpha).
+  const surge = stageSurge(frame);
+  const erupt = surge.level > 0 ? Math.min(1, surge.age / 10) : 0;
   for (let index = 0; index < 7; index += 1) {
     const x = 120 + index * 165 + (centre - W * 0.5) * -0.1;
     if (x < -60 || x > W + 60) continue;
     // Steam pulses on their own rhythm rather than all together.
     const pulse = (frame * (0.012 + index * 0.002) + index * 1.7) % (Math.PI * 2);
-    const rise = (Math.sin(pulse) + 1) * 0.5;
-    const size = 16 + rise * 26;
-    const gradient = ctx.createRadialGradient(x, 430 - rise * 46, 2, x, 430 - rise * 46, size);
-    gradient.addColorStop(0, `rgba(240,244,248,${0.16 * (1 - rise * 0.55)})`);
+    const rise = Math.max((Math.sin(pulse) + 1) * 0.5, erupt);
+    const size = 16 + rise * 26 + surge.level * 24;
+    const top = 430 - rise * 46 - surge.level * 18;
+    const gradient = ctx.createRadialGradient(x, top, 2, x, top, size);
+    gradient.addColorStop(0, `rgba(240,244,248,${0.16 * (1 - rise * 0.55) + surge.level * 0.34})`);
     gradient.addColorStop(1, "rgba(240,244,248,0)");
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(x, 430 - rise * 46, size, 0, Math.PI * 2);
+    ctx.arc(x, top, size, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Pendant lights swaying, harder right after a big hit.
-  const sway = (0.02 + reaction * 0.05) * Math.sin(frame * 0.03);
+  // Pendant lights swaying, harder right after a big hit (and hardest on a surge).
+  const sway = (0.02 + reaction * 0.05 + surge.level * 0.12) * Math.sin(frame * 0.03);
   ctx.globalAlpha = 0.4;
   ctx.strokeStyle = "#f2c98a";
   ctx.lineWidth = 2;
@@ -18026,20 +18213,28 @@ function drawBuffetAtmosphere(frame, centre, reaction) {
 // Splashes in the pool, traffic on the slide and heat shimmer over the deck.
 function drawPoolDeckAtmosphere(frame, centre, reaction) {
   ctx.save();
-  // Splash plumes where the pool sits behind the fight floor.
-  for (let index = 0; index < 5; index += 1) {
-    const cycle = (frame * (0.9 + index * 0.25) + index * 137) % 260;
-    if (cycle > 60) continue;
+  // Splash plumes where the pool sits behind the fight floor. v5.1 STAGE KO
+  // BEATS: all five fire together for the 60 ticks after a pulse (each 3
+  // ticks behind the last), bigger with the level; the KO adds a cannonball
+  // in the middle of the pool — eleven drops on an 80 px spread.
+  const surge = stageSurge(frame);
+  const plumes = surge.ko && surge.hold && surge.age < 60 ? 6 : 5;
+  for (let index = 0; index < plumes; index += 1) {
+    const cannonball = index === 5;
+    const idle = (frame * (0.9 + index * 0.25) + index * 137) % 260;
+    const cycle = cannonball ? surge.age : ambientSyncedCycle(surge.pulseAge, index * 3, 60, idle);
+    if (cycle < 0 || cycle > 60) continue;
     const life = cycle / 60;
-    const x = 220 + index * 210 + (centre - W * 0.5) * -0.12;
+    const x = (cannonball ? 640 : 220 + index * 210) + (centre - W * 0.5) * -0.12;
     if (x < -60 || x > W + 60) continue;
-    ctx.globalAlpha = (1 - life) * 0.65;
+    const drops = cannonball ? 11 : 7;
+    ctx.globalAlpha = (1 - life) * (0.65 + surge.level * 0.3);
     ctx.fillStyle = "#dff4ff";
-    for (let drop = 0; drop < 7; drop += 1) {
-      const angle = (drop / 7) * Math.PI - Math.PI;
-      const spread = life * 46;
+    for (let drop = 0; drop < drops; drop += 1) {
+      const angle = (drop / drops) * Math.PI - Math.PI;
+      const spread = life * (cannonball ? 80 : 46 + surge.level * 20);
       ctx.beginPath();
-      ctx.arc(x + Math.cos(angle) * spread, 452 + Math.sin(angle) * spread * 0.5, 4 - life * 2, 0, Math.PI * 2);
+      ctx.arc(x + Math.cos(angle) * spread, 452 + Math.sin(angle) * spread * 0.5, (cannonball ? 6 : 4 + surge.level * 2) - life * 2, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -26900,6 +27095,8 @@ const audioFxDebug = {
   dizzyRings: 0, clockTicks: 0,
   // Item 21: jittered shared-sample plays and the two synthesised cues.
   sharedVariations: 0, dashScuffs: 0, weaponClatters: 0,
+  // v5.1 STAGE KO BEATS: the cruise ship's KO horns actually voiced.
+  koHorns: 0,
   // v5.1 KO MOMENT: voiced crowd takes actually started (post every gate).
   crowdVoicePlays: 0,
 };
@@ -27464,6 +27661,14 @@ function updateCrowdAudio(dt) {
     crowdKoHold.cheerFired = true;
     playCrowdVoice("cheer", 1.4, { source: "ko-hold" });
   }
+  // v5.1 STAGE KO BEATS: the cruise ship answers the KO with its horn, once
+  // per hold, never the same blast twice running (engine/ambient.mjs
+  // pickKoHorn off a hash of the hold tick, so replay and live agree).
+  if (fightLive && soundOn && state.stage === "cruise" && crowdKoHold.startTick >= 0 && koHorn.holdTick !== crowdKoHold.startTick) {
+    koHorn.holdTick = crowdKoHold.startTick;
+    koHorn.last = pickKoHorn(koHorn.last, presentationHash01(crowdKoHold.startTick, 211));
+    playKoHorn(AMBIENT_KO_HORNS[koHorn.last]);
+  }
   const wantBed = fightLive && soundOn && audioContextRunning();
   if (wantBed) {
     const variant = state.crowd?.variant || "street";
@@ -27710,6 +27915,23 @@ function teardownAmbienceRig() {
   ambienceRig.master.disconnect();
   audioPersistentNodes = Math.max(0, audioPersistentNodes - ambienceRig.nodeCount);
   ambienceRig = null;
+}
+
+// The ship's horn: two sawtooth reeds a fifth apart through a 600 Hz lowpass
+// (the chord of a real whistle), a breath of noise on the attack, one or two
+// blasts per the horn spec. Presentation audio, render-side, off the KO hold.
+const koHorn = { holdTick: -1, last: -1 };
+
+function playKoHorn(horn) {
+  if (!horn || !audioContextRunning()) return;
+  const level = state.sfxVolume;
+  audioFxDebug.koHorns += 1;
+  for (let blast = 0; blast < horn.blasts; blast += 1) {
+    const delay = blast * (horn.seconds + horn.gap);
+    synthToneShot({ delay, wave: "sawtooth", from: horn.from, seconds: horn.seconds, peak: horn.peak * level, attack: 0.12, filterType: "lowpass", freq: 600, q: 1.1, vibratoRate: 5.5, vibratoDepth: 1.6 });
+    synthToneShot({ delay, wave: "sawtooth", from: horn.fifth, seconds: horn.seconds, peak: horn.peak * 0.6 * level, attack: 0.14, filterType: "lowpass", freq: 900, q: 1.1, vibratoRate: 4.8, vibratoDepth: 2.2 });
+    synthNoiseShot({ delay, seconds: 0.28, filterType: "bandpass", freq: 420, q: 1.4, peak: 0.018 * level, attack: 0.04 });
+  }
 }
 
 function playAmbienceEvent(kind) {
@@ -30100,6 +30322,7 @@ window.__finalBlowEngine = {
         sharedVariations: audioFxDebug.sharedVariations,
         dashScuffs: audioFxDebug.dashScuffs,
         weaponClatters: audioFxDebug.weaponClatters,
+        koHorns: audioFxDebug.koHorns,
         musicIntensity: Number(musicIntensityLevel.toFixed(3)),
         ambienceActive: ambienceEngaged ? 1 : 0,
         ambienceStage: ambienceEngaged ? state.stage : "",
@@ -30917,9 +31140,18 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     // can ask whether a big hit / KO actually latched before it measures the
     // floodlights. Presentation state only, never part of a snapshot.
     ambient() {
+      const reduced = state.accessibility.reducedMotion;
+      const level = ambientPulseLevel(ambientObs, state.simulationTick, reduced);
+      // v5.1 STAGE KO BEATS: the KO beat off the crowd hold and the surge the
+      // four stages' furniture actually draws from, so a probe can confirm a
+      // stage reacted (surge > 0) before it measures a landmark rectangle.
+      const beat = ambientKoBeat(crowdKoHoldAge(), reduced);
       return {
         ...ambientObs,
-        ...ambientPulseLevel(ambientObs, state.simulationTick, state.accessibility.reducedMotion),
+        ...level,
+        beat,
+        surge: ambientSurge(level, beat),
+        stage: state.stage,
         tick: state.simulationTick,
       };
     },

@@ -243,3 +243,37 @@ the same take twice in a row, level tied to the stir) play over the synth
 swells on specials, throws, wall bounces, supers, the KO and the fatal blow,
 and answer a taunt. Details and measurements in MOTION-ATLAS.md, "v5.1 — THE
 KO MOMENT".
+
+### 5.1 — stage KO beats: the other four stages answer the KO
+
+5.0's pulse landed almost entirely on the Vet (floodlights, two bursts); the
+buffet, the cruise deck and Somerset each had one small hook and no KO beat,
+and Wildwood only sped its chase. Now every stage draws from one shared read
+(`stageSurge()` in game.js — the pulse for a big hit, the crowd's KO hold
+folded in as the KO beat through `engine/ambient.mjs` `ambientKoBeat` /
+`ambientSurge`; whichever is stronger drives the furniture, both decaying
+over 48 ticks, the hold flag riding the whole 4.9 s roundover). Per stage,
+the pulse hooks and the KO beat:
+
+| Stage | Big hit (pulse 0.7+) | KO beat (crowd hold) |
+| --- | --- | --- |
+| Buffet | wok fireball climbs out of the pass with a white-hot core; the five pendants stutter; ten specular glints hop along the tray line; all seven steam plumes erupt together (`drawBuffetAtmosphere`); the six heat-lamp cones flare and widen (`drawPracticalLights`) | the whole pass-through window floods with kitchen light |
+| Cruise | pool surface and wet deck flash (the 5.0 note's "pool-deck flash", now real); the 26-bulb party string under the bar awning stutters; all five splash plumes fire together, bigger | the ship's horn (three synthesised blasts, never the same twice running — `AMBIENT_KO_HORNS` / `pickKoHorn`), a steam jet off the funnel under the horn light, a cannonball in the middle of the pool, six gulls up off the port rail |
+| Somerset | nine station lamps under the El and the SOMERSET sign surge; corner signal and storefront neon stutter; pigeons scatter; the El's window band on the pavement flares (`drawPracticalLights`) | a second train through at speed (60 ticks end to end, lit windows smeared into a streak, its band sweeping the wet street) and a street-level flash |
+| Wildwood | a bright sector chases round the wheel rim (a lap every 18 ticks); the WILDWOOD letters flood pink-gold; the chase bulbs run 4x faster; the neon pools on the planks surge (`drawPracticalLights`) | rim strobes in 6-tick alternation, every chase bulb held lit for the whole roundover (stuttering through the flash, then a double-speed chase), two fireworks over the pier |
+| Vet | unchanged: floodlights swell, a burst over the bowl (two on a KO) | — |
+| Janney | unchanged: moths flare, TV windows flare on the KO pulse | — |
+
+Reduced motion zeroes the flash and drops the hold (`ambientKoBeat`) the way
+it zeroes the pulse, so nothing strobes; the horn is audio and still sounds.
+Everything is a pure function of the tick, the latch and the hold, so replay
+and rollback draw the same frames. `__finalBlowQa.ambient()` now also
+returns `beat`, `surge` and `stage`; `snapshot().violence.koHorns` counts
+horns voiced. Measured on the canvas at the KO tick against the frame before
+(mean brightness, landmark rectangles; the roundover's win-card dim is why
+KO+170 reads below the pre-KO frame): buffet pass-through 59 -> 147, wok
+46 -> 176, pendants 74 -> 87, tray line 93 -> 111; cruise pool 102 -> 136,
+deck 86 -> 119, funnel 111 -> 186, party string 56 -> 87, sky flat (+1.5);
+Somerset lamps 31 -> 99, SOMERSET sign 59 -> 144, street 34 -> 80, El band
+25 -> 73; Wildwood sign 81 -> 124, wheel 57 -> 89, chase bulbs 27 -> 88,
+plank neon 45 -> 51. All back to (or under) the pre-KO read by KO+170.

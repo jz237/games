@@ -5,11 +5,18 @@ import { fileURLToPath } from "node:url";
 import {
   AMBIENT_BIG_THRESHOLD,
   AMBIENT_KO_AMOUNT,
+  AMBIENT_KO_BEAT_TICKS,
+  AMBIENT_KO_HORNS,
   AMBIENT_PULSE_TICKS,
   AMBIENT_STIR_THRESHOLD,
+  ambientKoBeat,
   ambientPhaseChange,
   ambientPulseLevel,
+  ambientStutter,
+  ambientSurge,
+  ambientSyncedCycle,
   createAmbientObs,
+  pickKoHorn,
   pulseAmbientLatch,
   stirPulseKind,
 } from "../engine/ambient.mjs";
@@ -141,8 +148,156 @@ function testGameWiring() {
   assert.match(gameSource, /const koPulse = ambientPhaseChange\(ambientObs, state\.phase, state\.screen\);\n\s*if \(koPulse\) pulseAmbient\(koPulse\.kind, koPulse\.amount\);/);
   assert.match(gameSource, /const \{ pulseAge, pulse, ko \} = ambientPulseLevel\(ambientObs, frame, reduced\);/);
   assert.ok(!/pulseAge \/ 48/.test(gameSource), "no second copy of the decay in game.js");
-  // The QA surface can ask whether a pulse latched.
-  assert.match(gameSource, /ambient\(\) \{\n\s*return \{\n\s*\.\.\.ambientObs,/);
+  // The QA surface can ask whether a pulse latched. (v5.1 STAGE KO BEATS:
+  // the hook computes the KO beat and the surge before it returns, so the
+  // pin moved from "returns the obs straight away" to "spreads the obs, the
+  // level, the beat and the surge".)
+  assert.match(gameSource, /ambient\(\) \{\n[\s\S]{0,700}?\.\.\.ambientObs,\n\s*\.\.\.level,\n\s*beat,\n\s*surge: ambientSurge\(level, beat\),\n\s*stage: state\.stage,/);
+}
+
+// v5.1 STAGE KO BEATS — the four stages that got one hook in 5.0 answer big
+// hits and the KO off the crowd's KO hold. Pure helpers here, the furniture
+// in game.js; a retune that stops a stage reacting goes red below.
+
+function testKoBeat() {
+  assert.equal(AMBIENT_KO_BEAT_TICKS, 48, "the KO flash decays over the same 48 ticks as the pulse");
+  // No hold (crowdKoHoldAge() reads -1): nothing.
+  assert.deepEqual(ambientKoBeat(-1), { age: -1, flash: 0, hold: false });
+  assert.deepEqual(ambientKoBeat(undefined), { age: undefined, flash: 0, hold: false });
+  assert.deepEqual(ambientKoBeat(Number.NaN), { age: Number.NaN, flash: 0, hold: false });
+  // The roundover edge: full flash, hold on.
+  assert.deepEqual(ambientKoBeat(0), { age: 0, flash: 1, hold: true });
+  assert.deepEqual(ambientKoBeat(24), { age: 24, flash: 0.5, hold: true });
+  assert.equal(ambientKoBeat(47).flash > 0, true);
+  assert.equal(ambientKoBeat(48).flash, 0, "tick 48 reads as exactly zero like the pulse");
+  // Past the flash the hold rides the whole 294-tick roundover.
+  assert.deepEqual(ambientKoBeat(200), { age: 200, flash: 0, hold: true });
+  // Reduced motion: no flash, no hold (nothing strobes), the age still reported.
+  assert.deepEqual(ambientKoBeat(5, true), { age: 5, flash: 0, hold: false });
+  let previous = 2;
+  for (let age = 0; age <= 48; age += 1) {
+    const { flash } = ambientKoBeat(age);
+    assert.ok(flash < previous, `tick ${age} decays`);
+    previous = flash;
+  }
+}
+
+function testSurgePicksTheStrongerRead() {
+  const rest = { pulseAge: 100000, pulse: 0 };
+  // Nothing live: level 0, age -1, no ko, no hold.
+  assert.deepEqual(ambientSurge(rest, ambientKoBeat(-1)), { level: 0, age: -1, ko: false, hold: false });
+  assert.deepEqual(ambientSurge(null, null), { level: 0, age: -1, ko: false, hold: false });
+  // A big hit alone: the pulse drives, with the pulse's own age.
+  assert.deepEqual(ambientSurge({ pulseAge: 12, pulse: 0.75 }, ambientKoBeat(-1)), { level: 0.75, age: 12, ko: false, hold: false });
+  // The KO tick: the pulse (1.4 clamped to 1) and the flash (1) tie; the KO wins the tie.
+  assert.deepEqual(ambientSurge({ pulseAge: 0, pulse: 1 }, ambientKoBeat(0)), { level: 1, age: 0, ko: true, hold: true });
+  // A fatality round: the ko pulse fired at the FINISH prompt and is long
+  // gone when the hold latches on the kill — the beat drives on its own.
+  assert.deepEqual(ambientSurge(rest, ambientKoBeat(10)), { level: 1 - 10 / 48, age: 10, ko: true, hold: true });
+  // Deep in the hold with the flash spent: no level, but the hold is still
+  // reported so the slow furniture (sign chase, horn light) keeps riding it.
+  assert.deepEqual(ambientSurge(rest, ambientKoBeat(120)), { level: 0, age: -1, ko: false, hold: true });
+  // A fresh big hit during a spent hold drives with the pulse.
+  assert.deepEqual(ambientSurge({ pulseAge: 3, pulse: 0.9 }, ambientKoBeat(120)), { level: 0.9, age: 3, ko: false, hold: true });
+  // Reduced motion zeroes both reads, so the surge is zero too.
+  const obs = pulseAmbientLatch(createAmbientObs(), "ko", 1.4, 0);
+  assert.equal(ambientSurge(ambientPulseLevel(obs, 0, true), ambientKoBeat(0, true)).level, 0);
+}
+
+function testSyncedCycle() {
+  // The pigeons' scatter rule as it shipped in 5.0, now shared with the pool
+  // splashes and the buffet steam: for the window after a latch every piece
+  // rides the latch age plus its own stagger, outside it the idle rhythm.
+  assert.equal(ambientSyncedCycle(0, 4, 60, 777), 4);
+  assert.equal(ambientSyncedCycle(30, 8, 60, 777), 38);
+  assert.equal(ambientSyncedCycle(59, 0, 60, 777), 59);
+  assert.equal(ambientSyncedCycle(60, 0, 60, 777), 777, "the window is half-open");
+  assert.equal(ambientSyncedCycle(-1, 0, 60, 777), 777, "before the latch: idle");
+  assert.equal(ambientSyncedCycle(100000, 0, 60, 777), 777, "rest state: idle");
+  // Five splash plumes three ticks apart all fire inside the first 12 ticks.
+  const fired = [0, 1, 2, 3, 4].map((index) => ambientSyncedCycle(0, index * 3, 60, 200));
+  assert.deepEqual(fired, [0, 3, 6, 9, 12]);
+}
+
+function testStutter() {
+  // No surge: a plain multiplier of 1 for every bulb, whatever its hash.
+  for (const hash of [0, 0.3, 0.6, 0.99]) assert.equal(ambientStutter(hash, 0), 1);
+  assert.equal(ambientStutter(0.5, -1), 1);
+  assert.equal(ambientStutter(0.5, Number.NaN), 1);
+  // Full surge: 55% of bulbs overdriven to 1.8, the rest dropped to 0.15 —
+  // a stutter, never a dimmer, never every bulb doing the same thing.
+  assert.equal(ambientStutter(0.54, 1), 1.8);
+  assert.equal(ambientStutter(0.56, 1), 0.15);
+  let lit = 0;
+  for (let bulb = 0; bulb < 1000; bulb += 1) if (ambientStutter(bulb / 1000, 1) > 1) lit += 1;
+  assert.equal(lit, 550);
+  // Half surge: 1.4 for the lit share (~77%), 0.15 for the rest.
+  assert.equal(ambientStutter(0.5, 0.5), 1.4);
+  assert.equal(ambientStutter(0.8, 0.5), 0.15);
+  // Over-unity levels clamp (a 1.4 KO stir never darkens more than 45%).
+  assert.equal(ambientStutter(0.54, 1.4), 1.8);
+  assert.equal(ambientStutter(0.56, 1.4), 0.15);
+}
+
+function testKoHornsNeverRepeat() {
+  assert.equal(AMBIENT_KO_HORNS.length, 3);
+  const ids = AMBIENT_KO_HORNS.map((horn) => horn.id);
+  assert.deepEqual(ids, ["long", "double", "high"]);
+  for (const horn of AMBIENT_KO_HORNS) {
+    assert.ok(horn.from >= 80 && horn.from <= 120, `${horn.id} sits in the ship-whistle register`);
+    assert.ok(Math.abs(horn.fifth / horn.from - 1.5) < 0.01, `${horn.id}'s second reed is a fifth up`);
+    assert.ok(horn.seconds > 0.5 && horn.peak > 0 && horn.blasts >= 1);
+  }
+  assert.equal(AMBIENT_KO_HORNS[1].blasts, 2, "the double is two blasts");
+  // First pick: any of the three by the roll.
+  assert.equal(pickKoHorn(-1, 0), 0);
+  assert.equal(pickKoHorn(-1, 0.5), 1);
+  assert.equal(pickKoHorn(undefined, 0.99), 2);
+  // Never the previous one, whatever the roll.
+  for (let previous = 0; previous < 3; previous += 1) {
+    for (let roll = 0; roll < 1; roll += 0.05) {
+      const pick = pickKoHorn(previous, roll);
+      assert.notEqual(pick, previous, `previous ${previous} roll ${roll.toFixed(2)}`);
+      assert.ok(pick >= 0 && pick < 3);
+    }
+    // Both other horns are reachable.
+    assert.deepEqual([pickKoHorn(previous, 0.1), pickKoHorn(previous, 0.9)].sort(), [0, 1, 2].filter((index) => index !== previous));
+  }
+  // A bad roll still picks something valid.
+  assert.equal(pickKoHorn(0, Number.NaN), 1);
+  assert.equal(pickKoHorn(0, 2), 1);
+}
+
+function testStageBeatWiring() {
+  // One shared read: the phase latch and the level live in readAmbientPulse,
+  // the KO beat folds in through stageSurge, and every layer that reacts —
+  // the ambient furniture, the two atmosphere passes, the practical lights —
+  // reads through it (never its own copy of the arithmetic).
+  assert.match(gameSource, /function readAmbientPulse\(frame, reduced\) \{\n\s*const koPulse = ambientPhaseChange/);
+  assert.match(gameSource, /function stageKoBeat\(reduced = state\.accessibility\.reducedMotion\) \{\n\s*updateCrowdKoHoldLatch\(\);\n\s*return ambientKoBeat\(crowdKoHoldAge\(\), reduced\);/);
+  assert.match(gameSource, /const \{ pulseAge, pulse, ko \} = readAmbientPulse\(frame, reduced\);\n[\s\S]{0,600}?const beat = stageKoBeat\(reduced\);\n\s*const surge = ambientSurge\(\{ pulseAge, pulse \}, beat\);/);
+  assert.match(gameSource, /function drawBuffetAtmosphere\([^)]*\) \{\n[\s\S]{0,400}?const surge = stageSurge\(frame\);/);
+  assert.match(gameSource, /function drawPoolDeckAtmosphere\([^)]*\) \{\n[\s\S]{0,500}?const surge = stageSurge\(frame\);/);
+  assert.match(gameSource, /function drawPracticalLights\([^)]*\) \{\n[\s\S]{0,700}?const surge = stageSurge\(frame, reduced\);/);
+  assert.ok(!/ambientKoBeat\(crowdKoHoldAge\(\), [^)]*\)[\s\S]*ambientKoBeat\(crowdKoHoldAge\(\), [^)]*\)[\s\S]*ambientKoBeat\(crowdKoHoldAge\(\)/.test(gameSource), "the beat is read in stageKoBeat and the QA hook only");
+  // Each of the four stage branches draws from the surge and the beat.
+  const ambient = gameSource.slice(gameSource.indexOf("function drawStageAmbient("), gameSource.indexOf("function drawBoardwalkAtmosphere("));
+  for (const stage of ["wildwood", "buffet", "cruise", "somerset"]) {
+    const start = ambient.indexOf(`stage === "${stage}"`);
+    assert.ok(start > 0, `${stage} branch present`);
+    const branch = ambient.slice(start, ambient.indexOf("} else if (stage ===", start + 10) === -1 ? undefined : ambient.indexOf("} else if (stage ===", start + 10));
+    assert.ok((branch.match(/surge\.level/g) || []).length >= 3, `${stage} draws its furniture from the surge (${(branch.match(/surge\.level/g) || []).length} reads)`);
+    assert.ok(/beat\.(hold|flash)/.test(branch), `${stage} has a KO beat of its own`);
+    assert.ok(/ambientStutter\(/.test(branch), `${stage} stutters something (no bulb ever just dims)`);
+  }
+  // The synced cycles all go through the helper: pigeons, splashes, steam.
+  assert.match(gameSource, /const scatter = ambientSyncedCycle\(pulseAge, bird \* 4, 60, \(f \+ bird \* 90\) % 900\);/);
+  assert.match(gameSource, /ambientSyncedCycle\(surge\.pulseAge, index \* 3, 60, idle\)/);
+  assert.match(gameSource, /const erupt = surge\.level > 0 \? Math\.min\(1, surge\.age \/ 10\) : 0;/);
+  // The cruise horn: once per hold, the pick never repeating, off the hold tick's hash.
+  assert.match(gameSource, /state\.stage === "cruise" && crowdKoHold\.startTick >= 0 && koHorn\.holdTick !== crowdKoHold\.startTick/);
+  assert.match(gameSource, /koHorn\.last = pickKoHorn\(koHorn\.last, presentationHash01\(crowdKoHold\.startTick, 211\)\);\n\s*playKoHorn\(AMBIENT_KO_HORNS\[koHorn\.last\]\);/);
+  assert.match(gameSource, /koHorns: audioFxDebug\.koHorns,/);
 }
 
 testConstantsAreTheShippedNumbers();
@@ -152,5 +307,11 @@ testDecayOver48Ticks();
 testReducedMotionZeroesTheLevelNotTheAge();
 testKoLatch();
 testGameWiring();
+testKoBeat();
+testSurgePicksTheStrongerRead();
+testSyncedCycle();
+testStutter();
+testKoHornsNeverRepeat();
+testStageBeatWiring();
 
 console.log("Final Blow ambient pulse tests passed");
