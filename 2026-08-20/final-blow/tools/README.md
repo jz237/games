@@ -115,6 +115,18 @@ a run at another clone. A root without a `game.js` is refused.
    generation; `install_ali.py` is that one-off install, kept as the worked
    example of re-deriving every table.
 
+   The v5.2 ext sheets for deathblow, post, donald and the devil are a
+   two-take generation (`grammar-ext8.txt`, `build_sheet.py --bank ext8`: rows
+   0-1 take A of the eight ext poses, rows 2-3 take B). `install_ext8.py`
+   picks one take per cell by height, sets each sheet's scale so its breathing
+   idle lands on the fighter's unified idle, composes the 8-cell 1280x640
+   `<id>-ext.webp`, measures it and prints the engine rows; `--apply` writes
+   the sheets and patches the manifest (`extScale`, `extCells`, `ext8`):
+
+   ```sh
+   $PY tools/swing/install_ext8.py --archive <art archive>/swing-v50 [--only devil] [--apply]
+   ```
+
 5. **Ship-encode.** The builders write lossless WebP; the shipped file is
    lossy with exact alpha, gated by the costume measure (v5.1 #36):
 

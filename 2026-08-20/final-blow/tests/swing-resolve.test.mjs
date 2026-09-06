@@ -378,7 +378,10 @@ function kitlessStrikePose(attack, attackFrame, beatOpt, roles) {
   const beat = attackMotionBeat(attack, attackFrame, beatOpt);
   if (beat?.beat === "windup") return beatPoseAt(beat.keys, beat.phase, base(frames[1]));
   if (beat?.beat === "cock") return beatPoseAt(beat.keys, beat.phase, () => base(time < startup * 0.48 ? frames[0] : frames[1]));
-  if (beat?.beat === "kickArc") return motion2Pose(beat.cell, "base", frames[1]);
+  if (beat?.beat === "kickArc") {
+    const arc = motion2Pose(beat.cell, "base", frames[1]);
+    return beatOpt?.extended ? { ...arc, fallback: uni(UNIFIED_CELLS.crouchTrans, arc.fallback) } : arc;
+  }
   if (beat?.beat === "airAttack") {
     return beatPoseAt(beat.keys, beat.phase, (key) => base(!key || key.at <= 0 ? frames[1] : key.at < 0.9 ? frames[2] : frames[3]));
   }
@@ -399,19 +402,18 @@ function kitlessStrikePose(attack, attackFrame, beatOpt, roles) {
   return base(frames[3]);
 }
 
-function strikeChain(gate, action, context) {
-  const attack = createFighterMove("jez", action, context);
+function strikeChain(gate, action, context, id = "jez", beatOpt = Object.freeze({ extended: true, inbetween: true })) {
+  const attack = createFighterMove(id, action, context);
   assert.ok(attack && !attack.animation, `${action} ${JSON.stringify(context)} is a kit-less normal`);
-  const roles = baseCellRoles("jez");
+  const roles = baseCellRoles(id);
   // jez: ext sheet whole, descent (ext cell 20) NOT accepted, ext2 whole.
-  const beatOpt = Object.freeze({ extended: true, inbetween: true });
   const chain = [];
   const raw = [];
   for (let attackFrame = 0; attackFrame < attack.totalFrames; attackFrame += 1) {
     const pose = kitlessStrikePose(attack, attackFrame, beatOpt, roles);
-    const resolved = resolveMotionPose(pose, gate, "jez", { bareHanded: bareHandedAttack(attack) });
+    const resolved = resolveMotionPose(pose, gate, id, { bareHanded: bareHandedAttack(attack) });
     const fighter = snapshot({
-      attacking: attack, attackFrame, grounded: !context.airborne, crouch: Boolean(context.crouching),
+      def: { id }, attacking: attack, attackFrame, grounded: !context.airborne, crouch: Boolean(context.crouching),
     });
     const drawn = swingResolve(resolved, swingContext(fighter), gate);
     if (chain.at(-1) !== cellName(drawn)) chain.push(cellName(drawn));
@@ -421,7 +423,7 @@ function strikeChain(gate, action, context) {
 }
 
 function testFrameChains() {
-  const gate = buildJezGate();
+  const gate = buildGate();
   // The gate reads the shipped manifests: jez's ext descent is the one cell
   // his ext sheet rejected (why the air kick's trail is the chambered alt).
   assert.equal(gate(UNIFIED_EXT_CELLS.jumpDescend, UNIFIED_EXT_BANK), false);
@@ -493,7 +495,8 @@ function testGameMirror() {
     'if (beat?.beat === "cock") {',
     "return beatPoseAt(beat.keys, beat.phase, () => base(time < startup * 0.48 ? frames[0] : frames[1]));",
     'if (beat?.beat === "kickArc") {',
-    'return motion2Pose(beat.cell, "base", frames[1]);',
+    'const arc = motion2Pose(beat.cell, "base", frames[1]);',
+    "return ext ? { ...arc, fallback: uni(UNIFIED_CELLS.crouchTrans, arc.fallback) } : arc;",
     'if (beat?.beat === "airAttack") {',
     "frame: !key || key.at <= 0 ? frames[1] : key.at < 0.9 ? frames[2] : frames[3],",
     'if (beat?.beat === "recover") {',
@@ -830,6 +833,40 @@ function testExt5AirChains() {
   assert.match(gameSource, /return beatPoseAt\(jumpArcKeys\(bandStart, extOpt\), progress, \(key\) => \(\s*\n[^\n]*\n\s*!key \|\| key\.at < 0\.76 \? base\(13\) : base\(12\)/);
   assert.match(gameSource, /if \(fighter\.landingRecoveryFrames > 0\) \{\s*\n\s*return uni\(UNIFIED_CELLS\.crouchTrans, motion2Pose\(MOTION2_CELLS\.crouchTrans, "base", 12\)\);/);
   assert.match(gameSource, /return flip < 0\.6\s*\n\s*\? motionPose\(MOTION_CELLS\.tuck, "base", 13\)\s*\n\s*: motionPose\(MOTION_CELLS\.airrec, "base", 13\);/);
+// v5.2 — THE DEVIL'S HEAVY WIND-UP LANDS ON HIS OWN COMPRESS, NOT HIS CLAW
+// LUNGE. His motion2:4 (crouch-trans) is rejected — an all-fours prowl — so the
+// compress band's chain never RESOLVED motion2:4, the 5.0 substitution onto
+// unified:6 never fired, and both the band and the kick arc that continues it
+// fell through to the caller's base fallback: base 13, his AIRBORNE claw
+// lunge, for the last 30% of every heavy wind-up on the street. With his ext
+// sheet the band keys unified:6 under the bridge and the arc degrades the
+// same way, so his chain is the shape everyone else's is.
+// ---------------------------------------------------------------------------
+function testDevilCompressBand() {
+  const gate = buildGate("devil");
+  assert.equal(gate(MOTION2_CELLS.crouchTrans, "motion2"), false, "the devil's motion2 crouch-trans is rejected");
+  assert.equal(gate(UNIFIED_CELLS.crouchTrans, UNIFIED_BANK), true);
+  assert.equal(gate(UNIFIED_EXT_CELLS.kickWindup, UNIFIED_EXT_BANK), true, "the devil carries an ext sheet as of 5.2");
+  const withExt = Object.freeze({ extended: true, inbetween: true });
+  for (const limb of ["punch", "kick"]) {
+    const { chain, raw } = strikeChain(gate, "heavy", { limb }, "devil", withExt);
+    assert.ok(!raw.includes("base:13") && !chain.includes("base:13"),
+      `devil heavy ${limb} still draws his airborne claw lunge: ${raw.join(" -> ")}`);
+    assert.ok(raw.includes("unified:6"), `devil heavy ${limb} must compress on his own crouch transition: ${raw.join(" -> ")}`);
+    assert.equal(raw[0], `ext:${limb === "kick" ? UNIFIED_EXT_CELLS.kickWindup : UNIFIED_EXT_CELLS.punchWindup}`, "the cock opens on his own chamber");
+  }
+  assert.deepEqual(strikeChain(gate, "heavy", { limb: "kick" }, "devil", withExt).raw,
+    ["ext:6", "ext2:6", "unified:6", "motion:1", "motion:4", "ext2:7", "unified:7", "unified:0"]);
+  // Without the ext sheet (what he shipped through 5.1) the arrays are the
+  // 4.9 ones and the lunge is back — pinned so the fix is known to be the
+  // ext branch and nothing else moved.
+  const noExt = Object.freeze({ inbetween: true });
+  const before = strikeChain(gate, "heavy", { limb: "kick" }, "devil", noExt).raw;
+  assert.ok(before.includes("base:13"), `expected the 4.9 read to show the lunge: ${before.join(" -> ")}`);
+  // The other nine resolve motion2:4 and are substituted onto unified:6 as
+  // before; the extra link under the bridge never reaches them.
+  assert.deepEqual(strikeChain(buildGate(), "heavy", { limb: "kick" }).raw,
+    ["ext:6", "ext2:6", "motion2:4", "motion:1", "motion:4", "ext2:7", "unified:7", "unified:0"]);
 }
 
 testContextFromSnapshot();
@@ -839,6 +876,7 @@ testAltFallback();
 testCrouchingNormalOverride();
 testAirHitNeverReachesTheScreen();
 testFrameChains();
+testDevilCompressBand();
 testGameMirror();
 testExt5GroundChains();
 testExt5AirChains();

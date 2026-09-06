@@ -19078,8 +19078,9 @@ function fighterPoseDescriptor(fighter) {
   const uni = (cell, pose) => unifiedPose(cell, pose);
   // v4.0 — THE EXT SHEET. `ext` is this fighter's ONE capability answer, read
   // once per pose so every beat below agrees about which key arrays to use.
-  // Five fighters have no ext sheet and take `false` through every branch,
-  // which is the byte-identical 3.5 read.
+  // A fighter whose ext sheet is not whole or not yet decoded takes `false`
+  // through every branch, which is the byte-identical 3.5 read (the five 3.0
+  // holdouts shipped that way until 4.1 / 5.2 put the whole roster on it).
   const ext = unifiedFighterExtReady(fighter.def.id);
   // v5.2 LOCOMOTION (ext5-air): `air` rides the same object. A fighter with
   // no ext sheet but the ext5 air cells (deathblow, post, donald, the devil)
@@ -19621,8 +19622,15 @@ function fighterPoseDescriptor(fighter) {
     // anywhere in the four banks, so the in-between has to be a transform, and
     // the drawing under it must be the chamber rather than the generic base
     // strike cell the un-handled beat used to fall through to.
+    // v5.2: the arc CONTINUES the compress band's drawing, so it degrades the
+    // same way that band does — through the fighter's own crouch transition
+    // before the base cell. The devil is the one fighter whose motion2:4 is
+    // rejected (an all-fours prowl), and base 13 is his AIRBORNE claw lunge:
+    // two ticks of it played between his compress and his kick on every
+    // heavy kick until his ext sheet put the unified read under it.
     if (beat?.beat === "kickArc") {
-      return motion2Pose(beat.cell, "base", frames[1]);
+      const arc = motion2Pose(beat.cell, "base", frames[1]);
+      return ext ? { ...arc, fallback: uni(UNIFIED_CELLS.crouchTrans, arc.fallback) } : arc;
     }
     if (beat?.beat === "airAttack") {
       return beatPoseAt(beat.keys, beat.phase, (key) => ({

@@ -10,11 +10,15 @@
 //   X-B  ALL SEVEN ROUTED CELLS OR NONE, and a fighter must be whole on BOTH
 //        sheets. Half an ext sheet is a walk cycle that changes drawing-count
 //        halfway round. The eighth cell is per-fighter; see X-E.
-//   X-C  THE HOLDOUTS ARE UNTOUCHED. deathblow, post, donald and the devil have
-//        no ext block, and EVERY re-framed beat must hand them back the
-//        byte-identical 3.5 key array. This is the load-bearing test of the
-//        whole wave: the holdouts keep their 3.0 sheets and must keep their
-//        3.0 motion. (ali was the fifth until 4.1 gave him a 24-cell sheet.)
+//   X-C  THE UN-EXTENDED ARRAYS ARE THE 3.5 READ. Through 5.1 this was the
+//        holdout contract — deathblow, post, donald and the devil had no ext
+//        block and every re-framed beat handed them the byte-identical 3.5 key
+//        array. As of 5.2 the whole roster carries an ext sheet, so the
+//        statement is about the OPTION rather than about four fighters: a
+//        track called without `extended` must still be the 3.5 array, because
+//        that is what a sheet that fails to decode degrades to, and the
+//        extended array must genuinely draw differently or the option is
+//        decorative.
 //   X-D  THE SIX-KEY WALK. The cycle order, the CADENCE (six keys at 15/s is
 //        the same 0.4s gait period four keys at 10/s ran at, or the fighter
 //        skates), and the reversal a retreat depends on.
@@ -29,6 +33,10 @@
 //        and the padding both renderers depend on.
 //   X-I  ali, the sixth fighter on the bank, and the per-fighter tables his
 //        REPLACED sheet made stale.
+//   X-J  v5.2 — deathblow, post, donald and the devil, on ext sheets composed
+//        from a two-take second generation (tools/swing/install_ext8.py):
+//        the roster is whole on the ext bank, the four sheets are measured
+//        into every table, and the descent is a real descent on all four.
 // ---------------------------------------------------------------------------
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -196,8 +204,9 @@ function testManifestShape() {
 // X-B — all eight or none, and only on top of a whole main sheet.
 // ---------------------------------------------------------------------------
 function testAllOrNothing() {
-  assert.deepEqual(EXT, ["alan", "ali", "benny", "commissioner", "cyraxx", "jez"],
-    "six fighters carry an ext sheet");
+  assert.deepEqual(EXT, ["alan", "ali", "benny", "commissioner", "cyraxx", "deathblow", "devil", "donald", "jez", "post"],
+    "all ten fighters carry an ext sheet as of 5.2");
+  assert.deepEqual(NO_EXT, [], "no fighter is off the ext bank — one falling off is a silent 3.5 walk");
   for (const id of EXT) {
     assert.equal(extMasks[id].accept.length, UNIFIED_EXT_CELL_COUNT);
     // Every ROUTED frame is drawable on every sheet.
@@ -219,9 +228,9 @@ function testAllOrNothing() {
   // ...and the split is pinned BY NAME, so a sheet silently losing or gaining a
   // usable descent is a test failure rather than a change in how jumps look.
   const descends = EXT.filter((id) => extMasks[id].accept[UNIFIED_EXT_CELLS.jumpDescend]);
-  assert.deepEqual(descends, ["ali"],
-    "ali is the only fighter whose cell 20 is a real descent — on the other five it "
-    + "drew as a hit reaction and routing it would flinch every jump on the way down");
+  assert.deepEqual(descends, ["ali", "deathblow", "devil", "donald", "post"],
+    "ali (4.1) and the four 5.2 sheets are the fighters whose cell 20 is a real descent — on "
+    + "the five 4.0 sheets it drew as a hit reaction and routing it would flinch every jump on the way down");
   for (const id of NO_EXT) {
     assert.equal(extMasks[id].whole, false);
     assert.equal(extMasks[id].accept.some(Boolean), false,
@@ -266,17 +275,25 @@ function testAllOrNothing() {
   const sheetless = JSON.parse(JSON.stringify(manifest));
   delete sheetless.fighters.jez.extSheet;
   assert.equal(buildUnifiedExtAcceptMasks(sheetless, masks).jez.whole, false);
-  // A fighter going whole must light all eight with no code change.
+  // A fighter going whole must light all eight with no code change — and one
+  // whose block is removed must go dark the same way (what the four 5.2
+  // fighters were until this wave, and what a missing manifest block means).
   const healed = JSON.parse(JSON.stringify(manifest));
+  delete healed.fighters.post.extSheet;
+  delete healed.fighters.post.extCells;
+  assert.equal(buildUnifiedExtAcceptMasks(healed, masks).post.whole, false);
   healed.fighters.post.extSheet = "post-ext.webp";
   healed.fighters.post.extCells = manifest.fighters.jez.extCells.map((c) => ({ ...c }));
   assert.equal(buildUnifiedExtAcceptMasks(healed, masks).post.whole, true);
 }
 
 // ---------------------------------------------------------------------------
-// X-C — THE FIVE HOLDOUTS RENDER EXACTLY WHAT 3.5 RENDERED.
+// X-C — THE UN-EXTENDED ARRAYS ARE THE 3.5 READ. (Through 5.1: "the five
+// holdouts render exactly what 3.5 rendered". The roster is whole on the ext
+// bank now, so this is the contract of the OPTION — the arrays a fighter
+// takes while his sheet is not yet decoded, or after it fails to.)
 // ---------------------------------------------------------------------------
-function testHoldoutsUnchanged() {
+function testUnextendedArraysAre35() {
   // Every ext-aware track, called the way a fighter with no sheet calls it,
   // must contain no ext link at all — not merely fall back off one.
   for (const [name, track] of EXT_AWARE_TRACKS) {
@@ -309,13 +326,19 @@ function testHoldoutsUnchanged() {
       jumpArcKeys(bandStart), "descend may never engage without an ext sheet under it");
   }
   // The walk is the beat with a genuinely separate code path, so it is checked
-  // by descriptor identity rather than by resolution.
-  for (const id of NO_EXT) {
+  // by descriptor identity rather than by resolution — for every fighter,
+  // since every one of them takes this branch until his sheet has decoded.
+  for (const id of ROSTER) {
     const roles = baseCellRoles(id);
-    for (const t of [0, 0.07, 0.31, 1.24, 9.81, -0.4]) {
+    const times = [0, 0.07, 0.31, 1.24, 9.81, -0.4];
+    for (const t of times) {
       assert.deepEqual(walkCyclePose(t, roles, { extended: false }), walkCyclePose(t, roles),
-        `${id}: a fighter with no ext sheet must walk the 3.5 four-key cycle byte-for-byte`);
+        `${id}: without the ext capability the walk must be the 3.5 four-key cycle byte-for-byte`);
     }
+    // ...and the extended cycle is a genuinely different cycle (the contact
+    // keys coincide at t = 0; the in-betweens and the cadence do not).
+    assert.ok(times.some((t) => JSON.stringify(walkCyclePose(t, roles, EXTENDED)) !== JSON.stringify(walkCyclePose(t, roles))),
+      `${id}: the extended walk must be a different cycle`);
   }
 }
 
@@ -675,6 +698,78 @@ function testAli() {
 }
 
 // ---------------------------------------------------------------------------
+// X-J — v5.2: THE FOUR HOLDOUTS, ON EXT SHEETS OF THEIR OWN. The art is a
+// two-take second generation (grammar-ext8: rows 0-1 take A of the eight ext
+// poses, rows 2-3 take B, image-to-image from the fighter's unified sheet);
+// tools/swing/install_ext8.py picked one take per cell by height and set each
+// sheet's scale so its breathing idle lands ON the unified idle — the premise
+// X-H's "two sheets draw at one size" contract rests on, which a second
+// generation does not carry by itself (post's drew him 8.6% taller, the
+// devil's 4.6% shorter). The rows below were measured on the composed sheets
+// in the repo (alpha >= 24; bbox midpoints), so they are facts about the art,
+// and a future sheet swap must re-measure them or fail here.
+// ---------------------------------------------------------------------------
+const EXT8 = Object.freeze({
+  deathblow: { heights: [273, 290, 290, 283, 285, 274, 277, 281], centres: [178, 170, 170, 173, 172, 178, 176, 174], adjust: { 1: 0.938, 2: 0.938 }, extScale: 1.2839 },
+  post: { heights: [280, 274, 273, 288, 274, 265, 282, 269], centres: [176, 178, 179, 172, 178, 183, 174, 181], adjust: {}, extScale: 1.2523 },
+  donald: { heights: [261, 261, 256, 243, 261, 254, 257, 256], centres: [184, 184, 186, 193, 184, 188, 186, 186], adjust: {}, extScale: 1.2202 },
+  devil: { heights: [283, 277, 278, 302, 270, 279, 285, 281], centres: [173, 176, 176, 164, 180, 175, 172, 174], adjust: { 1: 1.0056 }, extScale: 1.4383 },
+});
+
+function testExt8Fighters() {
+  for (const [id, pinned] of Object.entries(EXT8)) {
+    assert.ok(EXT.includes(id), `${id} carries an ext sheet as of 5.2`);
+    const entry = manifest.fighters[id];
+    assert.equal(entry.extSheet, `${id}-ext.webp`);
+    assert.ok(statSync(join(assetDir, entry.extSheet)).size > 100000, `${entry.extSheet} is missing or truncated`);
+    // The sheet's scale is its own (sidecar scale x the breathe factor) and
+    // recorded, or the sheet cannot be rebuilt; it stays within the family.
+    assert.equal(entry.extScale, pinned.extScale);
+    assert.ok(entry.extScale > 1 && entry.extScale < 2);
+    assert.match(entry.ext8, /install_ext8\.py/, `${id}: the manifest must say how the sheet was composed`);
+    assert.match(entry.ext8, /ext8-/, `${id}: the manifest must name the archived two-take generation`);
+    for (const frame of UNIFIED_EXT_ROUTED_CELLS) {
+      assert.equal(entry.extCells[frame].accept, true, `${id}: ext frame ${frame}`);
+      assert.match(entry.extCells[frame].note, /take [AB]/, `${id}: each cell records which take it is`);
+    }
+    // THE DESCENT IS A REAL DESCENT on all four (read at 1:1: torso upright,
+    // head level, legs reaching down), so the arc owns 8 -> 19 -> 9 -> 20.
+    assert.equal(entry.extCells[UNIFIED_EXT_CELLS.jumpDescend].accept, true, `${id}: cell 20`);
+    assert.equal(extMasks[id].accept[UNIFIED_EXT_CELLS.jumpDescend], true);
+    assert.match(entry.extCells[UNIFIED_EXT_CELLS.jumpDescend].note, /ROUTED/);
+    // The measured rows.
+    assert.deepEqual([...UNIFIED_EXT_CELL_HEIGHT[id]], pinned.heights, `${id}: ext heights`);
+    assert.deepEqual([...CELL_BODY_CENTRE[id][UNIFIED_EXT_BANK]], pinned.centres, `${id}: ext body centres`);
+    for (let frame = 0; frame < UNIFIED_EXT_CELL_COUNT; frame += 1) {
+      assert.equal(cellDrawAdjust(id, UNIFIED_EXT_BANK, frame), pinned.adjust[frame] ?? 1, `${id}: ext adjust ${frame}`);
+    }
+    // THE BREATHE LANDS ON THE IDLE by construction (the sheet factor), within
+    // the resample's rounding: no per-cell term is spent on it.
+    const idle = UNIFIED_CELL_HEIGHT[id][UNIFIED_CELLS.idle];
+    assert.ok(Math.abs(pinned.heights[UNIFIED_EXT_CELLS.idleBreathe] / idle - 1) <= 0.005,
+      `${id}: the composed breathe must sit on the idle (${pinned.heights[0]} vs ${idle})`);
+    assert.equal(cellDrawAdjust(id, UNIFIED_EXT_BANK, UNIFIED_EXT_CELLS.idleBreathe), 1);
+    // The four are prop-clean on this bank like everyone else.
+    for (let frame = 0; frame < UNIFIED_EXT_CELL_COUNT; frame += 1) {
+      assert.equal(isPropActionCell(id, UNIFIED_EXT_BANK, frame), false);
+    }
+  }
+  // The manifest's own status line must not still say six.
+  assert.match(manifest.format.extStatus, /ALL TEN fighters carry an ext sheet/);
+  assert.match(manifest.format.ext8, /install_ext8\.py/);
+  // THE DEVIL'S HEAVY WIND-UP COMPRESS BAND. His motion2:4 is rejected, so
+  // the 3.5 chain fell through to base 13 — his airborne claw lunge. The
+  // extended chain keys his own crouch transition under the bridge.
+  const compress = (o) => heavyWindupKeys("punch", o).at(-1).chain.map((l) => `${l.bank}:${l.cell}`);
+  assert.deepEqual(compress(undefined), ["motion2:4"], "the 3.5 compress band is untouched");
+  assert.deepEqual(compress(EXTENDED), ["motion2:4", `${UNIFIED_BANK}:${UNIFIED_CELLS.crouchTrans}`]);
+  assert.deepEqual(heavyWindupKeys("kick", EXTENDED).at(-1).chain.map((l) => `${l.bank}:${l.cell}`),
+    ["motion2:4", `${UNIFIED_BANK}:${UNIFIED_CELLS.crouchTrans}`]);
+  // game.js degrades the kick arc's continuation the same way, through the one gate.
+  assert.match(gameSource, /return ext \? \{ \.\.\.arc, fallback: uni\(UNIFIED_CELLS\.crouchTrans, arc\.fallback\) \} : arc;/);
+}
+
+// ---------------------------------------------------------------------------
 // X-H — registration, and the padding both renderers depend on.
 // ---------------------------------------------------------------------------
 function testRegistration() {
@@ -789,11 +884,12 @@ function testRegistration() {
 }
 
 test("X-A the ext manifest is the 8-cell grammar the routing addresses", testManifestShape);
-test("X-B an ext sheet is ALL SEVEN routed cells or none, and needs a whole main sheet", testAllOrNothing);
-test("X-C the four fighters without an ext sheet render exactly what 3.5 rendered", testHoldoutsUnchanged);
+test("X-B an ext sheet is ALL SEVEN routed cells or none, needs a whole main sheet, and all ten carry one", testAllOrNothing);
+test("X-C the un-extended arrays are the 3.5 read, and the extended ones genuinely differ", testUnextendedArraysAre35);
 test("X-D the walk is a six-key alternating cycle at the 3.5 gait period, reversible", testSixKeyWalk);
 test("X-E seven ext cells are routed for everyone and the descent is routed per fighter", testRouting);
 test("X-F gaining an ext sheet lengthens no hold and collapses no band", testHoldBudget);
 test("X-I ali is the sixth fighter on the ext bank, on re-measured tables", testAli);
 test("X-G cyraxx is on the bank for the first time, on both sheets", testCyraxx);
+test("X-J deathblow, post, donald and the devil are on the ext bank, on measured sheets of their own", testExt8Fighters);
 test("X-H the ext cells are registered, anchored and padded for both renderers", testRegistration);

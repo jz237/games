@@ -4069,3 +4069,177 @@ gore overlay is the upright-plan splat by necessity; the KO lie is the
 plain body's only. (4) The finisher's slow-motion ticks stretch every run
 on screen; the attributions above are script time. 387 tests green (the
 two new suites, the cinema pin, the trail pin).
+
+## v5.2 — THE LAST FOUR ON THE EXT SHEET: TWO TAKES, ONE PICK PER CELL, AND THE SHEET SCALED OFF THE BREATH
+
+deathblow, post, donald and the devil walked the 3.5 four-key cycle, held
+one idle drawing for as long as the stick was neutral and chambered every
+heavy on motion2 art for five waves after the other six got their ext
+sheets — the 4.x art waves recorded, generation by generation, why a 24-cell
+sheet never came back for them. This wave stops asking for one. Their ext
+sheet is a SECOND generation, generated the 4.9 way (image-to-image from the
+fighter's own unified sheet, colour-matched onto it, despilled with the 5.1
+slicer), and it is asked for TWICE on one 4x4 sheet: rows 0-1 are take A of
+the eight ext poses, rows 2-3 take B of the same eight
+(`tools/swing/grammar-ext8.txt`, `build_sheet.py --bank ext8`, archived as
+`swing-v50/lossless-51/<id>-ext8.webp` with an `ext8-<id>.json` sidecar).
+`tools/swing/install_ext8.py` picks one take per cell and composes the
+8-cell 1280x640 `<id>-ext.webp` the runtime already knows how to pad, gate
+and draw. No routing changed for the six who had a sheet; every table below
+is a measurement.
+
+### The pick, by height, and what the two takes actually differed in
+
+The slicer sidecar carries each cell's alpha>=24 height at the fighter's
+unified scale, and the rule is the one the 4.0 tables are built on: the
+breathing idle and the two walk-downs are the upright cycle, so the take
+nearest the fighter's UNIFIED IDLE (`UNIFIED_CELL_HEIGHT[id][0]`) wins;
+the wind-ups likewise; the mid-reaction the take nearest his unified
+light-hit (cell 12); the two jump cells whichever take is upright at 1:1,
+tie to A. Where the takes differed by more than a few pixels it was a real
+pose difference, and the height caught it: deathblow's take-A wind-ups are
+303px against a 272px idle because the model raised the chambered fist OVER
+HIS HEAD in both; take B (270/273) has it at the shoulder, which is a chamber.
+
+| | take (sidecar cell) per ext frame 16..23 | breathe A/B vs idle | wind-ups A/B |
+| --- | --- | --- | --- |
+| deathblow | B A B A A B B B (8 1 10 3 4 13 14 15) | 276 / **269** vs 272 | 303 303 / **270 273** |
+| post | B A A A B A B A (8 1 2 3 12 5 14 7) | 307 / **303** vs 279 | **286** 306 / 288 **305** |
+| donald | A A B A B A A A (0 1 10 3 12 5 6 7) | **265** / 268 vs 261 | **258 261** / 258 263 |
+| devil | A A A A B A A A (0 1 2 3 12 5 6 7) | **270** / 268 vs 283 | **266 272** / 262 263 |
+
+### THE SHEET SCALE, which is the finding of this install
+
+Every X-H contract in `tests/unified-ext.test.mjs` — the breathe draws
+within 2% of the idle, the two sheets draw at ONE size — rests on the 4.0
+premise that the ext sheet is *the same generation at the same global
+scale*. A second generation does not carry that. Built at the unified
+scale, post's breathe came back 303px against his 279px idle (+8.6%) and
+the devil's 270 against 283 (-4.6%): the idle alternates 0 <-> 16 every
+eight ticks, so either would have pulsed the stance on every breath — the
+exact fault the contract exists to refuse. donald was +1.5%, deathblow -1.1%.
+
+The breathe IS the idle by definition, so it sets the sheet's scale. Each
+sheet is resampled ONCE at compose time by `idle / breathe` (premultiplied
+Lanczos; feet re-registered on row 314 and the torso band on column 160
+exactly as the slicer does; a figure that would then leave the cell is
+fit-scaled about its torso column and drawn back through `drawAdjust`, the
+ext3/ext4 rule) — the ext2 precedent of one scale per sheet, applied to the
+one cell that can anchor it. Factors: deathblow 1.0112, post 0.9208, donald
+0.9849, devil 1.0481; the manifest records the result as `extScale`
+(1.2839 / 1.2523 / 1.2202 / 1.4383 against unified 1.2697 / 1.36 / 1.2389 /
+1.3722). Nothing downstream learns anything: the per-cell adjust table
+carries only height reconciliations and one fit term, both renderers read
+the sheet as they read the 4.0 sheets, and the X-H assertions pass
+unchanged. The alternative — a flat 0.921 / 1.048 in `UNIFIED_EXT_CELL_ADJUST`
+the way the commissioner's 1.033 is folded — draws the same pixels and
+would have had to weaken the one-size assertion to do it.
+
+### The measured rows (composed sheets, alpha >= 24, bbox midpoints)
+
+| | ext heights 16..23 | body centres | ext adjust | walk-downs raw | breathe |
+| --- | --- | --- | --- | --- | --- |
+| deathblow (idle 272) | 273 290 290 283 285 274 277 281 | 178 170 170 173 172 178 176 174 | 17: 0.938, 18: 0.938 | +6.6% / +6.6% | +0.4% |
+| post (idle 279) | 280 274 273 288 274 265 282 269 | 176 178 179 172 178 183 174 181 | — | -1.8% / -2.2% | +0.4% |
+| donald (idle 261) | 261 261 256 243 261 254 257 256 | 184 184 186 193 184 188 186 186 | — | 0.0% / -1.9% | 0.0% |
+| devil (idle 283) | 283 277 278 302 270 279 285 281 | 173 176 176 164 180 175 172 174 | 17: 1.0056 (fit) | -2.1% / -1.8% | 0.0% |
+
+deathblow's two walk-downs sit 6.6% over his idle and take the same term
+the 4.0 sheets take (jez 0.926/0.936, alan 0.935/0.945); the other six
+walk-downs are inside the 3% band the cyraxx row set. The devil's walk-down
+A is 280px wide with the wings and tail, and at his 1.048 factor the
+slicer's fit rule trims it 0.6% to stay inside the cell; 1.0056 draws it
+back. Drawn on screen, every corrected key of all four six-key cycles is
+within 0.05% of its idle and every uncorrected ext key within 2.2%; the
+breathe within 0.4%. Airborne anchoring: every ascent (centres 173/172/193/
+164) and descent (172/178/184/180) sits above the fighter's own apex tuck
+(247/234/238/228), which is the X-H ordering the B2 anchor needs.
+
+### THE DESCENT IS A DESCENT, four times
+
+Read at 1:1 on the lossless masters, both takes of cell 20 on all four
+sheets are what the 4.0 prompt asked for and never got: torso vertical,
+head level and looking forward, feet below the hips, arms out for balance
+— deathblow with both legs reaching down and slightly flexed, post with the
+knees bent in take A (a crouch in the air) and reaching down in take B,
+donald arms wide and legs under him in both, the devil one leg lifted in
+take A and both reaching for the floor in take B with the wings out. The
+taller, more open take was picked on the three where it existed (post,
+donald and the devil take B). Nothing on any of the eight is head-down or
+arched backward; nothing puts the feet above the hips. `accept:true` and
+ROUTED on all four, so the arc owns the whole airborne chain
+`8 -> 19 -> 9 -> 20` as it has for ali since 4.1 — five fighters now, the
+five 4.0 sheets still stopping at 19.
+
+### The devil's heavy wind-up was landing on his claw lunge
+
+His motion2:4 (crouch-trans) is rejected — it is the all-fours prowl — and
+that had a consequence nobody traced: the heavy wind-up's COMPRESS band
+keys `motion2:4` alone, and the 5.0 substitution onto the unified crouch
+transition fires only on a RESOLVED motion2:4. His never resolved, so the
+band fell through to the caller's base fallback, base 13, his AIRBORNE claw
+lunge, for the last 30% of every heavy wind-up on the street — and the kick
+arc, which CONTINUES that drawing for two ticks, fell through to the same
+cell. Traced through the engine before this wave: heavy kick `ext:6 ->
+ext2:6 -> unified:6 x4 -> base:13 x2 -> motion:1 ...` with the compress
+band itself on base:13 when the arc was not reserved. The extended chain
+now keys `ukey(crouchTrans)` under the motion2 bridge, and game.js degrades
+the arc's continuation through the same cell, both inside the ext branch so
+the 3.5 arrays are byte-identical; the other nine resolve motion2:4 and are
+substituted exactly as in 5.0 (pinned in swing-resolve.test.mjs).
+
+### Verified by frame attribution — engine traces, then real play
+
+Node traces through the engine with the shipped manifests as the gate, per
+tick, for all four (deathblow shown; the others differ only in the motion3
+descent post and the devil carry, and the base:8 donald's prop gate leaves
+under his punch smear — see below):
+
+    walk       unified:1 x4 -> ext:1 x4 -> unified:2 x4 -> unified:3 x4 -> ext:2 x4 -> unified:4 x4  (retreat reverses it)
+    idle       unified:0 x8 -> ext:0 x8 -> unified:0 x8 ...
+    heavy punch  ext:5 x5 -> ext2:4 x5 -> unified:6 x3 -> ext3:3 x2 -> ext3:13 x6 -> ext3:2 x8 -> ext2:5 x5 -> unified:7 x4 -> idle
+    heavy kick   ext:6 x6 -> ext2:6 x6 -> unified:6 x6 -> ext3:14 x7 -> ext3:11 x9 -> ext2:7 x6 -> unified:7 x6 -> idle
+    jump arc     unified:8 x5 -> ext:3 x5 -> unified:9 x7 -> ext:4 x5 -> motion:11 x12 -> motion:6 x12
+    light        ext4:1 x7 -> ext4:4 x7 -> ext:7 x7 -> unified:7 x8 -> idle
+    heavy        ext4:3 x7 -> ext:7 x7 -> ext4:4 x7 -> unified:7 x8 -> idle
+
+Every hold budget is the 4.1 number: the ext cells replace drawings and
+move no band. Then the same beats in the real game, headless Chrome on the
+worktree, `__finalBlowQa.pose()` read every sim tick (the trace ring is
+written at the render choke point, which a page nobody paints never
+reaches): all four fighters report `family: [unified, ext, ext2, ext3,
+ext4]` ready with no pending or failed sheet, zero runtime errors, zero
+failed responses; walk `unified:1 -> unified-ext:1 -> unified:2 ->
+unified:3 -> unified-ext:2 -> unified:4` on all four; the idle alternating
+8/8; the devil's heavy kick `unified-ext:6 -> unified-ext2:6 -> unified:6 x6
+-> unified-ext3:14 -> unified-ext3:11 -> unified-ext2:7 -> unified:7` with
+no base cell anywhere in it; the light hit `unified-ext4:1 x7 ->
+unified-ext4:4 x7 -> unified-ext:7 x7 -> unified:7 x8 -> idle`.
+
+### What this install did not do, written down
+
+* **The plain jump's drawn descent is long.** 5.0's substitution draws the
+  ext descent under `motion:11` for any airborne fighter (it was written for
+  the attacker's trail), so a routed descent now covers the air-recovery
+  band too: deathblow and donald, motion3 off, hold `unified-ext:4` for
+  17-20 ticks of a plain jump; post and the devil rewind through `motion3:3`
+  (`ext:4 x5 -> motion3:3 x6 -> ext:4 x9`). ali has drawn the same rewind
+  since 5.0. The tracks and their budgets are unchanged; the drawing is.
+  The ext5 sheet's own apex tuck, descent and AIR-RECOVER cells are the
+  answer, and that item should key the air-recovery band on them.
+* **donald's heavy punch smear** still leaves the family for two ticks
+  (`unified:6 -> base:8 x2 -> ext3:13`): his motion:2 smear is a prop-action
+  cell, the prop gate diverts it to base 13 and then to the bare-hand
+  stand-in, so the ext3 smear substitution never fires. Same class as the
+  devil's compress band, one link under the smear key; not this item.
+* **17/18 leg phase is unverified frame by frame**, as 5.0 recorded for
+  ali. At 1:1 the two walk-downs exchange legs on all four sheets; which of
+  them carries cell 1's phase against cell 3's was not measured (the
+  luminance metric needs each fighter's marker and the two contact keys
+  share a silhouette by construction since 4.3).
+* **The four sheets ship lossless** (411-586 KB). The 5.1 #36 encode pass
+  was not run: it needs the composed sheets archived as lossless masters
+  first (`swing-v50/lossless-51/<id>-ext.webp`), then
+  `encode_sheets.py --only`.
+* The devil's ext8 masters carry a few green energy specks around the
+  wings and tail, inherited from the generation; nothing was retouched.

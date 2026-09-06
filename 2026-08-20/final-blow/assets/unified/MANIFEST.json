@@ -40,7 +40,7 @@
    "mid-reaction"
   ],
   "extCellCount": 8,
-  "extStatus": "WIRED AND SHIPPING (v4.1). SIX fighters carry an ext sheet: jez, alan, benny, commissioner, cyraxx and ali. Seven of the eight ext cells are routed on the beat they were drawn for on every one of them: 16 into the breathing idle, 17 and 18 into the six-key walk, 19 into the jump ascent, 21 and 22 into the attack chambers, 23 into both reaction ladders. THE EIGHTH, 20 (jump-descend), IS ROUTED PER FIGHTER off its own accept flag, because on this cell the routing is a property of the ART and not of the chain: it drew as a hit reaction on all five 4.0 sheets (accept:false, retired, see each fighter's extCells[4] note) and as a real feet-first descent on ali's 4.1 sheet (accept:true, ROUTED). A fighter whose flag is false has the cell forced undrawable in his mask, exactly as before. The gate does NOT count cell 20 -- 'whole' means every cell that CAN draw is accepted -- so a bad descent costs no fighter his sheet. The ext sheet is otherwise gated ALL SEVEN OR NONE and additionally requires the main sheet to be whole, because the beats interleave the two sheets cell by cell.",
+  "extStatus": "WIRED AND SHIPPING (v5.2). ALL TEN fighters carry an ext sheet: jez, alan, benny, commissioner and cyraxx from the 4.0 24-cell generations, ali from his 4.1/5.0 redraw, and deathblow, post, donald and the devil from the v5.2 two-take ext8 generation (see each fighter's `ext8` note). Seven of the eight ext cells are routed on the beat they were drawn for on every one of them: 16 into the breathing idle, 17 and 18 into the six-key walk, 19 into the jump ascent, 21 and 22 into the attack chambers, 23 into both reaction ladders. THE EIGHTH, 20 (jump-descend), IS ROUTED PER FIGHTER off its own accept flag, because on this cell the routing is a property of the ART and not of the chain: it drew as a hit reaction on the five 4.0 sheets (accept:false, retired, see each fighter's extCells[4] note) and as a real feet-first descent on ali's 4.1 sheet and on all four v5.2 sheets (accept:true, ROUTED). A fighter whose flag is false has the cell forced undrawable in his mask. The gate does NOT count cell 20 -- 'whole' means every cell that CAN draw is accepted -- so a bad descent costs no fighter his sheet. The ext sheet is otherwise gated ALL SEVEN OR NONE and additionally requires the main sheet to be whole, because the beats interleave the two sheets cell by cell.",
   "extIntegrationOrder": "The six-key walk is the highest-value wiring: cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4. Then the jump arc 8 -> 19 -> 9 -> 20. Then the attack ramps 21 -> 10 and 22 -> 11. Then 12 -> 23 -> 13 in the reaction ladder, and 0 <-> 16 on the breathing idle. -- DONE in 4.0 with one exception, and the exception CLOSED in 4.1 for the one fighter whose art supports it. On the five 4.0 sheets the jump arc still owns 8 -> 19 and stops there: 9 and 20 stay retired because cell 20 did not come back as a descent, and one usable airborne in-between cannot own a chain (RULE 2). On ali it came back correct, so his arc is the WHOLE chain 8 -> 19 -> 9 -> 20 -- four consecutive drawings from one generation owning the airborne middle, which is exactly what routingNote kept cells 8 and 9 on the sheet waiting for. RULE 2 is satisfied by a CONNECTED REGION, not by a roster-wide identical answer; the crossing count is unchanged at one and it moves later, from ascent -> tuck near the apex to descend -> motion3 deep into the fall.",
   "generationLayout13": "6 COLUMNS x 4 ROWS = 24 panels on one 1024x1024 generation. square_hd is fal's resolution ceiling for openai-gpt-image-2 (measured: aspect_ratio 2:3 returns 1024x768 and portrait_16_9 returns 608x1088, both FEWER pixels), and the drawn figure fills the cell HEIGHT, so rows -- not columns -- set per-cell fidelity. Four rows keeps the 256px cell height and therefore the ~230-250px drawn figure the shipped sheets already have; six rows would have dropped it to ~165px. Row 1 is the six-key walk filmstrip, which is also why the walk got two extra keys: a 6-column top row IS the filmstrip.",
   "wave13": {
@@ -574,7 +574,8 @@
      "losslessBytes": 813668
     }
    }
-  }
+  },
+  "ext8": "v5.2: the four 4.0 holdouts' ext sheets are a second generation (tools/swing/build_sheet.py --bank ext8: two takes of the eight ext poses per 4x4 sheet, image-to-image from the fighter's unified sheet) composed by tools/swing/install_ext8.py. A second generation does not carry the unified scale exactly, so each sheet is resampled once so that its breathing idle lands on the fighter's unified idle (`extScale` records the result); every downstream table and both renderers then read it as the 4.0 sheets are read."
  },
  "fighters": {
   "deathblow": {
@@ -1116,7 +1117,60 @@
      "accept": true,
      "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
-   ]
+   ],
+   "extSheet": "deathblow-ext.webp",
+   "extScale": 1.2839,
+   "extCells": [
+    {
+     "frame": 16,
+     "id": "idle-breathe",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 8, 269px raw -> 273px composed). Idle one breath later -- the second idle key the breathing idle alternates with cell 0 every 8 ticks."
+    },
+    {
+     "frame": 17,
+     "id": "walk-down-a",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 1, 286px raw -> 290px composed). Walk DOWN A -- the weight-sinking beat between contact A (1) and passing A (2)."
+    },
+    {
+     "frame": 18,
+     "id": "walk-down-b",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 10, 286px raw -> 290px composed). Walk DOWN B -- the leg exchange of 17; the six-key cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4."
+    },
+    {
+     "frame": 19,
+     "id": "jump-ascent",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 3, 279px raw -> 283px composed). Jump ascent -- airborne and still rising, between jump-rise (8) and the apex tuck (9). Upright at 1:1."
+    },
+    {
+     "frame": 20,
+     "id": "jump-descend",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 4, 281px raw -> 285px composed). jump-descend, AND IT IS A REAL DESCENT: torso upright, head level, legs reaching down, arms out for balance -- read at 1:1 against this fighter's own cells 12/13, it is not their sibling. accept:true and ROUTED (v5.2): the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20, as it does for ali."
+    },
+    {
+     "frame": 21,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 13, 270px raw -> 274px composed). Punch wind-up -- rear fist chambered at the ribs, the kit-less heavy punch's COCK band."
+    },
+    {
+     "frame": 22,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 14, 273px raw -> 277px composed). Kick chamber -- knee snapped up, foot cocked, the kit-less heavy kick's COCK band."
+    },
+    {
+     "frame": 23,
+     "id": "mid-reaction",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 15, 277px raw -> 281px composed). Mid reaction -- the flinch between light-hit (12) and big-hit (13), band 1 of the heavy ladder and band 2 of the light."
+    }
+   ],
+   "ext8": "v5.2: the ext sheet is a SECOND generation -- two takes of the eight ext poses on one 4x4 sheet (final-blow-art-archive/swing-v50/lossless-51/deathblow-ext8.webp, sidecar ext8-deathblow.json, grammar-ext8.txt), image-to-image from this fighter's unified sheet, colour-matched, despilled, sliced at the unified scale 1.2697. tools/swing/install_ext8.py picked one take per cell by height (breathe, walk-downs and wind-ups nearest the idle 272, mid-reaction nearest the light-hit 272, jump cells the upright take read at 1:1) and set the sheet's scale off the breathe: factor 1.0112 so the breathing idle lands ON the idle (the 4.0 contract that the two sheets draw at one size), extScale 1.2839. Composed cells measured (alpha>=24): heights [273, 290, 290, 283, 285, 274, 277, 281], body centres [178, 170, 170, 173, 172, 178, 176, 174], ext adjust {1: 0.938, 2: 0.938}."
   },
   "jez": {
    "sheet": "jez.webp",
@@ -3620,7 +3674,60 @@
      "accept": true,
      "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
-   ]
+   ],
+   "extSheet": "post-ext.webp",
+   "extScale": 1.2523,
+   "extCells": [
+    {
+     "frame": 16,
+     "id": "idle-breathe",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 8, 303px raw -> 280px composed). Idle one breath later -- the second idle key the breathing idle alternates with cell 0 every 8 ticks."
+    },
+    {
+     "frame": 17,
+     "id": "walk-down-a",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 1, 296px raw -> 274px composed). Walk DOWN A -- the weight-sinking beat between contact A (1) and passing A (2)."
+    },
+    {
+     "frame": 18,
+     "id": "walk-down-b",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 2, 295px raw -> 273px composed). Walk DOWN B -- the leg exchange of 17; the six-key cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4."
+    },
+    {
+     "frame": 19,
+     "id": "jump-ascent",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 3, 311px raw -> 288px composed). Jump ascent -- airborne and still rising, between jump-rise (8) and the apex tuck (9). Upright at 1:1."
+    },
+    {
+     "frame": 20,
+     "id": "jump-descend",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 12, 296px raw -> 274px composed). jump-descend, AND IT IS A REAL DESCENT: torso upright, head level, legs reaching down, arms out for balance -- read at 1:1 against this fighter's own cells 12/13, it is not their sibling. accept:true and ROUTED (v5.2): the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20, as it does for ali."
+    },
+    {
+     "frame": 21,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 5, 286px raw -> 265px composed). Punch wind-up -- rear fist chambered at the ribs, the kit-less heavy punch's COCK band."
+    },
+    {
+     "frame": 22,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 14, 305px raw -> 282px composed). Kick chamber -- knee snapped up, foot cocked, the kit-less heavy kick's COCK band."
+    },
+    {
+     "frame": 23,
+     "id": "mid-reaction",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 7, 291px raw -> 269px composed). Mid reaction -- the flinch between light-hit (12) and big-hit (13), band 1 of the heavy ladder and band 2 of the light."
+    }
+   ],
+   "ext8": "v5.2: the ext sheet is a SECOND generation -- two takes of the eight ext poses on one 4x4 sheet (final-blow-art-archive/swing-v50/lossless-51/post-ext8.webp, sidecar ext8-post.json, grammar-ext8.txt), image-to-image from this fighter's unified sheet, colour-matched, despilled, sliced at the unified scale 1.36. tools/swing/install_ext8.py picked one take per cell by height (breathe, walk-downs and wind-ups nearest the idle 279, mid-reaction nearest the light-hit 292, jump cells the upright take read at 1:1) and set the sheet's scale off the breathe: factor 0.9208 so the breathing idle lands ON the idle (the 4.0 contract that the two sheets draw at one size), extScale 1.2523. Composed cells measured (alpha>=24): heights [280, 274, 273, 288, 274, 265, 282, 269], body centres [176, 178, 179, 172, 178, 183, 174, 181], ext adjust {}."
   },
   "benny": {
    "sheet": "benny.webp",
@@ -5259,7 +5366,60 @@
      "accept": true,
      "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
-   ]
+   ],
+   "extSheet": "donald-ext.webp",
+   "extScale": 1.2202,
+   "extCells": [
+    {
+     "frame": 16,
+     "id": "idle-breathe",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 0, 265px raw -> 261px composed). Idle one breath later -- the second idle key the breathing idle alternates with cell 0 every 8 ticks."
+    },
+    {
+     "frame": 17,
+     "id": "walk-down-a",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 1, 265px raw -> 261px composed). Walk DOWN A -- the weight-sinking beat between contact A (1) and passing A (2)."
+    },
+    {
+     "frame": 18,
+     "id": "walk-down-b",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 10, 260px raw -> 256px composed). Walk DOWN B -- the leg exchange of 17; the six-key cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4."
+    },
+    {
+     "frame": 19,
+     "id": "jump-ascent",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 3, 247px raw -> 243px composed). Jump ascent -- airborne and still rising, between jump-rise (8) and the apex tuck (9). Upright at 1:1."
+    },
+    {
+     "frame": 20,
+     "id": "jump-descend",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 12, 265px raw -> 261px composed). jump-descend, AND IT IS A REAL DESCENT: torso upright, head level, legs reaching down, arms out for balance -- read at 1:1 against this fighter's own cells 12/13, it is not their sibling. accept:true and ROUTED (v5.2): the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20, as it does for ali."
+    },
+    {
+     "frame": 21,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 5, 258px raw -> 254px composed). Punch wind-up -- rear fist chambered at the ribs, the kit-less heavy punch's COCK band."
+    },
+    {
+     "frame": 22,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 6, 261px raw -> 257px composed). Kick chamber -- knee snapped up, foot cocked, the kit-less heavy kick's COCK band."
+    },
+    {
+     "frame": 23,
+     "id": "mid-reaction",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 7, 260px raw -> 256px composed). Mid reaction -- the flinch between light-hit (12) and big-hit (13), band 1 of the heavy ladder and band 2 of the light."
+    }
+   ],
+   "ext8": "v5.2: the ext sheet is a SECOND generation -- two takes of the eight ext poses on one 4x4 sheet (final-blow-art-archive/swing-v50/lossless-51/donald-ext8.webp, sidecar ext8-donald.json, grammar-ext8.txt), image-to-image from this fighter's unified sheet, colour-matched, despilled, sliced at the unified scale 1.2389. tools/swing/install_ext8.py picked one take per cell by height (breathe, walk-downs and wind-ups nearest the idle 261, mid-reaction nearest the light-hit 266, jump cells the upright take read at 1:1) and set the sheet's scale off the breathe: factor 0.9849 so the breathing idle lands ON the idle (the 4.0 contract that the two sheets draw at one size), extScale 1.2202. Composed cells measured (alpha>=24): heights [261, 261, 256, 243, 261, 254, 257, 256], body centres [184, 184, 186, 193, 184, 188, 186, 186], ext adjust {}."
   },
   "cyraxx": {
    "scale": 1.4712,
@@ -8753,7 +8913,60 @@
      "accept": true,
      "note": "v5.2 ext5 cell, generated as one 4x4 sheet with the fighter's own unified sheet as the image-to-image reference, colour-matched to it, despilled, built at the unified scale."
     }
-   ]
+   ],
+   "extSheet": "devil-ext.webp",
+   "extScale": 1.4383,
+   "extCells": [
+    {
+     "frame": 16,
+     "id": "idle-breathe",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 0, 270px raw -> 283px composed). Idle one breath later -- the second idle key the breathing idle alternates with cell 0 every 8 ticks."
+    },
+    {
+     "frame": 17,
+     "id": "walk-down-a",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 1, 265px raw -> 277px composed). Walk DOWN A -- the weight-sinking beat between contact A (1) and passing A (2). Fit-scaled about the torso column; drawAdjust 1.0056."
+    },
+    {
+     "frame": 18,
+     "id": "walk-down-b",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 2, 265px raw -> 278px composed). Walk DOWN B -- the leg exchange of 17; the six-key cycle 1 -> 17 -> 2 -> 3 -> 18 -> 4."
+    },
+    {
+     "frame": 19,
+     "id": "jump-ascent",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 3, 288px raw -> 302px composed). Jump ascent -- airborne and still rising, between jump-rise (8) and the apex tuck (9). Upright at 1:1."
+    },
+    {
+     "frame": 20,
+     "id": "jump-descend",
+     "accept": true,
+     "note": "v5.2 ext8 take B (slicer cell 12, 257px raw -> 270px composed). jump-descend, AND IT IS A REAL DESCENT: torso upright, head level, legs reaching down, arms out for balance -- read at 1:1 against this fighter's own cells 12/13, it is not their sibling. accept:true and ROUTED (v5.2): the jump arc owns his whole airborne chain 8 -> 19 -> 9 -> 20, as it does for ali."
+    },
+    {
+     "frame": 21,
+     "id": "punch-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 5, 266px raw -> 279px composed). Punch wind-up -- rear fist chambered at the ribs, the kit-less heavy punch's COCK band."
+    },
+    {
+     "frame": 22,
+     "id": "kick-windup",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 6, 272px raw -> 285px composed). Kick chamber -- knee snapped up, foot cocked, the kit-less heavy kick's COCK band."
+    },
+    {
+     "frame": 23,
+     "id": "mid-reaction",
+     "accept": true,
+     "note": "v5.2 ext8 take A (slicer cell 7, 268px raw -> 281px composed). Mid reaction -- the flinch between light-hit (12) and big-hit (13), band 1 of the heavy ladder and band 2 of the light."
+    }
+   ],
+   "ext8": "v5.2: the ext sheet is a SECOND generation -- two takes of the eight ext poses on one 4x4 sheet (final-blow-art-archive/swing-v50/lossless-51/devil-ext8.webp, sidecar ext8-devil.json, grammar-ext8.txt), image-to-image from this fighter's unified sheet, colour-matched, despilled, sliced at the unified scale 1.3722. tools/swing/install_ext8.py picked one take per cell by height (breathe, walk-downs and wind-ups nearest the idle 283, mid-reaction nearest the light-hit 294, jump cells the upright take read at 1:1) and set the sheet's scale off the breathe: factor 1.0481 so the breathing idle lands ON the idle (the 4.0 contract that the two sheets draw at one size), extScale 1.4383. Composed cells measured (alpha>=24): heights [283, 277, 278, 302, 270, 279, 285, 281], body centres [173, 176, 176, 164, 180, 175, 172, 174], ext adjust {1: 1.0056}."
   }
  },
  "internal": {

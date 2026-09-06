@@ -2172,6 +2172,22 @@ const UNIFIED_EXT_CELL_ADJUST = Object.freeze({
   // nothing is folded in here beyond the height reconciliation — see the
   // commissioner's block above for the one entry that is not a height term.
   ali: Object.freeze({  }),
+  // v5.2 — THE FOUR 4.0 HOLDOUTS, on ext sheets composed from a two-take
+  // second generation (tools/swing/install_ext8.py; MOTION-ATLAS v5.2). Each
+  // sheet was resampled ONCE at build time so its breathing idle lands on the
+  // fighter's unified idle, so no sheet-level term is folded in here: the
+  // rows below are the same height reconciliation the 4.0 rows carry.
+  // deathblow's two walk-downs measure 290px against a 272px idle (+6.6%
+  // each) and take the same term; post's (-1.8%/-2.2%) and donald's
+  // (0.0%/-1.9%) sit inside the band.
+  deathblow: Object.freeze({ 1: 0.938, 2: 0.938 }),
+  post: Object.freeze({  }),
+  donald: Object.freeze({  }),
+  // The devil's walk-down A is 280px wide with its wings and tail; at his
+  // sheet factor the slicer's fit rule trims it 0.6% to keep it inside the
+  // cell, and this draws it back (the ext3/ext4 convention). His height
+  // terms are inside the band (-2.1%/-1.8%).
+  devil: Object.freeze({ 1: 1.0056 }),
 });
 
 /**
@@ -2206,6 +2222,13 @@ export const UNIFIED_EXT_CELL_HEIGHT = Object.freeze({
   commissioner: Object.freeze([287, 290, 282, 320, 315, 263, 284, 241]),
   cyraxx: Object.freeze([294, 305, 297, 290, 297, 280, 290, 247]),
   ali: Object.freeze([297, 300, 296, 264, 302, 292, 302, 269]),
+  // v5.2: measured on the composed ext8 sheets (alpha >= 24, after the
+  // per-sheet resample that puts frame 0 on the idle: deathblow 272, post
+  // 279, donald 261, devil 283).
+  deathblow: Object.freeze([273, 290, 290, 283, 285, 274, 277, 281]),
+  post: Object.freeze([280, 274, 273, 288, 274, 265, 282, 269]),
+  donald: Object.freeze([261, 261, 256, 243, 261, 254, 257, 256]),
+  devil: Object.freeze([283, 277, 278, 302, 270, 279, 285, 281]),
 });
 
 /** Drawn (corrected) content height of a unified cell, in cell pixels. */
@@ -2695,6 +2718,8 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([171, 163, 164, 168, 187, 171, 186, 174, 177, 174, 176, 197, 201, 174, 212, 180]),
     motion3: Object.freeze([161, 158, 158, 158, 164, 188, 158, 166, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([180, 170, 162, 166, 163, 226, 186, 177, 180, 247, 192, 184, 180, 199, 210, 270]),
+    // v5.2: bbox midpoints of the composed ext8 sheet (install_ext8.py).
+    "unified-ext": Object.freeze([178, 170, 170, 173, 172, 178, 176, 174]),
     "unified-ext2": Object.freeze([163, 162, 158, 158, 165, 180, 164, 187, 212, 215, 220, 220, 191, 192, 176, 172]),
     "unified-ext3": Object.freeze([186, 196, 189, 192, 225, 256, 210, 217, 214, 184, 215, 195, 220, 212, 204, 249]),
     "unified-ext4": Object.freeze([183, 176, 203, 184, 192, 190, 199, 234, 189, 230, 223, 217, 223, 212, 234, 262]),
@@ -2733,6 +2758,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([174, 163, 163, 163, 190, 166, 197, 170, 184, 181, 187, 196, 199, 190, 211, 183]),
     motion3: Object.freeze([172, 158, 158, 158, 176, 204, 158, 178, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([176, 169, 170, 170, 172, 228, 192, 179, 178, 234, 179, 174, 170, 166, 192, 266]),
+    "unified-ext": Object.freeze([176, 178, 179, 172, 178, 183, 174, 181]),
     "unified-ext2": Object.freeze([162, 163, 161, 163, 178, 176, 162, 162, 214, 220, 218, 226, 189, 186, 176, 173]),
     "unified-ext3": Object.freeze([180, 171, 174, 180, 222, 257, 211, 200, 218, 170, 230, 191, 220, 206, 195, 248]),
     "unified-ext4": Object.freeze([178, 174, 196, 180, 184, 186, 194, 177, 185, 222, 229, 221, 232, 205, 204, 265]),
@@ -2745,6 +2771,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([175, 163, 162, 169, 197, 172, 196, 181, 183, 175, 188, 202, 197, 191, 209, 200]),
     motion3: Object.freeze([176, 158, 158, 158, 178, 203, 164, 184, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([185, 176, 171, 175, 173, 219, 194, 188, 166, 238, 194, 191, 184, 190, 202, 258]),
+    "unified-ext": Object.freeze([184, 184, 186, 193, 184, 188, 186, 186]),
     "unified-ext2": Object.freeze([165, 162, 158, 163, 172, 193, 167, 167, 206, 213, 210, 222, 172, 172, 169, 172]),
     "unified-ext3": Object.freeze([191, 190, 190, 190, 226, 258, 208, 220, 220, 198, 240, 200, 217, 202, 194, 240]),
     "unified-ext4": Object.freeze([192, 184, 200, 190, 195, 187, 228, 202, 200, 231, 223, 224, 226, 205, 241, 264]),
@@ -2757,6 +2784,7 @@ export const CELL_BODY_CENTRE = Object.freeze({
     motion2: Object.freeze([164, 163, 217, 215, 212, 166, 206, 175, 190, 183, 180, 190, 190, 187, 222, 172]),
     motion3: Object.freeze([158, 158, 158, 158, 157, 198, 158, 160, -1, -1, -1, -1, -1, -1, -1, -1]),
     unified: Object.freeze([176, 164, 164, 162, 165, 222, 196, 176, 174, 228, 186, 186, 172, 172, 192, 258]),
+    "unified-ext": Object.freeze([173, 176, 176, 164, 180, 175, 172, 174]),
     "unified-ext2": Object.freeze([162, 162, 159, 164, 188, 194, 167, 183, 219, 213, 210, 212, 162, 178, 180, 162]),
     "unified-ext3": Object.freeze([191, 180, 178, 206, 225, 250, 194, 216, 202, 170, 218, 208, 207, 216, 180, 228]),
     "unified-ext4": Object.freeze([177, 176, 186, 202, 184, 184, 192, 180, 188, 226, 208, 220, 228, 202, 230, 263]),
@@ -3384,10 +3412,16 @@ export function unifiedFighterIds(masks) {
 // sheet is exactly the cross-generation strobe the unified bank exists to kill.
 //
 // A fighter with no ext sheet — the five 3.0 holdouts (deathblow, post, donald,
-// ali, devil) — has NO extCells block in the manifest, so the mask is
-// not-whole, no Image is ever requested (no 404), and every beat below returns
-// its pre-4.0 array unchanged. That is a hard requirement, not a nicety: those
-// five keep their 3.0 sheets byte-identically and must keep their 3.0 motion.
+// ali, devil) until 4.1 gave ali one and 5.2 the other four — has NO extCells
+// block in the manifest, so the mask is not-whole, no Image is ever requested
+// (no 404), and every beat below returns its pre-4.0 array unchanged. The
+// branch stays for that reason even with the whole roster on the sheet: it is
+// what a sheet that fails to decode, or a future fighter, degrades to.
+//
+// v5.2: the four holdouts' sheets are a SECOND generation (two takes of the
+// eight poses, image-to-image from the unified sheet — tools/swing/
+// install_ext8.py), resampled once at build time so the breathing idle lands
+// on the unified idle, which is the one premise every table below rests on.
 // ---------------------------------------------------------------------------
 
 export const UNIFIED_EXT_BANK = "unified-ext";
@@ -4832,7 +4866,17 @@ export function heavyWindupKeys(limb, { extended = false, inbetween = false } = 
     //    a 5.26 dE crossing with no flash over it and a 9.51 dE one into the
     //    smear; retired, the whole windup->smear->extension->follow swing is
     //    a single unbroken motion-family chain, exactly as 2.9 shipped it.
-    { at: 0.70, chain: [m2key(MOTION2_CELLS.crouchTrans)] },
+    //    v5.2: on an EXT fighter the band already draws the unified crouch
+    //    transition — swingSubstitute maps a resolved motion2:4 onto it (5.0),
+    //    so the "retired" reasoning above stopped describing the screen when
+    //    the whole swing moved onto the fighter's own sheets. The devil is the
+    //    one fighter whose motion2:4 is rejected (his is an all-fours prowl),
+    //    so his chain never RESOLVED motion2:4, the substitution never fired,
+    //    and the band fell through to the caller's base fallback — base 13,
+    //    his AIRBORNE claw lunge, held for the last 30% of every heavy windup
+    //    on the street. The same drawing the other nine get is keyed under the
+    //    bridge for him, inside the ext branch so the 3.5 array is untouched.
+    { at: 0.70, chain: extended ? [m2key(MOTION2_CELLS.crouchTrans), ukey(UNIFIED_CELLS.crouchTrans)] : [m2key(MOTION2_CELLS.crouchTrans)] },
   ];
 }
 
@@ -5396,8 +5440,8 @@ export function walkCyclePose(walkTime, roles = DEFAULT_BASE_ROLES, { extended =
   const walkKeys = roles.walk || DEFAULT_BASE_ROLES.walk;
   // v4.0: a fighter with a whole ext sheet walks the SIX-key alternating cycle
   // at the rate that holds the gait period. Everything below this branch is the
-  // 3.5 four-key path, reached byte-for-byte by every fighter without one — the
-  // five holdouts today — so their locomotion is unchanged.
+  // 3.5 four-key path, reached byte-for-byte by every fighter without one (the
+  // five holdouts until 4.1/5.2; a sheet that fails to decode today).
   if (extended) {
     const step = UNIFIED_EXT_WALK_KEYS[walkCycleFrameExt(walkTime)];
     // The degraded chain, innermost first: the four-key cycle's drawing at this

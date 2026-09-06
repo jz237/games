@@ -48,7 +48,8 @@ test("unifiedFamilyFor: the family follows the manifest gates, in plan order", (
     unifiedFamilyFor({ ext4: true, ext2: true, whole: true, ext3: true, ext: true }),
     ["unified", "ext", "ext2", "ext3", "ext4"],
   );
-  // ext missing but ext2+ present (deathblow/devil/donald/post ship this way).
+  // ext missing but ext2+ present (deathblow/devil/donald/post shipped this
+  // way until 5.2; still what a fighter whose ext sheet failed to decode is).
   assert.deepEqual(unifiedFamilyFor({ whole: true, ext: false, ext2: true, ext3: true, ext4: true }), ["unified", "ext2", "ext3", "ext4"]);
   // v5.2: the locomotion sheet is part of the family the intro waits for.
   assert.deepEqual(unifiedFamilyFor({ whole: true, ext: true, ext2: true, ext3: true, ext4: true, ext5: true }), ["unified", "ext", "ext2", "ext3", "ext4", "ext5"]);
