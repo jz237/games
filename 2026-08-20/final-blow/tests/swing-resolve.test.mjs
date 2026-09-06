@@ -423,7 +423,7 @@ function strikeChain(gate, action, context, id = "jez", beatOpt = Object.freeze(
 }
 
 function testFrameChains() {
-  const gate = buildGate();
+  const gate = buildJezGate();
   // The gate reads the shipped manifests: jez's ext descent is the one cell
   // his ext sheet rejected (why the air kick's trail is the chambered alt).
   assert.equal(gate(UNIFIED_EXT_CELLS.jumpDescend, UNIFIED_EXT_BANK), false);
@@ -496,7 +496,7 @@ function testGameMirror() {
     "return beatPoseAt(beat.keys, beat.phase, () => base(time < startup * 0.48 ? frames[0] : frames[1]));",
     'if (beat?.beat === "kickArc") {',
     'const arc = motion2Pose(beat.cell, "base", frames[1]);',
-    "return ext ? { ...arc, fallback: uni(UNIFIED_CELLS.crouchTrans, arc.fallback) } : arc;",
+    "return ext ? { ...arc, fallback: uni(UNIFIED_CELLS.crouchTrans, arc.fallback) } : arc",
     'if (beat?.beat === "airAttack") {',
     "frame: !key || key.at <= 0 ? frames[1] : key.at < 0.9 ? frames[2] : frames[3],",
     'if (beat?.beat === "recover") {',
@@ -758,10 +758,12 @@ function testExt5AirChains() {
   // DEATHBLOW, both accept states: no ext sheet (5.1) and with one (the
   // parallel ext8 item may hand him one — traced with the ascent accepted
   // and the descent held, the 4.0 shape, and with both).
-  const db = buildGate("deathblow");
+  // 5.2 ext8 gave deathblow a real ext sheet; the 5.1 shape (no ext) is
+  // pinned through an explicit rejection so both reads stay covered.
+  const db = buildGate("deathblow", { extOverride: {} });
   assert.deepEqual(capabilityFor("deathblow", db), { air: true });
   assert.equal(jumpTrace("deathblow", db), "unified:0 x1 -> unified:8 x6 -> unified:9 x6 -> ext5:4 x3 -> ext5:5 x4 -> ext5:6 x8 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1");
-  assert.equal(jumpTrace("deathblow", buildGate("deathblow", { ext5: false })), "unified:0 x1 -> motion2:7 x6 -> motion:5 x9 -> ext3:8 x12 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1",
+  assert.equal(jumpTrace("deathblow", buildGate("deathblow", { ext5: false, extOverride: {} })), "unified:0 x1 -> motion2:7 x6 -> motion:5 x9 -> ext3:8 x12 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1",
     "5.1: no motion3 on his sheet, so the tuck held 9 and the chamber 12");
   const dbExt = buildGate("deathblow", { extOverride: { [E.idleBreathe]: 1, [E.jumpAscent]: 1 } });
   assert.deepEqual(capabilityFor("deathblow", dbExt), { extended: true, air: true });
@@ -769,16 +771,24 @@ function testExt5AirChains() {
   const dbDescend = buildGate("deathblow", { extOverride: { [E.idleBreathe]: 1, [E.jumpAscent]: 1, [E.jumpDescend]: 1 } });
   assert.equal(jumpTrace("deathblow", dbDescend), "unified:0 x1 -> unified:8 x3 -> ext:3 x3 -> unified:9 x6 -> ext:4 x3 -> ext5:5 x4 -> ext5:6 x8 -> ext3:10 x6 -> unified:6 x7 -> unified:0 x1",
     "with a real descent of his own it takes the fall band, as ali's does");
+  // The REAL 5.2 gate: his composed ext sheet accepts the ascent and the
+  // feet-first descent, so he reads exactly like the synthetic descend case.
+  const dbReal = buildGate("deathblow");
+  assert.deepEqual(capabilityFor("deathblow", dbReal), { extended: true, descend: true, air: true });
+  assert.equal(jumpTrace("deathblow", dbReal), jumpTrace("deathblow", dbDescend), "the shipped ext sheet gives him the descend chain");
   // ALI keeps his own cell 20 where 4.1 put it; the ext5 descent follows it,
   // and the 5.1 rewind (ext:4 -> motion3:3 -> ext:4) is gone.
   const ali = buildGate("ali");
   assert.deepEqual(capabilityFor("ali", ali), { extended: true, descend: true, air: true });
   assert.equal(jumpTrace("ali", ali), "unified:0 x1 -> unified:8 x3 -> ext:3 x4 -> unified:9 x6 -> ext:4 x4 -> ext5:5 x5 -> ext5:6 x8 -> ext3:10 x7 -> unified:6 x7 -> unified:0 x1");
   assert.equal(jumpTrace("ali", buildGate("ali", { ext5: false })), "unified:0 x1 -> unified:8 x3 -> ext:3 x4 -> unified:9 x6 -> ext:4 x4 -> motion3:3 x5 -> ext:4 x8 -> ext3:10 x7 -> unified:6 x7 -> unified:0 x1");
-  // THE DEVIL: no ext sheet, a glide cap on the fall (longer descent holds,
-  // exactly as long as 5.1's).
+  // THE DEVIL: a glide cap on the fall (longer descent holds, exactly as
+  // long as 5.1's). 5.2 ext8 gave him an ext sheet too, so his rise/ascent
+  // and his own feet-first descent lead into the ext5 descent and recover;
+  // the no-ext read of the same arc is pinned through an explicit rejection.
   const devil = buildGate("devil");
-  assert.equal(jumpTrace("devil", devil), "unified:0 x1 -> unified:8 x7 -> unified:9 x6 -> ext5:4 x4 -> ext5:5 x4 -> ext5:6 x9 -> ext3:10 x11 -> unified:6 x7 -> unified:0 x1");
+  assert.equal(jumpTrace("devil", devil), "unified:0 x1 -> unified:8 x3 -> ext:3 x4 -> unified:9 x6 -> ext:4 x4 -> ext5:5 x4 -> ext5:6 x9 -> ext3:10 x11 -> unified:6 x7 -> unified:0 x1");
+  assert.equal(jumpTrace("devil", buildGate("devil", { extOverride: {} })), "unified:0 x1 -> unified:8 x7 -> unified:9 x6 -> ext5:4 x4 -> ext5:5 x4 -> ext5:6 x9 -> ext3:10 x11 -> unified:6 x7 -> unified:0 x1");
   assert.deepEqual(holdsOf(jumpTrace("devil", devil)), holdsOf(jumpTrace("devil", buildGate("devil", { ext5: false }))));
   // AIR NORMALS: the trail after the strike is the air recover on every
   // fighter, and the chamber is drawn once. jez / ali / the devil carry the
@@ -833,6 +843,8 @@ function testExt5AirChains() {
   assert.match(gameSource, /return beatPoseAt\(jumpArcKeys\(bandStart, extOpt\), progress, \(key\) => \(\s*\n[^\n]*\n\s*!key \|\| key\.at < 0\.76 \? base\(13\) : base\(12\)/);
   assert.match(gameSource, /if \(fighter\.landingRecoveryFrames > 0\) \{\s*\n\s*return uni\(UNIFIED_CELLS\.crouchTrans, motion2Pose\(MOTION2_CELLS\.crouchTrans, "base", 12\)\);/);
   assert.match(gameSource, /return flip < 0\.6\s*\n\s*\? motionPose\(MOTION_CELLS\.tuck, "base", 13\)\s*\n\s*: motionPose\(MOTION_CELLS\.airrec, "base", 13\);/);
+}
+
 // v5.2 — THE DEVIL'S HEAVY WIND-UP LANDS ON HIS OWN COMPRESS, NOT HIS CLAW
 // LUNGE. His motion2:4 (crouch-trans) is rejected — an all-fours prowl — so the
 // compress band's chain never RESOLVED motion2:4, the 5.0 substitution onto
@@ -865,7 +877,7 @@ function testDevilCompressBand() {
   assert.ok(before.includes("base:13"), `expected the 4.9 read to show the lunge: ${before.join(" -> ")}`);
   // The other nine resolve motion2:4 and are substituted onto unified:6 as
   // before; the extra link under the bridge never reaches them.
-  assert.deepEqual(strikeChain(buildGate(), "heavy", { limb: "kick" }).raw,
+  assert.deepEqual(strikeChain(buildGate("jez"), "heavy", { limb: "kick" }).raw,
     ["ext:6", "ext2:6", "motion2:4", "motion:1", "motion:4", "ext2:7", "unified:7", "unified:0"]);
 }
 
@@ -876,9 +888,9 @@ testAltFallback();
 testCrouchingNormalOverride();
 testAirHitNeverReachesTheScreen();
 testFrameChains();
-testDevilCompressBand();
 testGameMirror();
 testExt5GroundChains();
 testExt5AirChains();
 
 console.log("Final Blow swing resolver tests passed");
+testDevilCompressBand();
