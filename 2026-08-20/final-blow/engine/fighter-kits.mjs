@@ -3749,7 +3749,10 @@ export function swingSubstitute(bank, frame, ctx = {}) {
   const E3 = UNIFIED_EXT3_CELLS, E4 = UNIFIED_EXT4_CELLS;
   if (bank === UNIFIED_BANK) {
     switch (frame) {
-      case UNIFIED_CELLS.lightHit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.bodyBlow ? E4.bodyBlow : E4.headSnap };
+      case UNIFIED_CELLS.lightHit:
+        // The blockstun settle's fallback can land on the unified light hit too.
+        if (ctx.blocking) return ctx.crouching ? { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard } : { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch };
+        return { bank: UNIFIED_EXT4_BANK, frame: ctx.bodyBlow ? E4.bodyBlow : E4.headSnap };
       case UNIFIED_CELLS.bigHit: return { bank: UNIFIED_EXT4_BANK, frame: ctx.victimAirborne ? E4.launched : E4.bigHit };
       case UNIFIED_CELLS.stagger: return { bank: UNIFIED_EXT4_BANK, frame: E4.stagger };
       case UNIFIED_CELLS.knockdown: return ctx.ko ? { bank: UNIFIED_EXT4_BANK, frame: E4.ko } : null;

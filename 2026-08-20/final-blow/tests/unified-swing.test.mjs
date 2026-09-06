@@ -119,6 +119,7 @@ function testSubstitutionTable() {
   assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.headSnap });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, { blocking: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch }, "a blocked hit's settle fallback keeps the flinch");
   assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, { blocking: true, crouching: true }), { bank: UNIFIED_EXT3_BANK, frame: E3.crouchGuard });
+  assert.deepEqual(sub("unified", 12, { blocking: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.guardFlinch }, "the unified light hit keeps the flinch on a block too");
   assert.deepEqual(sub("motion2", MOTION2_CELLS.lightHit, { bodyBlow: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.bodyBlow });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, {}), { bank: UNIFIED_EXT4_BANK, frame: E4.dizzy });
   assert.deepEqual(sub("motion2", MOTION2_CELLS.dizzy, { reeling: true }), { bank: UNIFIED_EXT4_BANK, frame: E4.stagger },

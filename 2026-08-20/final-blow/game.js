@@ -18690,7 +18690,17 @@ function fighterPoseDescriptor(fighter) {
     const blockPhase = clamp(1 - fighter.blockstunFrames / Math.max(1, blockTotal), 0, 0.999);
     return beatPoseAt(crouchBlockstunKeys(), blockPhase, uni(UNIFIED_CELLS.crouch, base(roles.crouch)));
   }
-  if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
+  if (fighter.hitFlash > 0 || fighter.hitstunFrames > 21) {
+    // v5.1: a BLOCKED contact's flash keeps the stance. The flash outlives a
+    // jab's 4-tick blockstun, and this read then borrowed the clean-hit cell
+    // for the flash's remaining ticks — a 4-tick hit read on a block (measured:
+    // unified:12 / ext4:1 at ticks 63-66 after a blocked jab, blockstun 0,
+    // guarding). No hitstun and a guard up is a block, not a hit.
+    if (fighter.hitstunFrames === 0 && (fighter.guarding || fighter.block)) {
+      return fighter.crouch ? uni(UNIFIED_CELLS.crouch, base(roles.crouch)) : uni(UNIFIED_CELLS.guard, base(roles.guard));
+    }
+    return uni(UNIFIED_CELLS.lightHit, base(roles.hit));
+  }
   // v2.9 FLOW: sequenced wake-up — getup-a (knee up, hand pushing off) into
   // getup-b (half-risen crouch) across the recovery countdown, ending the
   // teleport-to-feet. Pure helper in fighter-kits.mjs; fallbacks exact.
@@ -28350,7 +28360,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-5.0");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-5.1");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -29721,7 +29731,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "5.0-fullswing",
+  version: "5.1-truth",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
