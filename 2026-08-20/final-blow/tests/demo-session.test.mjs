@@ -384,7 +384,10 @@ test("game.js reaches the session layer only through the demo: a played match is
   // The result card, the standings band and the NEXT UP tease are demo-only.
   assert.match(game, /if \(state\.mode === "demo"\) renderDemoResultCard\(winner\);/);
   assert.match(game, /demoSession\.nextUp = demoNextUpFromPeek\(\);\s*renderDemoStandingsBand\(\);/);
-  assert.match(game, /for \(const id of demoSession\.nextUp\.pair\) announcerSay\(`\$\{id\}-name`, \{ delay: 1500 \}\);/);
+  // (5.4.1 RINGSIDE: the result hold speaks the sign-off instead of reading the
+  // next pair's names — the versus card's corner calls introduce them once.)
+  assert.doesNotMatch(game, /announcerSay\(`\$\{id\}-name`, \{ delay: 1500 \}\)/, "the 5.4 name reads doubled the card's corner calls");
+  assert.match(game, /if \(!demoSession\.qa\) \{\s*const cues = demoSignOffSpeech\(\{/);
   // The story is resolved once per card from the director's tag + the QA override.
   assert.match(game, /demoResolveShow\(cycle, showOverride\);/);
   assert.equal((game.match(/demoResolveShow\(/g) || []).length, 2);

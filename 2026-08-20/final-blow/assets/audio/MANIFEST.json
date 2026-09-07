@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-06",
+  "generated": "2026-09-07",
   "tool": "tools/audio/build_manifest.mjs",
   "purpose": "Per-take duration (ms) and size (bytes) of every voice take and shared sample, plus contiguous take counts per cue, measured from the files on disk with ffprobe. game.js reads this instead of HEAD-probing variant slots and instead of guessing announcer speech length from word counts; it falls back to those only when this file is missing. Regenerate whenever a take is added, removed or renamed.",
   "announcer": {
-    "takes": 121,
+    "takes": 228,
     "cues": {
       "alan-name": 3,
       "alan-wins": 3,
@@ -18,6 +18,73 @@
       "connected": 3,
       "cyraxx-name": 3,
       "cyraxx-wins": 4,
+      "dc-clutch-1": 1,
+      "dc-clutch-1-tail": 1,
+      "dc-clutch-2": 1,
+      "dc-clutch-3": 1,
+      "dc-clutch-4": 1,
+      "dc-comeback-1": 1,
+      "dc-comeback-2": 1,
+      "dc-comeback-3": 1,
+      "dc-comeback-4": 1,
+      "dc-counter-1": 1,
+      "dc-counter-2": 1,
+      "dc-counter-3": 1,
+      "dc-counter-4": 1,
+      "dc-counter-5": 1,
+      "dc-ex-1": 1,
+      "dc-ex-2": 1,
+      "dc-ex-3": 1,
+      "dc-ex-4": 1,
+      "dc-finisher-1": 1,
+      "dc-finisher-2": 1,
+      "dc-finisher-3": 1,
+      "dc-finisher-4": 1,
+      "dc-first-hit-1": 1,
+      "dc-first-hit-2": 1,
+      "dc-first-hit-3": 1,
+      "dc-first-hit-4": 1,
+      "dc-guard-crush-1": 1,
+      "dc-guard-crush-2": 1,
+      "dc-guard-crush-3": 1,
+      "dc-guard-crush-4": 1,
+      "dc-perfect-guard-1": 1,
+      "dc-perfect-guard-2": 1,
+      "dc-perfect-guard-3": 1,
+      "dc-perfect-guard-4": 1,
+      "dc-round-end-1": 1,
+      "dc-round-end-2": 1,
+      "dc-round-end-3": 1,
+      "dc-round-end-4": 1,
+      "dc-round-start-1": 1,
+      "dc-round-start-2": 1,
+      "dc-round-start-3": 1,
+      "dc-round-start-4": 1,
+      "dc-super-1": 1,
+      "dc-super-2": 1,
+      "dc-super-3": 1,
+      "dc-super-4": 1,
+      "dc-super-5": 1,
+      "dc-tech-1": 1,
+      "dc-tech-2": 1,
+      "dc-tech-3": 1,
+      "dc-tech-4": 1,
+      "dc-throw-1": 1,
+      "dc-throw-2": 1,
+      "dc-throw-3": 1,
+      "dc-throw-4": 1,
+      "dc-wall-bounce-1": 1,
+      "dc-wall-bounce-2": 1,
+      "dc-wall-bounce-3": 1,
+      "dc-wall-bounce-4": 1,
+      "dc-weapon-pickup-1": 1,
+      "dc-weapon-pickup-2": 1,
+      "dc-weapon-pickup-3": 1,
+      "dc-weapon-pickup-4": 1,
+      "dc-weapon-throw-1": 1,
+      "dc-weapon-throw-2": 1,
+      "dc-weapon-throw-3": 1,
+      "dc-weapon-throw-4": 1,
       "deathblow-name": 3,
       "deathblow-wins": 3,
       "devil-name": 3,
@@ -41,8 +108,46 @@
       "round1": 3,
       "round2": 3,
       "setpoint": 3,
+      "so-card-1": 1,
+      "so-card-1-tail": 1,
+      "so-card-2": 1,
+      "so-card-2-tail": 1,
+      "so-card-3": 1,
+      "so-card-4": 1,
+      "so-card-4-tail": 1,
+      "so-main-1": 1,
+      "so-main-2": 1,
+      "so-main-2-tail": 1,
+      "so-main-3": 1,
+      "so-main-4": 1,
+      "so-plain-1": 1,
+      "so-plain-2": 1,
+      "so-plain-3": 1,
+      "so-plain-4": 1,
+      "so-plain-5": 1,
+      "so-streak-1-tail": 1,
+      "so-streak-2": 1,
+      "so-streak-3": 1,
+      "so-streak-4": 1,
+      "so-streak-k3": 1,
+      "so-streak-k4": 1,
+      "so-streak-k5": 1,
+      "so-streak-kx": 1,
+      "stage-buffet": 1,
+      "stage-cruise": 1,
+      "stage-janney": 1,
+      "stage-somerset": 1,
+      "stage-vet": 1,
+      "stage-wildwood": 1,
+      "tenseconds": 3,
       "timeover": 3,
-      "wallbounce": 4
+      "wallbounce": 4,
+      "weapon-bottle": 1,
+      "weapon-brick": 1,
+      "weapon-needle": 1,
+      "weapon-pigeon": 1,
+      "weapon-souvenir-cup": 1,
+      "weapon-tongs": 1
     },
     "files": {
       "alan-name-1.mp3": {
@@ -204,6 +309,274 @@
       "cyraxx-wins-4.mp3": {
         "ms": 2116,
         "bytes": 34316
+      },
+      "dc-clutch-1-1.mp3": {
+        "ms": 2508,
+        "bytes": 40586
+      },
+      "dc-clutch-1-tail-1.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "dc-clutch-2-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "dc-clutch-3-1.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "dc-clutch-4-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "dc-comeback-1-1.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "dc-comeback-2-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-comeback-3-1.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "dc-comeback-4-1.mp3": {
+        "ms": 1149,
+        "bytes": 18852
+      },
+      "dc-counter-1-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "dc-counter-2-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "dc-counter-3-1.mp3": {
+        "ms": 3082,
+        "bytes": 49781
+      },
+      "dc-counter-4-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-counter-5-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "dc-ex-1-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "dc-ex-2-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-ex-3-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-ex-4-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "dc-finisher-1-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "dc-finisher-2-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "dc-finisher-3-1.mp3": {
+        "ms": 2194,
+        "bytes": 35570
+      },
+      "dc-finisher-4-1.mp3": {
+        "ms": 1071,
+        "bytes": 17598
+      },
+      "dc-first-hit-1-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-first-hit-2-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "dc-first-hit-3-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "dc-first-hit-4-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-guard-crush-1-1.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "dc-guard-crush-2-1.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "dc-guard-crush-3-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "dc-guard-crush-4-1.mp3": {
+        "ms": 2194,
+        "bytes": 35570
+      },
+      "dc-perfect-guard-1-1.mp3": {
+        "ms": 1228,
+        "bytes": 20106
+      },
+      "dc-perfect-guard-2-1.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "dc-perfect-guard-3-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "dc-perfect-guard-4-1.mp3": {
+        "ms": 1228,
+        "bytes": 20106
+      },
+      "dc-round-end-1-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "dc-round-end-2-1.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "dc-round-end-3-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "dc-round-end-4-1.mp3": {
+        "ms": 1228,
+        "bytes": 20106
+      },
+      "dc-round-start-1-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-round-start-2-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "dc-round-start-3-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "dc-round-start-4-1.mp3": {
+        "ms": 1071,
+        "bytes": 17598
+      },
+      "dc-super-1-1.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "dc-super-2-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "dc-super-3-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-super-4-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-super-5-1.mp3": {
+        "ms": 2351,
+        "bytes": 38078
+      },
+      "dc-tech-1-1.mp3": {
+        "ms": 914,
+        "bytes": 15090
+      },
+      "dc-tech-2-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "dc-tech-3-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "dc-tech-4-1.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "dc-throw-1-1.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "dc-throw-2-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "dc-throw-3-1.mp3": {
+        "ms": 914,
+        "bytes": 15090
+      },
+      "dc-throw-4-1.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "dc-wall-bounce-1-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "dc-wall-bounce-2-1.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "dc-wall-bounce-3-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "dc-wall-bounce-4-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
+      "dc-weapon-pickup-1-1.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "dc-weapon-pickup-2-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "dc-weapon-pickup-3-1.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "dc-weapon-pickup-4-1.mp3": {
+        "ms": 1071,
+        "bytes": 17598
+      },
+      "dc-weapon-throw-1-1.mp3": {
+        "ms": 758,
+        "bytes": 12582
+      },
+      "dc-weapon-throw-2-1.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "dc-weapon-throw-3-1.mp3": {
+        "ms": 2926,
+        "bytes": 47273
+      },
+      "dc-weapon-throw-4-1.mp3": {
+        "ms": 1489,
+        "bytes": 24285
       },
       "deathblow-name-1.mp3": {
         "ms": 1306,
@@ -501,6 +874,142 @@
         "ms": 2429,
         "bytes": 39332
       },
+      "so-card-1-1.mp3": {
+        "ms": 1306,
+        "bytes": 21359
+      },
+      "so-card-1-tail-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "so-card-2-1.mp3": {
+        "ms": 1802,
+        "bytes": 29301
+      },
+      "so-card-2-tail-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "so-card-3-1.mp3": {
+        "ms": 3239,
+        "bytes": 52288
+      },
+      "so-card-4-1.mp3": {
+        "ms": 2116,
+        "bytes": 34316
+      },
+      "so-card-4-tail-1.mp3": {
+        "ms": 993,
+        "bytes": 16344
+      },
+      "so-main-1-1.mp3": {
+        "ms": 3866,
+        "bytes": 62319
+      },
+      "so-main-2-1.mp3": {
+        "ms": 2769,
+        "bytes": 44765
+      },
+      "so-main-2-tail-1.mp3": {
+        "ms": 2038,
+        "bytes": 33062
+      },
+      "so-main-3-1.mp3": {
+        "ms": 2847,
+        "bytes": 46019
+      },
+      "so-main-4-1.mp3": {
+        "ms": 3709,
+        "bytes": 59812
+      },
+      "so-plain-1-1.mp3": {
+        "ms": 679,
+        "bytes": 11328
+      },
+      "so-plain-2-1.mp3": {
+        "ms": 1881,
+        "bytes": 30555
+      },
+      "so-plain-3-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "so-plain-4-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "so-plain-5-1.mp3": {
+        "ms": 1724,
+        "bytes": 28047
+      },
+      "so-streak-1-tail-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "so-streak-2-1.mp3": {
+        "ms": 2586,
+        "bytes": 41839
+      },
+      "so-streak-3-1.mp3": {
+        "ms": 2194,
+        "bytes": 35570
+      },
+      "so-streak-4-1.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "so-streak-k3-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "so-streak-k4-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "so-streak-k5-1.mp3": {
+        "ms": 1959,
+        "bytes": 31808
+      },
+      "so-streak-kx-1.mp3": {
+        "ms": 2351,
+        "bytes": 38078
+      },
+      "stage-buffet-1.mp3": {
+        "ms": 3709,
+        "bytes": 59812
+      },
+      "stage-cruise-1.mp3": {
+        "ms": 2769,
+        "bytes": 44765
+      },
+      "stage-janney-1.mp3": {
+        "ms": 2769,
+        "bytes": 44765
+      },
+      "stage-somerset-1.mp3": {
+        "ms": 2847,
+        "bytes": 46019
+      },
+      "stage-vet-1.mp3": {
+        "ms": 2194,
+        "bytes": 35570
+      },
+      "stage-wildwood-1.mp3": {
+        "ms": 2429,
+        "bytes": 39332
+      },
+      "tenseconds-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "tenseconds-2.mp3": {
+        "ms": 1228,
+        "bytes": 20106
+      },
+      "tenseconds-3.mp3": {
+        "ms": 1489,
+        "bytes": 24285
+      },
       "timeover-1.mp3": {
         "ms": 2273,
         "bytes": 36824
@@ -528,6 +1037,30 @@
       "wallbounce-4.mp3": {
         "ms": 1489,
         "bytes": 24285
+      },
+      "weapon-bottle-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "weapon-brick-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "weapon-needle-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
+      },
+      "weapon-pigeon-1.mp3": {
+        "ms": 1411,
+        "bytes": 23031
+      },
+      "weapon-souvenir-cup-1.mp3": {
+        "ms": 1567,
+        "bytes": 25539
+      },
+      "weapon-tongs-1.mp3": {
+        "ms": 1646,
+        "bytes": 26793
       }
     }
   },

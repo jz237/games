@@ -504,6 +504,7 @@ import {
   demoRecordsLine,
   demoResultEyebrow,
   demoRoundCardPlan,
+  demoSignOffFamily,
   demoSignOffLine,
   demoStandingLine,
   demoStandings,
@@ -554,6 +555,7 @@ import {
 import {
   DEMO_VERSUS_HOLD_MS,
   demoRingIntroDue,
+  demoVersusSpeechFloor,
   demoRingIntroPlan,
   demoStandingsAfterMatch,
   demoVersusAnnouncesRound,
@@ -561,6 +563,17 @@ import {
   demoVersusCardTimes,
 } from "./engine/demo-versus.mjs";
 import { DEMO_COMMENTARY_KINDS, createDemoCommentaryBus } from "./engine/demo-commentary.mjs";
+// 5.4.1 RINGSIDE: the attract show's voice pack — the lower third, the
+// sign-offs, the venue call and the clock call, spoken in the announcer's
+// own voice on the reviewed name banks (engine/demo-voice.mjs).
+import {
+  DEMO_VOICE_KIND_POLICY,
+  demoCommentarySpeech,
+  demoSignOffSpeech,
+  demoStageCue,
+  demoVoiceCaptions,
+  demoVoiceGate,
+} from "./engine/demo-voice.mjs";
 import {
   auditGraphicFatalities,
   getGraphicFatality,
@@ -1952,7 +1965,13 @@ function updateIntroArtHold(now) {
     capMs: INTRO_ART_HOLD_MS,
     pendingCount: pending.length,
     inIntro,
-    floorMs: introArtHold.floorMs,
+    // 5.4.1 RINGSIDE: under a versus card the floor is also the moment the
+    // announcer's window clears (the corner calls, the venue call, a
+    // sign-off that spilled over) — ROUND 1 follows the last call instead
+    // of landing under it; capped so a stuck window cannot hold the card.
+    floorMs: demoVersus.active
+      ? demoVersusSpeechFloor({ floorMs: introArtHold.floorMs, startedAt: introArtHold.startedAt, busyUntil: announcerBusyUntil })
+      : introArtHold.floorMs,
   });
   if (decision.hold) {
     introArtHold.lastPending = pending;
@@ -4685,14 +4704,33 @@ function renderDemoResultCard(winner) {
   // per situation, on the recap line the demo never used.
   const recap = $("#resultRecap");
   if (recap) {
+    const streak = demoSession.ledger?.fighters?.[state.fighters[winner].def.id]?.streak || 0;
+    const nextBout = demoSession.nextUp?.bout || null;
     recap.textContent = demoSignOffLine({
       variant: demoSession.show?.signOff ?? 0,
       winnerName: names[winner], loserName: names[1 - winner],
       rounds: state.rounds, winner, bout,
-      nextBout: demoSession.nextUp?.bout || null,
-      streak: demoSession.ledger?.fighters?.[state.fighters[winner].def.id]?.streak || 0,
+      nextBout,
+      streak,
     });
     recap.hidden = false;
+    // 5.4.1 RINGSIDE: the sign-off is SPOKEN — the fragment and the winner's
+    // reviewed name take (the next pair's names are the versus card's corner
+    // calls, so they are no longer read here). Not on a QA demo, like the
+    // 5.4 name reads it replaces; behind the attract gate like every call.
+    if (!demoSession.qa) {
+      const cues = demoSignOffSpeech({
+        family: demoSignOffFamily({ bout, nextBout, streak }),
+        variant: demoSession.show?.signOff ?? 0,
+        winnerId: state.fighters[winner].def.id,
+        loserId: state.fighters[1 - winner].def.id,
+        streak,
+      });
+      if (cues) {
+        voiceFxDebug.demoSignOffCalls += 1;
+        for (const cue of cues) announcerSay(cue, { delay: 150 });
+      }
+    }
   }
 }
 
@@ -5289,6 +5327,9 @@ function startNextDemoMatch() {
   demoSession.commentary = createDemoCommentaryBus({
     seed: hashSeed(demoSession.director.snapshot().seed, "commentary", cycle.cycle),
   });
+  // 5.4.1 RINGSIDE: the lower third is spoken as well as painted.
+  demoSession.commentary.subscribe(demoVoiceOnCommentary);
+  demoVoice.lastAt = -Infinity;
   demoSession.lowerThirdShown = -1;
   const pairKey = demoMatchupKey(...cycle.picks);
   if (!demoSession.pairsSeen.includes(pairKey)) demoSession.pairsSeen.push(pairKey);
@@ -5480,16 +5521,12 @@ function scheduleNextDemoMatch() {
   // standings band takes the bottom of the screen instead of the whole of it
   // — the Release 1.8 high-score takeover covered the winner for all five
   // seconds on any cabinet that had ever recorded a score — and the high
-  // scores ride the band's last line in attract mode. The announcer reads
-  // the next pair's names from the reviewed `<id>-name` banks (bag-drawn,
-  // never the same take twice running), behind the attract gate like every
-  // other call.
+  // scores ride the band's last line in attract mode. (5.4.1 RINGSIDE: the
+  // 5.4 name reads that sat here doubled the versus card's corner calls a
+  // second later; the hold now carries the spoken sign-off instead — see
+  // renderDemoResultCard — and the card introduces the pair once.)
   demoSession.nextUp = demoNextUpFromPeek();
   renderDemoStandingsBand();
-  if (!demoSession.qa && demoSession.nextUp?.pair) {
-    voiceFxDebug.demoNextUpCalls += 1;
-    for (const id of demoSession.nextUp.pair) announcerSay(`${id}-name`, { delay: 1500 });
-  }
   // 5.4 (sweep #26/#27): a bout that never reached round 2 (a QA
   // demoResult, a double-perfect) still gets the result hold's warm-up —
   // 2.4 s here plus the 2.6 s versus hold, under which the art hold itself
@@ -5821,6 +5858,8 @@ function planDemoVersusCard(resetSet) {
   demoVersus.plan = demoRingIntroPlan({
     card: demoVersus.card,
     stageName: stages[state.stage]?.name || "",
+    // 5.4.1 RINGSIDE: the venue call (a take per stage).
+    stageCue: demoStageCue(state.stage),
     round: state.round,
     holdMs: DEMO_VERSUS_HOLD_MS,
   });
@@ -5892,7 +5931,10 @@ function fireDemoVersusBeats(now = performance.now()) {
       const card = demoVersus.card.cards[beat.side];
       announce(card.name, `${card.eyebrow} · ${card.title}`, 1.05, { speak: beat.cue ? [{ cue: beat.cue, delay: 0 }] : [] });
     } else if (beat.kind === "stage" && beat.banner?.main) {
-      announce(beat.banner.main, beat.banner.sub, 0.85);
+      // 5.4.1 RINGSIDE: the banner speaks the venue take (a plain banner
+      // books nothing — the stage name is not in the banner cue ladder).
+      if (beat.cue) voiceFxDebug.demoStageCalls += 1;
+      announce(beat.banner.main, beat.banner.sub, 0.85, { speak: beat.cue ? [{ cue: beat.cue, delay: 0 }] : [] });
     }
     noteDemoVersusBeat(beat, now);
   }
@@ -15881,6 +15923,44 @@ function demoChoreoBeat(side, beat) {
 // ---------------------------------------------------------------------------
 function demoCommentaryLive() {
   return !rollbackResimulating && state.mode === "demo" && demoSession.active && Boolean(demoSession.commentary);
+}
+
+// ---------------------------------------------------------------------------
+// 5.4.1 RINGSIDE — the lower third, SPOKEN. The bus publishes every line it
+// paints; this listener turns the line's plan (engine/demo-voice.mjs) into
+// announcer calls — a generated fragment, the seat's reviewed name take, the
+// stage weapon's take — queued back to back on the announcer's busy window
+// the way K.O. -> name -> wins already is. Policy: an exchange line is spoken
+// only when the MC is free and DEMO_VOICE_MIN_GAP_MS after the last one (the
+// painted line stays the record of everything; speech is the highlights);
+// the bell's room read and the round's own fragments ride the queue. Demo
+// only by construction: the bus exists only inside a demo, and every call
+// still passes announcerSay's attract gate and sound toggle.
+// ---------------------------------------------------------------------------
+const demoVoice = { lastAt: -Infinity, recent: [] };
+
+function demoVoiceOnCommentary(event) {
+  if (!demoCommentaryLive() || !event) return;
+  const now = performance.now();
+  if (!demoVoiceGate({ kind: event.kind, now, busyUntil: announcerBusyUntil, lastAt: demoVoice.lastAt })) {
+    voiceFxDebug.demoVoiceDropped += 1;
+    return;
+  }
+  const winner = event.side === 1 ? 1 : 0;
+  const cues = demoCommentarySpeech(event, {
+    ids: state.fighters.map((fighter) => fighter.def.id),
+    weaponId: STAGE_WEAPONS[state.stage]?.id || "",
+    matchWon: event.kind === "round-end" && (state.rounds[winner] || 0) >= (state.matchRules?.roundsToWin || 2),
+  });
+  if (!cues) return;
+  const delay = DEMO_VOICE_KIND_POLICY[event.kind]?.delayMs || 0;
+  let spoken = false;
+  for (const cue of cues) spoken = announcerSay(cue, { delay }) || spoken;
+  if (!spoken) return;
+  demoVoice.lastAt = now;
+  voiceFxDebug.demoVoiceLines += 1;
+  demoVoice.recent.push({ id: event.id, kind: event.kind, variant: event.variant, tick: event.tick, cues });
+  while (demoVoice.recent.length > 24) demoVoice.recent.shift();
 }
 
 function demoCommentaryNames() {
@@ -30506,8 +30586,10 @@ const voiceFxDebug = {
   // w51: "TEN SECONDS" clock calls (once per round) and decision round-ends
   // that opened on the timeover bank instead of "ko".
   clockCallouts: 0, decisionCalls: 0,
-  // 5.4 SESSION LAYER: NEXT UP name reads booked during the result hold.
-  demoNextUpCalls: 0,
+  // 5.4.1 RINGSIDE: the attract voice pack — lower-third lines spoken and
+  // dropped (the MC was busy or the gap too short), sign-offs booked in the
+  // result hold, venue calls on the versus card.
+  demoVoiceLines: 0, demoVoiceDropped: 0, demoSignOffCalls: 0, demoStageCalls: 0,
   // 5.1 manifest counters: banks resolved without a request, and media
   // elements actually created for fighter voice (was 3-5 per take, up to
   // 183 per fighter at fight start; now one per take, grown only on overlap).
@@ -32194,11 +32276,9 @@ const ANNOUNCER_LINES = (() => {
     comeback: ["WHAT A COMEBACK!", "BACK FROM THE DEAD!", "NEVER COUNT THEM OUT!"],
     timeover: ["TIME OVER — DECISION!", "THE CLOCK CALLS IT!", "TIME! JUDGES' DECISION!"],
     // w51 clock truth: spoken once per round when the clock reads :10.
-    // TODO(tenseconds-takes): no recorded takes exist yet — the cue is absent
-    // from assets/audio/announcer/MANIFEST.json so it is caption-only (zero
-    // requests) until the owner approves generating tenseconds-1..3.mp3 with
-    // the announcer voice (work order in MISSING-AUDIO.md, Priority 6). The
-    // synthesised clock tick carries the moment audibly meanwhile.
+    // 5.4.1 RINGSIDE: the three takes exist (tenseconds-1..3.mp3, approved
+    // 2026-09-06 with the attract voice pack); the synthesised tick ladder
+    // still carries the seconds under the call.
     tenseconds: ["TEN SECONDS!", "CLOCK'S RUNNING!", "TIME'S ALMOST UP!"],
     "fatality-performed": ["FATALITY.", "A GRAPHIC FINISH.", "THAT WAS A FINAL BLOW."],
     // Release 1.7 DEPTH: the guard-crush letter-slam's spoken call.
@@ -32225,6 +32305,10 @@ const ANNOUNCER_LINES = (() => {
   for (const [cue, lineIndex] of Object.entries(ANNOUNCER_RETAKES)) {
     banks[cue] = [...banks[cue], banks[cue][lineIndex]];
   }
+  // 5.4.1 RINGSIDE: the attract voice pack's captions — every generated
+  // fragment, venue and weapon take (engine/demo-voice.mjs); the demo speaks
+  // them through the same announcerSay/announcerBank path as every call.
+  Object.assign(banks, demoVoiceCaptions());
   return Object.freeze(banks);
 })();
 
@@ -32699,7 +32783,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-5.4");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-5.4.1");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -34136,7 +34220,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "5.4-fightnight",
+  version: "5.4.1-ringside",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -35990,6 +36074,15 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     // 5.4 FIGHT NIGHT (sweep #19/#22/#24): the attract audio gate, where it
     // opened, the bed's binding/loop/fade/restart state and the last two
     // dozen fighter-voice takes ("fighter:cue:take/of"). Pure reads.
+    // 5.4.1 RINGSIDE: what the attract voice pack spoke and dropped.
+    demoVoice() {
+      return {
+        lines: voiceFxDebug.demoVoiceLines, dropped: voiceFxDebug.demoVoiceDropped,
+        signOffs: voiceFxDebug.demoSignOffCalls, stageCalls: voiceFxDebug.demoStageCalls,
+        busyForMs: Math.max(0, Math.round(announcerBusyUntil - performance.now())),
+        recent: demoVoice.recent.map((entry) => ({ ...entry, cues: [...entry.cues] })),
+      };
+    },
     attractAudio() {
       return {
         ...attractAudio.snapshot(),

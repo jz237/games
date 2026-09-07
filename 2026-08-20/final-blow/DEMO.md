@@ -1765,3 +1765,60 @@ latches, the recent list, the tally); `node tests/browser-smoke.mjs
 (the bug's corner and size with the new rows, and the tick-for-tick
 determinism the seed-url probe pins — `demoSnapshot().commentary` carries the
 tally, so two loads of one link are compared on it too).
+
+## Ringside — the attract show, spoken (5.4.1, 2026-09-06)
+
+5.4 painted the lower third, the sign-offs and the versus card as text and
+left every new line caption-only, because a new announcer line needs the
+owner's approval. He approved all four groups on 2026-09-06 and this pass
+generated them in the announcer's own voice (`VOICE-CAST.json`: FB2 Atlas
+Announcer, `eleven_v3`, `mp3_44100_128`, stability 0.5 — the casting the
+2026-08-30 batch used), NEW files only: none of the 45 reviewed takes or the
+four music tracks was touched.
+
+**How a line is spoken** (`engine/demo-voice.mjs`). The text banks carry
+tokens no take can say — a fighter's name, a special's name, a health
+percentage, a round score. A spoken line is therefore a SEQUENCE the
+announcer queue (`announcerSay`, one call after another on the busy window)
+plays back to back, the way `K.O.! · POST · WINS!` already does: a generated
+fragment (`dc-<kind>-<n>`, `so-<family>-<n>`), the seat's reviewed
+`<id>-name` take, the stage weapon's own take (`weapon-<id>`), the streak
+lead-in (`so-streak-k3..k5`, `-kx` past five). Percentages and scores stay on
+screen. So `FIRST BLOOD · POST` is heard as *FIRST BLOOD!* … *POST!*, `POST
+PUTS ALI G INTO THE WALL` as *ALI G!* … *INTO THE WALL!*, `CLUTCH · JEZ HOLDS
+ON AT 14%` as *CLUTCH!* … *JEZ!* … *HOLDS ON!*. The finisher and round-end
+lines add only their fragment after the round's own K.O./name/wins calls, and
+the round-end line stays silent when the `-wins` bank just closed the match.
+
+**Policy.** An exchange line is spoken only when the MC is free (the busy
+window within 150 ms of now) and 3 s after the last spoken line — the painted
+line is the record of everything, speech is the highlights; the bell's room
+read (*THE ROOM IS BEHIND… POST!*) waits 700 ms so FIGHT! lands first, and the
+finisher / round-end fragments ride the queue. Every call still passes the
+attract audio gate and the sound toggle. `qa.demoVoice()` reports lines
+spoken and dropped, sign-offs, venue calls and the busy window.
+
+**The result hold speaks the sign-off** — the fragment and the winner's name
+take (`QUICK WORK FROM… POST!`, `JEZ! … OVER… ALLAN!`, `THREE STRAIGHT FOR…
+DEATHBLOW! … WHO STOPS THAT?`). The 5.4 next-pair name reads that sat there
+are gone: they doubled the versus card's corner calls a second later. The
+hold is 3.0 s (was 2.4) so the sign-off lands before the card.
+
+**The versus card calls the venue.** The stage beat speaks `stage-<id>`
+(*TONIGHT AT SOMERSET SEPTA STATION!*, one take per stage) and the card now
+holds while the MC is still talking: the art hold's floor becomes the moment
+the announcer's window clears plus 250 ms (`demoVersusSpeechFloor`, never
+under the card's 2.6 s, capped at 6 s), so ROUND 1 follows the venue call
+instead of landing under it. Measured on seed 237's first card the release
+comes at 4–5.5 s; the seam between bouts is 3.0 s + the card, under the 8 s
+it was at 5.3.
+
+**The clock call** (MISSING-AUDIO.md Priority 6) has its three takes;
+`tenseconds` is no longer caption-only.
+
+**The batch.** 107 files, 679–3866 ms (mean 1752), mean level -19.9…-13.0 dB, peak -3.2…-0.6 dB, 3 takes re-rolled on a peak above -0.5 dB, 0 fallbacks off eleven_v3. `tools/audio/build_manifest.mjs` re-baked the
+manifest (228 announcer takes / 143 cues) and the legacy announcer count
+file. `node --test tests/demo-voice.test.mjs`: every painted line has a plan,
+the file list is the manifest's contract, the takes are on disk at the
+announcer's length contract, the resolvers, the gate, and the game.js wiring
+pinned from source.

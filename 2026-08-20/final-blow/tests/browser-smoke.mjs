@@ -433,7 +433,7 @@ probe('title-menu', async () => {
     }))()`);
     assert.match(title.title, /Final Blow/);
     assert.match(title.build, /5\.4/);
-    assert.equal(title.version.text, 'VERSION 5.4');
+    assert.equal(title.version.text, 'VERSION 5.4.1');
     assert.notEqual(title.version.display, 'none');
     assert.ok(title.version.left >= 0 && title.version.top >= 0);
     assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -470,7 +470,7 @@ probe('title-menu', async () => {
     assert.equal(title.engine.demo.idleScheduled, true);
     assert.equal(title.onlineSecurityBadges, 4);
     assert.equal(title.aiDifficulty, 'street');
-    assert.equal(title.engineVersion, '5.4-fightnight');
+    assert.equal(title.engineVersion, '5.4.1-ringside');
     assert.deepEqual(title.engine.presentationRules, {
       hitFlashFilter: 'brightness(1.55) saturate(1.12)',
       attackNamePopups: false,
@@ -4138,7 +4138,8 @@ probe('demo-hold', async () => {
     assert.equal(demoHoldProbe.atHide.resultScheduled, false, 'the wall-clock timer is frozen, not left running');
     // 5.4 versus card (sweep #8/#20): the result hold is 2.4 s (the other
     // 2.6 s of the old 5 s moved onto the fight screen as the versus card).
-    assert.ok(demoHoldProbe.atHide.hold.resultRemainingMs > 1400 && demoHoldProbe.atHide.hold.resultRemainingMs <= 2400, `remaining ${demoHoldProbe.atHide.hold.resultRemainingMs}`);
+    // (5.4.1: the result hold is 3.0 s for the spoken sign-off.)
+    assert.ok(demoHoldProbe.atHide.hold.resultRemainingMs > 2000 && demoHoldProbe.atHide.hold.resultRemainingMs <= 3000, `remaining ${demoHoldProbe.atHide.hold.resultRemainingMs}`);
     assert.equal(demoHoldProbe.atHide.status, 'NEXT FIGHT WAITS FOR THE SCREEN');
     assert.equal(demoHoldProbe.atHide.speed, 'HELD');
     assert.equal(demoHoldProbe.stillHidden.matches, 1, 'no new exhibition may start while hidden');
@@ -4181,7 +4182,7 @@ probe('demo-versus', async () => {
         nameSize: parseFloat(getComputedStyle(left.querySelector('strong')).fontSize),
         banner: document.querySelector('#announcer strong').getAttribute('aria-label') + '|' + document.querySelector('#announcer span').textContent,
         artHold: ring.artHold, planKinds: ring.plan.map((b) => b.kind), planCues: ring.plan.map((b) => b.cue), fired: ring.log.map((b) => b.kind),
-        pair: s.demo.cycle.picks, elapsedMs: ring.elapsedMs,
+        pair: s.demo.cycle.picks, stageId: s.stage, elapsedMs: ring.elapsedMs,
       };
     })()`);
     assert.equal(opened.phase, 'intro');
@@ -4212,7 +4213,8 @@ probe('demo-versus', async () => {
     assert.deepEqual(opened.planKinds, ['corner', 'corner', 'stage', 'round', 'fight']);
     assert.equal(opened.planCues[0], `${opened.pair[0]}-name`);
     assert.equal(opened.planCues[1], `${opened.pair[1]}-name`);
-    assert.deepEqual(opened.planCues.slice(2), ['', 'round1', 'fight'], 'no stage cue is invented; ROUND 1 and FIGHT! keep their banks');
+    // (5.4.1 RINGSIDE: the stage beat speaks the venue take; ROUND 1 and FIGHT! keep their banks.)
+    assert.deepEqual(opened.planCues.slice(2), [`stage-${opened.stageId}`, 'round1', 'fight'], 'the venue cue, then ROUND 1 and FIGHT! on their own banks');
     assert.equal(opened.artHold.active, true);
     assert.equal(opened.artHold.floorMs, 2600);
     assert.ok(opened.fired.length >= firedLower && opened.fired.length <= firedUpper, `fired ${opened.fired.join(',')} at ${opened.elapsedMs} ms`);
@@ -4229,17 +4231,26 @@ probe('demo-versus', async () => {
     assert.deepEqual(midCard.revealed, [true, true, true], 'both corners and the stage row are up by the stage beat');
     assert.deepEqual(midCard.fired, ['corner', 'corner', 'stage']);
     assert.ok(midCard.stageRow.length > 3);
-    await delay(2000);
+    // 5.4.1 RINGSIDE: the card now holds until the MC's window clears (the
+    // corner calls and the venue call, capped at 6 s), so the probe waits for
+    // the release itself rather than a fixed 2 s.
+    for (let waited = 0; waited < 7000; waited += 250) {
+      await delay(250);
+      if (await evaluate(client, `window.__finalBlowEngine.snapshot().tick > 0`)) break;
+    }
+    // FIGHT! rides its own timer 1150 ms after the release; read after it.
+    await delay(1600);
     const released = await evaluate(client, `(() => {
       const s = window.__finalBlowEngine.snapshot();
       const ring = window.__finalBlowQa.demoRingIntro();
-      return { phase: s.phase, tick: s.tick, hidden: document.querySelector('#introDialogue').hidden, log: ring.log.map((b) => ({ kind: b.kind, at: b.at })), release: ring.releaseReason, banner: document.querySelector('#announcer strong').getAttribute('aria-label') };
+      return { phase: s.phase, tick: s.tick, stageId: s.stage, hidden: document.querySelector('#introDialogue').hidden, log: ring.log.map((b) => ({ kind: b.kind, at: b.at, cue: b.cue })), release: ring.releaseReason, banner: document.querySelector('#announcer strong').getAttribute('aria-label') };
     })()`);
     assert.ok(released.tick > 0, 'the clock runs after the release');
     assert.equal(released.hidden, true, 'the card leaves with the ROUND card');
     assert.ok(['floor', 'capped'].includes(released.release), `release ${released.release}`);
     assert.deepEqual(released.log.map((b) => b.kind), ['corner', 'corner', 'stage', 'round', 'fight'], 'the announcer plan order');
-    assert.ok(released.log[3].at >= 2600 && released.log[3].at < 3200, `ROUND 1 at the 2.6 s release, got ${released.log[3].at}`);
+    assert.ok(released.log[3].at >= 2600 && released.log[3].at <= 6300, `ROUND 1 at the release — the 2.6 s floor or the moment the venue call ends, got ${released.log[3].at}`);
+    assert.equal(released.log[2].cue, `stage-${released.stageId}`, 'the stage beat speaks the venue take (5.4.1)');
     assert.ok(released.log[4].at - released.log[3].at >= 1100 && released.log[4].at - released.log[3].at <= 1500, `FIGHT! 1150 ms after ROUND 1, got ${released.log[4].at - released.log[3].at}`);
     assert.equal(released.banner, 'FIGHT!');
     // Round 2 keeps its plain card: no versus card outside round 1. Card 1 of
@@ -4247,7 +4258,13 @@ probe('demo-versus', async () => {
     // a best-of-three is forced through the QA entry; the card's 2.6 s clock
     // stop is wall time, so the probe waits it out before stepping.
     await evaluate(client, `(() => { const qa = window.__finalBlowQa; qa.demoNextShow({ bout: 'co-main' }); qa.demo(237); })()`);
-    await delay(3200);
+    // (5.4.1: the card also holds while the MC's window clears — up to 6 s —
+    // so the probe waits for the release itself.)
+    for (let waited = 0; waited < 8000; waited += 250) {
+      await delay(250);
+      if (await evaluate(client, `!window.__finalBlowQa.demoRingIntro().planned`)) break;
+    }
+    await delay(300);
     // The KO lands on a grounded, quiet tick so the 5.4 closer takes the PLAIN
     // knockout (an airborne victim earns the Final Blow ceremony, which is
     // longer than any fixed step); the step then runs until round 2 is up.
@@ -4271,6 +4288,7 @@ probe('demo-camera', async () => {
     // moves, and the finisher probes above leave the persisted toggle ON —
     // start from a clean page with it off so the shots can be measured.
     await navigate(client, gameUrl);
+    const reducedMotionBefore = await evaluate(client, `localStorage.getItem('final-blow-reduced-motion')`);
     await evaluate(client, `localStorage.removeItem('final-blow-reduced-motion')`);
     await navigate(client, gameUrl);
     const demoCameraProbe = await evaluate(client, `(async () => {
@@ -4339,6 +4357,11 @@ probe('demo-camera', async () => {
     assert.equal(played.snapshot.camera.presentation.demoShot, null);
     assert.notEqual(played.snapshot.mode, 'demo');
     assert.equal(played.snapshot.violence.demoShots, again.koCam.shots, 'the played match drew no shot (the monotonic total stands where the second demo left it)');
+    // Put the persisted toggle back the way the probes before this one left
+    // it: the mobile probes later in the registry read it (battery profile,
+    // capped zoom).
+    if (reducedMotionBefore !== null) await evaluate(client, `localStorage.setItem('final-blow-reduced-motion', ${JSON.stringify(reducedMotionBefore)})`);
+    await navigate(client, gameUrl);
 });
 
 probe('offline-cache', async () => {
@@ -4379,8 +4402,8 @@ probe('offline-cache', async () => {
     // offline boot needs it cached.
     // 5.1 added engine/{audio-manifest, ambient, announcer, crowd-voice, shared-sfx,
     // swing-resolve}.mjs to the shell: game.js imports them at boot.
-    // (5.4 Fight Night: the attract loop's six demo modules joined the shell.)
-    assert.equal(offlineCache.entries, 34);
+    // (5.4 Fight Night: the attract loop's six demo modules joined the shell; 5.4.1 the voice pack's.)
+    assert.equal(offlineCache.entries, 35);
     assert.equal(offlineCache.hasAtlasFacing, true);
     assert.equal(offlineCache.hasIndex, false);
     assert.equal(offlineCache.rootRedirected, false);
@@ -4402,7 +4425,7 @@ probe('offline-cache', async () => {
     }))()`);
     assert.match(controlledReload.title, /Final Blow/);
     assert.match(controlledReload.build, /5\.4/);
-    assert.equal(controlledReload.version, '5.4-fightnight');
+    assert.equal(controlledReload.version, '5.4.1-ringside');
 
     await client.send('Network.emulateNetworkConditions', {
       offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -4420,7 +4443,7 @@ probe('offline-cache', async () => {
     }))()`);
     assert.match(offlineBoot.title, /Final Blow/);
     assert.match(offlineBoot.build, /5\.4/);
-    assert.equal(offlineBoot.version, '5.4-fightnight');
+    assert.equal(offlineBoot.version, '5.4.1-ringside');
     assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
     await client.send('Network.emulateNetworkConditions', {
       offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -4466,7 +4489,7 @@ probe('mobile-landscape', async () => {
     assert.equal(landscape.mobileLandscape, true);
     assert.equal(landscape.orientationBlocked, false);
     assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-    assert.equal(landscape.version.text, 'VERSION 5.4');
+    assert.equal(landscape.version.text, 'VERSION 5.4.1');
     assert.notEqual(landscape.version.display, 'none');
     assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
     assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

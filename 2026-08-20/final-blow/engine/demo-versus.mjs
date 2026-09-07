@@ -130,6 +130,7 @@ export function demoVersusCard({
 export function demoRingIntroPlan({
   card = null,
   stageName = "",
+  stageCue = "",
   round = 1,
   holdMs = DEMO_VERSUS_HOLD_MS,
   fightDelayMs = DEMO_VERSUS_FIGHT_DELAY_MS,
@@ -155,7 +156,9 @@ export function demoRingIntroPlan({
     at: beats.stage,
     kind: "stage",
     card: 2,
-    cue: "",
+    // 5.4.1 RINGSIDE: the venue call (engine/demo-voice.mjs DEMO_STAGE_VOICE)
+    // once its take exists; "" keeps the beat a banner only.
+    cue: stageCue || "",
     text: upper(stageName),
     banner: { main: upper(stageName), sub: card?.stage?.show || "" },
   });
@@ -172,6 +175,24 @@ export function demoRingIntroPlan({
 }
 
 /** The beats that are due at `elapsedMs` and have not fired (`fired` = count so far), in order. */
+/**
+ * 5.4.1 RINGSIDE — the card holds while the MC is still talking. The corner
+ * calls, the venue call and any sign-off that spilled over from the result
+ * hold play back to back on the announcer's busy window, and ROUND 1 must
+ * follow the last of them rather than land under it: the floor becomes the
+ * moment the window clears (plus a settle), never less than the card's own
+ * floor and never past the cap, so a stuck window cannot hold the card.
+ */
+export const DEMO_VERSUS_SPEECH_CAP_MS = 6_000;
+export const DEMO_VERSUS_SPEECH_SETTLE_MS = 250;
+export function demoVersusSpeechFloor({
+  floorMs = DEMO_VERSUS_HOLD_MS, startedAt = 0, busyUntil = 0,
+  settleMs = DEMO_VERSUS_SPEECH_SETTLE_MS, capMs = DEMO_VERSUS_SPEECH_CAP_MS,
+} = {}) {
+  const speechMs = Math.max(0, busyUntil - startedAt) + settleMs;
+  return Math.max(Math.max(0, floorMs), Math.min(capMs, speechMs));
+}
+
 export function demoRingIntroDue(plan = [], elapsedMs = 0, fired = 0) {
   const due = [];
   for (let index = Math.max(0, fired); index < plan.length; index += 1) {

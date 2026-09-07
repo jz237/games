@@ -3,7 +3,7 @@
 // could make Chrome abort the page before it rendered. (Since 5.1 a fetched
 // media file is KEPT, in a second, capped, build-keyed cache — see
 // MEDIA_CACHE_NAME — which is a different thing from installing it.)
-const CACHE_NAME = "final-blow-shell-5.4";
+const CACHE_NAME = "final-blow-shell-5.4.1";
 // v5.1 #38 — the RUNTIME media cache. Sheets, audio, stage plates and the 3D
 // renderer's HD/vendor files are still fetched on demand (never at install:
 // the precache alternative is now 81 MB / ~560 files), but once a file has
@@ -45,6 +45,7 @@ const SHELL = [
   "./engine/demo-versus.mjs",
   "./engine/demo-session.mjs",
   "./engine/demo-commentary.mjs",
+  "./engine/demo-voice.mjs",
   "./engine/fatalities.mjs",
   "./engine/fighter-audio.mjs",
   "./engine/atlas-facing.mjs",

@@ -6,7 +6,10 @@ export const DEMO_IDLE_DELAY_MS = 45_000;
 // demo rate: 5.0 s hold + 3.0 s round-1 intro before; 2.4 s hold + the 2.6 s
 // VERSUS hold + 3.0 s intro after) — the 2.6 s moved onto the fight screen as
 // the versus card and ring introduction (engine/demo-versus.mjs).
-export const DEMO_RESULT_HOLD_MS = 2_400;
+// 5.4.1 RINGSIDE: 2.4 s at 5.4; the spoken sign-off (a fragment, the winner's
+// name take, sometimes a tail) needs ~3 s before the versus card's corner
+// calls, so the hold is 3.0 s — the seam is still under the 8 s it was at 5.3.
+export const DEMO_RESULT_HOLD_MS = 3_000;
 import { registerAiDifficulty, resolveAiSettings } from "./ai.mjs";
 import { getFighterKit } from "./fighter-kits.mjs";
 import { DEMO_SIGN_OFF_VARIANTS, demoBoutPlan } from "./demo-session.mjs";

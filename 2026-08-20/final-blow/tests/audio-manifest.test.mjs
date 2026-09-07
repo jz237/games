@@ -24,6 +24,7 @@ import {
   fighterAudioVariants,
 } from "../engine/fighter-audio.mjs";
 import { APPROVED_CORE_CUES, APPROVED_KICK_POOLS } from "../engine/audio-review.mjs";
+import { demoVoiceCaptions } from "../engine/demo-voice.mjs";
 
 const gameRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const resolve = (path) => join(gameRoot, path);
@@ -59,7 +60,8 @@ test("the audio manifest is the tool's output and parses", () => {
   // Nothing on disk is unreachable: a take past a hole in its bank would be
   // silently dropped by every picker, so the generator must have found none.
   assert.deepEqual(raw.gaps, []);
-  assert.equal(raw.announcer.takes, 121);
+  // (5.4.1 RINGSIDE: 121 + the attract voice pack's 107 — engine/demo-voice.mjs.)
+  assert.equal(raw.announcer.takes, 228);
   assert.equal(Object.values(raw.fighters).reduce((sum, entry) => sum + entry.takes, 0), 357);
 });
 
@@ -146,17 +148,25 @@ function announcerLineCounts() {
   const retakes = gameSource.match(/const ANNOUNCER_RETAKES = Object\.freeze\(\{([\s\S]*?)\}\);/)?.[1];
   assert.ok(retakes, "game.js must declare ANNOUNCER_RETAKES");
   for (const [, cue] of retakes.matchAll(/^\s*"?([\w-]+)"?: \d+,?$/gm)) counts[cue] += 1;
+  // 5.4.1 RINGSIDE: the attract voice pack's captions join ANNOUNCER_LINES at
+  // load (Object.assign(banks, demoVoiceCaptions())) — one caption per
+  // generated fragment, venue and weapon take, straight from the module.
+  for (const [cue, lines] of Object.entries(demoVoiceCaptions())) {
+    assert.equal(counts[cue], undefined, `${cue}: the pack must not shadow a literal caption bank`);
+    counts[cue] = lines.length;
+  }
   return counts;
 }
 
 test("every announcer cue the game captions has exactly that many takes, and vice versa", () => {
   const lines = announcerLineCounts();
-  // w51 announcer/clock truth added "tenseconds" as a CAPTION-ONLY cue (no
-  // takes generated yet — MISSING-AUDIO.md Priority 6, an owner call), so it
-  // is captioned but absent from the manifest by design.
-  const CAPTION_ONLY = new Set(["tenseconds"]);
-  assert.equal(Object.keys(lines).length, 39);
-  for (const cue of CAPTION_ONLY) assert.ok(lines[cue] >= 1 && !raw.announcer.cues[cue], `${cue} is caption-only`);
+  // w51 announcer/clock truth added "tenseconds" as a CAPTION-ONLY cue; the
+  // owner approved its three takes on 2026-09-06 with the attract voice pack
+  // (5.4.1 RINGSIDE), so nothing is caption-only any more: 39 literal banks
+  // plus the pack's 104 cues.
+  const CAPTION_ONLY = new Set();
+  assert.equal(Object.keys(lines).length, 143);
+  assert.equal(lines.tenseconds, 3, "the clock call's three captions match its three takes");
   assert.deepEqual(
     Object.fromEntries(Object.keys(lines).filter((cue) => !CAPTION_ONLY.has(cue)).sort().map((cue) => [cue, lines[cue]])),
     Object.fromEntries(Object.keys(raw.announcer.cues).sort().map((cue) => [cue, raw.announcer.cues[cue]])),

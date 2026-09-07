@@ -7,6 +7,8 @@ import {
   DEMO_VERSUS_BEAT_MS,
   DEMO_VERSUS_FIGHT_DELAY_MS,
   DEMO_VERSUS_HOLD_MS,
+  DEMO_VERSUS_SPEECH_CAP_MS,
+  demoVersusSpeechFloor,
   demoRecordLine,
   demoRingIntroDue,
   demoRingIntroPlan,
@@ -172,15 +174,26 @@ test("holdDecision without a floor is byte-identical to the shipped decision", (
   assert.deepEqual(holdDecision({ startedAt: 0, now: INTRO_ART_HOLD_MS, pendingCount: 1 }), { hold: false, reason: "capped", elapsed: INTRO_ART_HOLD_MS });
 });
 
-test("the seam is repartitioned, not lengthened: result hold + versus hold = the old 5 s hold", () => {
+test("the seam: 3.0 s of result hold for the spoken sign-off, then the 2.6 s card floor — under the 8 s it was at 5.3", () => {
   // Before 5.4: a 5000 ms result hold, then the 2.25 s round-1 intro (3.0 s of
-  // wall clock at the 0.75x demo rate) = 8.0 s between two exhibitions. After:
-  // the same 8.0 s, with 2.6 s of it on the fight screen as the versus card.
-  assert.equal(DEMO_RESULT_HOLD_MS + DEMO_VERSUS_HOLD_MS, 5000);
-  assert.equal(DEMO_RESULT_HOLD_MS, 2400);
+  // wall clock at the 0.75x demo rate) = 8.0 s between two exhibitions. 5.4
+  // repartitioned it to 2.4 s + 2.6 s. 5.4.1 RINGSIDE speaks the sign-off in
+  // the result hold (a fragment, the winner's name take, sometimes a tail —
+  // about 3 s) and the venue on the card, so the result hold is 3.0 s and
+  // the card's floor extends to the moment the MC's window clears (capped).
+  assert.equal(DEMO_RESULT_HOLD_MS, 3000);
   assert.equal(DEMO_VERSUS_HOLD_MS, 2600);
+  assert.ok(DEMO_RESULT_HOLD_MS + DEMO_VERSUS_SPEECH_CAP_MS <= 9000, "even a capped card keeps the seam near the 5.3 length");
   assert.ok(DEMO_VERSUS_BEAT_MS.stage < DEMO_VERSUS_HOLD_MS, "the stage banner lands before the ROUND card");
   assert.ok(DEMO_VERSUS_BEAT_MS.right - DEMO_VERSUS_BEAT_MS.left >= 1000, "the left corner's name take has its beat before the right corner is called");
+});
+
+test("the speech floor: the card holds while the MC is talking, never under its own floor, never past the cap", () => {
+  assert.equal(demoVersusSpeechFloor({ floorMs: 2600, startedAt: 1000, busyUntil: 0 }), 2600, "nothing queued: the card's own floor");
+  assert.equal(demoVersusSpeechFloor({ floorMs: 2600, startedAt: 1000, busyUntil: 3000 }), 2600, "a window that clears before the floor changes nothing");
+  assert.equal(demoVersusSpeechFloor({ floorMs: 2600, startedAt: 1000, busyUntil: 5200 }), 4450, "a venue call still playing at 4.2 s: ROUND 1 follows it (plus the 250 ms settle)");
+  assert.equal(demoVersusSpeechFloor({ floorMs: 2600, startedAt: 1000, busyUntil: 60000 }), DEMO_VERSUS_SPEECH_CAP_MS, "a stuck window cannot hold the card past the cap");
+  assert.equal(demoVersusSpeechFloor({ floorMs: 0, startedAt: 0, busyUntil: 0 }), 250, "no floor at all: only the settle");
 });
 
 // ---------------------------------------------------------------------------

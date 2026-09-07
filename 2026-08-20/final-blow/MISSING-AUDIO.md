@@ -20,7 +20,8 @@ verified** (valid mp3, 0.4–6.0s, mean above −35 dB, peak below −0.5 dB).
 | P4 online moments | DONE — 12/12 |
 | P5 variant retakes | DONE — 30/30 |
 | P0 rejected-cue retakes | NOT GENERATED — 0/117, blocked (see Priority 0) |
-| P6 clock callout (w51) | NOT GENERATED — 0/3, caption-only until approved (see Priority 6) |
+| P6 clock callout (w51) | DONE — 3/3 (approved 2026-09-06, generated with the 5.4.1 attract voice pack) |
+| P7 attract voice pack (5.4.1 Ringside) | DONE — 104/104 fragments + venue and weapon takes (see the 5.4.1 section) |
 
 P0 is not a quota problem: fresh takes for the rejected cues cannot land at
 their canonical paths while the review contract holds — rejected recordings
@@ -334,7 +335,7 @@ different read (15 × 2 = 30 files). Which cue survived for which fighter is
 `APPROVED_CORE_CUES` in `engine/audio-review.mjs`; a cue that is not listed
 there needs a fresh original take first (Priority 0), not a variant.
 
-## Priority 6 — clock callout (announcer voice) — NOT GENERATED (0/3, owner call)
+## Priority 6 — clock callout (announcer voice) — DONE (3/3, approved 2026-09-06)
 
 Roadmap2 w51 (sweep #27) wired the final-ten-seconds clock: a synthesised
 tick ladder from :10 to the :00 buzzer (`clockTickAudio` in game.js, never a
@@ -422,3 +423,21 @@ Design, wiring and verification: STAGES.md → *5.3 — Music*.
 Nothing in this section replaces the P0 candidate-review cycle
 (`engine/audio-review.mjs`: block 0/8, hit-heavy 0/8, ko 0/8, fatal 0/8) — that
 is a separate sitting with Jez and is untouched by the music work.
+
+## 5.4.1 "Ringside" — the attract voice pack (2026-09-06)
+
+Jez approved all four groups the 5.4 demo left as text: the 68 lower-third
+commentary lines, the 17 result-screen sign-offs, the six venue calls and the
+three clock calls. Generated with the announcer casting in `VOICE-CAST.json`
+(`eleven_v3`, `mp3_44100_128`, stability 0.5), verified like the 2026-08-30
+batch (valid mp3, 0.3–6.0 s, mean above −35 dB, peak below −0.5 dB): 107 files, 679–3866 ms (mean 1752), mean level -19.9…-13.0 dB, peak -3.2…-0.6 dB, 3 takes re-rolled on a peak above -0.5 dB, 0 fallbacks off eleven_v3.
+The generator is `workspace/state/generate_final_blow_demo_voice.py` (reads
+the key from the secrets env in-process; never prints it).
+
+The spoken form of each line is in `engine/demo-voice.mjs`: a fragment plus
+the reviewed `<id>-name` take for the seat, so no fighter's name was ever
+generated, and tokens no take can speak (a special's name, a health
+percentage, a score) stay on screen. New cue families: `dc-<kind>-<n>` (67),
+`so-<family>-<n>` (25, incl. the streak lead-ins `so-streak-k3..k5/kx`),
+`stage-<id>` (6), `weapon-<id>` (6), `tenseconds` (3). Nothing in the P0
+review cycle is touched by this batch.
