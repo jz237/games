@@ -6,7 +6,7 @@ import { Soldier } from './soldier.js';
 import * as M2 from './models2.js';
 import { flatGeo } from './assets.js';
 import { clamp, lerp, angDiff, approach, TAU } from './util.js';
-import { pickDeath, beginDeath, stepDeath, ragEnv } from './deaths.js';
+import { pickDeath, beginDeath, stepDeath, ragEnv, ragSounds, blastCorpse, twitchCorpse, FADE, SINK_LOW } from './deaths.js';
 
 export const TUNE = {
   joeSpeed: 5.6, joeAccel: 55, joeRadius: 0.42, wadeSpeed: 0.55,
@@ -20,6 +20,11 @@ export const TUNE = {
 const SCORE = { rifle: 100, lobber: 150, trench: 150, sniper: 300, mortar: 400, officer: 2000, bunker: 1000, truck: 800, pow: 500, moto: 500, tank: 3000, search: 300 };
 const HITBOX = 0.5;
 const DIVE_T = 1.15;          // v10: a dive-roll away from an incoming grenade
+const KICK_T = 0.8;           // v11: an enemy's kick when Joe is too close for a rifle
+const KICKERS = new Set(['fight', 'approach', 'cover', 'charge', 'enter', 'aim']);
+// v11: metres of travel per run cycle — measured so a planted foot stays put
+// (at 2.3 the feet skated backwards at ~1.2 m/s)
+const STRIDE = TAU / 2.7, STRIDE_E = TAU / 2.6;
 
 const dirOf = (a) => [Math.sin(a), Math.cos(a)];      // angle 0 = north (+p), +π/2 = east (+x)
 const angOf = (dx, dp) => Math.atan2(dx, dp);
@@ -34,7 +39,7 @@ export class Game {
     this.hi = this.loadHi();
     this.state = 'idle';
     this.events = [];
-    this._v = new THREE.Vector3(); this._v2 = new THREE.Vector3();
+    this._v = new THREE.Vector3(); this._v2 = new THREE.Vector3(); this._mz = new THREE.Vector3();
     this.shellGeo = new THREE.SphereGeometry(0.11, 8, 6);
     this.shellMat = new THREE.MeshStandardMaterial({ color: 0x2a2a28, roughness: 0.5, metalness: 0.4 });
   }
@@ -146,7 +151,8 @@ export class Game {
   viewBottom() { return this.camP - this.R.offBottom; }
   onScreen(x, p, pad = 0) { return p < this.viewTop() + pad && p > this.viewBottom() - pad && Math.abs(x - this.camX) < this.R.halfWidthTop + pad; }
   pan(x) { return clamp((x - this.camX) / 14, -0.9, 0.9); }
-  h(x, p) { return this.world.h(x, p); }
+  // the surface things stand, drive and land on: terrain, or a bridge deck
+  h(x, p) { const h = this.world.h(x, p), d = this.T.deckY(x, p); return d !== null ? Math.max(h, d) : h; }
   hw(p) { return this.T.halfWidth(p); }
   // difficulty: each loop is harder, and so is each area within a loop
   diff() { return this.loop + (this.area ? (this.area.id - 1) * 0.4 : 0); }
@@ -218,6 +224,7 @@ export class Game {
     const top = TUNE.joeSpeed * (wade ? TUNE.wadeSpeed : 1);
     J.vx = approach(J.vx, mx * top, TUNE.joeAccel * dt); J.vp = approach(J.vp, mp * top, TUNE.joeAccel * dt);
     let nx = J.x + J.vx * dt, np = J.p + J.vp * dt;
+    if (J.shoveT > 0) { const k = J.shoveT / 0.22; nx += J.shoveX * k * dt; np += J.shoveP * k * dt; J.shoveT -= dt; }
     // keep inside the corridor and the camera window
     const hw = this.world.boundHalf(np);
     nx = clamp(nx, -hw, hw);
@@ -255,8 +262,12 @@ export class Game {
       J.fireCd = TUNE.fireCd;
       const a = J.aimFire + (rnd() - 0.5) * 2 * TUNE.spread;
       const [dx, dp] = dirOf(a);
-      const sx = J.x + dx * 0.75 + dp * -0.12, sp = J.p + dp * 0.75 - dx * -0.12;
-      this.bullets.push({ x: sx, p: sp, vx: dx * TUNE.bulletSpeed, vp: dp * TUNE.bulletSpeed, life: TUNE.bulletLife, y: this.T.standY(J.x, J.p) + 1.12 });
+      // v11: the round leaves the muzzle (where last frame's pose put it) and
+      // settles to the old chest-high flight line over its first 4 m
+      const gy = this.T.standY(J.x, J.p) + 1.12, m = J.s.muzzle(this._mz);
+      const atGun = Math.hypot(m.x - J.x, -m.z - J.p) < 1.6 && Math.abs(m.y - gy) < 1;
+      const sx = atGun ? m.x : J.x + dx * 0.75 + dp * -0.12, sp = atGun ? -m.z : J.p + dp * 0.75 - dx * -0.12;
+      this.bullets.push({ x: sx, p: sp, vx: dx * TUNE.bulletSpeed, vp: dp * TUNE.bulletSpeed, life: TUNE.bulletLife, y: atGun ? m.y : gy, y0: atGun ? m.y : gy, y1: gy, d: 0 });
       J.recoil = 1; J.fired = true;
       this.audio.play('shot', { gain: 0.42, pan: this.pan(J.x), variance: 0.08 }, 45);
       J.brass = (J.brass || 0) + 1;
@@ -280,16 +291,16 @@ export class Game {
       if (J.throwT >= 1) J.throwT = -1;
     }
     J.recoil = Math.max(0, J.recoil - dt * 10);
-    // footsteps, dust and splashes
-    if (J.speedN > 0.15) {
-      J.stepAcc += moved;
-      if (J.stepAcc > (wade ? 0.7 : 1.1)) {
-        J.stepAcc = 0; this.audio.step(this.pan(J.x));
-        if (wade) this.splash(J.x, J.p, wade.w.level);
-        else if (this.dusty(J.x, J.p)) this.fx.dust(J.x, this.h(J.x, J.p), -J.p, 1, [0.7, 0.6, 0.45], 0.6, 0.3);
-      }
-    }
+    // footsteps: v11 plays them when a foot actually lands (the rig reports it)
     this.syncJoeVisual(dt);
+  }
+
+  footfall(J, foot) {
+    const wade = this.T.wading(J.x, J.p), deck = this.T.deckY(J.x, J.p) !== null;
+    this.audio.step(this.pan(J.x), deck ? 'wood' : 'dirt', deck ? 0.42 : 0.35);
+    const f = J.s.bones[foot === 'R' ? 'FootR' : 'FootL'].getWorldPosition(this._fp || (this._fp = new THREE.Vector3()));
+    if (wade) this.splash(f.x, -f.z, wade.w.level);
+    else if (!deck && this.dusty(J.x, J.p)) this.fx.dust(f.x, this.h(J.x, J.p), f.z, 1, [0.7, 0.6, 0.45], 0.6, 0.3);
   }
 
   splash(x, p, level) {
@@ -306,7 +317,7 @@ export class Game {
     s.a.twist = clamp(-angDiff(J.leg, J.aim), -1.2, 1.2);
     s.a.speed = J.speedN || 0;
     s.a.moveYaw = J.mvAng != null ? Math.PI - J.mvAng : null;
-    s.a.phase += (J.alive ? Math.hypot(J.x - J.px, J.p - J.pp) : 0) * (TAU / 2.3);
+    s.a.phase += (J.alive ? Math.hypot(J.x - J.px, J.p - J.pp) : 0) * STRIDE;
     s.a.recoil = J.recoil;
     s.a.throwT = J.throwT;
     s.a.dead = J.alive ? 0 : Math.min(1, J.deadT * 2.6);
@@ -324,6 +335,7 @@ export class Game {
     s.setFlash(J.hurtFlash > 0 ? J.hurtFlash : 0);
     if (J.hurtFlash > 0) J.hurtFlash -= dt * 4;
     s.pose(dt);
+    if (s.stepEvt && J.alive && !J.inside) this.footfall(J, s.stepEvt);
     if (J.fired) {
       J.fired = false;
       const m = s.muzzle(this._v);
@@ -351,6 +363,7 @@ export class Game {
     // v10: he goes down as a ragdoll, knocked away from whatever got him
     const dx = J.x - fx, dp = J.p - fp, L = Math.hypot(dx, dp) || 1;
     const r = J.s.startRagdoll(ragEnv(this));
+    ragSounds(this, r, () => J.x);
     r.push(dx / L * 2.4, 1.2, -dp / L * 2.4, ['mid', 'neck', 'head', 'shL', 'shR']);
     r.push(-dx / L, 0, dp / L, ['knL', 'knR']);
     this.audio.play('player-death', { gain: 0.9 }, 200);
@@ -538,7 +551,28 @@ export class Game {
       const visible = this.onScreen(e.x, e.p, 1);
       // despawn stragglers left far below the screen
       if (e.p < this.viewBottom() - (e.static ? 10 : 6) && e.state !== 'flee' && !e.finale && !e.bike) { this.removeEnemy(e); continue; }
+      // v11: too close for a rifle — he kicks
+      if (e.state !== 'kick' && KICKERS.has(e.state) && J.alive && this.state === 'play' && dist < 1.35 && (e.kickCd || 0) <= this.t
+        && !e.static && !e.bike && !e.trench && !e.mortar && e.baseY === undefined) {
+        e.kickFrom = e.state === 'aim' ? 'fight' : e.state; e.token = false;
+        e.state = 'kick'; e.t = KICK_T; e.kicked = false; e.kickCd = this.t + 2.6;
+      }
       switch (e.state) {
+        case 'kick': {
+          e.face = toJoe;
+          if (!e.kicked && 1 - e.t / KICK_T > 0.42) {
+            e.kicked = true;
+            if (J.alive && dist < 1.75) {
+              this.audio.play('kick-hit', { gain: 0.45, pan: this.pan(J.x), variance: 0.08 }, 100);
+              this.damageJoe(1, e.x, e.p);
+              const L = dist || 1;
+              J.shoveX = dx / L * 6; J.shoveP = dp / L * 6; J.shoveT = 0.22;
+              J.s.flinch(dx / L, -dp / L, 1.2);
+            }
+          }
+          if (e.t <= 0) { e.state = e.kickFrom || 'fight'; e.t = rr(0.3, 0.7); }
+          break;
+        }
         case 'enter': {
           const tdx = e.tx - e.x, tdp = e.tp - e.p, td = Math.hypot(tdx, tdp);
           if (td < 0.5 || e.t < -4) { e.state = e.type === 'lobber' ? 'approach' : 'fight'; e.t = rr(0.3, 1.0); break; }
@@ -557,7 +591,11 @@ export class Game {
           e.fireCd -= dt;
           const los = dist < 24 && this.col.los(e.x, e.p, J.x, J.p, 1.4);
           if (e.state === 'cover') {
-            e.s.a.crouch = approach(e.s.a.crouch, 1, dt * 4);
+            // v11: a quick peek over the top now and then (still covered: a
+            // crouch above 0.5 keeps him behind the bags for bullets)
+            if (!e.peekAt) e.peekAt = this.t + rr(1.2, 3);
+            if (this.t > e.peekAt) { e.peekUntil = this.t + rr(0.35, 0.6); e.peekAt = this.t + rr(2, 4); }
+            e.s.a.crouch = approach(e.s.a.crouch, this.t < (e.peekUntil || 0) ? 0.58 : 1, dt * 4);
           } else if (e.t <= 0 && !e.hold) {
             // reposition: close in if far or blind, otherwise sidestep
             e.t = rr(1.6, 3.2);
@@ -594,7 +632,8 @@ export class Game {
           e.face = toJoe; mvx = dx / (dist || 1); mvp = dp / (dist || 1); speed = TUNE.runSpeed * 0.9;
           e.fireCd -= dt;
           if (e.fireCd <= 0 && dist < 16 && visible) { e.fireCd = 0.9; this.enemyFire(e, J, 0.12); }
-          if (dist < 3 || e.t <= 0) { e.state = 'fight'; e.t = 0.5; }
+          // v11: a charge carries on into kicking range (the kick check takes it from there)
+          if (dist < 1.2 || e.t <= 0) { e.state = 'fight'; e.t = 0.5; }
           break;
         }
         case 'throw': {
@@ -692,7 +731,10 @@ export class Game {
     const [fx, fp] = dirOf(a);
     const y0 = (e.baseY !== undefined ? e.baseY + 1.3 : Math.max(0.9, this.baseY(e) + 1.1));
     this.stats.eshots++;
-    this.ebullets.push({ x: e.x + fx * 0.7, p: e.p + fp * 0.7, vx: fx * s, vp: fp * s, life: 2.2, y: y0, enemy: true, sniper: !!e.sniper, fromX: e.x, fromP: e.p });
+    // v11: from his muzzle when he has one where we'd expect it
+    const m = e.s && e.s.T.gun ? e.s.muzzle(this._mz) : null;
+    const atGun = m && Math.hypot(m.x - e.x, -m.z - e.p) < 1.6 && Math.abs(m.y - y0) < 1;
+    this.ebullets.push({ x: atGun ? m.x : e.x + fx * 0.7, p: atGun ? -m.z : e.p + fp * 0.7, vx: fx * s, vp: fp * s, life: 2.2, y: atGun ? m.y : y0, y0: atGun ? m.y : y0, y1: y0, d: 0, enemy: true, sniper: !!e.sniper, fromX: e.x, fromP: e.p });
     e.fired = true; if (e.s) e.face = a;
     this.audio.play('shot', { gain: 0.28, rate: e.sniper ? 0.8 : 1.15, pan: this.pan(e.x), variance: 0.1 }, 40);
   }
@@ -747,7 +789,7 @@ export class Game {
     this.chain++; this.chainT = 1.8;
     // build v9: pick how he dies — by what hit him and where he stood
     corpse.style = this.forceDeath || pickDeath({ e, fromX, fromP, byBlast: corpse.byBlast, bike: !!bike,
-      fall: corpse.fall, water: !e.trench && this.T.waterFrac(e.x, e.p) > 0.35, chain: this.chain, last: this._lastDeath });
+      fall: corpse.fall, water: !e.trench && this.T.openWater(e.x, e.p) > 0.35, chain: this.chain, last: this._lastDeath });
     this._lastDeath = corpse.style;
     this.deathTally = this.deathTally || {};
     this.deathTally[corpse.style] = (this.deathTally[corpse.style] || 0) + 1;
@@ -758,7 +800,7 @@ export class Game {
     this.fx.text(e.x, by + 2, -e.p, mult > 1 ? `${pts}  x${mult}` : String(pts), pts >= 1000 ? 'big' : '');
     // occasional supply drop
     const dropP = e.type === 'lobber' && !e.ledge ? 0.45 : e.sniper || e.elevated ? 0 : 0.07;
-    if (rnd() < dropP && !e.trench && !e.mortar && this.T.waterFrac(e.x, e.p) < 0.3) this.dropPickup(e.x, e.p, 'gren');
+    if (rnd() < dropP && !e.trench && !e.mortar && this.T.openWater(e.x, e.p) < 0.3) this.dropPickup(e.x, e.p, 'gren');
     if (e.type === 'officer') this.emit('officer-down');
     if (e.search) { e.search.on = false; e.search.lock = 0; }
     // tiny hit-stop sells the kill
@@ -771,10 +813,18 @@ export class Game {
     for (const c of this.corpses) {
       c.t += dt;
       stepDeath(this, c, dt);
-      if (c.t > 9) c.dead = true;
+      if (c.t > c.sinkAt + FADE) c.dead = true;
     }
     this.corpses = this.corpses.filter(c => { if (c.dead) c.s.dispose(); return !c.dead; });
-    if (this.corpses.length > 26) this.corpses.shift().s.dispose();
+    // v11: bodies stay ~24 s (a settled ragdoll is frozen: no CPU cost, no
+    // shadow); past 32 the oldest starts fading early rather than vanishing
+    // (on an integrated GPU forty bodies on screen start to cost frames)
+    // LOW quality (chosen automatically on slow machines) keeps fewer, for less time
+    const low = this.R.quality === 'low', cap = low ? 16 : 32;
+    const lying = this.corpses.filter(c => c.t < c.sinkAt);
+    if (lying.length > cap) lying[0].sinkAt = lying[0].t;
+    if (low) for (const c of lying) if (c.sinkAt > SINK_LOW) c.sinkAt = Math.max(SINK_LOW, c.t);
+    if (this.corpses.length > cap + 12) this.corpses.shift().s.dispose();
   }
 
   // ------------------------------------------------------------------ bullets
@@ -784,7 +834,13 @@ export class Game {
     for (const b of this.bullets) {
       const x0 = b.x, p0 = b.p;
       b.x += b.vx * dt; b.p += b.vp * dt; b.life -= dt;
+      if (b.y1 !== undefined) { b.d += Math.hypot(b.vx, b.vp) * dt; b.y = b.y1 + (b.y0 - b.y1) * Math.max(0, 1 - b.d / 4); }
       if (b.life <= 0) { b.dead = true; continue; }
+      // v11: rounds passing over bodies make them twitch (a body never stops a round)
+      for (const c of this.corpses) {
+        if (!c.s.rag || (c.twT || 0) > this.t) continue;
+        if (segCircle(x0, p0, b.x, b.p, c.e.x, c.e.p, 0.55) !== null) { c.twT = this.t + 0.15; twitchCorpse(this, c, b.vx, b.vp); }
+      }
       // soldiers and vehicles: closest along the segment
       let hitE = null, hitT = 2;
       for (const e of this.enemies) {
@@ -796,7 +852,11 @@ export class Game {
           const sx = b.x - x0, sp = b.p - p0, L2 = sx * sx + sp * sp || 1;
           const u = clamp(((e.x - x0) * sx + (e.p - p0) * sp) / L2, 0, 1);
           const ox = e.x - (x0 + sx * u), op = e.p - (p0 + sp * u), od = Math.hypot(ox, op);
-          if (od < 1.0) { e.nearT = this.t + 0.7; e.s.flinch(ox / (od || 1), -op / (od || 1), 0.35); }
+          if (od < 1.0) {
+            e.nearT = this.t + 0.7; e.s.flinch(ox / (od || 1), -op / (od || 1), 0.5);
+            // v11: pinned — a man up from cover to shoot may duck back down
+            if (e.state === 'aim' && e.prevState === 'cover' && rnd() < 0.45) { e.state = 'cover'; e.token = false; e.fireCd = rr(0.8, 1.6) / this.loopK(); e.t = rr(0.4, 1.0); }
+          }
         }
       }
       for (const v of this.trucks) { if (v.dead) continue; const t = segBox(x0, p0, b.x, b.p, v); if (t !== null && t < hitT) { hitT = t; hitE = v; } }
@@ -833,7 +893,7 @@ export class Game {
     }
     // rounds that run out of range kick up dirt (or water) where they land
     for (const b of this.bullets) if (b.dead && b.life <= 0) {
-      const wf = this.T.waterFrac(b.x, b.p);
+      const wf = this.T.openWater(b.x, b.p);
       if (wf > 0.4) this.fx.impact(b.x, this.T.waterAt(b.x, b.p).w.level, -b.p, 'water');
       else this.fx.impact(b.x, this.h(b.x, b.p), -b.p, this.dusty(b.x, b.p) ? 'sand' : 'dirt');
     }
@@ -842,6 +902,7 @@ export class Game {
     for (const b of this.ebullets) {
       const x0 = b.x, p0 = b.p;
       b.x += b.vx * dt; b.p += b.vp * dt; b.life -= dt; b.age = (b.age || 0) + dt;
+      if (b.y1 !== undefined) { b.d += Math.hypot(b.vx, b.vp) * dt; b.y = b.y1 + (b.y0 - b.y1) * Math.max(0, 1 - b.d / 4); }
       if (b.life <= 0 || b.p < this.viewBottom() - 4 || b.p > this.viewTop() + 8) { b.dead = true; continue; }
       if (J.alive && segCircle(x0, p0, b.x, b.p, J.x, J.p, 0.42) !== null && J.invuln <= 0 && this.state === 'play') {
         b.dead = true;
@@ -908,7 +969,7 @@ export class Game {
 
   explode(x, p, r, owner) {
     const y = this.h(x, p);
-    const wa = this.T.waterAt(x, p), inWater = wa && wa.m > 0.4;
+    const wa = this.T.waterAt(x, p), inWater = wa && wa.m > 0.4 && this.T.deckY(x, p) === null;
     this.fx.explosion(x, inWater ? wa.w.level : y, -p, r, { debris: inWater ? [0.8, 0.9, 1] : this.dusty(x, p) ? [0.55, 0.45, 0.32] : [0.35, 0.28, 0.2] });
     const J = this.joe;
     const dj = Math.hypot(J.x - x, J.p - p);
@@ -931,6 +992,7 @@ export class Game {
         e.fireCd = Math.max(e.fireCd || 0, 0.45 + k * 0.4);
       }
     }
+    for (const c of this.corpses) blastCorpse(this, c, x, p, r);
     if (J.alive && dj < r + 4 && dj > 0.3) J.s.flinch((J.x - x) / dj, -(J.p - p) / dj, clamp(1.2 - (dj - r) / 4, 0.3, 1));
     if (!byJoe || owner === 'barrel' || owner === 'tankwreck') {
       if (dj < r * 0.85 && J.alive) this.damageJoe(owner === 'barrel' ? 2 : 1, x, p);
@@ -1269,7 +1331,9 @@ export class Game {
       if (w.state === 'tied') {
         s.a.crouch = 1; s.a.speed = 0;
         if (J.alive && Math.hypot(J.x - w.x, J.p - w.p) < 1.3) {
-          w.state = 'free'; w.t = 0;
+          w.state = 'free'; w.t = 0; w.cheer = 0;
+          this.reachFor(w.x, this.T.standY(w.x, w.p) + 0.7, w.p);
+          this.audio.play('pow-cheer', { gain: 0.5, pan: this.pan(w.x), variance: 0.08 }, 300);
           this.rescued++;
           this.addScore(SCORE.pow);
           J._g = Math.min(TUNE.grenMax, J._g + 2);
@@ -1287,14 +1351,19 @@ export class Game {
         s.a.crouch = approach(s.a.crouch, 0, dt * 3);
         if (w.t > 0.4) {
           const c = w.cage, dx = c.x - w.x, dp = (c.p - 2.2) - w.p, d = Math.hypot(dx, dp);
-          if (d < 0.3) { w.state = 'free'; w.t = 1; }
-          else { w.face = angOf(dx, dp); s.a.speed = 0.8; w.x += dx / d * 3 * dt; w.p += dp / d * 3 * dt; s.a.phase += 3 * dt * (TAU / 2.3); }
+          if (d < 0.3) { w.state = 'free'; w.t = 1; w.cheer = -0.25 * (w.i % 4); }
+          else { w.face = angOf(dx, dp); s.a.speed = 0.8; w.x += dx / d * 3 * dt; w.p += dp / d * 3 * dt; s.a.phase += 3 * dt * STRIDE; }
         }
       } else if (w.state === 'free') {
         s.a.crouch = approach(s.a.crouch, 0, dt * 3);
-        if (w.t > 0.6) {
+        // v11: a wave to Joe before running for it
+        if (w.cheer !== undefined && w.cheer < 1.3) {
+          w.cheer += dt; s.a.speed = 0;
+          if (w.cheer > 0) { w.face = angOf(J.x - w.x, J.p - w.p); s.a.dwave = clamp(w.cheer / 1.3, 0, 1); }
+          if (w.cheer >= 1.3) { s.a.dwave = -1; w.t = Math.max(w.t, 0.6); }
+        } else if (w.t > 0.6) {
           s.a.speed = 1; w.face = Math.PI;
-          w.p -= 5 * dt; s.a.phase += 5 * dt * (TAU / 2.3);
+          w.p -= 5 * dt; s.a.phase += 5 * dt * STRIDE;
           if (w.p < this.viewBottom() - 3) { w.state = 'gone'; s.dispose(); }
         }
       }
@@ -1306,8 +1375,12 @@ export class Game {
     }
     for (const c of this.world.dyn.cages) if (c.open && c.openT < 1) { c.openT = Math.min(1, c.openT + dt * 2); c.door.rotation.y = -c.openT * 1.9; }
   }
+  // v11: Joe's right hand goes out to a latch or a prisoner's ropes
+  reachFor(x, y, p) { const a = this.joe.s.a; if (a.throwT >= 0) return; a.reachT = 0; a.reachX = x; a.reachY = y; a.reachZ = -p; }
   openCage(c) {
     c.open = true; c.openT = 0; c.doorCol.alive = false;
+    this.reachFor(c.x, this.T.standY(c.x, c.p - 1.7) + 1.0, c.p - 1.6);
+    this.audio.play('pow-cheer', { gain: 0.55, pan: this.pan(c.x), variance: 0.05 }, 300);
     const n = c.n;
     this.rescued += n;
     this.addScore(SCORE.pow * n);
@@ -1416,8 +1489,9 @@ export class Game {
       const mv = Math.hypot(e.x - e.px, e.p - e.pp);
       s.a.moveYaw = mv > 0.004 && !e.bike ? Math.PI - angOf(e.x - e.px, e.p - e.pp) : null;
       s.a.roll = e.state === 'dive' ? clamp(1 - e.t / DIVE_T, 0, 1) : -1;
-      s.a.phase += mv * (TAU / 2.2);
-      if (e.state === 'cover') s.a.crouch = approach(s.a.crouch, 1, dt * 4);
+      s.a.phase += mv * STRIDE_E;
+      s.a.kick = e.state === 'kick' ? clamp(1 - e.t / KICK_T, 0, 1) : -1;
+      if (e.state === 'cover') s.a.crouch = approach(s.a.crouch, this.t < (e.peekUntil || 0) ? 0.58 : 1, dt * 4);
       else if (!e.trench && !e.mortar) s.a.crouch = approach(s.a.crouch, 0, dt * 5);
       s.a.recoil = Math.max(0, (s.a.recoil || 0) - dt * 8);
       // v10: feet on the slope only when standing on the ground; rifle up

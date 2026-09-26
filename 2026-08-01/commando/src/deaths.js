@@ -14,6 +14,7 @@ import { clamp, TAU } from './util.js';
 import { sampleJoints } from './ragdoll.js';
 
 const rnd = Math.random;
+const _pv = new THREE.Vector3();
 const ease = (u) => u * u * (3 - 2 * u);
 
 // ------------------------------------------------------------------ choosing
@@ -108,6 +109,9 @@ export function ragEnv(game) {
   };
 }
 
+// v11: bodies lie where they fell this long, then fade into the ground
+export const SINK_AT = 24, SINK_LOW = 14, FADE = 1.6;
+
 // scripted opening, in seconds (0: the ragdoll takes him at once)
 const PRE = { stagger: 0.5, spin: 0.42, knees: 0.75, scorched: 0.95, officer: 2.2 };
 
@@ -123,6 +127,7 @@ export function beginDeath(game, c) {
   c.dx = c.vx / L; c.dp = c.vp / L;
   c.landed = false;
   c.pre = PRE[c.style] || 0;
+  c.sinkAt = SINK_AT;
   MUTE = !!c.silent && c.style !== 'bike';
   const x = e.x;
   switch (c.style) {
@@ -206,13 +211,49 @@ function handOver(game, c, prev) {
     case 'officer': r.push(bx * 0.8, 0.2, bz * 0.8, ['head', 'neck', 'mid']); r.push(-bx * 0.8, 0, -bz * 0.8, ['knL', 'knR']); break;
   }
   r.onLand = (v) => land(game, c, v > 6);
+  ragSounds(game, r, () => c.e.x);
+}
+
+// v11: what a ragdoll sounds like after the first landing — the rifle
+// clattering down, softer bumps as the body settles, limbs slapping water
+export function ragSounds(game, r, xOf) {
+  r.onGunLand = (v) => { if (v > 2) game.audio.play('gun-clatter', { gain: clamp(0.16 + v * 0.05, 0.18, 0.45), pan: game.pan(xOf()), variance: 0.1 }, 90); };
+  r.onBump = (v) => game.audio.play('body-thud', { gain: clamp(v * 0.045, 0.1, 0.3), rate: 1.15, pan: game.pan(xOf()), variance: 0.12 }, 120);
+  r.onSplash = (x, y, z) => { game.fx.impact(x, y, z, 'water'); game.audio.play('limb-splash', { gain: 0.32, pan: game.pan(xOf()), variance: 0.12 }, 90); };
+}
+
+// v11: a blast near bodies already down throws them again (cutting a
+// scripted opening short if it's still playing)
+export function blastCorpse(game, c, x, p, r) {
+  if (c.dead || c.t > c.sinkAt) return;
+  const e = c.e, d = Math.hypot(e.x - x, e.p - p), reach = r + 2.5;
+  if (d > reach) return;
+  if (!c.s.rag) handOver(game, c, c.hadPrev ? c.prevJ : null);
+  const R = c.s.rag, k = 1 - d / reach, ux = (e.x - x) / (d || 1), up = (e.p - p) / (d || 1);
+  R.push(ux * 6.5 * k, 2.2 + 7.5 * k, -up * 6.5 * k);
+  R.spin(rnd() - 0.5, rnd() * 0.3, rnd() - 0.5, (2 + 6 * rnd()) * k);
+  R.landed = false; c.landed = false; c.retossed = true;     // it thuds again where it comes down (if it comes down hard)
+  if (d < r * 0.7 && c.s.setChar) c.s.setChar(Math.max(c.s.material.userData.uChar.value, 0.7));
+  c.sinkAt = Math.max(c.sinkAt, c.t + 6);
+}
+
+// v11: a round passing over a body makes it twitch
+const PARTS = ['mid', 'pelvis', 'shL', 'shR', 'knL', 'knR', 'head', 'elL', 'elR'];
+export function twitchCorpse(game, c, vx, vp) {
+  const R = c.s.rag;
+  if (!R || c.dead || c.t > c.sinkAt) return;
+  const L = Math.hypot(vx, vp) || 1, nm = PARTS[(rnd() * PARTS.length) | 0];
+  R.push(vx / L * 2.6, 1.1, -vp / L * 2.6, [nm]);
+  R.pos(nm, _pv);
+  game.fx.dust(_pv.x, _pv.y, _pv.z, 2, [0.55, 0.45, 0.35], 0.8, 0.25);
 }
 
 function land(game, c, big) {
   if (c.landed) return;
   c.landed = true;
+  if (c.retossed && !big) return;                   // a light re-toss lands quietly
   const e = c.e, T = game.T, y = T.standY(e.x, e.p);
-  if (T.waterFrac(e.x, e.p) > 0.35) {
+  if (T.openWater(e.x, e.p) > 0.35) {
     splashFx(game, e.x, y, e.p);
     impact(game, 'body-splash', e.x, 0.55);
   } else {
@@ -223,7 +264,6 @@ function land(game, c, big) {
 
 // ------------------------------------------------------------------ per frame
 // moves c.e.x/p, poses and places c.s
-const _pv = new THREE.Vector3();
 export function stepDeath(game, c, dt) {
   const e = c.e, s = c.s, a = s.a, t = c.t;
   const T = game.T;
@@ -241,14 +281,20 @@ export function stepDeath(game, c, dt) {
       c.flail = (c.flail || 0) - dt;
       if (c.flail <= 0) { c.flail = 0.09; const k = () => (rnd() - 0.5) * 7; r.push(k(), k() * 0.5, k(), [rnd() < 0.5 ? 'wrL' : 'wrR', rnd() < 0.5 ? 'anL' : 'anR']); }
     }
-    if (c.style === 'splash' && r.landed === false && r.t > 0.05 && T.waterFrac(e.x, e.p) > 0.35) {
+    if (c.style === 'splash' && r.landed === false && r.t > 0.05 && T.openWater(e.x, e.p) > 0.35) {
       r.pos('mid', _pv);
       const lv = T.waterAt(e.x, e.p);
       if (lv && _pv.y < lv.w.level + 0.15) land(game, c, false);
     }
     r.pos('pelvis', _pv); e.x = _pv.x; e.p = -_pv.z;
-    // corpses melt into the ground at the end (as before)
-    if (t > 7) { r.asleep = true; s.obj.position.y -= dt * 0.4; }
+    // at the end the body sinks a little and fades out
+    if (t > c.sinkAt) {
+      r.asleep = true;
+      const m = s.material;
+      if (!m.transparent) { m.transparent = true; m.depthWrite = false; m.needsUpdate = true; s.unfreeze(); s.noFreeze = true; s.mesh.castShadow = false; }
+      m.opacity = clamp(1 - (t - c.sinkAt) / FADE, 0, 1);
+      s.obj.position.y -= dt * 0.12;
+    }
     s.pose(dt);
     return;
   }

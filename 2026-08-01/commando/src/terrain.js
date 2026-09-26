@@ -147,15 +147,27 @@ export class Terrain {
   }
   waterFrac(x, p) { const a = this.waterAt(x, p); return a ? a.m : 0; }
   onBridge(x, p) { for (const b of this.bridges) if (Math.abs(x - b.x) < b.half + 0.15 && p > b.p0 - 0.5 && p < b.p1 + 0.5) return true; return false; }
+  // the top of a bridge's planks where (x, p) is on its deck, else null (the
+  // deck is built at y 0.08 ± 0.05 in models.js bridgeGroup; the terrain under
+  // it is the riverbed, so anything that stands, drives or lands there has to
+  // ask for the deck — v11 fix for Joe walking under the bridge)
+  deckY(x, p) {
+    for (const b of this.bridges) if (Math.abs(x - b.x) < b.half + 0.12 && p > b.p0 - 0.15 && p < b.p1 + 0.15) return 0.13;
+    return null;
+  }
+  // water you'd actually be in: none on a bridge deck
+  openWater(x, p) { return this.deckY(x, p) === null ? this.waterFrac(x, p) : 0; }
   // deep water stops you; the swamp only slows you down
   waterBlocks(x, p) {
     const a = this.waterAt(x, p);
     return !!a && a.m > 0.45 && !a.w.wade && !this.onBridge(x, p);
   }
-  wading(x, p) { const a = this.waterAt(x, p); return a && a.w.wade && a.m > 0.3 ? a : null; }
+  wading(x, p) { if (this.deckY(x, p) !== null) return null; const a = this.waterAt(x, p); return a && a.w.wade && a.m > 0.3 ? a : null; }
   // the height soldiers stand at: waist-deep in wadeable water
   standY(x, p) {
-    const h = this.height(x, p), a = this.waterAt(x, p);
+    const h = this.height(x, p), d = this.deckY(x, p);
+    if (d !== null) return Math.max(h, d);
+    const a = this.waterAt(x, p);
     if (a && a.w.wade && a.m > 0.05) return Math.max(h, a.w.level - 0.55);
     return h;
   }

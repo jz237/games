@@ -56,6 +56,56 @@ title. Any key or tap exits. Its score never touches the saved hi-score
 (`newGame({ showcase: true })`). Verified: all three areas in ~5 min of game
 time with zero continues. Test hooks: `__cmd.watchDemo()`, `__cmd.demoState()`.
 
+## Build v11 (2026-09-26): the bridge, and a battlefield that remembers
+
+**The bridge.** Joe (and every soldier, truck, motorbike, grenade and body)
+used to walk straight through the plank deck onto the riverbed a metre under
+the water: `standY()` only knew the terrain, and under a bridge the terrain
+is the carved river bed. `terrain.deckY(x, p)` now reports the deck top
+(0.13 m) over each bridge's planks; `standY()` and the game's surface height
+`game.h()` take the higher of the two, wading and "is he in water" checks
+use `openWater()` (no water on a deck), so there are no splash deaths or
+water explosions on the bridge, and footsteps there are a hollow wooden knock
+(`Sfx.step({ surface: 'wood' })`). Verified across both bridges (area 1's
+river crossing, area 2's long bridge): Joe stays at deck height end to end.
+
+**Rounds leave the muzzle.** Bullets used to spawn at the old pistol-hand
+height (1.12 m) while the shouldered rifle's muzzle sits at about 1.4 m; they
+now start at the muzzle (last frame's pose) and settle to the old flight line
+over their first 4 m, so a tracer starts at its muzzle flash. Enemy rounds
+likewise.
+
+**Bodies.** A blast near bodies already down throws them again (cutting a
+scripted opening short); rounds passing over a body make it twitch (never
+stopping the round). Bodies lie where they fell for 24 s (14 s on LOW) and
+then fade out instead of sinking away at 7–9 s; past 32 on screen (16 on LOW)
+the oldest fades early. A settled ragdoll is frozen — matrices, bone texture
+and shadow stop updating and it is frustum-culled — until something moves
+it. Measured on an integrated GPU (AMD Radeon via D3D11, 60 fps at LOW):
+40 bodies at once cost frames, hence the caps. New sounds (ElevenLabs,
+`assets/sfx/`): `gun-clatter` when a dropped rifle hits the ground, a softer
+`body-thud` for one bounce after landing, `limb-splash` for the first time a
+hand, foot or head goes into water.
+
+**Feel.** Measured, not eyeballed: a planted foot drifted backwards at
+~1.2 m/s, so the stride per run cycle went from 2.3 m to 2.7 m (drift now
+~0.4 m/s, and a calmer cadence); the hips ride 5 cm higher while running (the
+Run clip lunges); flinches are stronger and knock the hips along the blow.
+Footsteps now play when a foot actually lands (each run clip's stance phase),
+dust from that foot. Checked in real time on vengeance's GPU (CDP screencast
+of WATCH DEMO): continuous motion, tracers from the flash, no regression in
+frame pacing against the live v10.
+
+**More life.** Crouching is a one-knee kneel (right knee down, on the toes)
+— riflemen in cover, tied prisoners; men in cover peek over the top between
+bursts (still covered) and one up to shoot may duck back when a round cracks
+past. Freed prisoners cheer (`pow-cheer`) and wave to Joe before running;
+Joe reaches out to cut a prisoner free or lift a cage latch, the rifle in
+his other hand. Enemies within 1.35 m kick (the legs of the pack's
+Kick_Right, now in `swat-extra.json`, rifle still in both hands): 1 damage,
+`kick-hit`, and Joe is knocked back; charging riflemen now carry the charge
+into kicking range.
+
 ## Build v10 (2026-09-26): soldiers that move like people
 
 "The characters are too stiff, they have no ragdoll, and he isn't holding the
@@ -144,7 +194,7 @@ Tuning lives in `RIG` (soldier.js). Tests: `__cmd.game.forceDeath`,
 | `src/models.js`, `src/models2.js` | the procedural models (buildings, fortresses, trucks, motorcycle…) and the tank wrapper |
 | `src/soldier.js` | soldiers assembled from Modular Men parts + rifle (on its own Gun bone), baked per kind into one skinned mesh (one draw call each); leg / upper-body / finger clip groups blended from speed, strafe angle, crouch, readiness; procedural layers: shouldered rifle IK, lean, breathing, head look, turn steps, slope feet, flinch, overhand throw, mortar feed; hands over to the ragdoll |
 | `assets/models/` | `adventurer.glb`, `swat.glb`, `beach.glb` (one rig; clips in `swat.glb`), `props.glb`, `nature.glb` — meshopt-compressed, WebP textures (2.6 MB total) |
-| `assets/anims/` | `swat-extra.json`: six more Modular Men clips (strafe runs, rifle idle, second hit reaction, roll) |
+| `assets/anims/` | `swat-extra.json`: eight more Modular Men clips (strafe runs, rifle idle, second hit reaction, roll, kicks) |
 | `assets/textures/` | `ground-albedo.webp` / `ground-normal.webp`: the five ground layers as strips (colour; normal X/Y + height), loaded as texture arrays |
 | `tools/` | `pack-models.mjs` rebuilds `assets/models/` from the source GLBs in `models.txt`; `pack-textures.mjs` rebuilds `assets/textures/` from the Poly Haven 1K scans in `textures.txt`; `extract-clips.mjs` writes `assets/anims/` from the pack's Swat.glb |
 | `src/fx.js` | particles, tracers, muzzle flashes, explosions, decals, lights, floating text |

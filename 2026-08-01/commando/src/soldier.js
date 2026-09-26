@@ -67,6 +67,10 @@ export const RIG = {
   runLean: 0.26, accelLean: 0.045, turnLean: 0.07,
   breathe: 0.025, sway: 0.028,
   lookMax: 0.9,
+  // v11
+  runLift: 0.05,           // hips up while running (the clip lunges)
+  jolt: 0.09,              // a flinch knocks the hips this far along the blow
+  kneelBack: 0.34, kneelFwd: 0.1, kneelToe: 0.9,
 };
 
 // ------------------------------------------------------------------ templates
@@ -204,7 +208,12 @@ function clipSet() {
   CLIPS.RunUp = { clip: part('Run', 'upper', upper), group: 'upper' };
   // v10 extra clips (assets/anims/swat-extra.json): strafing and back-pedalling
   // runs, a relaxed rifle stance, a second hit reaction, a dive roll
-  for (const n of ['HitRecieve_2', 'Roll']) if (by[n]) CLIPS[n] = { clip: by[n], group: 'full' };
+  for (const n of ['HitRecieve_2', 'Roll', 'Kick_Right']) if (by[n]) CLIPS[n] = { clip: by[n], group: 'full' };
+  // v11: armed men kick with the legs (and some of the lean) of Kick_Right, rifle still in both hands
+  if (by.Kick_Right) {
+    CLIPS.KickLegs = { clip: part('Kick_Right', 'legs', legs), group: 'lower' };
+    CLIPS.KickUp = { clip: part('Kick_Right', 'upper', upper), group: 'upper' };
+  }
   if (by.Idle_Gun) CLIPS.RestLegs = { clip: part('Idle_Gun', 'legs', legs), group: 'lower' };
   for (const k of ['Back', 'Left', 'Right']) if (by['Run_' + k]) {
     CLIPS[`Run${k}Legs`] = { clip: part('Run_' + k, 'legs', legs), group: 'lower' };
@@ -358,11 +367,14 @@ export class Soldier {
       // v10: flinch (seconds since hit, strength, world push direction), look target, mortar feed, readiness
       flinchT: 9, flinchAmp: 0, flinchX: 0, flinchZ: 1, lookX: null, lookZ: 0, feedT: -1, feedX: 0, feedZ: 0, aiming: false, foot: true, dying: false, release: 0.57,
       moveYaw: null, roll: -1, hitAlt: false,
+      // v11: a kick (0..1), reaching out with the right hand (0..1) to a world point
+      kick: -1, reachT: -1, reachX: 0, reachY: 0, reachZ: 0,
     };
     // procedural state
     this.legYaw = null; this.turning = false; this.turnW = 0; this.turnPhase = 0;
     this.roll = 0; this.lean = 0; this.prevS = 0; this.accel = 0; this.headYaw = 0; this.ready = 1; this.readyT = 0;
     this.ground = null;             // (x, z) → ground y; set by the game for foot IK
+    this.stepEvt = null; this.prevF = 0; this.prevTurn = 0;   // v11: 'L' / 'R' when a foot lands
     this.rag = null;
     if (kind !== 'pow') this.addNade();
   }
@@ -407,13 +419,39 @@ export class Soldier {
   }
   stopRagdoll() {
     if (!this.rag) return;
+    this.unfreeze();
     this.rag = null;
     this.fresh = true; this.legYaw = null;
+  }
+  // v11: a body at rest costs nothing — its matrices and bone texture stop
+  // updating and it can be frustum-culled — until something moves it again
+  freeze() {
+    if (this.frozen) return;
+    this.frozen = true;
+    this.obj.updateMatrixWorld(true);
+    const sk = this.mesh.skeleton;
+    sk.update();
+    this._skUpdate = sk.update; sk.update = () => {};
+    this.obj.traverse((o) => { o.matrixAutoUpdate = false; o.matrixWorldNeedsUpdate = false; });
+    this.mesh.computeBoundingSphere(); this.mesh.frustumCulled = true;
+    this.mesh.castShadow = false;      // flat on the ground its shadow barely shows; it costs a whole pass
+  }
+  unfreeze() {
+    if (!this.frozen) return;
+    this.frozen = false;
+    this.mesh.skeleton.update = this._skUpdate;
+    this.obj.traverse((o) => { o.matrixAutoUpdate = true; });
+    this.mesh.frustumCulled = false; this.mesh.castShadow = true;
   }
 
   // ---------------------------------------------------------------- per frame
   pose(dt) {
-    if (this.rag) { this.rag.step(dt); this.rag.apply(); return; }
+    if (this.rag) {
+      if (!this.rag.asleep) this.unfreeze();
+      this.rag.step(dt); this.rag.apply();
+      if (this.rag.asleep && !this.frozen && !this.noFreeze) this.freeze();
+      return;
+    }
     const a = this.a, B = this.bones, gun = this.T.gun;
     a.t += dt;
     const s = clamp(a.speed, 0, 1);
@@ -423,8 +461,18 @@ export class Soldier {
     const throwing = a.throwT >= 0 && !acting;
     if (a.feedT >= 0) { a.feedT += dt / 0.75; if (a.feedT >= 1) a.feedT = -1; }
     const feeding = a.feedT >= 0 && !acting;
+    if (a.reachT >= 0) { a.reachT += dt / 0.6; if (a.reachT >= 1) a.reachT = -1; }
+    const kicking = a.kick >= 0 && !acting && !!this.act.KickLegs;
     const f = ((a.phase / (Math.PI * 2)) % 1 + 1) % 1;
-    const run = acting || a.sit ? 0 : clamp(s / 0.4, 0, 1) * (1 - c);
+    const run = acting || a.sit || kicking ? 0 : clamp(s / 0.4, 0, 1) * (1 - c);
+    // footfalls: the run phases are aligned so the left foot is mid-stance at
+    // 0 and the right at 0.5; a heel lands a little before that
+    this.stepEvt = null;
+    if (run > 0.3) {
+      const cross = (at) => ((this.prevF - at + 1) % 1) > 0.5 && ((f - at + 1) % 1) < 0.5;
+      if (cross(0.93)) this.stepEvt = 'L'; else if (cross(0.43)) this.stepEvt = 'R';
+    }
+    this.prevF = f;
 
     // --- where the legs point: they lag the body and step round on the spot
     const yaw = this.obj.rotation.y;
@@ -445,6 +493,8 @@ export class Soldier {
       legOff = angDiff(yaw, this.legYaw);
     }
     this.turnW += ((this.turning ? 1 : 0) - this.turnW) * Math.min(1, dt * 10);
+    if (this.turning && Math.floor(this.turnPhase * 2) !== Math.floor(this.prevTurn * 2)) this.stepEvt = this.stepEvt || 'T';
+    this.prevTurn = this.turnPhase;
     // turn-lean and run-lean from the legs' own motion
     const omega = acting ? 0 : angDiff(this.prevLeg ?? this.legYaw, this.legYaw) / Math.max(dt, 1e-3);
     this.prevLeg = this.legYaw;
@@ -470,7 +520,13 @@ export class Soldier {
       // stand / run by speed (crouched soldiers hold still); stride locked to distance
       const step = this.turnW * (1 - run) * (1 - c);
       const wf = (this.turnPhase % 1 + 1) % 1;
-      if (gun) {
+      if (kicking) {
+        const kt = clamp(a.kick, 0, 1);
+        if (gun) {
+          add('KickLegs', 1); add('KickUp', 0.45); add('IdleUp', 0.55); add('Grip', 1);
+          time.KickLegs = kt * this.act.KickLegs.dur * 0.98; time.KickUp = kt * this.act.KickUp.dur * 0.98; time.Grip = 0;
+        } else { add('Kick_Right', 1); time.Kick_Right = kt * this.act.Kick_Right.dur * 0.98; }
+      } else if (gun) {
         // running in any direction while facing the aim: forward, back-pedal
         // and side-step clips, blended by the angle and kept in step
         let wF = 1, wB = 0, wL = 0, wR = 0;
@@ -531,7 +587,10 @@ export class Soldier {
     const idleW = acting ? 0 : (1 - run) * (1 - c) * (1 - this.turnW);
 
     // --- hips: crouch, flinch dip, weight shift, and feet on the slope
-    let drop = c * 0.5 + fl * 0.13, side = Math.sin(a.t * 0.5 + this.seed) * RIG.sway * idleW;
+    // (running lifts the hips a touch — the Run clip sits very low; a flinch
+    // knocks them back along the blow)
+    let drop = c * 0.5 + fl * 0.13 - run * RIG.runLift, side = Math.sin(a.t * 0.5 + this.seed) * RIG.sway * idleW;
+    const kneel = !acting && !a.sit ? c : 0;
     const footIK = !acting && a.foot && this.ground && !a.sit;
     const dy = [0, 0];
     if (footIK) {
@@ -542,17 +601,28 @@ export class Soldier {
       });
       drop += Math.max(0, -Math.min(dy[0], dy[1])) * 0.9;
     }
-    if (drop > 0.002 || Math.abs(side) > 0.002 || dy[0] || dy[1]) {
+    if (Math.abs(drop) > 0.002 || Math.abs(side) > 0.002 || dy[0] || dy[1] || fl > 0.01) {
       const body = B.Body;
       body.getWorldPosition(_tg); _tg.y -= drop; _tg.addScaledVector(_lf, side);
+      if (fl > 0.01) { _tg.x += a.flinchX * fl * RIG.jolt; _tg.z += a.flinchZ * fl * RIG.jolt; }
       body.position.copy(body.parent.worldToLocal(_tg));
       body.updateMatrixWorld(true);
       ['L', 'R'].forEach((sd, i) => {
         const foot = B['Foot' + sd];
-        if (dy[i]) { foot.getWorldPosition(_tg); _tg.y += dy[i]; foot.position.copy(foot.parent.worldToLocal(_tg)); foot.updateMatrixWorld(true); }
-        // keep the knee bending the way the clip bent it
+        // kneeling (v11): the right foot goes back onto its toes so that knee
+        // comes down to the ground, the left steps a little forward
+        const kn = kneel * (i === 1 ? 1 : 0);
+        if (dy[i] || kneel > 0.01) {
+          foot.getWorldPosition(_tg); _tg.y += dy[i];
+          _tg.addScaledVector(_fw, kneel * (i === 1 ? -RIG.kneelBack : RIG.kneelFwd));
+          foot.position.copy(foot.parent.worldToLocal(_tg));
+          if (kn > 0.01) rotWorld(foot, _qa.setFromAxisAngle(_lf, -RIG.kneelToe * kn));
+          foot.updateMatrixWorld(true);
+        }
+        // keep the knee bending the way the clip bent it (a kneeling knee points down and forward)
         B['LowerLeg' + sd].getWorldPosition(_pole); B['UpperLeg' + sd].getWorldPosition(_a);
         _pole.sub(_a).addScaledVector(_fw, 0.05);
+        if (kn > 0.01) _pole.lerp(_v1.copy(_fw).addScaledVector(UP, -0.6), kn);
         foot.getWorldPosition(_tg);
         solveIK(B['UpperLeg' + sd], B['LowerLeg' + sd], B['Ankle' + sd], _tg, _pole);
       });
@@ -669,8 +739,9 @@ export class Soldier {
       _gp.addScaledVector(_A, -over * 1.1);
     }
     // carrying it in the support hand while the right arm throws or feeds
-    const u = throwing ? a.throwT : feeding ? a.feedT : -1;
-    const cw = throwing ? sstep(0, 0.14, u) * (1 - sstep(0.84, 1, u)) : feeding ? this.feedW(u) : 0;
+    const reaching = a.reachT >= 0 && !throwing;
+    const u = throwing ? a.throwT : feeding ? a.feedT : reaching ? a.reachT : -1;
+    const cw = throwing ? sstep(0, 0.14, u) * (1 - sstep(0.84, 1, u)) : feeding ? this.feedW(u) : reaching ? Math.sin(Math.PI * u) : 0;
     if (cw > 0) {
       _qa.setFromAxisAngle(UP, aimYaw - 0.3); _qb.setFromAxisAngle(AX, 0.8);
       _gq2.copy(_qa).multiply(_qb);
@@ -688,7 +759,12 @@ export class Soldier {
     // firing hand on the grip — or throwing
     this.handTarget(HAND_R, _c.set(0, 0, 0), _gp, _gq, _tR);
     if (throwing || feeding) this.throwArm(u, throwing, _tR);
-    else {
+    else if (reaching) {
+      // reach out to a cage latch or a prisoner's ropes, then back to the grip
+      _tg.set(a.reachX, a.reachY, a.reachZ).lerp(_tR, 1 - Math.sin(Math.PI * u));
+      _pole.copy(UP).multiplyScalar(-1).addScaledVector(_lat, -0.6);
+      solveIK(B.UpperArmR, B.LowerArmR, B.WristR, _tg, _pole);
+    } else {
       _pole.copy(UP).multiplyScalar(-1).addScaledVector(_lat, -0.8).addScaledVector(_cf, -0.2);
       solveIK(B.UpperArmR, B.LowerArmR, B.WristR, _tR, _pole);
       setWorldQ(B.WristR, _qc.copy(_gq).multiply(HAND_R.q));

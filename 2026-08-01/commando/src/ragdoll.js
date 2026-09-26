@@ -120,6 +120,9 @@ export class Ragdoll {
     this.t = 0; this.still = 0; this.asleep = false; this.dtPrev = 1 / 60;
     this.landed = false; this.landSpeed = 0; this.float = 1.3;
     this.contact = new Uint8Array(n);
+    // v11 events for sound: onGunLand(speed), onBump(speed, x, y, z), onSplash(x, y, z)
+    this.wet = new Uint8Array(n); this.vy = new Float32Array(n); this.gunDown = false;
+    this.splashed = new Uint8Array(n); this.bumps = 0; this.lastBump = -1; this.splashes = 0;
     // bone frames at hand-over: the pelvis and chest follow particle frames,
     // the feet ride on the shins
     this.q0 = { body: B.Body.getWorldQuaternion(new THREE.Quaternion()), chest: B.Chest.getWorldQuaternion(new THREE.Quaternion()) };
@@ -184,6 +187,7 @@ export class Ragdoll {
       const k = i * 3;
       let damp = 0.999, ay = -g;
       const vy0 = (X[k + 1] - P[k + 1]) / dt;
+      this.vy[i] = vy0;
       if (i <= J.head && vy0 < fallV) fallV = vy0;
       if (wl !== null && X[k + 1] < wl) { damp = 0.9; ay += g * (BUOY[i] || 0.7) * this.float; }
       const vx = (X[k] - P[k]) * r * damp, vy = (X[k + 1] - P[k + 1]) * r * damp, vz = (X[k + 2] - P[k + 2]) * r * damp;
@@ -216,6 +220,18 @@ export class Ragdoll {
     for (let i = 0; i < n; i++) {
       const k = i * 3;
       const on = X[k + 1] <= this.floor[i] + 0.004;
+      // sounds: the rifle hitting the ground, the body bouncing after the
+      // first landing, a hand, foot or head slapping into water
+      if (on && !this.contact[i]) {
+        if (i >= 16 && !this.gunDown) { this.gunDown = true; if (this.onGunLand) this.onGunLand(Math.hypot(X[k] - P[k], X[k + 1] - P[k + 1], X[k + 2] - P[k + 2]) / dt); }
+        else if (this.landed && (i === J.pelvis || i === J.mid || i === J.head) && this.vy[i] < -3.2 && this.bumps < 1 && this.t - this.lastBump > 0.35 && this.onBump) {
+          this.bumps++; this.lastBump = this.t; this.onBump(-this.vy[i], X[k], X[k + 1], X[k + 2]);
+        }
+      }
+      // (a floating body bobs across the surface: only a limb's first entry splashes)
+      const wet = wl !== null && X[k + 1] < wl;
+      if (wet && !this.wet[i] && !this.splashed[i] && this.vy[i] < -1.5 && this.splashes < 3 && this.onSplash && i < 16) { this.splashed[i] = 1; this.splashes++; this.onSplash(X[k], wl, X[k + 2]); }
+      this.wet[i] = wet ? 1 : 0;
       this.contact[i] = on ? 1 : 0;
       if (on) {
         const mu = 0.32;
@@ -307,13 +323,13 @@ export class Ragdoll {
       _dq.setFromUnitVectors(_v, _w);
       this.gun.q.premultiply(_dq);
       if (this.contact[16] || this.contact[17]) {
-        _v.set(1, 0, 0).applyQuaternion(this.gun.q);            // its left side
-        _u.copy(_w).cross(_v.set(0, 1, 0)).normalize();         // any horizontal perpendicular
-        if (_u.lengthSq() > 0.5) {
-          _v.set(0, 1, 0).applyQuaternion(this.gun.q);
-          const want = Math.abs(_v.y) > 0.3 ? _v.set(0, 0, 0) : null;   // settle on its side
-          if (want === null) { /* already lying flat */ }
-          else { _dq.setFromAxisAngle(_w, 0.12 * Math.sign(_v.copy(_u).dot(_y.set(0, 1, 0).applyQuaternion(this.gun.q)) || 1)); this.gun.q.premultiply(_dq); }
+        // resting on the ground it rolls onto its side: turn about the barrel
+        // until its up axis lies flat
+        _v.set(0, 1, 0).applyQuaternion(this.gun.q);
+        if (Math.abs(_v.y) > 0.05) {
+          _u.crossVectors(_w, _v);                      // how 'up' moves for a turn about the barrel
+          const th = -Math.sign(_v.y * (_u.y || 1)) * Math.min(0.15, Math.abs(_v.y));
+          _dq.setFromAxisAngle(_w, th); this.gun.q.premultiply(_dq);
         }
       }
       _v.copy(this.gun.butt).applyQuaternion(this.gun.q);

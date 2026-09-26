@@ -24,7 +24,7 @@ export class Audio {
     if (!this._ok(name, gap)) return;
     this.S.play(name, opts);
   }
-  step(pan) { if (this.S && this.S.ready && this._ok('step', 130)) try { this.S.step({ gain: 0.35, pan }); } catch (e) {} }
+  step(pan, surface = 'dirt', gain = 0.35) { if (this.S && this.S.ready && this._ok('step', 110)) try { this.S.step({ gain, pan, surface }); } catch (e) {} }
   tink(pan) { if (this.S && this.S.ready && this._ok('tink', 90)) try { this.S.tink({ gain: 0.25, pan }); } catch (e) {} }
   thunk(pan) { if (this.S && this.S.ready && this._ok('thunk', 60)) try { this.S.thunk({ pan }); } catch (e) {} }
   boom(pan) { if (this.S && this.S.ready && this._ok('boom', 60)) try { this.S.boom({ pan }); } catch (e) {} }

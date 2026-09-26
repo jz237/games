@@ -6,7 +6,9 @@
 const FILES = ['shot', 'explosion', 'enemy-down', 'player-death', 'ready',
   // build v9: the death catalogue's voices and impacts (deaths.js)
   'die-grunt-a', 'die-grunt-b', 'die-yelp', 'die-groan', 'die-yell', 'die-scream', 'die-whoa',
-  'die-oof', 'die-cough', 'die-nooo', 'body-thud', 'body-splash', 'bike-crash'];
+  'die-oof', 'die-cough', 'die-nooo', 'body-thud', 'body-splash', 'bike-crash',
+  // build v11: the ragdolls' dropped rifles and limbs, enemy kicks, freed prisoners
+  'gun-clatter', 'limb-splash', 'kick-hit', 'pow-cheer'];
 
 const Sfx = {
   ctx: null, buffers: {}, ready: false, volume: 0.8,
@@ -71,8 +73,9 @@ const Sfx = {
       node.connect(p); p.connect(this.ctx.destination);
     } else node.connect(this.ctx.destination);
   },
-  // boot on dirt: a low, soft noise thud with a touch of grit
-  step({ gain = 1, pan = 0 } = {}) {
+  // boot on dirt: a low, soft noise thud with a touch of grit; on a bridge
+  // deck (surface 'wood', build v11) a hollow knock of plank on beam
+  step({ gain = 1, pan = 0, surface = 'dirt' } = {}) {
     if (!this.ctx || this.ctx.state === 'closed') return;
     const now = this.ctx.currentTime;
     let g0 = this.volume * gain * 0.34;
@@ -81,14 +84,23 @@ const Sfx = {
     const src = this.ctx.createBufferSource();
     src.buffer = this.noise(0.085);
     const lp = this.ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 420 + Math.random() * 260;   // vary the surface, step to step
+    const wood = surface === 'wood';
+    lp.type = wood ? 'bandpass' : 'lowpass';
+    lp.frequency.value = wood ? 260 + Math.random() * 90 : 420 + Math.random() * 260;   // vary the surface, step to step
+    if (wood) lp.Q.value = 5;
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(g0, now);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+    g.gain.setValueAtTime(g0 * (wood ? 2.2 : 1), now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + (wood ? 0.12 : 0.09));
     src.connect(lp); lp.connect(g);
     this.out(g, pan);
     src.start(now);
+    if (wood) {
+      // the plank's own ring: a short low tone under the knock
+      const o = this.ctx.createOscillator(), og = this.ctx.createGain();
+      o.type = 'sine'; o.frequency.value = 150 + Math.random() * 40;
+      og.gain.setValueAtTime(g0 * 0.9, now); og.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      o.connect(og); this.out(og, pan); o.start(now); o.stop(now + 0.11);
+    }
   },
   // brass on stone: two detuned partials, very short
   tink({ gain = 1, pan = 0 } = {}) {
