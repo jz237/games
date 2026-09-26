@@ -4,18 +4,17 @@
 // effects and voice. Purely visual: the soldier is already dead (alive=false)
 // the instant he is hit, so no death here can delay the game or block a shot.
 //
-// A death is driven by a corpse record {t, e, s, style, ...}. Each frame the
-// style sets the rig's pose parameters (Death / HitRecieve / Wave clip times,
-// crouch), the soldier poses, and then the style places the whole body: ground
-// position, height in the air, and a rotation about a pivot (feet for topples,
-// hips for somersaults) — so the model can fly, tumble, roll and topple.
+// Build v10 made the bodies physical: a death is a short scripted opening (or
+// none) and then a Verlet ragdoll (ragdoll.js) with a kick shaped by the
+// style — thrown back, launched end over end, corkscrewed, rolled, tipped off
+// a tower, flung over a motorbike's handlebars — so every fall lands
+// differently on whatever ground is there.
 import * as THREE from 'three';
 import { clamp, TAU } from './util.js';
+import { sampleJoints } from './ragdoll.js';
 
 const rnd = Math.random;
-const G = 14;                                   // gamey gravity: arcs read snappy
 const ease = (u) => u * u * (3 - 2 * u);
-const easeIn = (u) => u * u * u;
 
 // ------------------------------------------------------------------ choosing
 const BULLET = { classic: 22, stagger: 16, spin: 16, knees: 14, plank: 12, flyback: 12 };
@@ -86,227 +85,210 @@ function place(c, x, y, p, pitch, roll, spin, pivot) {
   s.obj.quaternion.copy(_q);
   s.obj.position.copy(_w).sub(_o);
 }
-// the hip bone's position in the body's own (upright) frame, after posing
-function hipsOf(s) {
-  const b = s.bones.Body || s.bones.Hips;
-  if (!b) return _o.set(0, 1, 0);
-  return s.obj.worldToLocal(b.getWorldPosition(_o));
+
+// ------------------------------------------------------------------ physics
+// Build v10: every death ends in a Verlet ragdoll (ragdoll.js). Some styles
+// play a scripted opening first (a stagger, a spin, sinking to the knees, the
+// scorched daze, the officer's farewell); the rest hand straight over with a
+// kick shaped by what killed him.
+export function ragEnv(game) {
+  const T = game.T, col = game.col, push = col.constructor.push;
+  return {
+    ground: (x, z) => T.standY(x, -z),
+    water: (x, z) => { const a = T.waterAt(x, -z); return a && a.m > 0.3 ? a.w.level : null; },
+    wall: (x, z, r) => {
+      const p = -z;
+      for (const c of col.near(p, r + 3)) {
+        if (!c.alive || c.enemyPass || c.water) continue;
+        const v = push(c, x, p, r);
+        if (v) return [v[0], -v[1]];
+      }
+      return null;
+    },
+  };
 }
+
+// scripted opening, in seconds (0: the ragdoll takes him at once)
+const PRE = { stagger: 0.5, spin: 0.42, knees: 0.75, scorched: 0.95, officer: 2.2 };
 
 // ------------------------------------------------------------------ setup
 export function beginDeath(game, c) {
   const e = c.e, a = c.s.a;
-  a.hit = -1; a.dwave = -1; a.dead = 0; a.crouch = 0; a.twist = 0;
+  a.hit = -1; a.dwave = -1; a.dead = 0; a.crouch = 0; a.twist = 0; a.dying = true; a.throwT = -1; a.feedT = -1; a.roll = -1;
+  a.hitAlt = rnd() < 0.5;                           // one of the two hit reactions
   c.yaw = Math.PI - e.face;
   c.x0 = e.x; c.p0 = e.p;
   // unit direction the body is thrown (away from what killed it)
   const L = Math.hypot(c.vx, c.vp) || 1;
   c.dx = c.vx / L; c.dp = c.vp / L;
   c.landed = false;
+  c.pre = PRE[c.style] || 0;
   MUTE = !!c.silent && c.style !== 'bike';
   const x = e.x;
   switch (c.style) {
     case 'classic': voice(game, grunt(), x); break;
     case 'stagger': voice(game, grunt(), x); break;
-    case 'spin': voice(game, 'die-yelp', x); c.turns = (1.2 + rnd() * 0.6) * (rnd() < 0.5 ? -1 : 1); break;
-    // topples get a sideways twist: straight away from this camera, a fallen
-    // body looks just like a standing one
-    case 'knees': voice(game, 'die-groan', x, 0.5); c.yaw += (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 0.5); break;
-    case 'plank': voice(game, 'die-groan', x, 0.45); c.yaw += (rnd() < 0.5 ? -1 : 1) * (0.7 + rnd() * 0.5); break;
-    case 'flyback': c.yaw = Math.atan2(-c.dx, c.dp); voice(game, 'die-yell', x); c.dist = 2.8 + rnd() * 1.2; c.h = 0.9 + rnd() * 0.5; c.dur = 0.62; break;
-    case 'launch': {
-      c.yaw = Math.atan2(-c.dx, c.dp);          // back to the blast
-      voice(game, 'die-scream', x, 0.5);
-      c.h = 2.8 + rnd() * 1.4; c.dur = 2 * Math.sqrt(2 * c.h / G); c.dist = 2.5 + rnd() * 1.5;
-      c.turns = 2 + Math.floor(rnd() * 2);
-      break;
-    }
-    case 'corkscrew': {
-      voice(game, 'die-whoa', x, 0.5);
-      c.h = 3.5 + rnd() * 1.5; c.dur = 2 * Math.sqrt(2 * c.h / G); c.dist = 0.8;
-      c.turns = (3.5 + rnd() * 1.5) * (rnd() < 0.5 ? -1 : 1);
-      break;
-    }
-    case 'tumble': {
-      voice(game, 'die-oof', x, 0.5);
-      c.dist = 4 + rnd() * 1.5; c.dur = 1.15; c.turns = 2 + Math.floor(rnd() * 2);
-      // lie so the long axis crosses the direction of travel, then log-roll
-      c.rollYaw = Math.atan2(c.dp, c.dx);      // model +X along travel (world z = -p)
-      break;
-    }
+    case 'spin': voice(game, 'die-yelp', x); c.turns = (0.9 + rnd() * 0.4) * (rnd() < 0.5 ? -1 : 1); break;
+    case 'knees': voice(game, 'die-groan', x, 0.5); break;
+    case 'plank': voice(game, 'die-groan', x, 0.45); break;
+    case 'flyback': voice(game, 'die-yell', x); break;
+    case 'launch': voice(game, 'die-scream', x, 0.5); break;
+    case 'corkscrew': voice(game, 'die-whoa', x, 0.5); break;
+    case 'tumble': voice(game, 'die-oof', x, 0.5); break;
     case 'scorched': c.s.setChar && c.s.setChar(0); break;
-    case 'splash': voice(game, grunt(), x); c.yaw += (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 0.5); break;
+    case 'splash': voice(game, grunt(), x); break;
     case 'ledge': voice(game, 'die-scream', x, 0.45); break;
     case 'bike': {
       voice(game, 'die-whoa', x, 0.5);
       const mo = c.bike;
-      const bl = mo ? Math.hypot(mo.vx, mo.vp) : 0;
-      if (bl > 0.5) { c.dx = mo.vx / bl; c.dp = mo.vp / bl; }
-      c.yaw = Math.atan2(c.dx, -c.dp);          // face the way he flies
-      c.h = 1.8 + rnd() * 0.6; c.dur = 2 * Math.sqrt(2 * c.h / G); c.dist = 3 + rnd();
+      c.bv = mo ? [mo.vx, mo.vp] : [c.dx * 6, c.dp * 6];
       break;
     }
     case 'officer': voice(game, 'die-nooo', x, 0.6); c.circle = rnd() < 0.5 ? -1 : 1; break;
   }
   MUTE = false;
+  if (!c.pre) handOver(game, c);
+}
+
+// the kick each style gives the ragdoll. World axes: x, y up, z = -p; (bx, bz)
+// is the unit direction away from the killer.
+function handOver(game, c, prev) {
+  const s = c.s, e = c.e;
+  const r = s.startRagdoll(ragEnv(game), { prev, rigid: c.style === 'plank' });
+  // off-centre hits: the push swings up to ~50° to one side (a fall straight
+  // away from this camera reads as a man sitting down)
+  const sw = (rnd() < 0.5 ? -1 : 1) * (0.35 + rnd() * 0.5), cs = Math.cos(sw), sn = Math.sin(sw);
+  const bx = c.dx * cs - c.dp * sn, bz = -(c.dx * sn + c.dp * cs);
+  const j = (a) => a * (0.85 + rnd() * 0.3);        // a little variety
+  // a running man keeps some of his momentum
+  if (!prev && c.style !== 'bike' && e.px !== undefined) {
+    const mx = clamp((e.x - e.px) * 60, -8, 8), mp = clamp((e.p - e.pp) * 60, -8, 8);
+    if (mx || mp) r.push(mx * 0.8, 0, -mp * 0.8);
+  }
+  switch (c.style) {
+    case 'classic':
+      r.push(bx * j(2.6), 0.6, bz * j(2.6), ['mid', 'neck', 'head', 'shL', 'shR']);
+      r.push(bx * 1.2, 0, bz * 1.2, ['pelvis', 'hipL', 'hipR']);
+      r.push(-bx * 1.4, 0, -bz * 1.4, ['knL', 'knR']);               // the knees buckle
+      break;
+    case 'stagger': r.push(bx * j(2.2), 0.4, bz * j(2.2), ['mid', 'neck', 'head', 'shL', 'shR']); r.push(-bx, 0, -bz, ['knL', 'knR']); break;
+    case 'spin': r.push(bx * 1.2, 0.5, bz * 1.2); break;               // the spin itself carries over from the opening
+    case 'knees': r.push(-bx * j(1.8), 0, -bz * j(1.8), ['mid', 'neck', 'head', 'shL', 'shR']); break;
+    case 'plank': r.push(bx * j(2.4), 0, bz * j(2.4), ['head', 'neck', 'shL', 'shR']); r.push(-bx * 0.4, 0, -bz * 0.4, ['anL', 'anR']); break;
+    case 'flyback':
+      r.push(bx * j(5.2), j(3.4), bz * j(5.2));
+      r.push(bx * 1.6, 0.4, bz * 1.6, ['mid', 'neck', 'head', 'shL', 'shR']);  // chest leads, legs trail
+      break;
+    case 'launch': {
+      r.push(bx * j(3.4), j(9.6), bz * j(3.4));
+      const dir = rnd() < 0.5 ? 1 : -1;                             // back- or front-flip
+      r.spin(-bz * dir, 0, bx * dir, j(7));
+      break;
+    }
+    case 'corkscrew':
+      r.push(bx * 1.0, j(8.6), bz * 1.0);
+      r.spin(0.15, 1, 0.1, j(13) * (rnd() < 0.5 ? -1 : 1));
+      break;
+    case 'tumble':
+      r.push(bx * j(6.2), j(3.2), bz * j(6.2));
+      r.spin(bx, 0, bz, j(9) * (rnd() < 0.5 ? -1 : 1));               // rolled along the ground
+      break;
+    case 'scorched': r.push(-bx * 0.6, 0, -bz * 0.6, ['knL', 'knR']); r.push(rnd() - 0.5, 0, rnd() - 0.5, ['head', 'neck']); break;
+    case 'splash': r.push(bx * j(2.2), 0.8, bz * j(2.2), ['mid', 'neck', 'head', 'shL', 'shR']); break;
+    case 'ledge': r.push(bx * 0.8, j(2.2), 2.4 + bz * 0.8); break;          // off the front, toward the camera
+    case 'bike': {
+      const [vx, vp] = c.bv;
+      r.push(vx * 0.9, j(4.6), -vp * 0.9);
+      const L = Math.hypot(vx, vp) || 1;
+      r.spin(-vp / L, 0, -vx / L, j(6));                               // over the handlebars
+      break;
+    }
+    case 'officer': r.push(bx * 0.8, 0.2, bz * 0.8, ['head', 'neck', 'mid']); r.push(-bx * 0.8, 0, -bz * 0.8, ['knL', 'knR']); break;
+  }
+  r.onLand = (v) => land(game, c, v > 6);
+}
+
+function land(game, c, big) {
+  if (c.landed) return;
+  c.landed = true;
+  const e = c.e, T = game.T, y = T.standY(e.x, e.p);
+  if (T.waterFrac(e.x, e.p) > 0.35) {
+    splashFx(game, e.x, y, e.p);
+    impact(game, 'body-splash', e.x, 0.55);
+  } else {
+    game.fx.dust(e.x, y, -e.p, big ? 7 : 4, [0.62, 0.52, 0.4], big ? 2.2 : 1.4, big ? 0.7 : 0.5);
+    impact(game, 'body-thud', e.x, big ? 0.6 : 0.45);
+  }
 }
 
 // ------------------------------------------------------------------ per frame
-// returns nothing; moves c.e.x/p, poses and places c.s. Called instead of the
-// old generic corpse slide.
+// moves c.e.x/p, poses and places c.s
+const _pv = new THREE.Vector3();
 export function stepDeath(game, c, dt) {
   const e = c.e, s = c.s, a = s.a, t = c.t;
   const T = game.T;
-  const gy = (x, p) => T.standY(x, p) + (e.trench ? e.yCur : 0);
-  let air = 0, pitch = 0, roll = 0, spin = 0, hips = false;
-  a.hit = -1; a.dwave = -1;
-
-  const land = (x, p, big = false) => {
-    if (c.landed) return;
-    c.landed = true;
-    const y = gy(x, p);
-    if (T.waterFrac(x, p) > 0.35) {
-      splashFx(game, x, y, p);
-      impact(game, 'body-splash', x, 0.55);
-    } else {
-      game.fx.dust(x, y, -p, big ? 7 : 4, [0.62, 0.52, 0.4], big ? 2.2 : 1.4, big ? 0.7 : 0.5);
-      impact(game, 'body-thud', x, big ? 0.6 : 0.45);
+  s.setFlash(Math.max(0, 0.9 - t * 8));
+  s.a.speed = 0; s.a.recoil = 0;
+  if (s.rag) {
+    const r = s.rag;
+    // what happens while physics has him
+    if (c.style === 'scorched') {
+      if (s.setChar) s.setChar(0.88);
+      c.puff = (c.puff || 0) - dt;
+      if (c.puff <= 0 && t < 3) { c.puff = 0.12; r.pos('mid', _pv); smokePuff(game, _pv.x, _pv.y + 0.3, -_pv.z); }
     }
-  };
-  // move along the throw direction, stopping at walls (the body is visual
-  // only, but flying through a bunker looks wrong)
+    if (c.style === 'ledge' && !r.landed && t < 1.5) {
+      c.flail = (c.flail || 0) - dt;
+      if (c.flail <= 0) { c.flail = 0.09; const k = () => (rnd() - 0.5) * 7; r.push(k(), k() * 0.5, k(), [rnd() < 0.5 ? 'wrL' : 'wrR', rnd() < 0.5 ? 'anL' : 'anR']); }
+    }
+    if (c.style === 'splash' && r.landed === false && r.t > 0.05 && T.waterFrac(e.x, e.p) > 0.35) {
+      r.pos('mid', _pv);
+      const lv = T.waterAt(e.x, e.p);
+      if (lv && _pv.y < lv.w.level + 0.15) land(game, c, false);
+    }
+    r.pos('pelvis', _pv); e.x = _pv.x; e.p = -_pv.z;
+    // corpses melt into the ground at the end (as before)
+    if (t > 7) { r.asleep = true; s.obj.position.y -= dt * 0.4; }
+    s.pose(dt);
+    return;
+  }
+  // ---- the scripted opening
+  const gy = (x, p) => T.standY(x, p) + (e.trench ? e.yCur : 0);
+  let air = 0, pitch = 0, spin = 0;
+  a.hit = -1; a.dwave = -1;
   const travel = (d) => {
     const nx = c.x0 + c.dx * d, np = c.p0 + c.dp * d;
     if (!game.col.blocked(nx, np, 0.3, 'enemy')) { e.x = nx; e.p = np; }
-    else { c.x0 = e.x - c.dx * d; c.p0 = e.p - c.dp * d; }   // pin in place from here on
+    else { c.x0 = e.x - c.dx * d; c.p0 = e.p - c.dp * d; }
   };
-
   switch (c.style) {
-    case 'classic': default: {
-      if (t < 0.5) travel(2.2 * (t - t * t));
-      a.dead = Math.min(1, t * 2.8);
-      if (t > 0.55) land(e.x, e.p);
-      break;
-    }
     case 'stagger': {
-      // two jolts backwards, then the drop
-      if (t < 0.5) { a.hit = ((t % 0.25) / 0.25) * 0.85; travel(1.4 * ease(t / 0.5)); }
-      else a.dead = Math.min(1, (t - 0.5) * 2.6);
+      // two jolts backwards, then the ragdoll
+      a.hit = ((t % 0.25) / 0.25) * 0.85; travel(1.4 * ease(clamp(t / 0.5, 0, 1)));
       if (t > 0.2 && t < 0.27 && !c.g2) { c.g2 = true; voice(game, grunt(), e.x, 0.4); }
-      if (t > 0.95) land(e.x, e.p);
       break;
     }
     case 'spin': {
       const u = clamp(t / 0.6, 0, 1);
       spin = c.turns * TAU * (1 - (1 - u) * (1 - u));
-      if (t < 0.6) { a.hit = u; air = 0.18 * Math.sin(Math.PI * u); }
-      else a.dead = Math.min(1, (t - 0.6) * 3);
-      if (t > 0.95) land(e.x, e.p);
+      a.hit = u; air = 0.18 * Math.sin(Math.PI * u);
       break;
     }
     case 'knees': {
       a.hit = 0.55;
       a.crouch = clamp(t / 0.3, 0, 1);                  // sink onto the knees
-      if (t > 0.3 && t < 0.85) spin = Math.sin((t - 0.3) * 9) * 0.08;   // sways
-      if (t > 0.85) pitch = 1.4 * easeIn(clamp((t - 0.85) / 0.35, 0, 1)); // face-plant
-      if (t > 1.2) land(e.x, e.p);
-      break;
-    }
-    case 'plank': {
-      // stiff as a board and toppling like a felled tree
-      a.hit = 0.35;
-      const u = clamp((t - 0.12) / 0.7, 0, 1);
-      pitch = -Math.PI / 2 * easeIn(u);
-      if (u >= 1) { land(e.x, e.p); pitch += Math.max(0, 0.12 - (t - 0.82)) * Math.sin((t - 0.82) * 40) * 0.6; }
-      break;
-    }
-    case 'flyback': {
-      const u = clamp(t / c.dur, 0, 1);
-      travel(c.dist * (1 - (1 - u) * (1 - u)));
-      air = 4 * c.h * u * (1 - u);
-      pitch = -0.4 * Math.sin(Math.PI * u);                // leans back in flight;
-      a.dead = Math.min(1, t * 1.6);                       // the clip lays him down
-      if (u >= 1) { land(e.x, e.p); if (t < c.dur + 0.3) travel(c.dist + 0.4 * ease((t - c.dur) / 0.3)); }
-      break;
-    }
-    case 'launch': {
-      const u = clamp(t / c.dur, 0, 1);
-      travel(c.dist * u);
-      air = 4 * c.h * u * (1 - u);
-      // end over end about the hips — whole turns, because the Death clip's
-      // own pose already lies him on his back
-      pitch = -c.turns * TAU * u;
-      hips = u < 1;
-      a.dead = Math.min(1, t * 3);
-      if (u >= 1) {
-        land(e.x, e.p, true);
-        const b = t - c.dur;                               // a little bounce
-        if (b < 0.3) air = 0.35 * Math.sin(Math.PI * b / 0.3);
-      }
-      break;
-    }
-    case 'corkscrew': {
-      const u = clamp(t / c.dur, 0, 1);
-      travel(c.dist * u);
-      air = 4 * c.h * u * (1 - u);
-      spin = c.turns * TAU * (1 - (1 - u) * (1 - u));
-      a.hit = 0.45;                                        // arms flung wide…
-      if (u > 0.7) { a.hit = -1; a.dead = (u - 0.7) / 0.3; } // …and limp for the landing
-      if (u >= 1) land(e.x, e.p, true);
-      break;
-    }
-    case 'tumble': {
-      const u = clamp(t / c.dur, 0, 1);
-      travel(c.dist * (1 - (1 - u) * (1 - u)));
-      c.yaw = c.rollYaw;
-      a.dead = Math.min(1, t * 4);                         // knocked flat by the clip…
-      roll = -c.turns * TAU * (1 - (1 - u) * (1 - u));      // …then rolled like a log
-      hips = true;
-      air = Math.abs(Math.sin(u * c.turns * Math.PI)) * 0.3 * (1 - u);
-      if (u >= 1) land(e.x, e.p);
+      if (t > 0.3) spin = Math.sin((t - 0.3) * 9) * 0.08;   // sways
       break;
     }
     case 'scorched': {
       const k = clamp(t / 0.25, 0, 1);
       if (s.setChar) s.setChar(0.88 * k);
-      if (t < 0.95) {
-        // dazed and smoking, swaying on the spot
-        spin = Math.sin(t * 8) * 0.22;
-        pitch = Math.sin(t * 6) * 0.06;
-        c.puff = (c.puff || 0) - dt;
-        if (c.puff <= 0) { c.puff = 0.07; smokePuff(game, e.x, gy(e.x, e.p) + 1.9, e.p); }
-        if (t > 0.18 && !c.coughed) { c.coughed = true; voice(game, 'die-cough', e.x, 0.5); }
-      } else a.dead = Math.min(1, (t - 0.95) * 2.4);
-      if (t > 1.35) land(e.x, e.p);
-      break;
-    }
-    case 'splash': {
-      const u = clamp(t / 0.45, 0, 1);
-      a.hit = 0.3;
-      pitch = -Math.PI / 2 * easeIn(u);
-      if (u >= 1) {
-        if (!c.landed) { c.landed = true; splashFx(game, e.x, gy(e.x, e.p), e.p); impact(game, 'body-splash', e.x, 0.6); }
-        air = -Math.min(0.9, (t - 0.45) * 0.35);          // and sinks
-      }
-      break;
-    }
-    case 'ledge': {
-      const fallT = Math.sqrt(2 * c.fall / 9.8);
-      const u = clamp(t / fallT, 0, 1);
-      air = Math.max(0, c.fall - 9.8 * t * t * 0.5);
-      if (u < 0.6) { a.hit = (t * 3.2) % 1; pitch = -0.5 * u / 0.6; }   // flailing on the way down
-      else { a.dead = Math.min(1, (u - 0.6) / 0.4); pitch = -0.5 * (1 - a.dead); }
-      if (u >= 1) land(e.x, e.p, true);
-      break;
-    }
-    case 'bike': {
-      const u = clamp(t / c.dur, 0, 1);
-      travel(c.dist * u);
-      air = 4 * c.h * u * (1 - u) + 0.6 * (1 - u);          // starts from the saddle
-      pitch = TAU * u;                                       // one front flip over the handlebars
-      hips = u < 1;
-      a.dead = Math.min(1, t * 2.5);                         // lands on his back, courtesy of the clip
-      if (u >= 1) land(e.x, e.p, true);
+      // dazed and smoking, swaying on the spot
+      spin = Math.sin(t * 8) * 0.22;
+      pitch = Math.sin(t * 6) * 0.06;
+      c.puff = (c.puff || 0) - dt;
+      if (c.puff <= 0) { c.puff = 0.07; smokePuff(game, e.x, gy(e.x, e.p) + 1.9, e.p); }
+      if (t > 0.18 && !c.coughed) { c.coughed = true; voice(game, 'die-cough', e.x, 0.5); }
       break;
     }
     case 'officer': {
@@ -319,25 +301,26 @@ export function stepDeath(game, c, dt) {
         const ang = u * TAU * c.circle;
         e.x = c.x0 + Math.sin(ang) * 0.6; e.p = c.p0 + (1 - Math.cos(ang)) * 0.6;
         spin = ang;
-      } else if (t < 2.2) { a.dwave = (t - 1.3) / 0.9; spin = TAU * c.circle; }
-      else { a.dead = Math.min(1, (t - 2.2) * 2.2); spin = TAU * c.circle; }
-      if (t > 2.65) land(e.x, e.p);
+      } else { a.dwave = clamp((t - 1.3) / 0.9, 0, 1); spin = TAU * c.circle; }
       break;
     }
   }
-
-  s.setFlash(Math.max(0, 0.9 - t * 8));
-  s.a.speed = 0; s.a.recoil = 0;
-  // corpses melt into the ground at the end (as before)
-  let y = gy(e.x, e.p) + air;
-  if (t > 7) y -= (t - 7) * 0.4;
+  const y = gy(e.x, e.p) + air;
   // Pose the rig UPRIGHT, then tilt the whole body. The kneeling IK works in
   // world space; posing while still tipped from last frame drove the knees
   // (and the body with them) into the ground.
   s.obj.quaternion.setFromAxisAngle(AY, c.yaw + spin);
   s.obj.position.set(e.x, y, -e.p);
   s.pose(dt);
-  place(c, e.x, y, e.p, pitch, roll, spin, hips ? hipsOf(s) : FEET);
+  place(c, e.x, y, e.p, pitch, 0, spin, FEET);
+  // remember where the joints were, so the ragdoll inherits the motion
+  s.obj.updateMatrixWorld(true);
+  c.joints = sampleJoints(s, c.joints || new Float32Array(48));
+  c.prevJ = c.prevJ || new Float32Array(48);
+  if (t + dt >= c.pre) {
+    // hand over with last frame's joints as the "previous" positions
+    handOver(game, c, c.hadPrev ? c.prevJ : null);
+  } else { c.prevJ.set(c.joints); c.hadPrev = true; }
 }
 
 // ------------------------------------------------------------------ effects

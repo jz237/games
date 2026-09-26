@@ -56,12 +56,85 @@ title. Any key or tap exits. Its score never touches the saved hi-score
 (`newGame({ showcase: true })`). Verified: all three areas in ~5 min of game
 time with zero continues. Test hooks: `__cmd.watchDemo()`, `__cmd.demoState()`.
 
+## Build v10 (2026-09-26): soldiers that move like people
+
+"The characters are too stiff, they have no ragdoll, and he isn't holding the
+gun right." Six changes, all in the rig code; the game still drives the same
+parameters.
+
+**The rifle hold** (`src/soldier.js`). The weapon used to be baked onto the
+right wrist in the rig's pistol pose (`Idle_Gun_Pointing`), so every rifleman
+held his AK out at arm's length like a handgun. It now has a bone of its own
+(`Gun`) that pose() places every frame: stock in the right shoulder pocket,
+barrel down the aim line, torso bladed so the support shoulder leads; two-bone
+IK puts the right hand on the pistol grip and the left under the handguard,
+with the wrists turned to wrap the grip. The rig's arms are short for its
+height, so the rifle is carbine-length and slides back until both hands reach.
+Recoil kicks the stock back and the muzzle up through the arms and rocks the
+shoulders; running without firing drops it to a low ready. The officer's SMG
+is held the same way.
+
+**Ragdolls** (`src/ragdoll.js`). Every death now ends in a Verlet ragdoll:
+16 particles on the joints (pelvis, mid-spine, neck, skull, shoulders, elbows,
+wrists, hips, knees, ankles), rigid sticks for the braced pelvis and chest
+blocks and the limb bones, soft ranges that keep the torso a torso, knee and
+elbow hinges, hip limits (no splits, no leg swung up behind), gravity,
+terrain with friction, water drag with fading buoyancy, and walls near the
+ground. The pelvis and chest follow particle frames; every other bone swings
+the least amount that points it at its particle, so twist stays stable. The
+rifle drops out of the hand as its own two-particle body and settles on its
+side. A settled body sleeps (1–3 s) and costs nothing; twelve fresh ragdolls
+cost ~1 ms a frame. The fourteen v9 death styles became kicks: shots knock a
+man back with the knees buckling (swung up to ~50° to one side — a fall
+straight away from this camera reads as sitting down), point blank throws
+him, blasts launch him end over end, corkscrew him or roll him along the
+ground, towers drop him flailing off the front, riders go over the
+handlebars. The stagger, spin, kneel, scorched daze and the officer's
+farewell play their scripted openings first and hand over mid-motion (the
+last two frames of joints become the ragdoll's velocity). Joe dies as a
+ragdoll too and stands back up on respawn.
+
+**Secondary motion.** Lean into the run and into turns (and into a
+side-step); an acceleration lean; breathing and a slow weight shift at rest;
+the head turns to the nearest threat (enemies watch Joe); the legs lag a
+turn on the spot and step round (Walk legs) instead of pivoting; feet find
+the ground on slopes (the hips drop for the downhill foot and the knees
+re-solve with the clip's own bend).
+
+**Hit reactions.** A flinch layer (spine and head snap away from the blow,
+knees dip): Joe when he's hit or a blast goes off near him; enemies when a
+round cracks past within a metre, and a stagger with a shove and a pause in
+their fire when a blast just misses them.
+
+**Grenades.** Overhand throw instead of a punch: wind up behind the head,
+whip over the shoulder, follow through across the body, the torso turning
+into it; the grenade is visible in the palm until release and leaves from
+the hand. The rifle rides in the left hand meanwhile. Lobbers point their
+free arm at the target. The mortar crew have their own kind (`crew`: rifle
+uniform, hands free) and feed the tube with both hands.
+
+**More clips** (`assets/anims/swat-extra.json`, 30 KB gzipped). The packer
+had kept 11 of the Modular Men's 24 clips; `tools/extract-clips.mjs` pulls
+six more from the pack's own Swat.glb (Quaternius, CC0; same rig, identical
+clips to 0.006 rad, so no retargeting): Run_Back, Run_Left and Run_Right —
+armed men now face their aim and strafe or back-pedal, blended by the angle
+and kept in step by each clip's left-foot stance phase, with the chest held
+square to the aim; Idle_Gun — a relaxed stance when not ready; HitRecieve_2
+— a second reaction for the scripted death openings; and Roll — soldiers
+just outside an incoming grenade's blast (never inside it) dive-roll clear.
+Note `AnimationClip.parse` keeps the JSON's uuid and the mixer keys actions
+by uuid: each parsed clip needs a fresh one or they all share one action.
+
+Tuning lives in `RIG` (soldier.js). Tests: `__cmd.game.forceDeath`,
+`game.joe.s.flinch(dx, dz, amp)`, `s.rag` (the live ragdoll).
+
 ## Layout
 
 | file | what |
 |---|---|
 | `src/main.js` | boot, shader pre-warm, menus, attract demo, fixed 60 Hz loop, test hooks |
-| `src/deaths.js` | build v9 death catalogue: choosing a death, its motion, effects and voice |
+| `src/deaths.js` | the death catalogue: choosing a death, its scripted opening, ragdoll kick, effects and voice |
+| `src/ragdoll.js` | build v10 Verlet ragdoll: joint particles, sticks, limits, terrain/water/walls, bones driven from particles, the dropped rifle |
 | `src/game.js` | simulation: Joe, enemy AI, bullets, grenades, trucks, tank, motorcycles, searchlights, bunker, mortars, POWs and cages, finale, continues, scoring |
 | `src/level1.js` … `level3.js` | area layouts in metres (props, water, encounters, POWs, patrol, finale) |
 | `src/levels.js` | the campaign order and per-area lighting/weather (`AMBIENCE`) |
@@ -69,10 +142,11 @@ time with zero continues. Test hooks: `__cmd.watchDemo()`, `__cmd.demoState()`.
 | `src/terrain.js` | analytic height + colour + water function (rivers, wadeable swamp, causeways, cliffs, AO, craters, trenches); per-vertex texture-layer weights and the splat ground shader (the palette colour becomes a tint over the scans) |
 | `src/assets.js` | loads the model GLBs at boot; turns models into shared, normalised geometry (vertex-coloured or textured), splits the tank |
 | `src/models.js`, `src/models2.js` | the procedural models (buildings, fortresses, trucks, motorcycle…) and the tank wrapper |
-| `src/soldier.js` | soldiers assembled from Modular Men parts + rifle, baked per kind into one skinned mesh (one draw call each); leg / upper-body clip halves blended from the game's speed / crouch / throw / death / aim twist; two-bone IK for the rifle's support hand and for crouching |
+| `src/soldier.js` | soldiers assembled from Modular Men parts + rifle (on its own Gun bone), baked per kind into one skinned mesh (one draw call each); leg / upper-body / finger clip groups blended from speed, strafe angle, crouch, readiness; procedural layers: shouldered rifle IK, lean, breathing, head look, turn steps, slope feet, flinch, overhand throw, mortar feed; hands over to the ragdoll |
 | `assets/models/` | `adventurer.glb`, `swat.glb`, `beach.glb` (one rig; clips in `swat.glb`), `props.glb`, `nature.glb` — meshopt-compressed, WebP textures (2.6 MB total) |
+| `assets/anims/` | `swat-extra.json`: six more Modular Men clips (strafe runs, rifle idle, second hit reaction, roll) |
 | `assets/textures/` | `ground-albedo.webp` / `ground-normal.webp`: the five ground layers as strips (colour; normal X/Y + height), loaded as texture arrays |
-| `tools/` | `pack-models.mjs` rebuilds `assets/models/` from the source GLBs in `models.txt`; `pack-textures.mjs` rebuilds `assets/textures/` from the Poly Haven 1K scans in `textures.txt` |
+| `tools/` | `pack-models.mjs` rebuilds `assets/models/` from the source GLBs in `models.txt`; `pack-textures.mjs` rebuilds `assets/textures/` from the Poly Haven 1K scans in `textures.txt`; `extract-clips.mjs` writes `assets/anims/` from the pack's Swat.glb |
 | `src/fx.js` | particles, tracers, muzzle flashes, explosions, decals, lights, floating text |
 | `src/render.js` | renderer, sky environment, sun + shadows, bloom + grade, camera rig |
 | `src/bot.js` | autopilot (attract mode and playthrough tests); local A* around obstacles |

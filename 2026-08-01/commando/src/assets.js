@@ -24,6 +24,14 @@ export async function loadAssets(onProgress) {
     }),
     loadGround().then(() => onProgress && onProgress(++done / total)),
   ]);
+  // build v10: more of the Modular Men's own clips (strafing runs, a second hit
+  // reaction, a relaxed rifle stance, a dive roll) — same rig, see tools/extract-clips.mjs
+  try {
+    const x = await (await fetch(`assets/anims/swat-extra.json?v=${VER}`)).json();
+    // (parse keeps the JSON's uuid — none here — and the mixer keys actions by
+    // uuid, so every clip needs its own)
+    for (const c of x.clips) { const clip = THREE.AnimationClip.parse(c); clip.uuid = THREE.MathUtils.generateUUID(); GLB.swat.animations.push(clip); }
+  } catch (e) { console.warn('extra clips unavailable', e); }
 }
 
 // ------------------------------------------------------------------ ground textures

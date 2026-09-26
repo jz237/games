@@ -6,7 +6,7 @@ import { Soldier } from './soldier.js';
 import * as M2 from './models2.js';
 import { flatGeo } from './assets.js';
 import { clamp, lerp, angDiff, approach, TAU } from './util.js';
-import { pickDeath, beginDeath, stepDeath } from './deaths.js';
+import { pickDeath, beginDeath, stepDeath, ragEnv } from './deaths.js';
 
 export const TUNE = {
   joeSpeed: 5.6, joeAccel: 55, joeRadius: 0.42, wadeSpeed: 0.55,
@@ -19,6 +19,7 @@ export const TUNE = {
 };
 const SCORE = { rifle: 100, lobber: 150, trench: 150, sniper: 300, mortar: 400, officer: 2000, bunker: 1000, truck: 800, pow: 500, moto: 500, tank: 3000, search: 300 };
 const HITBOX = 0.5;
+const DIVE_T = 1.15;          // v10: a dive-roll away from an incoming grenade
 
 const dirOf = (a) => [Math.sin(a), Math.cos(a)];      // angle 0 = north (+p), +π/2 = east (+x)
 const angOf = (dx, dp) => Math.atan2(dx, dp);
@@ -124,17 +125,21 @@ export class Game {
 
   makeJoe(x, p) {
     const s = new Soldier('joe');
+    s.ground = this.groundFn();
     this.scene.add(s.obj);
     return { s, x, p, px: x, pp: p, vx: 0, vp: 0, leg: 0, aim: 0, hp: TUNE.joeHp, alive: true, invuln: TUNE.invulnSpawn, fireCd: 0, get grenades() { return this._g; }, _g: this.carryGren ?? TUNE.grenStart, deadT: 0, throwT: -1, recoil: 0, moveDist: 0, stepAcc: 0 };
   }
   makePow(x, p, i) {
     const s = new Soldier('pow');
+    s.ground = this.groundFn();
     s.a.crouch = 1;
     this.scene.add(s.obj);
     return { s, x, p, i, state: 'tied', t: 0, face: Math.PI };
   }
 
   emit(type, data) { this.events.push({ type, ...data }); }
+  // world (x, z) → the height a soldier stands at, for the rig's foot IK
+  groundFn() { const T = this.T; return (x, z) => T.standY(x, -z); }
 
   // ------------------------------------------------------------------ view helpers
   viewTop() { return this.camP - this.R.offTop; }
@@ -195,6 +200,7 @@ export class Game {
     let mx = 0, mp = 0, fire = false, gren = false, aimSet = false;
     if (I && !locked) {
       mx = I.mx; mp = I.mp; fire = I.fire; gren = I.gren;
+      J.fireHeld = fire;
       // aim: mouse ground point > stick vector > facing
       if (I.aimGround) {
         const g = this.R.groundAtNdc((I.aimGround.sx / innerWidth) * 2 - 1, -(I.aimGround.sy / innerHeight) * 2 + 1, this.h(J.x, J.p) + 1.0);
@@ -226,9 +232,11 @@ export class Game {
     // legs face travel; aim follows travel unless strafing/aiming
     if (spd > 0.5) {
       const mvAng = angOf(J.x - J.px, J.p - J.pp);
-      J.leg = mvAng;
       if (!aimSet && !(I && I.strafe)) J.aim = mvAng;
-    } else if (aimSet) J.leg = J.aim;
+      // v10: he faces his aim and the run follows his feet — strafing and
+      // back-pedalling clips instead of a twisted torso over sliding legs
+      J.leg = J.aim; J.mvAng = mvAng;
+    } else { J.mvAng = null; if (aimSet) J.leg = J.aim; }
     // aim assist for stick/keys: nudge onto an enemy close to the line of fire
     if (I && !I.aimGround && fire) {
       let best = null, bestD = 0.26;
@@ -265,7 +273,8 @@ export class Game {
         J.thrown = true;
         const [dx, dp] = dirOf(J.throwAim);
         const d = J.throwDist;
-        this.launchNade(J.x + dx * 0.4, J.p + dp * 0.4, this.T.standY(J.x, J.p) + 1.7, J.x + dx * d, J.p + dp * d, 0.5 + d * 0.035, 'joe');
+        const h = this.handPos(J.s);
+        this.launchNade(h ? h.x : J.x + dx * 0.4, h ? -h.z : J.p + dp * 0.4, h ? h.y : this.T.standY(J.x, J.p) + 1.7, J.x + dx * d, J.p + dp * d, 0.5 + d * 0.035, 'joe');
         this.audio.thunk(this.pan(J.x));
       }
       if (J.throwT >= 1) J.throwT = -1;
@@ -296,10 +305,20 @@ export class Game {
     if (Math.abs(tw) > 1.2) { J.leg = J.aim + Math.sign(angDiff(J.aim, J.leg)) * 1.2; }
     s.a.twist = clamp(-angDiff(J.leg, J.aim), -1.2, 1.2);
     s.a.speed = J.speedN || 0;
+    s.a.moveYaw = J.mvAng != null ? Math.PI - J.mvAng : null;
     s.a.phase += (J.alive ? Math.hypot(J.x - J.px, J.p - J.pp) : 0) * (TAU / 2.3);
     s.a.recoil = J.recoil;
     s.a.throwT = J.throwT;
     s.a.dead = J.alive ? 0 : Math.min(1, J.deadT * 2.6);
+    s.a.aiming = !!J.fireHeld;
+    // v10: his eyes find the nearest threat in front of him
+    let look = null, ld = 13;
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const d = Math.hypot(e.x - J.x, e.p - J.p);
+      if (d < ld && Math.abs(angDiff(J.aim, angOf(e.x - J.x, e.p - J.p))) < 1.7) { ld = d; look = e; }
+    }
+    if (look) { s.a.lookX = look.x; s.a.lookZ = -look.p; } else s.a.lookX = null;
     // invulnerability blink
     s.obj.visible = !J.inside && !(J.alive && J.invuln > 0 && this.state !== 'intro' && Math.floor(this.t * 14) % 2 === 0);
     s.setFlash(J.hurtFlash > 0 ? J.hurtFlash : 0);
@@ -320,6 +339,7 @@ export class Game {
     if (this.godMode) return;
     J.hp -= n; J.invuln = TUNE.invulnHit; J.hurtFlash = 1; this.stats.hits++;
     const dx = J.x - fromX, dp = J.p - fromP, L = Math.hypot(dx, dp) || 1;
+    J.s.flinch(dx, -dp, 1);
     this.R.addShake(0.5, dx / L * 0.25, -dp / L * 0.25);
     this.emit('hurt');
     if (J.hp <= 0) this.killJoe(fromX, fromP);
@@ -328,6 +348,11 @@ export class Game {
     const J = this.joe;
     J.alive = false; J.deadT = 0; J.hp = 0;
     J.s.a.deadDir = (fp > J.p) ? 1 : -1; J.s.a.deadSpin = rnd() - 0.5;
+    // v10: he goes down as a ragdoll, knocked away from whatever got him
+    const dx = J.x - fx, dp = J.p - fp, L = Math.hypot(dx, dp) || 1;
+    const r = J.s.startRagdoll(ragEnv(this));
+    r.push(dx / L * 2.4, 1.2, -dp / L * 2.4, ['mid', 'neck', 'head', 'shL', 'shR']);
+    r.push(-dx / L, 0, dp / L, ['knL', 'knR']);
     this.audio.play('player-death', { gain: 0.9 }, 200);
     this.R.addShake(0.8);
     this.state = 'dead'; this.stateT = 0;
@@ -342,7 +367,7 @@ export class Game {
     this.ebullets = this.ebullets.filter(b => Math.hypot(b.x - J.x, b.p - J.p) > 9);
     for (const n of this.nades) if (n.owner !== 'joe' && Math.hypot(n.tx - J.x, n.tp - J.p) < 6) n.dud = true;
     J.alive = true; J.hp = TUNE.joeHp; J.invuln = TUNE.invulnSpawn; J.deadT = 0; J.throwT = -1;
-    J.s.a.dead = 0;
+    J.s.a.dead = 0; J.s.stopRagdoll();
     // stand back up somewhere walkable near where he fell
     const [x, p] = this.col.resolve(J.x, J.p, TUNE.joeRadius + 0.3, 'joe');
     J.x = x; J.p = p; J.px = x; J.pp = p;
@@ -430,7 +455,8 @@ export class Game {
       }
       case 'mortar': {
         const pit = W.dyn.pits[e.pit]; if (!pit || !pit.alive) break;
-        const en = this.spawnEnemy('rifle', pit.x + 0.7, pit.p + 0.5, { state: 'mortar', face: Math.PI });
+        const en = this.spawnEnemy('mortar', pit.x + 0.7, pit.p + 0.5, { state: 'mortar', face: Math.PI });
+        en.type = 'rifle';
         en.mortar = true; en.static = true; en.pit = pit; en.t = 2.2; en.points = SCORE.mortar; en.noBullets = true;
         en.s.a.crouch = 1;
         break;
@@ -475,7 +501,8 @@ export class Game {
   }
 
   spawnEnemy(type, x, p, o = {}) {
-    const s = new Soldier(type === 'lobber' ? 'lobber' : type === 'officer' ? 'officer' : 'rifle');
+    const s = new Soldier(type === 'lobber' ? 'lobber' : type === 'officer' ? 'officer' : type === 'mortar' ? 'crew' : 'rifle');
+    s.ground = this.groundFn();
     this.scene.add(s.obj);
     const e = {
       type, s, x, p, px: x, pp: p, face: o.face ?? Math.PI, state: o.state || 'enter', t: 0,
@@ -577,7 +604,8 @@ export class Game {
             e.thrown = true;
             const [fx, fp] = dirOf(e.face);
             const d = Math.hypot(e.throwAt.x - e.x, e.throwAt.p - e.p);
-            this.launchNade(e.x + fx * 0.4, e.p + fp * 0.4, this.baseY(e) + 1.7, e.throwAt.x, e.throwAt.p, 0.8 + d * 0.03, 'enemy');
+            const h = this.handPos(e.s);
+            this.launchNade(h ? h.x : e.x + fx * 0.4, h ? -h.z : e.p + fp * 0.4, h ? h.y : this.baseY(e) + 1.7, e.throwAt.x, e.throwAt.p, 0.8 + d * 0.03, 'enemy');
           }
           if (e.t <= 0) { e.state = 'fight'; e.thrown = false; e.s.a.throwT = -1; e.fireCd = rr(2.8, 4.2) / this.loopK(); e.t = rr(0.5, 1.2); }
           break;
@@ -605,6 +633,13 @@ export class Game {
           break;
         }
         case 'ride': break;   // positioned by its motorcycle
+        case 'dive': {
+          const k = 1 - e.t / DIVE_T;
+          mvx = e.diveX; mvp = e.diveP; e.face = angOf(e.diveX, e.diveP);
+          speed = k < 0.12 ? 1.5 : k < 0.75 ? 4.4 : 1.2;
+          if (e.t <= 0) { e.state = e.diveFrom || 'fight'; e.t = rr(0.25, 0.6); }
+          break;
+        }
         case 'mortar': this.updateMortar(e, dt, dist); break;
         case 'flee': {
           const tdx = e.tx - e.x, tdp = e.tp - e.p, td = Math.hypot(tdx, tdp);
@@ -614,6 +649,13 @@ export class Game {
           if (e.fireCd <= 0 && dist < 14) { e.fireCd = 1.3; e.aimOverride = toJoe; this.enemyFire(e, J, 0.15); }
           break;
         }
+      }
+      // knocked about by a nearby blast
+      if (e.shoveT > 0) {
+        e.shoveT -= dt;
+        const k = Math.max(0, e.shoveT / 0.28);
+        const [nx, np] = this.col.move(e.x, e.p, e.x + e.shoveX * k * dt, e.p + e.shoveP * k * dt, 0.38, 'enemy');
+        e.x = nx; e.p = np; speed *= 0.3;
       }
       // integrate movement with collision (soldiers wade through the swamp)
       if (speed > 0) {
@@ -668,21 +710,25 @@ export class Game {
   updateMortar(e, dt, dist) {
     const J = this.joe, pit = e.pit;
     if (!pit.alive) { this.killEnemy(e, 0, 0, true); return; }
-    e.face = angOf(J.x - e.x, J.p - e.p);
+    // faces the tube while feeding it, Joe otherwise
+    e.face = e.drop > 0 ? angOf(pit.x - e.x, pit.p - e.p) : angOf(J.x - e.x, J.p - e.p);
     const active = dist < 30 && dist > 5 && this.onScreen(pit.x, pit.p, 6) && J.alive && this.state === 'play';
     if (e.t <= 0 && active) {
       e.t = rr(3.8, 4.8) / this.loopK();
       const tx = J.x + J.vx * 1.2 + rr(-1.2, 1.2), tp = J.p + J.vp * 1.2 + rr(-1.2, 1.2);
       this.launchNade(pit.x, pit.p, this.h(pit.x, pit.p) + 1.0, tx, tp, 1.9, 'mortar');
-      e.s.a.throwT = 0.5; e.drop = 0.3;
+      e.s.a.feedT = 0; e.s.a.feedX = pit.x; e.s.a.feedZ = -pit.p; e.drop = 0.5;
       pit.tube.userData.kick = 1;
       const y = this.h(pit.x, pit.p);
       this.fx.muzzle(pit.x, y + 1.0, -pit.p, 0, -1, true);
       this.fx.dust(pit.x, y + 0.9, -pit.p, 4, [0.55, 0.52, 0.48], 1.2, 0.5);
       this.audio.thunk(this.pan(pit.x));
     }
-    if (e.drop > 0) { e.drop -= dt; if (e.drop <= 0) e.s.a.throwT = -1; }
+    if (e.drop > 0) e.drop -= dt;
   }
+
+  // where the grenade in a soldier's hand is right now (null if not showing)
+  handPos(s) { return s.nade && s.nade.visible ? s.nade.getWorldPosition(this._hv || (this._hv = this._v.clone())) : null; }
 
   removeEnemy(e) { e.alive = false; e.s.dispose(); if (e.token) this.tokens--; }
 
@@ -745,6 +791,13 @@ export class Game {
         if (!this.hittable(e)) continue;
         const t = segCircle(x0, p0, b.x, b.p, e.x, e.p, e.baseY !== undefined ? 0.7 : HITBOX);
         if (t !== null && t < hitT) { hitT = t; hitE = e; }
+        else if (t === null && (e.nearT || 0) < this.t) {
+          // a round cracking past makes him flinch away from it
+          const sx = b.x - x0, sp = b.p - p0, L2 = sx * sx + sp * sp || 1;
+          const u = clamp(((e.x - x0) * sx + (e.p - p0) * sp) / L2, 0, 1);
+          const ox = e.x - (x0 + sx * u), op = e.p - (p0 + sp * u), od = Math.hypot(ox, op);
+          if (od < 1.0) { e.nearT = this.t + 0.7; e.s.flinch(ox / (od || 1), -op / (od || 1), 0.35); }
+        }
       }
       for (const v of this.trucks) { if (v.dead) continue; const t = segBox(x0, p0, b.x, b.p, v); if (t !== null && t < hitT) { hitT = t; hitE = v; } }
       for (const v of this.tanks) { if (v.dead) continue; const t = segBox(x0, p0, b.x, b.p, v); if (t !== null && t < hitT) { hitT = t; hitE = v; } }
@@ -822,6 +875,19 @@ export class Game {
   updateNades(dt) {
     for (const n of this.nades) {
       n.t += dt;
+      // v10: men just outside the blast see it coming and dive-roll clear
+      // (only ones the blast would miss anyway — it's a reaction, not a dodge)
+      if (n.owner === 'joe' && !n.warned && n.T - n.t < 0.5) {
+        n.warned = true;
+        const r = TUNE.grenRadius;
+        for (const e of this.enemies) {
+          if (!e.alive || e.static || e.trench || e.mortar || e.bike || e.baseY !== undefined || e.state === 'dive' || e.state === 'flee') continue;
+          const dx = e.x - n.tx, dp = e.p - n.tp, d = Math.hypot(dx, dp);
+          if (d < r + 0.4 || d > r + 3.6 || rnd() > 0.55) continue;
+          e.diveFrom = e.state === 'aim' ? 'fight' : e.state; e.state = 'dive'; e.t = DIVE_T; e.token = false;
+          e.diveX = dx / (d || 1); e.diveP = dp / (d || 1); e.face = angOf(e.diveX, e.diveP);
+        }
+      }
       const k = Math.min(1, n.t / n.T);
       n.x = lerp(n.sx, n.tx, k); n.p = lerp(n.sp, n.tp, k);
       n.y = lerp(n.sy, n.ty + 0.1, k) + Math.sin(k * Math.PI) * n.apex;
@@ -857,7 +923,15 @@ export class Game {
       if (e.mortar && e.pit && Math.hypot(e.pit.x - x, e.pit.p - p) < r + 0.8 && owner !== 'mortar') { e.pit.alive = false; e.pit.tube.visible = false; this.killEnemy(e, x, p, false, true); continue; }
       if (e.baseY !== undefined && !e.bike) { if (d < r * 0.8 && owner !== 'mortar' && owner !== 'tank') this.killEnemy(e, x, p, false, true); continue; }
       if (d < r + 0.2) this.killEnemy(e, x, p, false, true);
+      else if (d < r + 3.4 && !e.bike) {
+        // v10: rocked by the blast — flinch, a shove, and a moment before he fires again
+        const k = 1 - (d - r - 0.2) / 3.2, ux = (e.x - x) / (d || 1), up = (e.p - p) / (d || 1);
+        e.s.flinch(ux, -up, 0.6 + k * 0.6);
+        if (!e.static && !e.trench && e.baseY === undefined) { e.shoveX = ux * (2 + k * 4); e.shoveP = up * (2 + k * 4); e.shoveT = 0.28; }
+        e.fireCd = Math.max(e.fireCd || 0, 0.45 + k * 0.4);
+      }
     }
+    if (J.alive && dj < r + 4 && dj > 0.3) J.s.flinch((J.x - x) / dj, -(J.p - p) / dj, clamp(1.2 - (dj - r) / 4, 0.3, 1));
     if (!byJoe || owner === 'barrel' || owner === 'tankwreck') {
       if (dj < r * 0.85 && J.alive) this.damageJoe(owner === 'barrel' ? 2 : 1, x, p);
     }
@@ -1339,10 +1413,18 @@ export class Game {
       s.obj.position.set(e.x, this.baseY(e), -e.p);
       s.obj.rotation.y = Math.PI - e.face;
       s.a.speed = e.bike ? 0 : e.speedN || 0;
-      s.a.phase += Math.hypot(e.x - e.px, e.p - e.pp) * (TAU / 2.2);
+      const mv = Math.hypot(e.x - e.px, e.p - e.pp);
+      s.a.moveYaw = mv > 0.004 && !e.bike ? Math.PI - angOf(e.x - e.px, e.p - e.pp) : null;
+      s.a.roll = e.state === 'dive' ? clamp(1 - e.t / DIVE_T, 0, 1) : -1;
+      s.a.phase += mv * (TAU / 2.2);
       if (e.state === 'cover') s.a.crouch = approach(s.a.crouch, 1, dt * 4);
       else if (!e.trench && !e.mortar) s.a.crouch = approach(s.a.crouch, 0, dt * 5);
       s.a.recoil = Math.max(0, (s.a.recoil || 0) - dt * 8);
+      // v10: feet on the slope only when standing on the ground; rifle up
+      // when engaging; eyes on Joe
+      s.a.foot = e.baseY === undefined && !e.trench && !e.bike;
+      s.a.aiming = e.state === 'aim' || e.state === 'cover' || e.state === 'search' || e.state === 'trench' || e.state === 'sniper' || !!e.static;
+      if (this.joe.alive) { s.a.lookX = this.joe.x; s.a.lookZ = -this.joe.p; } else s.a.lookX = null;
       if (e.flashT > 0) e.flashT -= dt * 6;
       s.setFlash(Math.max(0, e.flashT || 0));
       s.pose(dt);
