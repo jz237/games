@@ -1,0 +1,5 @@
+forest_ground_04 https://polyhaven.com/a/forest_ground_04
+forest_leaves_02 https://polyhaven.com/a/forest_leaves_02
+coast_sand_01 https://polyhaven.com/a/coast_sand_01
+brown_mud_02 https://polyhaven.com/a/brown_mud_02
+dirt_aerial_02 https://polyhaven.com/a/dirt_aerial_02

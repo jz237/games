@@ -1,12 +1,12 @@
 {
   "name": "Commando HD — a tribute to the classic",
   "short_name": "Commando HD",
-  "description": "Modern browser remake of the 1989 classic. All-new art and sound; non-commercial fan tribute.",
+  "description": "Real-time 3D remake of the 1985 arcade classic. All-new art; non-commercial fan tribute.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",
   "display_override": ["fullscreen", "standalone"],
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0a0c08",
   "theme_color": "#0a0c08",
   "icons": [

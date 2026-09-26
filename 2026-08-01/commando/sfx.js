@@ -3,7 +3,10 @@
 (() => {
 'use strict';
 
-const FILES = ['shot', 'explosion', 'enemy-down', 'player-death', 'ready'];
+const FILES = ['shot', 'explosion', 'enemy-down', 'player-death', 'ready',
+  // build v9: the death catalogue's voices and impacts (deaths.js)
+  'die-grunt-a', 'die-grunt-b', 'die-yelp', 'die-groan', 'die-yell', 'die-scream', 'die-whoa',
+  'die-oof', 'die-cough', 'die-nooo', 'body-thud', 'body-splash', 'bike-crash'];
 
 const Sfx = {
   ctx: null, buffers: {}, ready: false, volume: 0.8,

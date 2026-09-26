@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0a0c08">
+<meta name="theme-color" content="#0b0d09">
+<meta name="description" content="Commando HD — a real-time 3D tribute to Capcom's 1985 Commando. Non-commercial fan remake.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -11,68 +12,114 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Commando HD — a tribute to the classic</title>
-<style>
-  html, body { margin: 0; padding: 0; background: #0a0c08; height: 100%; overflow: hidden;
-    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
-  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  canvas { }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=9">
+<!-- The site's CDN lets browsers keep .js for hours, so every game module is
+     pinned to a build version here (bump v= on each release). This page itself
+     is never cached, so a new release always pulls a matching set of modules. -->
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/three.module.min.js",
+  "three/addons/": "./vendor/three/addons/",
+  "./src/assets.js": "./src/assets.js?v=9",
+  "./src/audio.js": "./src/audio.js?v=9", "./src/bot.js": "./src/bot.js?v=9", "./src/deaths.js": "./src/deaths.js?v=9", "./src/fx.js": "./src/fx.js?v=9",
+  "./src/game.js": "./src/game.js?v=9", "./src/hud.js": "./src/hud.js?v=9", "./src/input.js": "./src/input.js?v=9",
+  "./src/level1.js": "./src/level1.js?v=9", "./src/level2.js": "./src/level2.js?v=9", "./src/level3.js": "./src/level3.js?v=9",
+  "./src/levels.js": "./src/levels.js?v=9", "./src/models.js": "./src/models.js?v=9", "./src/models2.js": "./src/models2.js?v=9",
+  "./src/render.js": "./src/render.js?v=9", "./src/soldier.js": "./src/soldier.js?v=9", "./src/terrain.js": "./src/terrain.js?v=9",
+  "./src/textures.js": "./src/textures.js?v=9", "./src/util.js": "./src/util.js?v=9", "./src/world.js": "./src/world.js?v=9"
+} }
+</script>
 </head>
 <body>
-<div id="stage"><canvas id="game"></canvas></div>
+<div id="stage"><canvas id="gl"></canvas></div>
+
+<div id="hud" class="hidden">
+  <div class="hud-tl">
+    <div class="hud-label">1UP</div>
+    <div id="hud-score" class="hud-big">0</div>
+    <div id="hud-chain" class="hud-chain"></div>
+  </div>
+  <div class="hud-tr">
+    <div class="hud-label">HI-SCORE</div>
+    <div id="hud-hi" class="hud-big">0</div>
+  </div>
+  <div class="hud-bl">
+    <div id="hud-lives" class="hud-lives"></div>
+    <div id="hud-hp" class="hud-hp"></div>
+  </div>
+  <div class="hud-br">
+    <div id="hud-gren" class="hud-gren"></div>
+  </div>
+  <div id="hud-obj" class="hud-obj"></div>
+  <div id="hud-prog" class="hud-prog"><div id="hud-prog-fill"></div><div id="hud-prog-joe"></div></div>
+</div>
+
+<div id="banner" class="banner hidden"><div id="banner-big"></div><div id="banner-small"></div></div>
+<div id="toast" class="toast"></div>
+
+<div id="touch" class="hidden">
+  <div id="stick-l" class="stick"><div class="knob"></div></div>
+  <div id="stick-r" class="stick fire"><div class="knob"></div></div>
+  <button id="btn-gren" class="tbtn" aria-label="Grenade">G</button>
+  <button id="btn-pause" class="tbtn small" aria-label="Pause">II</button>
+</div>
+
+<div id="title" class="screen">
+  <div class="title-inner">
+    <h1>COMMANDO<span>HD</span></h1>
+    <div class="subtitle">A TRIBUTE TO THE CLASSIC</div>
+    <nav id="menu" class="menu">
+      <button data-act="start" class="sel">START MISSION</button>
+      <button data-act="demo">WATCH DEMO</button>
+      <button data-act="area">START AT: <span id="area-mode">AREA 1</span></button>
+      <button data-act="controls">CONTROLS</button>
+      <button data-act="music">MUSIC: <span id="music-mode">SID</span></button>
+      <button data-act="quality">QUALITY: <span id="quality-mode">HIGH</span></button>
+    </nav>
+    <div id="controls-help" class="help hidden">
+      <p><b>MOVE</b> WASD / arrows &nbsp; <b>FIRE</b> Space / J / left mouse &nbsp; <b>GRENADE</b> K / X / right mouse</p>
+      <p>Mouse aims when you move it. Hold fire with the keys to keep your facing and strafe.</p>
+      <p>Gamepad: left stick moves, right stick aims &amp; fires, A fires, B / RB throws a grenade.</p>
+      <p>Touch: left thumb moves, right thumb aims &amp; fires, G throws a grenade.</p>
+    </div>
+    <div class="hiscores" id="hiscores"></div>
+    <div class="foot">Original &copy; Capcom 1985 &middot; non-commercial fan remake &middot; 3D models by <a href="https://quaternius.com/" target="_blank" rel="noopener">Quaternius</a> (CC0) and <a href="https://poly.pizza/l/CtP2TDTIN6" target="_blank" rel="noopener">KolosStudios</a> (CC BY) &middot; ground scans by <a href="https://polyhaven.com/" target="_blank" rel="noopener">Poly Haven</a> (CC0)<br><a href="/games/">&larr; All games</a> &middot; <a href="/experiments/sid-player/">C64 SID player &mdash; Rob Hubbard's Commando</a></div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="title-inner">
+    <h2>PAUSED</h2>
+    <nav class="menu">
+      <button data-act="resume" class="sel">RESUME</button>
+      <button data-act="restart">RESTART AREA</button>
+      <button data-act="quit">QUIT TO TITLE</button>
+    </nav>
+  </div>
+</div>
+
+<div id="demo-tag" class="hidden">DEMO &middot; <span class="k">PRESS ANY KEY</span><span class="t">TAP</span> FOR THE MENU</div>
+<div id="loading" class="screen"><div class="title-inner"><div id="load-big" class="load-big"></div><div id="load-small" class="subtitle">LOADING&hellip;</div></div></div>
+
 <script>window.WASM_SEARCH_PATH = 'vendor/websid/';</script>
 <script src="vendor/websid/scriptprocessor_player.js"></script>
 <script src="vendor/websid/backend_websid.js"></script>
 <script src="music.js"></script>
 <script src="sfx.js"></script>
-<script src="data/area1.js"></script>
-<script src="data/area2.js"></script>
-<script src="data/area3.js"></script>
-<script>window.AREAS = [window.AREA1, window.AREA2, window.AREA3];</script>
-<script src="data/plate-masks.js"></script>
-<script src="game.js"></script>
+<script type="module" src="src/main.js?v=9"></script>
 <script>
-// PWA offline cache — https only, so the LAN dev server (http) and the
-// headless QA rig (http://127.0.0.1) can never be served stale assets.
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then((reg) => {
-      // it125 UPDATE TOAST — a new build used to land silently and only appear
-      // after the player happened to close the app twice. Now the waiting
-      // worker announces itself and one tap takes it.
-      const offer = (worker) => {
-        if (!worker || !navigator.serviceWorker.controller) return;
-        const bar = document.createElement('div');
-        bar.textContent = 'NEW VERSION READY — TAP TO RELOAD';
-        bar.setAttribute('role', 'status');
-        bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:9999;'
-          + 'background:#1b1d14;color:#ffd257;border:1px solid #ffd257;border-radius:4px;'
-          + 'padding:10px 16px;font:12px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.06em;'
-          + 'cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.55)';
-        bar.onclick = () => { worker.postMessage({ type: 'SKIP_WAITING' }); location.reload(); };
-        document.body.appendChild(bar);
-      };
-      if (reg.waiting) offer(reg.waiting);
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed') offer(w); });
-      });
-    }).catch(() => {});
-  });
+// The 2D build installed an offline service worker here. The 3D build is
+// served straight from the network, so retire the old worker and its cache.
+if ('serviceWorker' in navigator) {
+  // only this game's worker: other games on the site have their own
+  navigator.serviceWorker.getRegistrations().then((regs) => regs
+    .filter((r) => r.scope.endsWith('/games/2026-08-01/commando/'))
+    .forEach((r) => r.unregister())).catch(() => {});
+  if (window.caches) caches.keys().then((ks) => ks.filter((k) => k.startsWith('commando-hd')).forEach((k) => caches.delete(k))).catch(() => {});
 }
 </script>
-<div id="sitelinks">
-  <a href="/games/">&larr; All games</a>
-  <a href="/experiments/sid-player/">C64 SID player &mdash; Rob Hubbard's Commando</a>
-</div>
-<style>
-  #sitelinks { position: fixed; left: 0; right: 0; bottom: 0; text-align: center;
-    font: 11px/1.9 ui-monospace, SFMono-Regular, Menlo, monospace; color: #7d7660;
-    background: linear-gradient(rgba(10,12,8,0), rgba(10,12,8,0.82)); padding: 14px 8px 5px;
-    pointer-events: none; z-index: 5; }
-  #sitelinks a { color: #9a9280; text-decoration: none; margin: 0 10px; pointer-events: auto; }
-  #sitelinks a:hover { color: #d4b25a; text-decoration: underline; }
-  @media (max-width: 560px) { #sitelinks { font-size: 10px; } #sitelinks a { margin: 0 5px; } }
-</style>
 </body>
 </html>
